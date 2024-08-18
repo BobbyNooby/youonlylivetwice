@@ -1,0 +1,6 @@
+name: YouOnlyLiveTwice
+version: '0.1'
+main: dev.bobbynooby.youOnlyLiveTwice.YouOnlyLiveTwice
+api-version: '1.21'
+
+

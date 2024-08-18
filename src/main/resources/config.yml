@@ -1,0 +1,19 @@
+server-list:
+  spoof: true
+  spoofed-player-count: 1
+
+spoof-tab-list: true
+
+players:
+  hide-join: true
+  hide-leave: true
+  hide-death: true
+  hide-revive: true
+  hide-name-tags: true
+
+allow-revive: true
+
+chat:
+  allow-whispers: false
+  allow-global-chat: false
+  chat-radius: 32
