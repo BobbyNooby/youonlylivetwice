@@ -11,6 +11,8 @@ used by itself out of the box withoutu any config.
 
 Config file will be provided for enabling / disabling of features if wanted.
 
+Ermm
+
 # Planned Features
 
 - Pseudo Hardcore (Ban System)
