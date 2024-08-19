@@ -13,7 +13,7 @@ players:
 
 allow-revive: true
 
+proximity-radius: 48
 chat:
   allow-whispers: false
   allow-global-chat: false
-  chat-radius: 32

@@ -25,7 +25,7 @@ public class PluginConfig {
 
     private boolean allowChatWhispers;
     private boolean allowGlobalChat;
-    private int chatRadius;
+    private int proximityRadius;
 
     private PluginConfig() {
     }
@@ -61,7 +61,7 @@ public class PluginConfig {
 
         allowChatWhispers = config.getBoolean("chat.allow-whispers", false);
         allowGlobalChat = config.getBoolean("chat.allow-global-chat", false);
-        chatRadius = config.getInt("chat.chat-radius", 32);
+        proximityRadius = config.getInt("proximity-radius", 48);
     }
 
 
@@ -189,13 +189,13 @@ public class PluginConfig {
     }
 
 
-    public int getChatRadius() {
-        return chatRadius;
+    public int getProximityRadius() {
+        return proximityRadius;
     }
 
-    public void setChatRadius(int chatRadius) {
-        this.chatRadius = chatRadius;
-        set("chat.chat-radius", chatRadius);
+    public void setProximityRadius(int chatRadius) {
+        this.proximityRadius = chatRadius;
+        set("proximity-radius", chatRadius);
     }
 
     public static PluginConfig getInstance() {

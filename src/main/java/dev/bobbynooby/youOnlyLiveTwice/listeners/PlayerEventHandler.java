@@ -1,50 +1,48 @@
 package dev.bobbynooby.youOnlyLiveTwice.listeners;
 
 import dev.bobbynooby.youOnlyLiveTwice.PluginConfig;
+import dev.bobbynooby.youOnlyLiveTwice.features.ChatSupressor;
 import dev.bobbynooby.youOnlyLiveTwice.features.NameTagHider;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.*;
 
 public class PlayerEventHandler implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        if (PluginConfig.getInstance().getHidePlayerJoin()) {
-            event.setJoinMessage("");
-        }
-
-        if (PluginConfig.getInstance().getHideNameTags()) {
-            NameTagHider.addPlayer(event.getPlayer());
-        }
+        ChatSupressor.handleJoin(event);
+        NameTagHider.handleJoin(event);
 
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLeave(PlayerQuitEvent event) {
-        if (PluginConfig.getInstance().getHidePlayerLeave()) {
-            event.setQuitMessage("");
-        }
+        ChatSupressor.handleLeave(event);
 
 
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
-        if (PluginConfig.getInstance().getHidePlayerDeath()) {
-            event.setDeathMessage("");
-        }
+        ChatSupressor.handleDeath(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerChangeWorld(PlayerChangedWorldEvent event) {
+        NameTagHider.handleWorldChange(event);
 
-        if (PluginConfig.getInstance().getHideNameTags()) {
-            NameTagHider.addPlayer(event.getPlayer());
-        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onChat(AsyncPlayerChatEvent event) {
+        ChatSupressor.handleMessage(event);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        ChatSupressor.handleWhisper(event);
     }
 }

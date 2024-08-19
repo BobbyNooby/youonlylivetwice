@@ -16,11 +16,12 @@ Ermm
 # Planned Features
 
 - Pseudo Hardcore (Ban System)
-- No nametags
-- Chat Supressor
-    - Hidden Join / Leave / Death Messages
-    - Proximity text chat
-- Server Player Count Hider
+- No nametags ✅
+- Chat Supressor ✅
+    - Hidden Join / Leave / Death Messages ✅
+    - Proximity text chat (Including whispers) ✅
+- Server Player Count Hider ✅
+- Tab List Hider
 - Persistent Player Presence
     - Npc player is spawned at a player logout spot that will sync its health / inventory with the player (Similar to
       the sleep system in Rust (video game) ).
