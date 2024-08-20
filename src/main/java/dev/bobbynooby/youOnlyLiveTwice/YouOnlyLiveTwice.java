@@ -1,30 +1,42 @@
 package dev.bobbynooby.youOnlyLiveTwice;
 
+import dev.bobbynooby.youOnlyLiveTwice.features.ChatSupressor;
 import dev.bobbynooby.youOnlyLiveTwice.features.NameTagHider;
+import dev.bobbynooby.youOnlyLiveTwice.features.PseudoHardcore;
 import dev.bobbynooby.youOnlyLiveTwice.features.ServerSpoofer;
 import dev.bobbynooby.youOnlyLiveTwice.listeners.PlayerEventHandler;
+import dev.bobbynooby.youOnlyLiveTwice.utils.PluginPrint;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import javax.naming.Name;
 
 public final class YouOnlyLiveTwice extends JavaPlugin {
 
+    public PseudoHardcore pseudoHardcore = new PseudoHardcore();
+    public ChatSupressor chatSupressor = new ChatSupressor();
+    public NameTagHider nameTagHider = new NameTagHider();
 
     @Override
     public void onEnable() {
         // Plugin startup logic
 
         PluginConfig.getInstance().load();
-        System.out.println("Settings Loaded!");
+        PluginPrint.println("Settings Loaded!");
 
-        NameTagHider.start();
+        nameTagHider.start();
+        PluginPrint.println("NameTagHider Enabled!");
+
+        pseudoHardcore.start(this);
+        PluginPrint.println("PseudoHardcore Enabled!");
 
 
         getServer().getPluginManager().registerEvents(new ServerSpoofer(), this);
-        System.out.println("Server Spoofer Enabled!");
+        PluginPrint.println("Server Spoofer Enabled!");
 
-        getServer().getPluginManager().registerEvents(new PlayerEventHandler(), this);
-        System.out.println("Player Event Handler Enabled!");
+        getServer().getPluginManager().registerEvents(new PlayerEventHandler(this), this);
+        PluginPrint.println("Player Event Handler Enabled!");
 
-        System.out.println("You Only Live Twice Started!");
+        PluginPrint.println("You Only Live Twice Started!");
 
 
     }
@@ -32,13 +44,15 @@ public final class YouOnlyLiveTwice extends JavaPlugin {
     @Override
     public void onDisable() {
         // Plugin shutdown logic
-        NameTagHider.stop();
-        System.out.println("Name Tag Hider Disabled!");
+
 
         PluginConfig.getInstance().save();
-        System.out.println("Settings Saved!");
+        PluginPrint.println("Settings Saved!");
 
-        System.out.println("You Only Live Twice Stopped!");
+        pseudoHardcore.stop();
+        nameTagHider.stop();
+
+        PluginPrint.println("You Only Live Twice Stopped!");
     }
 
     public static YouOnlyLiveTwice getInstance() {

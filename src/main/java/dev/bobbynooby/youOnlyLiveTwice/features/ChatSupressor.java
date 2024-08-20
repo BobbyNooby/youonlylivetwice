@@ -14,25 +14,25 @@ import java.lang.reflect.Array;
 import java.util.*;
 
 public class ChatSupressor {
-    public static void handleJoin(PlayerJoinEvent event) {
+    public void handleJoin(PlayerJoinEvent event) {
         if (PluginConfig.getInstance().getHidePlayerJoin()) {
             event.setJoinMessage("");
         }
     }
 
-    public static void handleLeave(PlayerQuitEvent event) {
+    public void handleLeave(PlayerQuitEvent event) {
         if (PluginConfig.getInstance().getHidePlayerLeave()) {
             event.setQuitMessage("");
         }
     }
 
-    public static void handleDeath(PlayerDeathEvent event) {
+    public void handleDeath(PlayerDeathEvent event) {
         if (PluginConfig.getInstance().getHidePlayerDeath()) {
             event.setDeathMessage("");
         }
     }
 
-    public static void handleMessage(AsyncPlayerChatEvent event) {
+    public void handleMessage(AsyncPlayerChatEvent event) {
         final Iterator<Player> iterator = event.getRecipients().iterator();
         int chatRadius = PluginConfig.getInstance().getProximityRadius();
 
@@ -49,7 +49,7 @@ public class ChatSupressor {
 
     }
 
-    public static void handleWhisper(PlayerCommandPreprocessEvent event) {
+    public void handleWhisper(PlayerCommandPreprocessEvent event) {
 
         if (event.getMessage().startsWith("/w") || event.getMessage().startsWith("/msg")) {
             String finalMessage = "";
@@ -61,7 +61,6 @@ public class ChatSupressor {
             Player sender = event.getPlayer();
             Player recipient = Bukkit.getPlayer(wordArray[1]);
 
-            System.out.println(sender.getName() + " is whispering to " + recipient.getName());
 
             String greyItalics = ChatColor.GRAY + "" + ChatColor.ITALIC;
             String senderPre = "You whisper to " + recipient.getName() + ": ";

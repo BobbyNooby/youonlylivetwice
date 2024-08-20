@@ -14,7 +14,7 @@ public class NameTagHider {
     public static Scoreboard scoreboard;
     public static Team team;
 
-    public static void start() {
+    public void start() {
         scoreboard = Bukkit.getServer().getScoreboardManager().getNewScoreboard();
         team = scoreboard.registerNewTeam("hidden_name_tag");
 
@@ -31,7 +31,7 @@ public class NameTagHider {
 
     }
 
-    public static void stop() {
+    public void stop() {
         scoreboard = null;
         team = null;
     }
@@ -41,15 +41,15 @@ public class NameTagHider {
         start();
     }
 
-    public static void showNameTag() {
+    public void showNameTag() {
         team.setNameTagVisibility(NameTagVisibility.ALWAYS);
     }
 
-    public static void hideNameTag() {
+    public void hideNameTag() {
         team.setNameTagVisibility(NameTagVisibility.NEVER);
     }
 
-    public static void addPlayer(Player player) {
+    public void addPlayer(Player player) {
         if (!team.hasPlayer(player)) {
             team.addPlayer(player);
             player.setScoreboard(scoreboard);
@@ -64,17 +64,17 @@ public class NameTagHider {
     }
 
 
-    public static void nameTagCheck(Player player) {
+    public void nameTagCheck(Player player) {
         addPlayer(player);
     }
 
-    public static void handleJoin(PlayerJoinEvent event) {
+    public void handleJoin(PlayerJoinEvent event) {
         if (PluginConfig.getInstance().getHideNameTags()) {
             nameTagCheck(event.getPlayer());
         }
     }
 
-    public static void handleWorldChange(PlayerChangedWorldEvent event) {
+    public void handleWorldChange(PlayerChangedWorldEvent event) {
         if (PluginConfig.getInstance().getHideNameTags()) {
             nameTagCheck(event.getPlayer());
         }
