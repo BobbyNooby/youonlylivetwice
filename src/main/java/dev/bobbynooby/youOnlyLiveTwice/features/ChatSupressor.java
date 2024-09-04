@@ -1,8 +1,16 @@
 package dev.bobbynooby.youOnlyLiveTwice.features;
 
 import dev.bobbynooby.youOnlyLiveTwice.PluginConfig;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerEntity;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
@@ -10,7 +18,6 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.lang.reflect.Array;
 import java.util.*;
 
 public class ChatSupressor {
@@ -35,7 +42,6 @@ public class ChatSupressor {
     public void handleMessage(AsyncPlayerChatEvent event) {
         final Iterator<Player> iterator = event.getRecipients().iterator();
         int chatRadius = PluginConfig.getInstance().getProximityRadius();
-
 
         while (iterator.hasNext()) {
             final Player recipient = iterator.next();

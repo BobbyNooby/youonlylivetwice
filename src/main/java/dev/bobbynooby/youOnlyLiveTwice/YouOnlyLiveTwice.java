@@ -1,5 +1,6 @@
 package dev.bobbynooby.youOnlyLiveTwice;
 
+import dev.bobbynooby.youOnlyLiveTwice.commands.YoltCommand;
 import dev.bobbynooby.youOnlyLiveTwice.features.ChatSupressor;
 import dev.bobbynooby.youOnlyLiveTwice.features.NameTagHider;
 import dev.bobbynooby.youOnlyLiveTwice.features.PseudoHardcore;
@@ -19,6 +20,8 @@ public final class YouOnlyLiveTwice extends JavaPlugin {
     @Override
     public void onEnable() {
         // Plugin startup logic
+
+        getCommand("yolt").setExecutor(new YoltCommand(this));
 
         PluginConfig.getInstance().load();
         PluginPrint.println("Settings Loaded!");

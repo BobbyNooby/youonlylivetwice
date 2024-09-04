@@ -4,3 +4,15 @@ main: dev.bobbynooby.youOnlyLiveTwice.YouOnlyLiveTwice
 api-version: '1.21'
 
 
+commands:
+  yolt:
+    description: "Main Command for admins/debugging."
+    usage: "/yolt [options]"
+    aliases: [ "yolt", "youonlylivetwice" ]
+    permission: yolt.admin
+    permission-message: "You don't have permission to use this command."
+
+
+permissions:
+  yolt.admin:
+    default: op

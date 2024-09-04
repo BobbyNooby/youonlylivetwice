@@ -89,4 +89,17 @@ public class LocalDatabase {
         }
     }
 
+    public String getUUIDFromUsername(String username) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT uuid FROM players WHERE name = ?")) {
+            preparedStatement.setString(1, username);
+            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                if (resultSet.next()) {
+                    return resultSet.getString("uuid");
+                } else {
+                    return null;
+                }
+            }
+        }
+    }
+
 }
