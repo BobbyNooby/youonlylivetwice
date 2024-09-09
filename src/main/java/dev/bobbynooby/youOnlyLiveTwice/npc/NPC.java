@@ -54,7 +54,7 @@ public class NPC {
         ServerPlayer npc = new ServerPlayer(server, serverLevel, gameProfile, ClientInformation.createDefault());
         npc.connection = new DummyServerGamePacketListenerImpl(server, npc);
         npc.setPos(x, y, z);
-        npc.setPose(Pose.SLEEPING);
+        npc.setPose(Pose.SWIMMING);
 
         SynchedEntityData synchedEntityData = npc.getEntityData();
         EntityDataAccessor<Byte> accessor = new EntityDataAccessor<>(17, EntityDataSerializers.BYTE);
@@ -63,7 +63,7 @@ public class NPC {
 
         ServerEntity npcServerEntity = new ServerEntity(npc.serverLevel(), npc, 0, false, packet -> {
         }, Set.of());
-
+        
 
         ServerGamePacketListenerImpl playerPacketListener = serverPlayer.connection;
 

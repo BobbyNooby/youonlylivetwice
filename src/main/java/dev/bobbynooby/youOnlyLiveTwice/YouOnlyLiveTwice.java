@@ -6,6 +6,7 @@ import dev.bobbynooby.youOnlyLiveTwice.features.NameTagHider;
 import dev.bobbynooby.youOnlyLiveTwice.features.PseudoHardcore;
 import dev.bobbynooby.youOnlyLiveTwice.features.ServerSpoofer;
 import dev.bobbynooby.youOnlyLiveTwice.listeners.PlayerEventHandler;
+import dev.bobbynooby.youOnlyLiveTwice.listeners.ProtocolLibHandler;
 import dev.bobbynooby.youOnlyLiveTwice.utils.PluginPrint;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -32,6 +33,9 @@ public final class YouOnlyLiveTwice extends JavaPlugin {
         pseudoHardcore.start(this);
         PluginPrint.println("PseudoHardcore Enabled!");
 
+
+        ProtocolLibHandler.start();
+        PluginPrint.println("ProtocolLib Enabled!");
 
         getServer().getPluginManager().registerEvents(new ServerSpoofer(), this);
         PluginPrint.println("Server Spoofer Enabled!");
