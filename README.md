@@ -12,7 +12,13 @@ Config file will be provided for enabling / disabling of features if wanted.
 
 # Planned Features
 
-- Pseudo Hardcore (Ban System)
+- Pseudo Hardcore
+    - Dead players are barred from playing
+    - Ghost (spectator) system ? Purgatory world ? Just banned from the server ?
+- Grave System
+    - Players leave a grave with their items and their player head in it.
+- Revive system
+    - Players heads can be used with a custom crafting recipe item or a ritual to revive them
 - No nametags ✅
 - Chat Supressor✅
     - Only get to see your own messages✅
@@ -27,8 +33,3 @@ Config file will be provided for enabling / disabling of features if wanted.
 - Persistent Player Presence
     - Npc player is spawned at a player logout spot that will sync its health / inventory with the player (Similar to
       the sleep system in Rust (video game) ).
-- Corpse System
-    - Dead players will leave behind a corpse that stays until looted.
-- Revive System
-    - Dead players will leave behind their player head. The head will be used in a custom crafting recipie which makes
-      an item that can bring people back from the dead.
