@@ -6,6 +6,7 @@ import dev.bobbynooby.youOnlyLiveTwice.utils.PluginPrint;
 import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -18,37 +19,13 @@ public class PseudoHardcore {
     private LocalDatabase db;
 
     public void start(YouOnlyLiveTwice plugin) {
-        try {
-            if (!plugin.getDataFolder().exists()) {
-                plugin.getDataFolder().mkdirs();
-            }
-
-            db = new LocalDatabase(plugin.getDataFolder().getAbsolutePath() + "/players.db");
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            PluginPrint.println("Failed to connect to database!" + e.getMessage());
-            Bukkit.getPluginManager().disablePlugin(plugin);
-        }
+        this.db = plugin.db;
     }
 
-    public void stop() {
-        try {
-            db.closeConnection();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
 
     public void handleLogin(PlayerLoginEvent event) throws SQLException {
         Player player = event.getPlayer();
         PluginPrint.println("Player " + player.getName() + " logged in.");
-
-        //Check if exists
-        if (!db.playerExists(player)) {
-            db.addPlayer(player);
-        }
-        ;
 
         //Check if alive
         if (!db.playerIsAlive(player)) {
@@ -58,11 +35,26 @@ public class PseudoHardcore {
 
     }
 
+    public void handleEntityDamage(EntityDamageEvent event) throws SQLException {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        double playerHealth = player.getHealth();
+        double damage = event.getFinalDamage();
+        if (playerHealth - damage <= 0) {
+            event.setCancelled(true);
+            db.killPlayer(player.getUniqueId());
+            player.kickPlayer("You are have died.");
+        }
+    }
+
+
     public void handleDeath(PlayerDeathEvent event) throws SQLException {
         Player player = event.getEntity();
         String playerName = player.getName();
         String deathMessage = event.getDeathMessage();
         String updatedDeathMessage = deathMessage;
+
 
         if (deathMessage.startsWith(playerName)) {
             updatedDeathMessage = "You" + deathMessage.substring(playerName.length());
@@ -70,7 +62,7 @@ public class PseudoHardcore {
         updatedDeathMessage = updatedDeathMessage.replace(playerName, "you");
 
         try {
-            db.killPlayer(player);
+            db.killPlayer(player.getUniqueId());
             player.kickPlayer(updatedDeathMessage);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -79,10 +71,10 @@ public class PseudoHardcore {
 
     public void killPlayer(String username) {
         try {
-            UUID uuid = UUID.fromString(db.getUUIDFromUsername(username));
+            UUID uuid = db.getUUIDFromUsername(username);
             Player player;
 
-            if (db.getUUIDFromUsername(username) == null) {
+            if (uuid == null) {
                 return;
             }
 
@@ -95,7 +87,7 @@ public class PseudoHardcore {
                 player.setHealth(0);
 
             }
-            db.killPlayer(player);
+            db.killPlayer(player.getUniqueId());
 
 
         } catch (SQLException e) {
@@ -103,12 +95,13 @@ public class PseudoHardcore {
         }
     }
 
+
     public void revivePlayer(String username) {
         try {
-            UUID uuid = UUID.fromString(db.getUUIDFromUsername(username));
+            UUID uuid = db.getUUIDFromUsername(username);
             PluginPrint.println("Reviving " + username + " with UUID " + uuid);
             Player player;
-            if (db.getUUIDFromUsername(username) == null) {
+            if (uuid == null) {
                 return;
             }
             if (Bukkit.getPlayer(uuid) != null) {
@@ -118,7 +111,7 @@ public class PseudoHardcore {
                 player = Bukkit.getOfflinePlayer(uuid).getPlayer();
                 player.setHealth(10);
             }
-            db.revivePlayer(player);
+            db.revivePlayer(player.getUniqueId());
         } catch (SQLException e) {
             e.printStackTrace();
         }

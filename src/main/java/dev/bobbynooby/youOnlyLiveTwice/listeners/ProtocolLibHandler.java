@@ -25,7 +25,7 @@ public class ProtocolLibHandler {
 
                 PacketContainer packet = event.getPacket();
 
-                PluginPrint.println(packet.getEnumEntityUseActions().read(0).getAction().name());
+//                PluginPrint.println(packet.getEnumEntityUseActions().read(0).getAction().name());
             }
         });
 

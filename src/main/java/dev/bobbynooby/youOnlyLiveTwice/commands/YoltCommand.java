@@ -1,22 +1,11 @@
 package dev.bobbynooby.youOnlyLiveTwice.commands;
 
-import com.mojang.authlib.GameProfile;
 import dev.bobbynooby.youOnlyLiveTwice.YouOnlyLiveTwice;
-import dev.bobbynooby.youOnlyLiveTwice.npc.NPC;
-import dev.bobbynooby.youOnlyLiveTwice.utils.DummyServerGamePacketListenerImpl;
-import dev.bobbynooby.youOnlyLiveTwice.utils.PluginPrint;
-import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerEntity;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import dev.bobbynooby.youOnlyLiveTwice.npc.AliveNPC;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
-import org.bukkit.craftbukkit.v1_21_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 
 import java.util.*;
@@ -40,10 +29,8 @@ public class YoltCommand implements CommandExecutor, TabExecutor {
 
         if (args.length == 1 && args[0].equalsIgnoreCase("test")) {
             if (sender instanceof Player player) {
-
-                NPC npc = new NPC(player);
-
-                npc.spawnNPC(player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ());
+                AliveNPC aliveNPC = new AliveNPC(player);
+                aliveNPC.spawnNPC(player.getLocation());
 
             }
 

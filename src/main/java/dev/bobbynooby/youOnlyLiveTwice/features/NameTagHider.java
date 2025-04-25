@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.scoreboard.NameTagVisibility;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
@@ -69,6 +70,12 @@ public class NameTagHider {
     }
 
     public void handleJoin(PlayerJoinEvent event) {
+        if (PluginConfig.getInstance().getHideNameTags()) {
+            nameTagCheck(event.getPlayer());
+        }
+    }
+
+    public void handleLogin(PlayerLoginEvent event) {
         if (PluginConfig.getInstance().getHideNameTags()) {
             nameTagCheck(event.getPlayer());
         }

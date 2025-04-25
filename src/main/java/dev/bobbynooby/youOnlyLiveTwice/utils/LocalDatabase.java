@@ -1,8 +1,10 @@
 package dev.bobbynooby.youOnlyLiveTwice.utils;
 
+import dev.bobbynooby.youOnlyLiveTwice.npc.RegistryHandler;
 import org.bukkit.entity.Player;
 
 import java.sql.*;
+import java.util.UUID;
 
 public class LocalDatabase {
 
@@ -15,7 +17,8 @@ public class LocalDatabase {
                     CREATE TABLE IF NOT EXISTS players (
                       uuid TEXT PRIMARY KEY,
                       name TEXT NOT NULL,
-                      alive BOOL NOT NULL DEFAULT true
+                      alive BOOL NOT NULL DEFAULT true,
+                      npcUUID TEXT NOT NULL
                       );
                     """);
         }
@@ -48,35 +51,36 @@ public class LocalDatabase {
     }
 
 
-    public void addPlayer(Player player) {
-        try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO players (uuid, name, alive) VALUES (?, ?, ?)")) {
+    public void addPlayer(Player player, UUID npcUUID) {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO players (uuid, name, alive, npcUUID) VALUES (?, ?, ?, ?)")) {
             preparedStatement.setString(1, player.getUniqueId().toString());
             preparedStatement.setString(2, player.getName());
             preparedStatement.setBoolean(3, true);
+            preparedStatement.setString(4, npcUUID.toString());
             preparedStatement.executeUpdate();
         } catch (SQLException e) {
             PluginPrint.println("Error in adding player" + e.getMessage());
         }
     }
 
-    public void deletePlayer(Player player) throws SQLException {
+    public void deletePlayer(UUID uuid) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement("DELETE FROM players WHERE uuid = ?")) {
-            preparedStatement.setString(1, player.getUniqueId().toString());
+            preparedStatement.setString(1, uuid.toString());
             preparedStatement.executeUpdate();
         }
     }
 
-    public void killPlayer(Player player) throws SQLException {
+    public void killPlayer(UUID uuid) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement("UPDATE players SET alive = false WHERE uuid = ?")) {
-            preparedStatement.setString(1, player.getUniqueId().toString());
+            preparedStatement.setString(1, uuid.toString());
             preparedStatement.executeUpdate();
         }
     }
 
 
-    public void revivePlayer(Player player) throws SQLException {
+    public void revivePlayer(UUID uuid) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement("UPDATE players SET alive = true WHERE uuid = ?")) {
-            preparedStatement.setString(1, player.getUniqueId().toString());
+            preparedStatement.setString(1, uuid.toString());
             preparedStatement.executeUpdate();
         }
     }
@@ -89,12 +93,38 @@ public class LocalDatabase {
         }
     }
 
-    public String getUUIDFromUsername(String username) throws SQLException {
+    public UUID getUUIDFromUsername(String username) throws SQLException {
         try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT uuid FROM players WHERE name = ?")) {
             preparedStatement.setString(1, username);
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 if (resultSet.next()) {
-                    return resultSet.getString("uuid");
+                    return UUID.fromString(resultSet.getString("uuid"));
+                } else {
+                    return null;
+                }
+            }
+        }
+    }
+
+    public UUID getPlayerUUIDFromNPCUUID(UUID npcUUID) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT uuid FROM players WHERE npcUUID = ?")) {
+            preparedStatement.setString(1, npcUUID.toString());
+            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                if (resultSet.next()) {
+                    return UUID.fromString(resultSet.getString("uuid"));
+                } else {
+                    return null;
+                }
+            }
+        }
+    }
+
+    public UUID getNPCUUIDFromPlayerUUID(UUID playerUUID) throws SQLException {
+        try (PreparedStatement preparedStatement = connection.prepareStatement("SELECT npcUUID FROM players WHERE uuid = ?")) {
+            preparedStatement.setString(1, playerUUID.toString());
+            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                if (resultSet.next()) {
+                    return UUID.fromString(resultSet.getString("npcUUID"));
                 } else {
                     return null;
                 }
