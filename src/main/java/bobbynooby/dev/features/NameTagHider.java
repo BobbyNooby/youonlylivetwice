@@ -23,10 +23,9 @@ public class NameTagHider {
         });
     }
 
-    public static void registerAddPlayerToTeamOnJoin(){
+    public static void registerAddPlayerToTeamOnJoin() {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity player = handler.getPlayer();
-            System.out.println("Hello " + player.getName());
 
             if (player.getScoreboardTeam() == null || !player.getScoreboardTeam().getName().equals(TEAM_NAME))
                 server.getScoreboard().addScoreHolderToTeam(player.getNameForScoreboard(), server.getScoreboard().getTeam(TEAM_NAME));

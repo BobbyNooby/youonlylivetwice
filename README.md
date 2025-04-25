@@ -14,9 +14,12 @@ Config file will be provided for enabling / disabling of features if wanted.
 
 - Pseudo Hardcore (Ban System)
 - No nametags ✅
-- Chat Supressor
-    - Only get to see your own messages
-    - Only see admin/server messages
+- Chat Supressor✅
+    - Only get to see your own messages✅
+    - Only see admin/server messages✅
+    - No advancements✅
+    - No death messages✅
+    - No join/leave messages✅
 - Command Supressor
     - Non-OP players only get to use /help which shows a spooky message✅
 - Server Player Count Hider ✅
