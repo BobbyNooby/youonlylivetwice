@@ -1,26 +1,26 @@
 # You Only Live Twice
 
-A minecraft plugin intended to increase the stakes of a multiplayer minecraft playthrough by removing several features
-usually taken for granted and provide an overall more immersive
-experience.
+A minecraft server-side fabric mod intended to increase the stakes of a multiplayer minecraft playthrough by removing
+several features usually taken for granted and provide an overall more immersive experience.
 
 # Usage
 
-This plugin is intended to be used with the SimpleVoiceChat plugin. Other than that, this plugin is intended to only be
-used by itself out of the box withoutu any config.
+This mod is intended to be used with the SimpleVoiceChat mod. Other than that, this mod is intended to only be
+used by itself out of the box without any config.
 
 Config file will be provided for enabling / disabling of features if wanted.
-
-Ermm
 
 # Planned Features
 
 - Pseudo Hardcore (Ban System)
-- No nametags
+- No nametags ✅
 - Chat Supressor
-    - Hidden Join / Leave / Death Messages
-    - Proximity text chat
-- Server Player Count Hider
+    - Only get to see your own messages
+    - Only see admin/server messages
+- Command Supressor
+    - Non-OP players only get to use /help which shows a spooky message✅
+- Server Player Count Hider ✅
+- Tab List Hider
 - Persistent Player Presence
     - Npc player is spawned at a player logout spot that will sync its health / inventory with the player (Similar to
       the sleep system in Rust (video game) ).
