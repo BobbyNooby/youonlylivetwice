@@ -7,7 +7,7 @@
     "CommandManagerMixin",
     "PlayerManagerMixin",
     "PlayerListS2CPacketMixin",
-    "PlayerListS2CPacketAccessor"
+    "PlayerListS2CPacketAccessor",
   ],
   "injectors": {
     "defaultRequire": 1

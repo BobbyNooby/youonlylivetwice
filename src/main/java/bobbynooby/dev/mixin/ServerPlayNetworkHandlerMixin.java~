@@ -1,0 +1,20 @@
+package bobbynooby.dev.mixin;
+
+
+import net.minecraft.network.packet.Packet;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
+import net.minecraft.server.network.ServerCommonNetworkHandler;
+import net.minecraft.server.network.ServerPlayNetworkHandler;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
+
+@Mixin(ServerCommonNetworkHandler.class)
+public class ServerPlayNetworkHandlerMixin {
+    @ModifyVariable(method = "sendPacket", at = @At("HEAD"), argsOnly = true)
+    private Packet<?> onSendPacket(Packet<?> packet) {
+        if (packet instanceof PlayerListS2CPacket) {
+            PlayerListS2CPacket.Action
+        }
+    }
+}

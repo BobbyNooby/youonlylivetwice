@@ -10,6 +10,7 @@ import static net.minecraft.scoreboard.AbstractTeam.VisibilityRule.NEVER;
 
 public class NameTagHider {
 
+
     public static void registerInitTeams() {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             var team = server.getScoreboard().getTeam(TEAM_NAME);

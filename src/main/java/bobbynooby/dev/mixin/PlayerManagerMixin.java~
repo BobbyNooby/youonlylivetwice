@@ -70,7 +70,7 @@ public abstract class PlayerManagerMixin {
 
     /*
 
-        Custom Tab Headers Section
+        CustomTabHeader Section
 
      */
 
