@@ -30,6 +30,8 @@ Config file will be provided for enabling / disabling of features if wanted.
     - Non-OP players only get to use /help which shows a spooky message✅
 - Server Player Count Hider ✅
 - Tab List Hider + Fancy Tab Message ✅
+- No Nether Fast Travel. 1 block in all dimensions = 1 block in the rest;✅
+- Initial World Border Set (5000 Blocks)
 - Random Spawns
     - Players spawn at random locations within a set area
     - The idea is to set the world border to a limited space (10000 x 10000) and make players spawn at random locations.

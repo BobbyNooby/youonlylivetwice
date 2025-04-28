@@ -7,7 +7,9 @@
     "CommandManagerMixin",
     "PlayerManagerMixin",
     "PlayerListS2CPacketMixin",
-    "PlayerListS2CPacketAccessor"
+    "PlayerListS2CPacketAccessor",
+    "DimensionTypeMixin",
+    "SpawnLocatingMixin"
   ],
   "injectors": {
     "defaultRequire": 1
