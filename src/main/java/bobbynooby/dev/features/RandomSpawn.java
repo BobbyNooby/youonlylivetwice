@@ -20,11 +20,10 @@ public class RandomSpawn {
             Random random = new Random();
             int x = random.nextInt(borderRadius * 2) - borderRadius;
             int z = random.nextInt(borderRadius * 2) - borderRadius;
-            int y = world.getTopY(Heightmap.Type.WORLD_SURFACE, x, z);
-            int adjustedY = world.getWorldChunk(new BlockPos(x, y, z)).sampleHeightmap(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z) + 1;
+            int y = world.getWorldChunk(new BlockPos(x, world.getTopY(Heightmap.Type.WORLD_SURFACE, x, z), z)).sampleHeightmap(Heightmap.Type.WORLD_SURFACE, x, z) + 1;
 
             // Check if it's a water block that the player spawns on
-            BlockState blockBelow = world.getBlockState(new BlockPos(x, adjustedY - 1, z));
+            BlockState blockBelow = world.getBlockState(new BlockPos(x, y - 1, z));
 
             // If it's a water block then regenerate a spawn
             if (!blockBelow.getFluidState().isEmpty() && attempts < attemptLimit) {
@@ -33,7 +32,7 @@ public class RandomSpawn {
             }
 
             // After exceeding the attempt limit, just return the spawn even if it's in water.
-            return new BlockPos(x, adjustedY, z);
+            return new BlockPos(x, y, z);
         }
     }
 }

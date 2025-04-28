@@ -1,8 +1,10 @@
 package bobbynooby.dev;
 
+import bobbynooby.dev.features.Config;
 import bobbynooby.dev.features.NameTagHider;
 import net.fabricmc.api.DedicatedServerModInitializer;
 
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,8 +21,9 @@ public class YouOnlyLiveTwice implements DedicatedServerModInitializer {
     @Override
     public void onInitializeServer() {
 
-        NameTagHider.registerInitTeams();
-        NameTagHider.registerAddPlayerToTeamOnJoin();
+        LOGGER.info("You Only Live Twice started.");
+
+        Config.initialize();
 
     }
 
