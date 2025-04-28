@@ -38,7 +38,7 @@ public class CommandManagerMixin {
                 if (commandRoot.equals("help")) {
 
                     // Send help message to non-op players
-                    player.sendMessage(Text.literal("But nobody answered....").formatted(Formatting.DARK_RED));
+                    player.sendMessage(Text.literal("But nobody answered....").formatted(Formatting.RED));
                 }
 
                 // Just ignore the command if it is not help

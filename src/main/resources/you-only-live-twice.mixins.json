@@ -4,7 +4,12 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "PlayerCountSpoofer",
-    "CommandManagerMixin"
+    "CommandManagerMixin",
+    "PlayerManagerMixin",
+    "PlayerListS2CPacketMixin",
+    "PlayerListS2CPacketAccessor",
+    "DimensionTypeMixin",
+    "SpawnLocatingMixin"
   ],
   "injectors": {
     "defaultRequire": 1
