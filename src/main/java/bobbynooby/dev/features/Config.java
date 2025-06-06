@@ -1,18 +1,17 @@
 package bobbynooby.dev.features;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.graves.GravesRegistry;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionTypes;
+import net.minecraft.util.WorldSavePath;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -31,6 +30,7 @@ public class Config {
         Path configPath = getConfigPath();
 
         if (Files.exists(configPath)) {
+
             YouOnlyLiveTwice.LOGGER.info("File at {} exists", configPath);
             loadConfig(configPath); // Load the configuration
         } else {
@@ -51,11 +51,32 @@ public class Config {
             }
         }
 
+        ServerLifecycleEvents.SERVER_STARTED.register((server) -> {
+            Path worldPath = server.getSavePath(WorldSavePath.ROOT);
+            Path gravesDir = worldPath.resolve("graves");
+
+            try {
+                Files.createDirectories(gravesDir);
+                Path testFile = gravesDir.resolve("test.txt");
+                Files.writeString(testFile, "Grave system initialized successfully!");
+                YouOnlyLiveTwice.LOGGER.info("Test file written to {}", testFile);
+            } catch (IOException e) {
+                YouOnlyLiveTwice.LOGGER.error("Failed to write test file", e);
+            }
+        });
+
         // Initialize WorldBorders
         ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::setupWorldBorder);
 
         // Initialize Custom Portal
         CustomCommands.register();
+
+
+        GravesRegistry.initialize();
+
+        // Initialize Graves
+        Graves.initialize();
+
     }
 
     // Load the configuration from the JSON file
