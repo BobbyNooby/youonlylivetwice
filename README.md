@@ -1,6 +1,8 @@
 # You Only Live Twice
 
-A minecraft server-side fabric mod intended to increase the stakes of a multiplayer minecraft playthrough by removing
+A minecraft server-side fabric mod (1.21.5 only for now) intended to increase the stakes of a multiplayer minecraft
+playthrough by
+removing
 several features usually taken for granted and provide an overall more immersive experience.
 
 # Usage
@@ -38,10 +40,10 @@ Player Respawn Cooldown : 2 weeks.
 
 # Planned Features
 
-- ### Pseudo Hardcore
+- ### Pseudo Hardcore ✅
     - Dead players are banned from the server for a period of time before they can join back.
-    - ### Grave System
-        - Players leave a grave with their items and their player head in it.
+    - ### Grave System ✅
+        - Players leave a grave with their items in it.
 - ### Persistent Player Presence
     - Npc player is spawned at a player logout spot that will sync its health / inventory with the player (Similar to
       the offline system in Rust (video game) ).

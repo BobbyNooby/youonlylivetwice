@@ -1,16 +1,16 @@
 package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.database.DatabaseHandler;
 import bobbynooby.dev.graves.GravesRegistry;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.world.GameRules;
 
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -54,18 +54,13 @@ public class Config {
             }
         }
 
-        ServerLifecycleEvents.SERVER_STARTED.register((server) -> {
-            Path worldPath = server.getSavePath(WorldSavePath.ROOT);
-            Path gravesDir = worldPath.resolve("graves");
 
-            try {
-                Files.createDirectories(gravesDir);
-                Path testFile = gravesDir.resolve("test.txt");
-                Files.writeString(testFile, "Grave system initialized successfully!");
-                YouOnlyLiveTwice.LOGGER.info("Test file written to {}", testFile);
-            } catch (IOException e) {
-                YouOnlyLiveTwice.LOGGER.error("Failed to write test file", e);
-            }
+        ServerLifecycleEvents.SERVER_STARTED.register((server) -> {
+            //Initialize DB
+            DatabaseHandler.initialize(server);
+
+            // Initialize GameRules
+            server.getGameRules().get(GameRules.DO_IMMEDIATE_RESPAWN).set(true, server);
         });
 
         // Initialize WorldBorders
@@ -74,8 +69,11 @@ public class Config {
         // Initialize Custom Portal
         CustomCommands.register();
 
-
+        // Initialize Custom grave blocks
         GravesRegistry.initialize();
+
+        // Initialize PseudoHardcore
+        PseudoHardcore.initialize();
 
         // Initialize Graves
         Graves.initialize();

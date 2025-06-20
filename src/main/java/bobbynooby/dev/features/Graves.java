@@ -49,5 +49,6 @@ public class Graves {
 
 
         player.getInventory().clear();
+        PseudoHardcore.handleDeath(player, world.getServer());
     }
 }
