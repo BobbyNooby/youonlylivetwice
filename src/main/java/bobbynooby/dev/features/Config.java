@@ -1,36 +1,39 @@
 package bobbynooby.dev.features;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.graves.GravesRegistry;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionTypes;
+import net.minecraft.util.WorldSavePath;
 
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Config {
     private static final String CONFIG_FILE = "config/you-only-live-twice.json";
 
     private static final double DEFAULT_END_BORDER_SCALE = 2.0;
-    private static final int DEFAULT_WORLD_DIAMETER = 8000;
+    private static final int DEFAULT_WORLD_DIAMETER = 10000;
+
+    private static final int DEFAULT_RESPAWN_COOLDOWN = 14;
 
     static double END_BORDER_SCALE = DEFAULT_END_BORDER_SCALE; // Default value
     static int WORLD_DIAMETER = DEFAULT_WORLD_DIAMETER; // Default value
+    static int RESPAWN_COOLDOWN = DEFAULT_RESPAWN_COOLDOWN; // Default value
+
 
     // Initialize configuration (load or create the config file)
     public static void initialize() {
         Path configPath = getConfigPath();
 
         if (Files.exists(configPath)) {
+
             YouOnlyLiveTwice.LOGGER.info("File at {} exists", configPath);
             loadConfig(configPath); // Load the configuration
         } else {
@@ -51,11 +54,32 @@ public class Config {
             }
         }
 
+        ServerLifecycleEvents.SERVER_STARTED.register((server) -> {
+            Path worldPath = server.getSavePath(WorldSavePath.ROOT);
+            Path gravesDir = worldPath.resolve("graves");
+
+            try {
+                Files.createDirectories(gravesDir);
+                Path testFile = gravesDir.resolve("test.txt");
+                Files.writeString(testFile, "Grave system initialized successfully!");
+                YouOnlyLiveTwice.LOGGER.info("Test file written to {}", testFile);
+            } catch (IOException e) {
+                YouOnlyLiveTwice.LOGGER.error("Failed to write test file", e);
+            }
+        });
+
         // Initialize WorldBorders
         ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::setupWorldBorder);
 
         // Initialize Custom Portal
         CustomCommands.register();
+
+
+        GravesRegistry.initialize();
+
+        // Initialize Graves
+        Graves.initialize();
+
     }
 
     // Load the configuration from the JSON file
@@ -97,6 +121,22 @@ public class Config {
                 return; // Exit after fixing and saving
             }
 
+            if (jsonObject.has("RESPAWN_COOLDOWN")) {
+                try {
+                    RESPAWN_COOLDOWN = jsonObject.get("RESPAWN_COOLDOWN").getAsInt();
+                } catch (NumberFormatException e) {
+                    YouOnlyLiveTwice.LOGGER.warn("Invalid value for RESPAWN_COOLDOWN, using default: {}", DEFAULT_RESPAWN_COOLDOWN);
+                    RESPAWN_COOLDOWN = DEFAULT_RESPAWN_COOLDOWN;
+                    saveConfig(configPath);
+                    return;
+                }
+            } else {
+                YouOnlyLiveTwice.LOGGER.warn("Missing RESPAWN_COOLDOWN, using default: {}", DEFAULT_RESPAWN_COOLDOWN);
+                RESPAWN_COOLDOWN = DEFAULT_RESPAWN_COOLDOWN;
+                saveConfig(configPath);
+                return;
+            }
+
             YouOnlyLiveTwice.LOGGER.info("Configuration loaded successfully.");
         } catch (JsonParseException e) {
             YouOnlyLiveTwice.LOGGER.error("Failed to parse config file, using default values.", e);
@@ -113,6 +153,7 @@ public class Config {
     private static void setDefaults() {
         END_BORDER_SCALE = DEFAULT_END_BORDER_SCALE;
         WORLD_DIAMETER = DEFAULT_WORLD_DIAMETER;
+        RESPAWN_COOLDOWN = DEFAULT_RESPAWN_COOLDOWN;
     }
 
     // Save the current configuration to the JSON file
@@ -122,6 +163,7 @@ public class Config {
             JsonObject jsonObject = new JsonObject();
             jsonObject.addProperty("END_BORDER_SCALE", END_BORDER_SCALE);
             jsonObject.addProperty("WORLD_DIAMETER", WORLD_DIAMETER);
+            jsonObject.addProperty("RESPAWN_COOLDOWN", RESPAWN_COOLDOWN);
 
             gson.toJson(jsonObject, writer);
         } catch (Exception e) {
@@ -146,6 +188,15 @@ public class Config {
     public static void setEndBorderScale(double scale) {
         END_BORDER_SCALE = scale;
         saveConfig(getConfigPath()); // Save the updated config immediately
+    }
+
+    public static int getRespawnCooldown() {
+        return RESPAWN_COOLDOWN;
+    }
+
+    public static void setRespawnCooldown(int cooldown) {
+        RESPAWN_COOLDOWN = cooldown;
+        saveConfig(getConfigPath());
     }
 
     // Get the path to the config file

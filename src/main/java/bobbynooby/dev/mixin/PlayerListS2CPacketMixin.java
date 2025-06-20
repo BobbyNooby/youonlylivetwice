@@ -10,7 +10,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.List;
 
 @Mixin(PlayerListS2CPacket.class)
 public class PlayerListS2CPacketMixin {
@@ -38,6 +41,7 @@ public class PlayerListS2CPacketMixin {
     can be seen on the tablist.
 
      */
+
     @Inject(method = "entryFromPlayer", at = @At("HEAD"), cancellable = true)
     private static void entryFromPlayer(Collection<ServerPlayerEntity> players, CallbackInfoReturnable<PlayerListS2CPacket> cir) {
         EnumSet<PlayerListS2CPacket.Action> enumSet = EnumSet.of(PlayerListS2CPacket.Action.ADD_PLAYER, PlayerListS2CPacket.Action.INITIALIZE_CHAT, PlayerListS2CPacket.Action.UPDATE_GAME_MODE, PlayerListS2CPacket.Action.UPDATE_LISTED, PlayerListS2CPacket.Action.UPDATE_LATENCY, PlayerListS2CPacket.Action.UPDATE_DISPLAY_NAME, PlayerListS2CPacket.Action.UPDATE_HAT, PlayerListS2CPacket.Action.UPDATE_LIST_ORDER);

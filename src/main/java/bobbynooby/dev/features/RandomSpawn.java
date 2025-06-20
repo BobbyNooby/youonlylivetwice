@@ -8,6 +8,7 @@ import net.minecraft.world.Heightmap;
 
 import java.util.Random;
 
+
 public class RandomSpawn {
 
     public static BlockPos findRandomSpawn(ServerWorld world) {

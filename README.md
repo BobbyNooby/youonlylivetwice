@@ -5,31 +5,43 @@ several features usually taken for granted and provide an overall more immersive
 
 # Usage
 
+The focus of this mod is to maximize immersion by relying on in-game experiences as much as possible. Third party
+communication tools, and F3 are not reccomended to be used while playing this mod.
+
 This mod is intended to be used on its own with a few exceptions listed below. The addition of other mods might cause
 issues.
 
-Some mods I highly recommend to use along with this are:
+Some addons I highly recommend to use along with this are:
 
-- [SimpleVoiceChat](https://modrinth.com/plugin/simple-voice-chat)
+- [SimpleVoiceChat (Client/Server Mod)](https://modrinth.com/project/9eGKb6K1)
     - This is the main mod i originally intended to use this mod with for an SMP.
-- [Chunky](https://modrinth.com/plugin/chunky)
+- [Chunky (Server-side Mod)](https://modrinth.com/project/fALzjamp)
     - Since the world border is so small, Chunky can be used to basically prerender the whole world.
+- [Hardcore Hearts (Resource Pack)](https://modrinth.com/project/5AMcQaG0)
+    - Just a simple resource pack that changes the hearts to hardcore hearts to make the
+- [No F3 (Client-side Mod)](https://modrinth.com/project/MPFUV2Ds)
+    - Highly reccomend to remove F3 to ensure a more immersive experience where you dont rely on coords.
 
 Upon starting the server, a config file will be created in the run/config folder. And the world borders will be set to a
-diameter of 8000 by default. The config can be changed in the file before starting the server or by using the /yolt
+diameter of 10000 by default. The config can be changed in the file before starting the server or by using the /yolt
 command in-game.
 
 Since this is a server sided mod, all config is done through the /yolt command.
 
+# Default Config
+
+World Diameter : 10000 Blocks
+
+Dimension Scaling : 1 across all dimensions
+
+Player Respawn Cooldown : 2 weeks.
+
 # Planned Features
 
 - ### Pseudo Hardcore
-    - Dead players are barred from playing
-    - Ghost (spectator) system ? Purgatory world ? Just banned from the server ?
+    - Dead players are banned from the server for a period of time before they can join back.
     - ### Grave System
         - Players leave a grave with their items and their player head in it.
-    - ### Revive system
-        - Players heads can be used with a custom crafting recipe item or a ritual to revive them
 - ### Persistent Player Presence
     - Npc player is spawned at a player logout spot that will sync its health / inventory with the player (Similar to
       the offline system in Rust (video game) ).

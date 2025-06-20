@@ -12,13 +12,13 @@ import java.util.List;
 @Mixin(ServerMetadata.Players.class)
 public class PlayerCountSpoofer {
 
-    @Inject(method="max" , at = @At("HEAD"), cancellable = true)
-    private void getMaxPlayers(CallbackInfoReturnable<Integer> cir){
+    @Inject(method = "max", at = @At("HEAD"), cancellable = true)
+    private void getMaxPlayers(CallbackInfoReturnable<Integer> cir) {
         cir.setReturnValue(1);
     }
 
-    @Inject(method="online" , at = @At("HEAD"), cancellable = true)
-    private void getOnlinePlayers(CallbackInfoReturnable<Integer> cir){
+    @Inject(method = "online", at = @At("HEAD"), cancellable = true)
+    private void getOnlinePlayers(CallbackInfoReturnable<Integer> cir) {
         cir.setReturnValue(0);
     }
 

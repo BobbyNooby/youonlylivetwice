@@ -9,7 +9,8 @@
     "PlayerListS2CPacketMixin",
     "PlayerListS2CPacketAccessor",
     "DimensionTypeMixin",
-    "SpawnLocatingMixin"
+    "SpawnLocatingMixin",
+    "LivingEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
