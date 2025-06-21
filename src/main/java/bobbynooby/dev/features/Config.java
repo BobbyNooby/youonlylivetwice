@@ -78,6 +78,10 @@ public class Config {
         // Initialize Graves
         Graves.initialize();
 
+        // Initialize NameTagHider
+        NameTagHider.registerInitTeams();
+        NameTagHider.registerAddPlayerToTeamOnJoin();
+
     }
 
     // Load the configuration from the JSON file

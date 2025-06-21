@@ -38,6 +38,18 @@ Dimension Scaling : 1 across all dimensions
 
 Player Respawn Cooldown : 2 weeks.
 
+# Commands
+
+/yolt center <x> <z>
+
+/yolt endscaling <scaling>
+
+/yolt respawncooldown <cooldown>
+
+/yolt kill <player>
+
+/yolt unkill <player>
+
 # Planned Features
 
 - ### Pseudo Hardcore ✅
