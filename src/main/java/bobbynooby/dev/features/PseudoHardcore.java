@@ -2,6 +2,7 @@ package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.database.DatabaseHandler;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -22,13 +23,19 @@ public class PseudoHardcore {
 
     }
 
-    public static void handleDeath(ServerPlayerEntity player, MinecraftServer server) {
+    public static void handleDeath(ServerPlayerEntity player) {
         player.networkHandler.disconnect(Text.literal("You have died."));
-        DatabaseHandler.addNewDeathLog(player);
+        DatabaseHandler.addNewDeathLog(player.getGameProfile());
+    }
+
+    public static void handleRevive(GameProfile playerProfile) {
+        DatabaseHandler.revivePlayer(playerProfile.getId());
+
     }
 
     public static void handleJoin(ServerPlayerEntity player, MinecraftServer server) {
         DatabaseHandler.DeathLog latestDeathlog = DatabaseHandler.getLatestDeathLog(player);
+
 
         if (latestDeathlog != null) {
             try {
@@ -36,14 +43,14 @@ public class PseudoHardcore {
                 SimpleDateFormat format = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", java.util.Locale.ENGLISH);
                 Date deathDate = format.parse(latestDeathlog.deathTime);
                 int cooldownValue = latestDeathlog.respawnCooldown;
-                long cooldownMillis = cooldownValue * 1000L;
+                long cooldownMillis = cooldownValue * 1000L * 60L * 60L * 24L;
 
                 // Check if the player is on cooldown
                 long allowedTimeMillis = deathDate.getTime() + (cooldownMillis);
                 long nowMillis = System.currentTimeMillis();
                 long remaining = (allowedTimeMillis - nowMillis);
 
-                if (nowMillis < allowedTimeMillis) {
+                if (nowMillis < allowedTimeMillis && !latestDeathlog.bypass) {
                     player.networkHandler.disconnect(getCooldownFromMillis(remaining));
                     YouOnlyLiveTwice.LOGGER.info("Kicked {} due to active cooldown. {}s remaining.", player.getGameProfile().getName(), remaining);
                 } else {

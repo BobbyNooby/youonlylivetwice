@@ -1,16 +1,22 @@
 package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.database.DatabaseHandler;
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.command.argument.Vec2ArgumentType;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec2f;
 import net.minecraft.world.dimension.DimensionTypes;
+
+import java.util.Optional;
 
 public class CustomCommands {
 
@@ -94,6 +100,102 @@ public class CustomCommands {
                                         return 1;
                                     })
                             )
+                    ).then(CommandManager.literal("respawncooldown")
+                            .then(CommandManager.argument("cooldown", IntegerArgumentType.integer()) // /yolt respawncooldown <cooldown>))
+                                    .executes(context -> {
+
+                                        // Set the respawn cooldown
+                                        int cooldown = IntegerArgumentType.getInteger(context, "cooldown");
+                                        Config.setRespawnCooldown(cooldown);
+
+                                        // Send feedback
+                                        context.getSource().sendFeedback(() -> {
+                                            return Text.of("Respawn cooldown set to: " + cooldown);
+                                        }, false);
+                                        return 1;
+                                    })
+                            )
+                    ).then(CommandManager.literal("kill")
+                            .then(CommandManager.argument("player", StringArgumentType.string()) // /yolt kill <player>
+                                    .executes(context -> {
+
+                                                MinecraftServer server = context.getSource().getServer();
+
+                                                // Get the target player from cache
+                                                String playerName = StringArgumentType.getString(context, "player");
+                                                Optional<GameProfile> playerProfile = server.getUserCache().findByName(playerName);
+                                                try {
+                                                    ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerName); // Get the target player from the ServerPlayerEntity
+
+                                                    if (player != null) {
+
+
+                                                        // Kill the player
+                                                        PseudoHardcore.handleDeath(player);
+
+                                                        // Send feedback
+                                                        context.getSource().sendFeedback(() -> {
+                                                            return Text.of("Killed " + player.getGameProfile().getName());
+                                                        }, false);
+                                                    } else if (playerProfile.isPresent()) {
+
+                                                        // Kill the player offline
+                                                        DatabaseHandler.addNewDeathLog(playerProfile.get());
+
+                                                        // Send feedback
+                                                        context.getSource().sendFeedback(() -> {
+                                                            return Text.of("Killed " + playerProfile.get().getName());
+                                                        }, false);
+                                                    } else {
+                                                        // No player found
+                                                        context.getSource().sendFeedback(() -> {
+                                                            return Text.of("Player" + playerName + " not found");
+                                                        }, false);
+                                                    }
+                                                } catch (Exception e) {
+                                                    YouOnlyLiveTwice.LOGGER.error("Failed to kill " + playerName, e);
+                                                }
+
+                                                return 1;
+                                            }
+                                    )
+                            )
+                    ).then(CommandManager.literal("unkill")
+                            .then(CommandManager.argument("player", StringArgumentType.string()) // /yolt unkill <player>
+                                    .executes(context -> {
+
+
+                                        MinecraftServer server = context.getSource().getServer();
+
+
+                                        // Get the target player from cache
+                                        String playerName = StringArgumentType.getString(context, "player");
+                                        try {
+                                            Optional<GameProfile> playerProfile = server.getUserCache().findByName(playerName);
+
+                                            if (playerProfile.isPresent()) {
+
+                                                // Revive the player
+                                                PseudoHardcore.handleRevive(playerProfile.get());
+
+                                                // Send feedback
+                                                context.getSource().sendFeedback(() -> {
+                                                    return Text.of("Revived " + playerProfile.get().getName());
+                                                }, false);
+                                            } else {
+
+                                                // No player found
+                                                context.getSource().sendFeedback(() -> {
+                                                    return Text.of("Player" + playerName + " not found");
+                                                }, false);
+
+                                            }
+                                        } catch (Exception e) {
+                                            YouOnlyLiveTwice.LOGGER.error("Failed to unkill " + playerName, e);
+                                        }
+
+                                        return 1;
+                                    }))
                     )
             );
         });

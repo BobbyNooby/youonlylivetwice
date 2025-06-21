@@ -2,6 +2,7 @@ package bobbynooby.dev.database;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.features.Config;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.WorldSavePath;
@@ -13,6 +14,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Date;
+import java.util.UUID;
 
 public class DatabaseHandler {
 
@@ -48,10 +50,10 @@ public class DatabaseHandler {
 
     }
 
-    public static void addNewDeathLog(ServerPlayerEntity player) {
+    public static void addNewDeathLog(GameProfile player) {
         // Get player data
-        String playerUuid = player.getUuidAsString();
-        String playerName = player.getGameProfile().getName();
+        String playerUuid = player.getId().toString();
+        String playerName = player.getName();
         String deathTime = new Date().toString();
         int respawnCooldown = Config.getRespawnCooldown();
 
@@ -70,6 +72,33 @@ public class DatabaseHandler {
             YouOnlyLiveTwice.LOGGER.error("Failed to add death log", e);
         }
     }
+
+    public static void revivePlayer(UUID playerUuid) {
+        String sql = """
+                UPDATE death_logs
+                   SET bypass = TRUE
+                 WHERE ROWID = (
+                       SELECT ROWID
+                         FROM death_logs
+                        WHERE uuid = ?
+                     ORDER BY ROWID DESC
+                        LIMIT 1
+                   )
+                """;
+
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, playerUuid.toString());
+            int updated = stmt.executeUpdate();
+            if (updated > 0) {
+                YouOnlyLiveTwice.LOGGER.info("Revived latest death log for " + playerUuid);
+            } else {
+                YouOnlyLiveTwice.LOGGER.warn("No death logs found to revive for " + playerUuid);
+            }
+        } catch (Exception e) {
+            YouOnlyLiveTwice.LOGGER.error("Failed to revive latest death log", e);
+        }
+    }
+
 
     public static void close() {
         try {

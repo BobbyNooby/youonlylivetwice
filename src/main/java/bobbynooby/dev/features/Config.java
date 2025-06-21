@@ -21,7 +21,7 @@ public class Config {
     private static final double DEFAULT_END_BORDER_SCALE = 2.0;
     private static final int DEFAULT_WORLD_DIAMETER = 10000;
 
-    private static final int DEFAULT_RESPAWN_COOLDOWN = 14;
+    private static final int DEFAULT_RESPAWN_COOLDOWN = 7;
 
     static double END_BORDER_SCALE = DEFAULT_END_BORDER_SCALE; // Default value
     static int WORLD_DIAMETER = DEFAULT_WORLD_DIAMETER; // Default value
