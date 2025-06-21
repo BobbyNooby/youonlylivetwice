@@ -21,8 +21,8 @@ Some addons I highly recommend to use along with this are:
     - Since the world border is so small, Chunky can be used to basically prerender the whole world.
 - [Hardcore Hearts (Resource Pack)](https://modrinth.com/project/5AMcQaG0)
     - Just a simple resource pack that changes the hearts to hardcore hearts to make the
-- [No F3 (Client-side Mod)](https://modrinth.com/project/MPFUV2Ds)
-    - Highly reccomend to remove F3 to ensure a more immersive experience where you dont rely on coords.
+- [Voice Chat Interaction (Server-side Mod)](https://modrinth.com/project/qsSP2ZZ0)
+    - Voice chat skulk sensor activation and warden detection
 
 Upon starting the server, a config file will be created in the run/config folder. And the world borders will be set to a
 diameter of 10000 by default. The config can be changed in the file before starting the server or by using the /yolt
