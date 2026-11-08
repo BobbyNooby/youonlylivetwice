@@ -7,6 +7,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
@@ -80,6 +82,52 @@ public class GraveStoreGameTests {
         helper.assertTrue(contents != null, "container component was lost");
         int diamonds = contents.nonEmptyItemCopyStream().filter(s -> s.is(Items.DIAMOND)).mapToInt(ItemStack::getCount).sum();
         helper.assertValueEqual(diamonds, 3, "diamonds inside the shulker box");
+        helper.succeed();
+    }
+
+    @GameTest
+    public void storeCodecRoundTrips(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        Grave a = grave(new BlockPos(1, 64, 1), List.of(new ItemStack(Items.DIAMOND, 4)));
+        Grave b = grave(new BlockPos(2, 64, 2), List.of(new ItemStack(Items.APPLE, 7)));
+        try {
+            store.put(a);
+            store.put(b);
+            Tag encoded = GraveStore.TYPE.codec().encodeStart(ops, store).getOrThrow();
+            GraveStore decoded = GraveStore.TYPE.codec().parse(ops, encoded).getOrThrow();
+            helper.assertTrue(decoded.byId(a.id()).map(g -> g.items().size() == 1 && g.items().get(0).is(Items.DIAMOND)
+                    && g.items().get(0).getCount() == 4).orElse(false), "first grave or its items missing");
+            helper.assertTrue(decoded.byId(b.id()).map(g -> g.items().size() == 1 && g.items().get(0).is(Items.APPLE)
+                    && g.items().get(0).getCount() == 7).orElse(false), "second grave or its items missing");
+        } finally {
+            store.remove(a.id());
+            store.remove(b.id());
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void badItemOnlyDropsThatItem(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        Grave grave = grave(new BlockPos(3, 64, 3), List.of(new ItemStack(Items.DIAMOND, 2), new ItemStack(Items.APPLE, 3)));
+        CompoundTag tag = (CompoundTag) Grave.CODEC.encodeStart(ops, grave).getOrThrow();
+        ListTag items = tag.getListOrEmpty("items");
+        items.getCompound(0).orElseThrow().putString("id", "minecraft:does_not_exist");
+
+        Grave after = Grave.CODEC.parse(ops, tag).getOrThrow();
+        helper.assertValueEqual(after.id(), grave.id(), "id");
+        helper.assertValueEqual(after.items().size(), 1, "surviving item count");
+        helper.assertTrue(after.items().get(0).is(Items.APPLE) && after.items().get(0).getCount() == 3, "other item changed");
+        helper.succeed();
+    }
+
+    @GameTest
+    public void emptyStacksAreFiltered(GameTestHelper helper) {
+        Grave grave = grave(new BlockPos(4, 64, 4), List.of(ItemStack.EMPTY, new ItemStack(Items.DIAMOND)));
+        helper.assertValueEqual(grave.items().size(), 1, "items after filtering");
+        helper.assertValueEqual(grave.withItems(List.of(ItemStack.EMPTY)).items().size(), 0, "items after withItems");
+        roundTrip(helper, grave);
         helper.succeed();
     }
 }

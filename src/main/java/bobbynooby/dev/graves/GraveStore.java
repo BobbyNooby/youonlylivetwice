@@ -2,6 +2,7 @@ package bobbynooby.dev.graves;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.Dynamic;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -21,8 +22,10 @@ import java.util.UUID;
 
 /** Every grave in the world, saved with the world's data. Graves are few, so lookups just scan. */
 public final class GraveStore extends SavedData {
-    private static final Codec<GraveStore> CODEC = Grave.CODEC.listOf().fieldOf("graves").codec()
-            .xmap(GraveStore::new, store -> List.copyOf(store.graves.values()));
+    // A broken grave record is logged and skipped; failing here would make the storage start empty and overwrite the file
+    private static final Codec<GraveStore> CODEC = Codec.of(
+            Grave.CODEC.listOf().fieldOf("graves").codec().comap(store -> List.copyOf(store.graves.values())),
+            Codec.PASSTHROUGH.listOf().fieldOf("graves").codec().map(GraveStore::readLeniently));
 
     // The storage runs this fixer on every load and fails on null, which would lose the graves after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -38,6 +41,16 @@ public final class GraveStore extends SavedData {
         for (Grave grave : loaded) {
             graves.put(grave.id(), grave);
         }
+    }
+
+    private static GraveStore readLeniently(List<Dynamic<?>> entries) {
+        List<Grave> loaded = new ArrayList<>();
+        for (Dynamic<?> entry : entries) {
+            Grave.CODEC.parse(entry)
+                    .resultOrPartial(error -> YouOnlyLiveTwice.LOGGER.error("Skipping unreadable grave record: {}", error))
+                    .ifPresent(loaded::add);
+        }
+        return new GraveStore(loaded);
     }
 
     public static GraveStore get(MinecraftServer server) {
