@@ -128,6 +128,29 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // One typo in the file must not reset a running server, or undo the test server's border override
+    @GameTest
+    public void reloadOfBrokenFileChangesNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        YoltConfig configBefore = Settings.get();
+        try {
+            Files.writeString(path, "{broken");
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("Config not reloaded"), "command output: " + output);
+            helper.assertTrue(Settings.get() == configBefore, "live config was replaced");
+            helper.assertValueEqual(Files.readString(path), "{broken", "config file");
+        } finally {
+            Files.writeString(path, fileBefore);
+            if (Settings.get() != configBefore) {
+                Settings.reload();
+                TestServerSetup.applyTestSettings();
+            }
+        }
+        helper.succeed();
+    }
+
     // Runs the command as the console and returns every line it sent back
     private static List<String> run(MinecraftServer server, String command) {
         List<String> output = new ArrayList<>();

@@ -50,6 +50,7 @@ class ConfigLoaderTest {
         assertEquals(3.0, r.config().worldBorder.endScale);
         assertEquals(1, r.warnings().size());
         assertTrue(r.warnings().get(0).contains("worldBorder.diameter"));
+        assertFalse(r.unparseable());
     }
 
     @Test
@@ -97,6 +98,20 @@ class ConfigLoaderTest {
         assertEquals("{not json", Files.readString(dir.resolve("config.json.bak")));
         assertEquals(10000, r.config().worldBorder.diameter);
         assertFalse(r.warnings().isEmpty());
+        assertTrue(r.unparseable());
+    }
+
+    // The reload path: the running server keeps its config, so the file must stay for the admin to fix
+    @Test
+    void unparseableFileLeftAloneWithoutDefaults() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{not json");
+        ConfigLoader.Result r = ConfigLoader.load(file, false);
+        assertTrue(r.unparseable());
+        assertNull(r.config());
+        assertFalse(r.warnings().isEmpty());
+        assertEquals("{not json", Files.readString(file));
+        assertFalse(Files.exists(dir.resolve("config.json.bak")));
     }
 
     @Test

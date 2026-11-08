@@ -5,7 +5,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 
 import java.nio.file.Path;
-import java.util.List;
 
 /** Holds the live config that every feature reads while the server runs. */
 public final class Settings {
@@ -19,17 +18,22 @@ public final class Settings {
         return config;
     }
 
-    /** Reads the file at mod start and logs anything that fell back to a default. */
+    /** Reads the file at mod start and logs anything that fell back to a default. A broken file is replaced with defaults. */
     public static void load() {
-        for (String warning : reload()) {
+        ConfigLoader.Result result = ConfigLoader.load(path(), true);
+        config = result.config();
+        for (String warning : result.warnings()) {
             YouOnlyLiveTwice.LOGGER.warn("Config: {}", warning);
         }
     }
 
-    public static List<String> reload() {
-        ConfigLoader.Result result = ConfigLoader.load(path());
-        config = result.config();
-        return result.warnings();
+    /** Re-reads the file. A file that isn't valid JSON changes nothing, so one typo can't reset a running server. */
+    public static ConfigLoader.Result reload() {
+        ConfigLoader.Result result = ConfigLoader.load(path(), false);
+        if (!result.unparseable()) {
+            config = result.config();
+        }
+        return result;
     }
 
     public static void save() {

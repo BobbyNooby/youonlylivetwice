@@ -20,7 +20,8 @@ import java.util.Map;
 
 /** Reads the config key by key, so one bad value only resets that value. */
 public final class ConfigLoader {
-    public record Result(YoltConfig config, List<String> warnings) {}
+    /** unparseable means the file was not valid JSON; config is then null if load was told not to write defaults. */
+    public record Result(YoltConfig config, List<String> warnings, boolean unparseable) {}
 
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
@@ -31,9 +32,14 @@ public final class ConfigLoader {
     private ConfigLoader() {}
 
     public static Result load(Path file) {
+        return load(file, true);
+    }
+
+    /** With writeDefaultsOnError false, a file that is not valid JSON is left as it is and nothing is loaded. */
+    public static Result load(Path file, boolean writeDefaultsOnError) {
         List<String> warnings = new ArrayList<>();
         if (!Files.exists(file)) {
-            return writeDefaults(file, warnings);
+            return new Result(writeDefaults(file), warnings, false);
         }
 
         JsonObject user;
@@ -44,10 +50,14 @@ public final class ConfigLoader {
             }
             user = parsed.getAsJsonObject();
         } catch (JsonParseException e) {
+            String problem = "config is not valid JSON (" + e.getMessage() + ")";
+            if (!writeDefaultsOnError) {
+                warnings.add(problem);
+                return new Result(null, warnings, true);
+            }
             backup(file);
-            warnings.add("config is not valid JSON (" + e.getMessage() + "), old file saved as "
-                    + file.getFileName() + ".bak, using defaults");
-            return writeDefaults(file, warnings);
+            warnings.add(problem + ", old file saved as " + file.getFileName() + ".bak, using defaults");
+            return new Result(writeDefaults(file), warnings, true);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -65,7 +75,7 @@ public final class ConfigLoader {
         }
         validate(config, warnings);
         write(file, config);
-        return new Result(config, warnings);
+        return new Result(config, warnings, false);
     }
 
     public static void write(Path file, YoltConfig config) {
@@ -80,10 +90,10 @@ public final class ConfigLoader {
         }
     }
 
-    private static Result writeDefaults(Path file, List<String> warnings) {
+    private static YoltConfig writeDefaults(Path file) {
         YoltConfig config = new YoltConfig();
         write(file, config);
-        return new Result(config, warnings);
+        return config;
     }
 
     private static void backup(Path file) {

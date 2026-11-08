@@ -23,7 +23,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.phys.Vec2;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -148,7 +147,13 @@ public final class YoltCommands {
 
     private static int reload(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
-        List<String> warnings = Settings.reload();
+        ConfigLoader.Result result = Settings.reload();
+        if (result.unparseable()) {
+            String problem = String.join(", ", result.warnings());
+            LOGGER.warn("{} tried to reload the config: {}", source.getTextName(), problem);
+            source.sendFailure(Component.literal("Config not reloaded, nothing changed: " + problem));
+            return 0;
+        }
         // What startup applied; each of these checks its own switch
         WorldBorders.apply(server);
         NameTagHider.apply(server);
@@ -156,7 +161,7 @@ public final class YoltCommands {
 
         LOGGER.info("{} reloaded the config", source.getTextName());
         reply(source, "Config reloaded");
-        for (String warning : warnings) {
+        for (String warning : result.warnings()) {
             LOGGER.warn("Config: {}", warning);
             reply(source, warning);
         }
