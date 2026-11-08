@@ -78,7 +78,7 @@ public class GraveStoreGameTests {
 
         ItemContainerContents contents = after.items().get(0).get(DataComponents.CONTAINER);
         helper.assertTrue(contents != null, "container component was lost");
-        int diamonds = contents.nonEmptyStream().filter(s -> s.is(Items.DIAMOND)).mapToInt(ItemStack::getCount).sum();
+        int diamonds = contents.nonEmptyItemCopyStream().filter(s -> s.is(Items.DIAMOND)).mapToInt(ItemStack::getCount).sum();
         helper.assertValueEqual(diamonds, 3, "diamonds inside the shulker box");
         helper.succeed();
     }
