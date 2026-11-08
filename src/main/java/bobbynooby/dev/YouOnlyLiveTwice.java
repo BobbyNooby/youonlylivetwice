@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Paths;
 
 public class YouOnlyLiveTwice implements DedicatedServerModInitializer {
-    public static final String MOD_ID = "you_only_live_twice";
+    public static final String MOD_ID = "you-only-live-twice";
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
