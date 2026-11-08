@@ -1,13 +1,12 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.CustomTabHeaders;
+import bobbynooby.dev.features.TabHeaders;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.OutgoingChatMessage;
 import net.minecraft.network.chat.PlayerChatMessage;
-import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
@@ -80,22 +79,19 @@ public abstract class PlayerManagerMixin {
     // Generate custom tab header each time a player joins
     @Inject(method = "placeNewPlayer", at = @At("HEAD"))
     public void sendHeader(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
-        if (!Settings.active()) {
+        if (!Settings.active() || !Settings.get().hide.tabHeader) {
             return;
         }
-        CustomTabHeaders.onPlayerJoin(player);
+        TabHeaders.onJoin(player);
     }
 
     // Called every tick. Update the custom tab header
     @Inject(method = "tick", at = @At("HEAD"))
     public void sendHeader(CallbackInfo ci) {
-        if (!Settings.active()) {
+        if (!Settings.active() || !Settings.get().hide.tabHeader) {
             return;
         }
-        for (ServerPlayer player : players) {
-            CustomTabHeaders.HeaderFooter headerFooter = CustomTabHeaders.getPlayerTab(player);
-            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.HEADER_STRING), Component.literal(headerFooter.FOOTER_STRING)));
-        }
+        TabHeaders.sendAll((PlayerList) (Object) this);
     }
 
 }

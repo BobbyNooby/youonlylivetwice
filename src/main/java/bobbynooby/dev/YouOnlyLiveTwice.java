@@ -3,6 +3,7 @@ package bobbynooby.dev;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.CustomCommands;
 import bobbynooby.dev.features.NameTagHider;
+import bobbynooby.dev.features.TabHeaders;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.features.WorldBorders;
 import net.fabricmc.api.ModInitializer;
@@ -47,6 +48,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
 
         CustomCommands.register();
         DeathLockout.init();
+        TabHeaders.init();
         NameTagHider.registerInitTeams();
         NameTagHider.registerAddPlayerToTeamOnJoin();
 

@@ -11,7 +11,8 @@
 		"fabric-gametest": [
 			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.SmokeGameTests",
-			"bobbynooby.dev.gametest.SwitchGameTests"
+			"bobbynooby.dev.gametest.SwitchGameTests",
+			"bobbynooby.dev.gametest.TabHeaderGameTests"
 		],
 		"fabric-client-gametest": [
 			"bobbynooby.dev.gametest.client.JoinClientTest",

@@ -1,12 +1,16 @@
 package bobbynooby.dev.features;
 
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.ChatFormatting;
+import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.PlayerList;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 
 /*
 
@@ -22,11 +26,11 @@ import java.util.Random;
 
 
  */
-public class CustomTabHeaders {
+public class TabHeaders {
 
     private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "--------------";
 
-    private static final Map<ServerPlayer, HeaderFooter> PLAYER_MAP = new HashMap<>();
+    private static final Map<UUID, HeaderFooter> PLAYER_MAP = new HashMap<>();
     private static final Random RANDOM = new Random();
     private static final String[] TAB_HEADERS = {
             ChatFormatting.RESET.toString() + ChatFormatting.BLUE.toString() + "The cold atmosphere of a new land... it fills you with determination.",
@@ -50,16 +54,31 @@ public class CustomTabHeaders {
     }
 
 
-    public static Component getFooter() {
-        return Component.literal(HEADER_FOOTER);
+    // Entries are dropped on leave, otherwise every player who ever joined stays in the map
+    public static void init() {
+        ServerPlayerEvents.LEAVE.register(player -> remove(player.getUUID()));
     }
 
-    public static void onPlayerJoin(ServerPlayer player) {
-        PLAYER_MAP.put(player, new HeaderFooter(getRandomHeader(), HEADER_FOOTER));
+    public static void onJoin(ServerPlayer player) {
+        PLAYER_MAP.put(player.getUUID(), new HeaderFooter(getRandomHeader(), HEADER_FOOTER));
     }
 
-    public static HeaderFooter getPlayerTab(ServerPlayer player) {
-        return PLAYER_MAP.get(player);
+    public static void sendAll(PlayerList list) {
+        for (ServerPlayer player : list.getPlayers()) {
+            HeaderFooter headerFooter = PLAYER_MAP.get(player.getUUID());
+            if (headerFooter == null) {
+                continue;
+            }
+            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.HEADER_STRING), Component.literal(headerFooter.FOOTER_STRING)));
+        }
+    }
+
+    public static boolean has(UUID uuid) {
+        return PLAYER_MAP.containsKey(uuid);
+    }
+
+    public static void remove(UUID uuid) {
+        PLAYER_MAP.remove(uuid);
     }
 
     public static class HeaderFooter {
