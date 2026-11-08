@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 public class OfflineGameTests {
@@ -164,22 +165,36 @@ public class OfflineGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    @GameTest(maxTicks = 20)
     public void onlineKillRunsNormalDeath(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Online", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        boolean waitingForKick = false;
         try {
             TestPlayers.markLoaded(player);
             helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.KILLED_ONLINE, "kill result");
             helper.assertTrue(player.isDeadOrDying(), "player is still alive");
             // The death kick waits for the end of the tick, so the death code still sees a connected player
-            helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) != null, "player was kicked inside the death call");
-            helper.assertTrue(DeathLockout.refusal(player.getUUID()) != null, "death did not start the lockout");
+            helper.assertTrue(server.getPlayerList().getPlayer(uuid) != null, "player was kicked inside the death call");
+            helper.assertTrue(DeathLockout.refusal(uuid) != null, "death did not start the lockout");
             helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                boolean kicked = server.getPlayerList().getPlayer(uuid) == null;
+                if (!kicked) {
+                    TestPlayers.leave(player);
+                }
+                helper.assertTrue(kicked, "player was not kicked after dying");
+                helper.succeed();
+            });
+            waitingForKick = true;
         } finally {
-            TestPlayers.leave(player);
+            if (!waitingForKick) {
+                TestPlayers.leave(player);
+            }
         }
-        helper.succeed();
     }
 
     // Vanilla ignores damage to a player whose client hasn't finished loading the world
