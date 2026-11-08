@@ -39,6 +39,8 @@ jobs:
 
   client_game_test:
     runs-on: ubuntu-24.04
+    # A client that can't open a window hangs instead of exiting
+    timeout-minutes: 30
     steps:
       - name: checkout repository
         uses: actions/checkout@v4
@@ -49,8 +51,9 @@ jobs:
           distribution: 'temurin'
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: install xvfb
-        run: sudo apt-get update && sudo apt-get install -y xvfb
+      # OpenGL finds no GLX visual under xvfb, so the client falls back to Vulkan on Mesa's software driver
+      - name: install xvfb and software vulkan
+        run: sudo apt-get update && sudo apt-get install -y xvfb mesa-vulkan-drivers
       - name: run client game tests
         run: ./gradlew runProductionClientGameTest
       - name: store screenshots
