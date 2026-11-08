@@ -2,20 +2,21 @@ package bobbynooby.dev.offline;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.world.Containers;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -42,8 +43,14 @@ public final class OfflineKill {
         return KillResult.KILLED_OFFLINE;
     }
 
-    /** Turns the save into a dead player's, so the next login goes through vanilla's respawn. */
+    /**
+     * Turns the save into a dead player's, so the next login goes through vanilla's respawn.
+     * All or nothing: if any step fails, the world and the save file stay as they were and the error is rethrown.
+     * The tag object passed in is left wiped either way.
+     */
     public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where) {
+        // Prepare: wipe the tag and write it to a temp file before anything in the world changes
+        ServerLevel level = levelFor(server, where);
         List<ItemStack> items = new ArrayList<>(OfflinePlayerData.takeInventory(tag, server.registryAccess()));
         switch (Settings.get().graves.enderChestOnDeath) {
             case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess()));
@@ -51,31 +58,72 @@ public final class OfflineKill {
             case KEEP -> {
             }
         }
-
-        ServerLevel level = loadedLevel(server, where);
-        ExperienceOrb.award(level, Vec3.atBottomCenterOf(where.pos()), experienceReward(level, tag));
+        int experience = experienceReward(level, tag);
         tag.putInt("XpLevel", 0);
         tag.putInt("XpTotal", 0);
         tag.putFloat("XpP", 0.0F);
-
         tag.remove("active_effects");
         tag.putFloat("Health", 0.0F);
         tag.store("LastDeathLocation", GlobalPos.CODEC, where);
+        Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 
-        // Items go out before the save is written: a failed save then duplicates them instead of losing them
-        deposit(server, who, items, where);
-        OfflinePlayerData.save(server, who.id(), tag);
+        // Deposit, then commit. A failed commit takes the drops back, so the items never exist twice.
+        List<Runnable> undo = new ArrayList<>();
+        try {
+            undo.add(deposit(server, who, items, where));
+            undo.add(dropExperience(level, where, experience));
+            OfflinePlayerData.commitSave(server, who.id(), prepared);
+        } catch (RuntimeException e) {
+            undo.forEach(Runnable::run);
+            OfflinePlayerData.discardSave(prepared);
+            throw e;
+        }
+
         if (Settings.get().deathLockout.enabled) {
             DeathLockout.recordDeath(who.id(), who.name());
         }
     }
 
-    public static void deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where) {
-        ServerLevel level = loadedLevel(server, where);
-        BlockPos pos = where.pos();
+    /** Puts the items in the world at where, and returns how to take them back out. */
+    public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where) {
+        ServerLevel level = levelFor(server, where);
+        Vec3 pos = Vec3.atBottomCenterOf(where.pos());
+        List<Entity> drops = new ArrayList<>();
         for (ItemStack item : items) {
-            Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), item);
+            drops.add(new ItemEntity(level, pos.x, pos.y, pos.z, item));
         }
+        return spawnAll(level, where, drops);
+    }
+
+    // Split like ExperienceOrb.award, but never merged into orbs already there, so undo removes exactly these
+    private static Runnable dropExperience(ServerLevel level, GlobalPos where, int amount) {
+        Vec3 pos = Vec3.atBottomCenterOf(where.pos());
+        List<Entity> orbs = new ArrayList<>();
+        while (amount > 0) {
+            int value = ExperienceOrb.getExperienceValue(amount);
+            amount -= value;
+            orbs.add(new ExperienceOrb(level, pos.x, pos.y, pos.z, value));
+        }
+        return spawnAll(level, where, orbs);
+    }
+
+    // Adds every entity or none. The chunk is loaded first, since entities added to an unloaded chunk sit in limbo.
+    private static Runnable spawnAll(ServerLevel level, GlobalPos where, List<Entity> entities) {
+        level.getChunkAt(where.pos());
+        List<Entity> added = new ArrayList<>();
+        Runnable undo = () -> added.forEach(Entity::discard);
+        try {
+            for (Entity entity : entities) {
+                if (!level.addFreshEntity(entity)) {
+                    throw new IllegalStateException("Could not add " + entity + " to the world");
+                }
+                added.add(entity);
+            }
+        } catch (RuntimeException e) {
+            undo.run();
+            throw e;
+        }
+        return undo;
     }
 
     // Vanilla's Player.getBaseExperienceReward, read from the save instead of a live player
@@ -87,13 +135,8 @@ public final class OfflineKill {
         return Math.min(tag.getIntOr("XpLevel", 0) * 7, 100);
     }
 
-    // Entities added to an unloaded chunk sit in limbo, so load it first
-    private static ServerLevel loadedLevel(MinecraftServer server, GlobalPos where) {
+    private static ServerLevel levelFor(MinecraftServer server, GlobalPos where) {
         ServerLevel level = server.getLevel(where.dimension());
-        if (level == null) {
-            level = server.overworld();
-        }
-        level.getChunkAt(where.pos());
-        return level;
+        return level != null ? level : server.overworld();
     }
 }

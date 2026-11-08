@@ -1,5 +1,6 @@
 package bobbynooby.dev.offline;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
@@ -42,16 +43,49 @@ public final class OfflinePlayerData {
         return server.getPlayerList().loadPlayerData(who);
     }
 
-    /** Writes a temp file and swaps it in, keeping the previous save as .dat_old, like vanilla's own save. */
+    /** Writes the save the way vanilla does: a temp file, then a swap that keeps the previous save as .dat_old. */
     public static void save(MinecraftServer server, UUID uuid, CompoundTag tag) {
-        Path dir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        Path prepared = prepareSave(server, uuid, tag);
         try {
-            Path tmp = Files.createTempFile(dir, uuid + "-", ".dat");
+            commitSave(server, uuid, prepared);
+        } catch (RuntimeException e) {
+            discardSave(prepared);
+            throw e;
+        }
+    }
+
+    /** Writes the tag to a temp file next to the save. Nothing else changes until commitSave. */
+    public static Path prepareSave(MinecraftServer server, UUID uuid, CompoundTag tag) {
+        Path dir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        Path tmp = null;
+        try {
+            tmp = Files.createTempFile(dir, uuid + "-", ".dat");
             // load() upgraded the data, so the old version number would make vanilla upgrade it twice
             NbtIo.writeCompressed(NbtUtils.addCurrentDataVersion(tag), tmp);
-            Util.safeReplaceFile(dir.resolve(uuid + ".dat"), tmp, dir.resolve(uuid + ".dat_old"));
+            return tmp;
         } catch (IOException e) {
-            throw new UncheckedIOException("Could not save player data for " + uuid, e);
+            if (tmp != null) {
+                discardSave(tmp);
+            }
+            throw new UncheckedIOException("Could not write player data for " + uuid, e);
+        }
+    }
+
+    /** Swaps the prepared file in. Throws if the swap failed, which leaves the old save in charge. */
+    public static void commitSave(MinecraftServer server, UUID uuid, Path prepared) {
+        Path dir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        // safeReplaceFile drops this result, so a failed swap would look like success
+        if (!Util.safeReplaceOrMoveFile(dir.resolve(uuid + ".dat"), prepared, dir.resolve(uuid + ".dat_old"), false)) {
+            throw new UncheckedIOException(new IOException("Could not replace the save file of " + uuid));
+        }
+    }
+
+    /** Deletes a prepared file that won't be committed. Only logs on failure, since callers are already failing. */
+    public static void discardSave(Path prepared) {
+        try {
+            Files.deleteIfExists(prepared);
+        } catch (IOException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not delete unused player data file {}", prepared, e);
         }
     }
 
