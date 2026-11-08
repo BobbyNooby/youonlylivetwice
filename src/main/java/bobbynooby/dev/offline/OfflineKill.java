@@ -88,9 +88,7 @@ public final class OfflineKill {
             throw e;
         }
 
-        if (Settings.get().deathLockout.enabled) {
-            DeathLockout.recordDeath(who.id(), who.name());
-        }
+        DeathLockout.recordDeath(who.id(), who.name());
     }
 
     /** Puts the items in the world at where, and returns how to take them back out. */

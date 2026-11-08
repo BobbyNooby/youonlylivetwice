@@ -46,6 +46,21 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // The switch is checked inside recordDeath, so no caller can start a lockout while it's off
+    @GameTest
+    public void lockoutOffRecordsNoDeath(GameTestHelper helper) {
+        UUID uuid = UUID.randomUUID();
+        boolean before = Settings.get().deathLockout.enabled;
+        Settings.get().deathLockout.enabled = false;
+        try {
+            DeathLockout.recordDeath(uuid, "Ghost");
+        } finally {
+            Settings.get().deathLockout.enabled = before;
+        }
+        helper.assertTrue(canLogin(helper, uuid), "death recorded with the lockout off");
+        helper.succeed();
+    }
+
     // A closed store makes every query throw, like a failing database would
     @GameTest
     public void storeFailureLetsPlayerInAndLogs(GameTestHelper helper) throws java.io.IOException {

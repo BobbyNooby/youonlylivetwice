@@ -34,7 +34,7 @@ public final class DeathLockout {
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (entity instanceof ServerPlayer player && Settings.active() && Settings.get().deathLockout.enabled) {
+            if (entity instanceof ServerPlayer player) {
                 recordDeath(player);
             }
         });
@@ -90,6 +90,9 @@ public final class DeathLockout {
 
     /** Logs the death, then kicks after the current tick so the kick isn't inside the death call. */
     public static void recordDeath(ServerPlayer player) {
+        if (!enabled()) {
+            return;
+        }
         UUID uuid = player.getUUID();
         recordDeath(uuid, player.nameAndId().name());
         MinecraftServer server = player.level().getServer();
@@ -104,6 +107,9 @@ public final class DeathLockout {
     }
 
     public static void recordDeath(UUID uuid, String name) {
+        if (!enabled()) {
+            return;
+        }
         DeathStore open = store;
         if (open == null) {
             YouOnlyLiveTwice.LOGGER.warn("Death store is closed, not recording death of {}", name);
@@ -115,6 +121,11 @@ public final class DeathLockout {
         } catch (RuntimeException e) {
             YouOnlyLiveTwice.LOGGER.error("Could not record death of {}", name, e);
         }
+    }
+
+    // Checked here instead of by each caller, so a new caller can't forget the switch
+    private static boolean enabled() {
+        return Settings.active() && Settings.get().deathLockout.enabled;
     }
 
     public static boolean revive(UUID uuid) {
