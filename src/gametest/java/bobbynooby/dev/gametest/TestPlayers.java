@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -33,6 +34,11 @@ public final class TestPlayers {
 
     public static ServerPlayer join(MinecraftServer server, String name, GameType mode, BlockPos absolutePos) {
         return join(server.overworld(), uniqueProfile(name), mode, absolutePos);
+    }
+
+    // Vanilla makes a player invulnerable until their client says the world has loaded, which a test player never does
+    public static void markLoaded(ServerPlayer player) {
+        player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
     }
 
     public static void leave(ServerPlayer player) {

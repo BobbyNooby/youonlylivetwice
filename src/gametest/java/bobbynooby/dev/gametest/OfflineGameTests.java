@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -170,8 +169,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Online", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            // A real client sends this once the world has loaded; until then vanilla makes the player invulnerable
-            player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
+            TestPlayers.markLoaded(player);
             helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.KILLED_ONLINE, "kill result");
             helper.assertTrue(player.isDeadOrDying(), "player is still alive");
             // The death kick waits for the end of the tick, so the death code still sees a connected player
