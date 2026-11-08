@@ -1,7 +1,7 @@
 package bobbynooby.dev;
 
+import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.CustomCommands;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.TabHeaders;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -9,6 +9,7 @@ import bobbynooby.dev.features.WorldBorders;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.gamerules.GameRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,25 +35,27 @@ public class YouOnlyLiveTwice implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTING.register(Settings::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPED.register(Settings::onServerStopped);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            if (!Settings.active()) {
-                return;
-            }
-            // The rule is saved with the world, so with the switch off we leave whatever the admin set
-            if (Settings.get().immediateRespawn) {
-                server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
-            }
-        });
-
+        ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::applyImmediateRespawn);
         ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::apply);
 
-        CustomCommands.register();
+        YoltCommands.register();
         DeathLockout.init();
         TabHeaders.init();
         NameTagHider.registerInitTeams();
         NameTagHider.registerAddPlayerToTeamOnJoin();
 
         LOGGER.info("You Only Live Twice started.");
+    }
+
+    // Also run by /yolt reload
+    public static void applyImmediateRespawn(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        // The rule is saved with the world, so with the switch off we leave whatever the admin set
+        if (Settings.get().immediateRespawn) {
+            server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
+        }
     }
 
 }

@@ -49,7 +49,7 @@ public final class Settings {
         active = false;
     }
 
-    private static Path path() {
+    public static Path path() {
         return FabricLoader.getInstance().getConfigDir().resolve("you-only-live-twice.json");
     }
 }
