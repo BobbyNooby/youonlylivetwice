@@ -143,6 +143,8 @@ public class OfflineGameTests {
             player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
             helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.KILLED_ONLINE, "kill result");
             helper.assertTrue(player.isDeadOrDying(), "player is still alive");
+            // The death kick waits for the end of the tick, so the death code still sees a connected player
+            helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) != null, "player was kicked inside the death call");
             helper.assertTrue(DeathLockout.refusal(player.getUUID()) != null, "death did not start the lockout");
         } finally {
             TestPlayers.leave(player);

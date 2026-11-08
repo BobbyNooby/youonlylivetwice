@@ -14,7 +14,6 @@ import java.util.UUID;
 
 public final class DeathLockout {
     private static volatile DeathStore store;
-    private static volatile MinecraftServer server;
 
     private DeathLockout() {}
 
@@ -23,7 +22,6 @@ public final class DeathLockout {
             if (!Settings.active()) {
                 return;
             }
-            server = started;
             store = DeathStore.open(started.getWorldPath(LevelResource.ROOT).resolve("database/you-only-live-twice.db"));
             YouOnlyLiveTwice.LOGGER.info("Opened death store");
         });
@@ -32,7 +30,6 @@ public final class DeathLockout {
         ServerLifecycleEvents.SERVER_STOPPED.register(stopped -> {
             DeathStore open = store;
             store = null;
-            server = null;
             if (open != null) {
                 open.close();
                 YouOnlyLiveTwice.LOGGER.info("Closed death store");
@@ -70,13 +67,19 @@ public final class DeathLockout {
         return Component.literal(Cooldown.message(remaining));
     }
 
-    /** Logs the death, then kicks on the next tick so the kick isn't inside the death call. */
+    /** Logs the death, then kicks after the current tick so the kick isn't inside the death call. */
     public static void recordDeath(ServerPlayer player) {
-        recordDeath(player.getUUID(), player.nameAndId().name());
-        MinecraftServer current = server;
-        if (current != null) {
-            current.execute(() -> player.connection.disconnect(Component.literal("You have died.")));
-        }
+        UUID uuid = player.getUUID();
+        recordDeath(uuid, player.nameAndId().name());
+        MinecraftServer server = player.level().getServer();
+        // execute() would run it straight away on the server thread; schedule() always queues it
+        server.schedule(server.wrapRunnable(() -> {
+            // By uuid: they may have left already, or respawned as a new player object
+            ServerPlayer current = server.getPlayerList().getPlayer(uuid);
+            if (current != null) {
+                current.connection.disconnect(Component.literal("You have died."));
+            }
+        }));
     }
 
     public static void recordDeath(UUID uuid, String name) {
