@@ -76,10 +76,11 @@ public abstract class PlayerManagerMixin {
 
      */
 
-    // Generate custom tab header each time a player joins
+    // Generate custom tab header each time a player joins. Done with the switch off too,
+    // so turning it on mid-session also covers players who are already online.
     @Inject(method = "placeNewPlayer", at = @At("HEAD"))
     public void sendHeader(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
-        if (!Settings.active() || !Settings.get().hide.tabHeader) {
+        if (!Settings.active()) {
             return;
         }
         TabHeaders.onJoin(player);

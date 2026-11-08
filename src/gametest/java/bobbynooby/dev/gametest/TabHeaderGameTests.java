@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.features.TabHeaders;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -24,6 +26,26 @@ public class TabHeaderGameTests {
             if (!left) {
                 TestPlayers.leave(player);
             }
+        }
+        helper.succeed();
+    }
+
+    // Turning the switch on mid-session must also cover players who joined while it was off
+    @GameTest
+    public void headerPickedWithSwitchOff(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean before = hide.tabHeader;
+        hide.tabHeader = false;
+        ServerPlayer player;
+        try {
+            player = TestPlayers.join(helper, "taboff", GameType.SURVIVAL, BlockPos.ZERO);
+        } finally {
+            hide.tabHeader = before;
+        }
+        try {
+            helper.assertTrue(TabHeaders.has(player.getUUID()), "no header for a player who joined with the switch off");
+        } finally {
+            TestPlayers.leave(player);
         }
         helper.succeed();
     }
