@@ -121,8 +121,14 @@ public final class YoltCommands {
             source.sendFailure(Component.literal("Could not kill " + name + ", see the server log."));
             return 0;
         }
-        if (result == OfflineKill.KillResult.NOT_FOUND) {
-            source.sendFailure(Component.literal("Player " + name + " not found."));
+        String failure = switch (result) {
+            case NOT_FOUND -> "Player " + name + " not found.";
+            case ALREADY_DEAD -> who.get().name() + " is already dead.";
+            case NOT_KILLED -> "Could not kill " + who.get().name() + " right now.";
+            case KILLED_ONLINE, KILLED_OFFLINE -> null;
+        };
+        if (failure != null) {
+            source.sendFailure(Component.literal(failure));
             return 0;
         }
         LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == OfflineKill.KillResult.KILLED_ONLINE ? "online" : "offline");

@@ -23,21 +23,30 @@ import java.util.Optional;
 
 /** Kills a player whether they are online or not, so both end in the same state. */
 public final class OfflineKill {
-    public enum KillResult { KILLED_ONLINE, KILLED_OFFLINE, NOT_FOUND }
+    public enum KillResult { KILLED_ONLINE, KILLED_OFFLINE, NOT_FOUND, ALREADY_DEAD, NOT_KILLED }
 
     private OfflineKill() {}
 
+    /** A player who is already dead is left exactly as they are, so a second kill can't restart their lockout. */
     public static KillResult kill(MinecraftServer server, NameAndId who) {
         ServerPlayer online = server.getPlayerList().getPlayer(who.id());
         if (online != null) {
+            if (online.isDeadOrDying()) {
+                return KillResult.ALREADY_DEAD;
+            }
             // Same as vanilla /kill: the normal death runs, and its death event starts the lockout
             online.kill(online.level());
-            return KillResult.KILLED_ONLINE;
+            // Vanilla ignores the kill while the player is still loading in or changing dimension
+            return online.isDeadOrDying() ? KillResult.KILLED_ONLINE : KillResult.NOT_KILLED;
         }
         // No save file means they never played here
         Optional<CompoundTag> tag = OfflinePlayerData.load(server, who);
         if (tag.isEmpty()) {
             return KillResult.NOT_FOUND;
+        }
+        // Logged out dead, or killed offline before. A save with no health loads at full health.
+        if (tag.get().getFloatOr("Health", 1.0F) <= 0.0F) {
+            return KillResult.ALREADY_DEAD;
         }
         applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()));
         return KillResult.KILLED_OFFLINE;

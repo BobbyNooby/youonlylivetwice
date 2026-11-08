@@ -13,6 +13,7 @@ import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
@@ -25,6 +26,7 @@ import net.minecraft.world.phys.AABB;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -107,6 +109,35 @@ public class OfflineGameTests {
         helper.succeed();
     }
 
+    // A second kill must not drop anything, write the save, or restart the lockout
+    @GameTest
+    public void offlineKillOfDeadPlayerChangesNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Twice", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        BlockPos last = helper.relativePos(player.blockPosition());
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            player.giveExperienceLevels(30);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "first kill result");
+
+        // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
+        helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
+        helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
+        helper.assertTrue(DeathLockout.revive(who.id()), "first kill recorded no death");
+        byte[][] filesBefore = saveFiles(server, who);
+
+        helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+        helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 2.0).isEmpty(), "second kill dropped items");
+        helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
+        helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
+        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "second kill restarted the lockout");
+        helper.succeed();
+    }
+
     @GameTest
     public void offlineKillAppliesEnderChestMode(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -146,6 +177,22 @@ public class OfflineGameTests {
             // The death kick waits for the end of the tick, so the death code still sees a connected player
             helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) != null, "player was kicked inside the death call");
             helper.assertTrue(DeathLockout.refusal(player.getUUID()) != null, "death did not start the lockout");
+            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla ignores damage to a player whose client hasn't finished loading the world
+    @GameTest
+    public void onlineKillOfLoadingPlayerIsReported(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Loading", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.NOT_KILLED, "kill result");
+            helper.assertFalse(player.isDeadOrDying(), "loading player died");
+            helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded");
         } finally {
             TestPlayers.leave(player);
         }
@@ -156,6 +203,12 @@ public class OfflineGameTests {
     private static int itemEntities(GameTestHelper helper, Item item, BlockPos relativePos) {
         AABB area = new AABB(helper.absolutePos(relativePos)).inflate(2.0);
         return helper.getLevel().getEntities(EntityTypes.ITEM, area, entity -> entity.isAlive() && entity.getItem().is(item)).size();
+    }
+
+    // A write moves the current save to .dat_old, so both files staying the same means nothing was written
+    private static byte[][] saveFiles(MinecraftServer server, NameAndId who) throws IOException {
+        Path dir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        return new byte[][] {Files.readAllBytes(dir.resolve(who.id() + ".dat")), Files.readAllBytes(dir.resolve(who.id() + ".dat_old"))};
     }
 
     private static List<ItemStack> enderChest(MinecraftServer server, NameAndId who) {
