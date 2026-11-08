@@ -13,9 +13,9 @@
 	},
 	"license": "MIT",
 	"icon": "assets/you-only-live-twice/icon.png",
-	"environment": "server",
+	"environment": "*",
 	"entrypoints": {
-		"server": [
+		"main": [
 			"bobbynooby.dev.YouOnlyLiveTwice"
 		]
 	},

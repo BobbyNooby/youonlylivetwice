@@ -6,14 +6,16 @@ import bobbynooby.dev.features.CustomCommands;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.PseudoHardcore;
 import bobbynooby.dev.features.WorldBorders;
-import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.gamerules.GameRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class YouOnlyLiveTwice implements DedicatedServerModInitializer {
+// Loads in any environment so client tests can host a dedicated server in the client process;
+// every feature checks Settings.active(), so single-player stays vanilla.
+public class YouOnlyLiveTwice implements ModInitializer {
     public static final String MOD_ID = "you-only-live-twice";
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -26,7 +28,7 @@ public class YouOnlyLiveTwice implements DedicatedServerModInitializer {
     }
 
     @Override
-    public void onInitializeServer() {
+    public void onInitialize() {
         Settings.load();
 
         ServerLifecycleEvents.SERVER_STARTING.register(Settings::onServerStarting);
