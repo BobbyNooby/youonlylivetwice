@@ -72,6 +72,34 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // Same limits as the config file, so a command can't save a value the next load would throw away
+    @GameTest
+    public void outOfRangeValuesAreRefused(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        int diameterBefore = config.worldBorder.diameter;
+        double endScaleBefore = config.worldBorder.endScale;
+        int cooldownBefore = config.deathLockout.cooldownDays;
+        String fileBefore = Files.readString(Settings.path());
+        try {
+            helper.assertValueEqual(run(server, "yolt endscaling 0"), List.of("End world border scaling factor must be above 0."), "endscaling 0 output");
+            for (String command : List.of("yolt border 0", "yolt border 59999969", "yolt endscaling -1", "yolt respawncooldown -1")) {
+                List<String> output = run(server, command);
+                helper.assertTrue(!output.isEmpty() && output.stream().noneMatch(line -> line.contains("set to")), command + " was not refused: " + output);
+            }
+            helper.assertValueEqual(config.worldBorder.diameter, diameterBefore, "diameter setting");
+            helper.assertValueEqual(config.worldBorder.endScale, endScaleBefore, "end scale setting");
+            helper.assertValueEqual(config.deathLockout.cooldownDays, cooldownBefore, "cooldown setting");
+            helper.assertValueEqual(Files.readString(Settings.path()), fileBefore, "config file");
+        } finally {
+            config.worldBorder.diameter = diameterBefore;
+            config.worldBorder.endScale = endScaleBefore;
+            config.deathLockout.cooldownDays = cooldownBefore;
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void killUnknownNameChangesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();

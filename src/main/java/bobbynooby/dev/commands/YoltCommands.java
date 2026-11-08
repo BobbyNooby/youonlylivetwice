@@ -1,6 +1,7 @@
 package bobbynooby.dev.commands;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.WorldBorders;
@@ -40,7 +41,7 @@ public final class YoltCommands {
                         // Commands are registered before any server exists, so single-player is checked on each use
                         .requires(source -> Settings.active() && GAMEMASTER.test(source))
                         .then(Commands.literal("border")
-                                .then(Commands.argument("diameter", IntegerArgumentType.integer())
+                                .then(Commands.argument("diameter", IntegerArgumentType.integer(1, ConfigLoader.MAX_BORDER_DIAMETER))
                                         .executes(c -> border(c.getSource(), IntegerArgumentType.getInteger(c, "diameter")))))
                         .then(Commands.literal("center")
                                 .then(Commands.argument("pos", Vec2Argument.vec2())
@@ -49,7 +50,7 @@ public final class YoltCommands {
                                 .then(Commands.argument("scaling", DoubleArgumentType.doubleArg())
                                         .executes(c -> endScaling(c.getSource(), DoubleArgumentType.getDouble(c, "scaling")))))
                         .then(Commands.literal("respawncooldown")
-                                .then(Commands.argument("days", IntegerArgumentType.integer())
+                                .then(Commands.argument("days", IntegerArgumentType.integer(0))
                                         .executes(c -> respawnCooldown(c.getSource(), IntegerArgumentType.getInteger(c, "days")))))
                         .then(Commands.literal("kill")
                                 .then(Commands.argument("player", StringArgumentType.string())
@@ -89,6 +90,11 @@ public final class YoltCommands {
     }
 
     private static int endScaling(CommandSourceStack source, double scaling) {
+        // Checked here because brigadier's minimum includes the bound itself, and 0 must be refused
+        if (!(scaling > 0)) {
+            source.sendFailure(Component.literal("End world border scaling factor must be above 0."));
+            return 0;
+        }
         Settings.get().worldBorder.endScale = scaling;
         Settings.save();
         WorldBorders.apply(source.getServer());

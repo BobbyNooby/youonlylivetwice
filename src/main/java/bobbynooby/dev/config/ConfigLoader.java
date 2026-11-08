@@ -22,6 +22,9 @@ import java.util.Map;
 public final class ConfigLoader {
     public record Result(YoltConfig config, List<String> warnings) {}
 
+    // Vanilla's largest world border
+    public static final int MAX_BORDER_DIAMETER = 59_999_968;
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String DURATION_PATH = "bodies.duration";
 
@@ -158,7 +161,7 @@ public final class ConfigLoader {
     private static void validate(YoltConfig c, List<String> warnings) {
         YoltConfig def = new YoltConfig();
 
-        if (c.worldBorder.diameter < 1 || c.worldBorder.diameter > 59_999_968) {
+        if (c.worldBorder.diameter < 1 || c.worldBorder.diameter > MAX_BORDER_DIAMETER) {
             c.worldBorder.diameter = def.worldBorder.diameter;
             warnings.add("worldBorder.diameter: must be 1 to 59999968, using default");
         }
