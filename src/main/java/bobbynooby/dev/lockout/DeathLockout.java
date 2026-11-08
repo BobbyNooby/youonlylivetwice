@@ -9,6 +9,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,18 +23,14 @@ public final class DeathLockout {
             if (!Settings.active()) {
                 return;
             }
-            store = DeathStore.open(started.getWorldPath(LevelResource.ROOT).resolve("database/you-only-live-twice.db"));
-            YouOnlyLiveTwice.LOGGER.info("Opened death store");
+            store = openStore(started.getWorldPath(LevelResource.ROOT).resolve("database/you-only-live-twice.db"));
         });
 
         // Not SERVER_STOPPING: players are still logged out after that and later code reads the store then
         ServerLifecycleEvents.SERVER_STOPPED.register(stopped -> {
             DeathStore open = store;
             store = null;
-            if (open != null) {
-                open.close();
-                YouOnlyLiveTwice.LOGGER.info("Closed death store");
-            }
+            closeStore(open);
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
@@ -41,6 +38,30 @@ public final class DeathLockout {
                 recordDeath(player);
             }
         });
+    }
+
+    /** Null if it can't be opened: the server still starts, like with a failing query, but deaths aren't recorded. */
+    static DeathStore openStore(Path file) {
+        try {
+            DeathStore opened = DeathStore.open(file);
+            YouOnlyLiveTwice.LOGGER.info("Opened death store");
+            return opened;
+        } catch (RuntimeException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not open the death store, deaths will not be recorded", e);
+            return null;
+        }
+    }
+
+    static void closeStore(DeathStore open) {
+        if (open == null) {
+            return;
+        }
+        try {
+            open.close();
+            YouOnlyLiveTwice.LOGGER.info("Closed death store");
+        } catch (RuntimeException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not close the death store", e);
+        }
     }
 
     /** Null when the player may join. */
