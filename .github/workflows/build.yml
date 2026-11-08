@@ -36,3 +36,26 @@ jobs:
         with:
           name: Artifacts
           path: build/libs/
+
+  client_game_test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+      - name: setup jdk
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+      - name: make gradle wrapper executable
+        run: chmod +x ./gradlew
+      - name: install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: run client game tests
+        run: ./gradlew runProductionClientGameTest
+      - name: store screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-screenshots
+          path: build/run/clientGameTest/screenshots

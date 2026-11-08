@@ -30,7 +30,7 @@ fabricApi {
     configureTests {
         createSourceSet = true
         modId = "you-only-live-twice-gametest"
-        enableClientGameTests = false
+        enableClientGameTests = true
         eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)
     }
 }
@@ -41,6 +41,21 @@ loom.runs.named("gameTest") { run ->
             layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
 }
 
+// A production client only loads mods from jars, so the test mod gets its own
+def gametestJar = tasks.register("gametestJar", Jar) {
+    archiveClassifier = "gametest"
+    from sourceSets.gametest.output
+}
+
+// useXVFB is left at Loom's default: on for Linux CI, off elsewhere
+tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+    mods.from(gametestJar)
+    jvmArgs.add("-Dfabric.client.gametest")
+    // Same folder as Loom's clientGameTest run, so the EULA it accepts covers the in-process server too
+    runDir = layout.buildDirectory.dir("run/clientGameTest")
+    dependsOn("acceptGameTestEula")
+}
+
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -49,6 +64,7 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
+    productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     testImplementation platform("org.junit:junit-bom:5.13.4")
     testImplementation "org.junit.jupiter:junit-jupiter"

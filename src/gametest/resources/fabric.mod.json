@@ -11,6 +11,10 @@
 		"fabric-gametest": [
 			"bobbynooby.dev.gametest.SmokeGameTests",
 			"bobbynooby.dev.gametest.SwitchGameTests"
+		],
+		"fabric-client-gametest": [
+			"bobbynooby.dev.gametest.client.JoinClientTest",
+			"bobbynooby.dev.gametest.client.SingleplayerClientTest"
 		]
 	},
 	"depends": {
