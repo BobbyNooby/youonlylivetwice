@@ -2,31 +2,30 @@
 	"schemaVersion": 1,
 	"id": "you-only-live-twice",
 	"version": "${version}",
-	"name": "you-only-live-twice",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "You Only Live Twice",
+	"description": "A server-side Fabric mod that gives players a second life: a grave holds your items when you die.",
 	"authors": [
-		"Me!"
+		"BobbyNooby"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/BobbyNooby/youonlylivetwice",
+		"sources": "https://github.com/BobbyNooby/youonlylivetwice"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/you-only-live-twice/icon.png",
-	"environment": "*",
+	"environment": "server",
 	"entrypoints": {
 		"server": [
 			"bobbynooby.dev.YouOnlyLiveTwice"
 		]
 	},
-	"mixins": ["you-only-live-twice.mixins.json"],
+	"mixins": [
+		"you-only-live-twice.mixins.json"
+	],
 	"depends": {
 		"fabricloader": ">=0.16.13",
 		"minecraft": "~1.21.5",
 		"java": ">=21",
 		"fabric-api": "*"
-	},
-	"suggests": {
-		"another-mod": "*"
 	}
 }
