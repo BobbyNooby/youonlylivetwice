@@ -52,7 +52,14 @@ public final class DeathLockout {
         if (open == null || !Settings.get().deathLockout.enabled) {
             return null;
         }
-        Optional<DeathLog> log = open.latest(uuid);
+        Optional<DeathLog> log;
+        try {
+            log = open.latest(uuid);
+        } catch (RuntimeException e) {
+            // Fail open: a broken database must not lock everyone out
+            YouOnlyLiveTwice.LOGGER.error("Could not check death lockout for {}, letting them in", uuid, e);
+            return null;
+        }
         if (log.isEmpty()) {
             return null;
         }
@@ -78,12 +85,31 @@ public final class DeathLockout {
             YouOnlyLiveTwice.LOGGER.warn("Death store is closed, not recording death of {}", name);
             return;
         }
-        open.recordDeath(uuid, name, System.currentTimeMillis(), Settings.get().deathLockout.cooldownDays);
-        YouOnlyLiveTwice.LOGGER.info("Death log added for {}", name);
+        try {
+            open.recordDeath(uuid, name, System.currentTimeMillis(), Settings.get().deathLockout.cooldownDays);
+            YouOnlyLiveTwice.LOGGER.info("Death log added for {}", name);
+        } catch (RuntimeException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not record death of {}", name, e);
+        }
     }
 
     public static boolean revive(UUID uuid) {
         DeathStore open = store;
-        return open != null && open.revive(uuid);
+        if (open == null) {
+            return false;
+        }
+        try {
+            return open.revive(uuid);
+        } catch (RuntimeException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not revive {}", uuid, e);
+            return false;
+        }
+    }
+
+    /** Swaps the open store and returns the old one; lets tests simulate a broken database. */
+    public static DeathStore swapStoreForTesting(DeathStore replacement) {
+        DeathStore old = store;
+        store = replacement;
+        return old;
     }
 }

@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathStore;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.players.NameAndId;
@@ -41,6 +42,24 @@ public class LockoutGameTests {
             helper.assertTrue(canLogin(helper, uuid), "player refused with the lockout off");
         } finally {
             Settings.get().deathLockout.enabled = before;
+        }
+        helper.succeed();
+    }
+
+    // A closed store makes every query throw, like a failing database would
+    @GameTest
+    public void storeFailureLetsPlayerInAndLogs(GameTestHelper helper) throws java.io.IOException {
+        UUID uuid = UUID.randomUUID();
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("yolt-broken-store");
+        DeathStore broken = DeathStore.open(dir.resolve("broken.db"));
+        broken.close();
+        DeathStore real = DeathLockout.swapStoreForTesting(broken);
+        try {
+            helper.assertTrue(DeathLockout.refusal(uuid) == null, "player refused while the store is failing");
+            DeathLockout.recordDeath(uuid, "Ghost");
+            helper.assertTrue(!DeathLockout.revive(uuid), "revive succeeded on a failing store");
+        } finally {
+            DeathLockout.swapStoreForTesting(real);
         }
         helper.succeed();
     }
