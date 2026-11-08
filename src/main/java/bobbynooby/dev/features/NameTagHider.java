@@ -31,7 +31,6 @@ public class NameTagHider {
         });
 
         ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((handler, sender, server) -> {
-            System.out.println("Hello " + handler.getName());
             if (handler.getScoreboardTeam() == null || !handler.getScoreboardTeam().getName().equals(TEAM_NAME))
                 server.getScoreboard().addScoreHolderToTeam(handler.getNameForScoreboard(), server.getScoreboard().getTeam(TEAM_NAME));
         });

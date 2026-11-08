@@ -26,7 +26,6 @@ public class GraveBlockEntity extends BlockEntity {
     }
 
     public void setInventory(PlayerInventory playerInventory) {
-        System.out.println(playerInventory.size());
         for (int i = 0; i < playerInventory.size() && i < inventory.size(); i++) {
             ItemStack itemStack = playerInventory.getStack(i);
             if (!itemStack.isEmpty()) {
