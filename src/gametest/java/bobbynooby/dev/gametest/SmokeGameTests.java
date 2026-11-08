@@ -21,6 +21,17 @@ public class SmokeGameTests {
         helper.succeed();
     }
 
+    // Survival is also a new player's default, so this checks the requested mode is really applied
+    @GameTest
+    public void testPlayerGetsRequestedGameMode(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Steve", GameType.CREATIVE, new BlockPos(1, 1, 1));
+
+        helper.assertTrue(player.gameMode() == GameType.CREATIVE, "test player is not in creative");
+
+        TestPlayers.leave(player);
+        helper.succeed();
+    }
+
     @GameTest
     public void modLoadsAndImmediateRespawnIsOn(GameTestHelper helper) {
         helper.assertTrue(FabricLoader.getInstance().isModLoaded("you-only-live-twice"), "mod not loaded");
