@@ -1,0 +1,16 @@
+{
+	"schemaVersion": 1,
+	"id": "you-only-live-twice-gametest",
+	"version": "1.0.0",
+	"name": "You Only Live Twice GameTests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-gametest": [
+			"bobbynooby.dev.gametest.SmokeGameTests"
+		]
+	},
+	"depends": {
+		"you-only-live-twice": "*",
+		"fabric-gametest-api-v1": "*"
+	}
+}

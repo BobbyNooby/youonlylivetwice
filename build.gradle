@@ -26,6 +26,21 @@ loom {
     }
 }
 
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "you-only-live-twice-gametest"
+        enableClientGameTests = false
+        eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)
+    }
+}
+
+// Without a report file the GameTest results only exist in the console log
+loom.runs.named("gameTest") { run ->
+    run.systemProperties.put("fabric-api.gametest.report-file",
+            layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
+}
+
 dependencies {
     // To change the versions see the gradle.properties file
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -34,6 +49,14 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
+
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 processResources {
