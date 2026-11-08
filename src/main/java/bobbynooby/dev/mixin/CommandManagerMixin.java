@@ -1,5 +1,6 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.config.Settings;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
@@ -29,6 +30,9 @@ public class CommandManagerMixin {
     // Restrict non-op players to only using help
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
+        if (!Settings.active() || !Settings.get().restrictCommands) {
+            return;
+        }
 
         // Basic command checking
         if (!command.isEmpty()) {
@@ -57,6 +61,9 @@ public class CommandManagerMixin {
     // Send restricted command tree to non-op players
     @Inject(method = "sendCommands", at = @At("HEAD"), cancellable = true)
     private void sendPatchedCommandTree(ServerPlayer player, CallbackInfo ci) {
+        if (!Settings.active() || !Settings.get().restrictCommands) {
+            return;
+        }
         // Check if player is op
         MinecraftServer server = player.level().getServer();
         PlayerList playerList = server.getPlayerList();

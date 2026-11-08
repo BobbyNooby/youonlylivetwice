@@ -1,5 +1,6 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.config.Settings;
 import net.minecraft.server.players.SleepStatus;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,12 +12,16 @@ public class SleepManagerMixin {
 
     @Inject(method = "amountSleeping", at = @At("HEAD"), cancellable = true)
     private void getFakeSleeping(CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(0);
+        if (Settings.active() && Settings.get().sleep.hideSleepers) {
+            cir.setReturnValue(0);
+        }
     }
 
 
     @Inject(method = "sleepersNeeded", at = @At("HEAD"), cancellable = true)
     private void getFakeNightSkippingRequirement(CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(727);
+        if (Settings.active() && Settings.get().sleep.noNightSkip) {
+            cir.setReturnValue(727);
+        }
     }
 }

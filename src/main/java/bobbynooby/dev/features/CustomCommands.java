@@ -1,6 +1,7 @@
 package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.database.DatabaseHandler;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -33,8 +34,9 @@ public class CustomCommands {
                                         int diameter = IntegerArgumentType.getInteger(context, "diameter");
 
                                         // Change the config and update the world borders
-                                        Config.setWorldDiameter(diameter);
-                                        WorldBorders.setupWorldBorder(context.getSource().getServer());
+                                        Settings.get().worldBorder.diameter = diameter;
+                                        Settings.save();
+                                        WorldBorders.apply(context.getSource().getServer());
 
                                         // Console logging
                                         YouOnlyLiveTwice.LOGGER.info("{} set the world border diameter to {}", context.getSource().getPlayer().getName() != null ? context.getSource().getPlayer().getName().getString() : "Console", diameter);
@@ -84,10 +86,11 @@ public class CustomCommands {
                                         double scaling = DoubleArgumentType.getDouble(context, "scaling");
 
                                         // Update the scaling value in the config
-                                        Config.setEndBorderScale(scaling);
+                                        Settings.get().worldBorder.endScale = scaling;
+                                        Settings.save();
 
                                         // Update the world border sizes
-                                        WorldBorders.setupWorldBorder(context.getSource().getServer());
+                                        WorldBorders.apply(context.getSource().getServer());
 
                                         // Console logging
                                         YouOnlyLiveTwice.LOGGER.info("{} set the end world border scaling factor to {}", context.getSource().getPlayer().getName() != null ? context.getSource().getPlayer().getName().getString() : "Console", scaling);
@@ -106,7 +109,8 @@ public class CustomCommands {
 
                                         // Set the respawn cooldown
                                         int cooldown = IntegerArgumentType.getInteger(context, "cooldown");
-                                        Config.setRespawnCooldown(cooldown);
+                                        Settings.get().deathLockout.cooldownDays = cooldown;
+                                        Settings.save();
 
                                         // Send feedback
                                         context.getSource().sendSuccess(() -> {

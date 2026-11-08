@@ -5,8 +5,12 @@
 	"name": "You Only Live Twice GameTests",
 	"environment": "*",
 	"entrypoints": {
+		"main": [
+			"bobbynooby.dev.gametest.TestServerSetup"
+		],
 		"fabric-gametest": [
-			"bobbynooby.dev.gametest.SmokeGameTests"
+			"bobbynooby.dev.gametest.SmokeGameTests",
+			"bobbynooby.dev.gametest.SwitchGameTests"
 		]
 	},
 	"depends": {

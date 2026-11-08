@@ -1,7 +1,7 @@
 package bobbynooby.dev.database;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
-import bobbynooby.dev.features.Config;
+import bobbynooby.dev.config.Settings;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -55,7 +55,7 @@ public class DatabaseHandler {
         String playerUuid = player.id().toString();
         String playerName = player.name();
         String deathTime = new Date().toString();
-        int respawnCooldown = Config.getRespawnCooldown();
+        int respawnCooldown = Settings.get().deathLockout.cooldownDays;
 
         // Add death log
         try {

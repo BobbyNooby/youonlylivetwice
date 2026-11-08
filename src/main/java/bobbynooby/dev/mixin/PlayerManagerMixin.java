@@ -1,5 +1,6 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.CustomTabHeaders;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.ChatType;
@@ -37,6 +38,10 @@ public abstract class PlayerManagerMixin {
     // Rewrite the broadcast method for chat messages
     @Inject(method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Ljava/util/function/Predicate;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V", at = @At("HEAD"), cancellable = true)
     private void chatBroadcast(PlayerChatMessage message, Predicate<ServerPlayer> isFiltered, ServerPlayer sender, ChatType.Bound chatType, CallbackInfo ci) {
+        // The chat.* switches come with the chat rework
+        if (!Settings.active()) {
+            return;
+        }
 
         boolean verifiedMessage = this.verifyChatTrusted(message);
         this.server.logChatMessage(message.decoratedContent(), chatType, verifiedMessage ? null : "Not Secure");
@@ -55,6 +60,9 @@ public abstract class PlayerManagerMixin {
     // Block join/leave/achievement/general server2client messages
     @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
     private void joinLeaveDeathBroadcast(Component message, boolean overlay, CallbackInfo ci) {
+        if (!Settings.active() || !Settings.get().hide.gameMessages) {
+            return;
+        }
 
         // Send the message to the server only
         this.server.sendSystemMessage(message);
@@ -72,12 +80,18 @@ public abstract class PlayerManagerMixin {
     // Generate custom tab header each time a player joins
     @Inject(method = "placeNewPlayer", at = @At("HEAD"))
     public void sendHeader(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
+        if (!Settings.active()) {
+            return;
+        }
         CustomTabHeaders.onPlayerJoin(player);
     }
 
     // Called every tick. Update the custom tab header
     @Inject(method = "tick", at = @At("HEAD"))
     public void sendHeader(CallbackInfo ci) {
+        if (!Settings.active()) {
+            return;
+        }
         for (ServerPlayer player : players) {
             CustomTabHeaders.HeaderFooter headerFooter = CustomTabHeaders.getPlayerTab(player);
             player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.HEADER_STRING), Component.literal(headerFooter.FOOTER_STRING)));

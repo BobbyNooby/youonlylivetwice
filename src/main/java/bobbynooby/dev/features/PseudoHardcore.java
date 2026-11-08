@@ -1,6 +1,7 @@
 package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.database.DatabaseHandler;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -19,16 +20,22 @@ public class PseudoHardcore {
 
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            handleJoin(handler.getPlayer(), server);
+            if (lockoutOn()) {
+                handleJoin(handler.getPlayer(), server);
+            }
         });
 
         // Graves used to start the lockout, so start it here on death instead
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
-            if (entity instanceof ServerPlayer player) {
+            if (entity instanceof ServerPlayer player && lockoutOn()) {
                 handleDeath(player);
             }
         });
 
+    }
+
+    private static boolean lockoutOn() {
+        return Settings.active() && Settings.get().deathLockout.enabled;
     }
 
     public static void handleDeath(ServerPlayer player) {

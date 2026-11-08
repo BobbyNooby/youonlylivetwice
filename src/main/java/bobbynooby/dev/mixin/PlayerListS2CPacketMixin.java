@@ -1,5 +1,6 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.config.Settings;
 import net.minecraft.Optionull;
 import net.minecraft.network.chat.RemoteChatSession;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
@@ -44,6 +45,9 @@ public class PlayerListS2CPacketMixin {
 
     @Inject(method = "createPlayerInitializing", at = @At("HEAD"), cancellable = true)
     private static void entryFromPlayer(Collection<ServerPlayer> players, CallbackInfoReturnable<ClientboundPlayerInfoUpdatePacket> cir) {
+        if (!Settings.active() || !Settings.get().hide.tabList) {
+            return;
+        }
         EnumSet<ClientboundPlayerInfoUpdatePacket.Action> enumSet = EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER, ClientboundPlayerInfoUpdatePacket.Action.INITIALIZE_CHAT, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_GAME_MODE, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_HAT, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER);
 
         List<ClientboundPlayerInfoUpdatePacket.Entry> spoofedEntries = new ArrayList<>();
