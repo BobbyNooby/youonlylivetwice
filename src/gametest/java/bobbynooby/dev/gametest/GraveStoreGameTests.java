@@ -58,9 +58,9 @@ public class GraveStoreGameTests {
             store.put(grave);
             helper.assertTrue(store.at(Level.OVERWORLD, pos).isPresent(), "grave not found by position");
             helper.assertTrue(store.byId(grave.id()).isPresent(), "grave not found by id");
-            helper.assertTrue(store.inChunk(Level.OVERWORLD, new ChunkPos(pos)).stream().anyMatch(g -> g.id().equals(grave.id())),
+            helper.assertTrue(store.inChunk(Level.OVERWORLD, ChunkPos.containing(pos)).stream().anyMatch(g -> g.id().equals(grave.id())),
                     "grave not found by chunk");
-            helper.assertTrue(store.inChunk(Level.NETHER, new ChunkPos(pos)).stream().noneMatch(g -> g.id().equals(grave.id())),
+            helper.assertTrue(store.inChunk(Level.NETHER, ChunkPos.containing(pos)).stream().noneMatch(g -> g.id().equals(grave.id())),
                     "grave found in the wrong dimension");
         } finally {
             store.remove(grave.id());

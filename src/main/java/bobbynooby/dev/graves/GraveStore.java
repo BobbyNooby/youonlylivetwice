@@ -70,7 +70,7 @@ public final class GraveStore extends SavedData {
     public List<Grave> inChunk(ResourceKey<Level> dim, ChunkPos chunk) {
         List<Grave> found = new ArrayList<>();
         for (Grave grave : graves.values()) {
-            if (grave.dimension().equals(dim) && new ChunkPos(grave.pos()).equals(chunk)) {
+            if (grave.dimension().equals(dim) && ChunkPos.containing(grave.pos()).equals(chunk)) {
                 found.add(grave);
             }
         }
