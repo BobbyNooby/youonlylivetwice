@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerPlayer.class)
-public class ServerPlayerEntityMixin {
+public class ServerPlayerMixin {
 
 
     @Inject(method = "getRespawnConfig", at = @At("HEAD"), cancellable = true)

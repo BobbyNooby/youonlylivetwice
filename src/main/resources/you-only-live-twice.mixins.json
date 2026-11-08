@@ -10,7 +10,7 @@
     "PlayerListS2CPacketAccessor",
     "PlayerListS2CPacketMixin",
     "PlayerManagerMixin",
-    "ServerPlayerEntityMixin",
+    "ServerPlayerMixin",
     "SleepManagerMixin",
     "SpawnLocatingMixin"
   ],
