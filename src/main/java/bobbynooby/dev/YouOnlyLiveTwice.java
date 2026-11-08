@@ -1,10 +1,9 @@
 package bobbynooby.dev;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.database.DatabaseHandler;
 import bobbynooby.dev.features.CustomCommands;
 import bobbynooby.dev.features.NameTagHider;
-import bobbynooby.dev.features.PseudoHardcore;
+import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.features.WorldBorders;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -38,8 +37,6 @@ public class YouOnlyLiveTwice implements ModInitializer {
             if (!Settings.active()) {
                 return;
             }
-            DatabaseHandler.initialize(server);
-
             // The rule is saved with the world, so with the switch off we leave whatever the admin set
             if (Settings.get().immediateRespawn) {
                 server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
@@ -49,7 +46,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::apply);
 
         CustomCommands.register();
-        PseudoHardcore.initialize();
+        DeathLockout.init();
         NameTagHider.registerInitTeams();
         NameTagHider.registerAddPlayerToTeamOnJoin();
 

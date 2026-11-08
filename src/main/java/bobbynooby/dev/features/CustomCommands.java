@@ -2,7 +2,7 @@ package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.database.DatabaseHandler;
+import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -135,7 +135,7 @@ public class CustomCommands {
 
 
                                                         // Kill the player
-                                                        PseudoHardcore.handleDeath(player);
+                                                        DeathLockout.recordDeath(player);
 
                                                         // Send feedback
                                                         context.getSource().sendSuccess(() -> {
@@ -144,7 +144,7 @@ public class CustomCommands {
                                                     } else if (playerProfile.isPresent()) {
 
                                                         // Kill the player offline
-                                                        DatabaseHandler.addNewDeathLog(playerProfile.get());
+                                                        DeathLockout.recordDeath(playerProfile.get().id(), playerProfile.get().name());
 
                                                         // Send feedback
                                                         context.getSource().sendSuccess(() -> {
@@ -180,7 +180,7 @@ public class CustomCommands {
                                             if (playerProfile.isPresent()) {
 
                                                 // Revive the player
-                                                PseudoHardcore.handleRevive(playerProfile.get());
+                                                DeathLockout.revive(playerProfile.get().id());
 
                                                 // Send feedback
                                                 context.getSource().sendSuccess(() -> {

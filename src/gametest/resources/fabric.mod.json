@@ -9,6 +9,7 @@
 			"bobbynooby.dev.gametest.TestServerSetup"
 		],
 		"fabric-gametest": [
+			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.SmokeGameTests",
 			"bobbynooby.dev.gametest.SwitchGameTests"
 		],
