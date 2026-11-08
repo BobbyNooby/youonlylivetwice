@@ -11,6 +11,7 @@ import com.google.gson.JsonPrimitive;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -78,14 +79,24 @@ public final class ConfigLoader {
         return new Result(config, warnings, false);
     }
 
+    /** Writes a temp file first and moves it over the config, so a crash mid-write can't leave half a file. */
     public static void write(Path file, YoltConfig config) {
+        Path target = file.toAbsolutePath();
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
-            Path parent = file.toAbsolutePath().getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
+            Files.createDirectories(target.getParent());
+            Files.writeString(tmp, GSON.toJson(config), StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
             }
-            Files.writeString(file, GSON.toJson(config), StandardCharsets.UTF_8);
         } catch (IOException e) {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException suppressed) {
+                e.addSuppressed(suppressed);
+            }
             throw new UncheckedIOException(e);
         }
     }

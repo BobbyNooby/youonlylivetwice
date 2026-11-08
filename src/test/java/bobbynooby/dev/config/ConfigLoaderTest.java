@@ -8,6 +8,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -112,6 +114,19 @@ class ConfigLoaderTest {
         assertFalse(r.warnings().isEmpty());
         assertEquals("{not json", Files.readString(file));
         assertFalse(Files.exists(dir.resolve("config.json.bak")));
+    }
+
+    @Test
+    void writeReplacesFileAndLeavesNoTempFile() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "old contents");
+        YoltConfig config = new YoltConfig();
+        config.randomSpawn = false;
+        ConfigLoader.write(file, config);
+        assertFalse(JsonParser.parseString(Files.readString(file)).getAsJsonObject().get("randomSpawn").getAsBoolean());
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList());
+        }
     }
 
     @Test
