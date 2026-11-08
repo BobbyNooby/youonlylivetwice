@@ -6,7 +6,8 @@
 	"environment": "*",
 	"entrypoints": {
 		"fabric-gametest": [
-			"bobbynooby.dev.gametest.SmokeGameTests"
+			"bobbynooby.dev.gametest.SmokeGameTests",
+			"bobbynooby.dev.gametest.HarnessCheckGameTests"
 		]
 	},
 	"depends": {

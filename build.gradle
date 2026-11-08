@@ -39,6 +39,7 @@ fabricApi {
 loom.runs.named("gameTest") { run ->
     run.systemProperties.put("fabric-api.gametest.report-file",
             layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
+    run.systemProperties.put("mixin.debug.verbose", "true")
 }
 
 dependencies {
