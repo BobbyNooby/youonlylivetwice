@@ -12,12 +12,13 @@ public class SmokeGameTests {
     @GameTest
     public void testPlayerIsSurvivalAndNamed(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Alex", GameType.SURVIVAL, new BlockPos(1, 1, 1));
-
-        helper.assertTrue(player.gameMode() == GameType.SURVIVAL, "test player is not in survival");
-        helper.assertTrue(player.getGameProfile().name().startsWith("Alex"), "test player name does not start with Alex");
-        helper.assertTrue(helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID()) != null, "test player is not in the player list");
-
-        TestPlayers.leave(player);
+        try {
+            helper.assertTrue(player.gameMode() == GameType.SURVIVAL, "test player is not in survival");
+            helper.assertTrue(player.getGameProfile().name().startsWith("Alex"), "test player name does not start with Alex");
+            helper.assertTrue(helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID()) != null, "test player is not in the player list");
+        } finally {
+            TestPlayers.leave(player);
+        }
         helper.succeed();
     }
 
@@ -25,10 +26,11 @@ public class SmokeGameTests {
     @GameTest
     public void testPlayerGetsRequestedGameMode(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Steve", GameType.CREATIVE, new BlockPos(1, 1, 1));
-
-        helper.assertTrue(player.gameMode() == GameType.CREATIVE, "test player is not in creative");
-
-        TestPlayers.leave(player);
+        try {
+            helper.assertTrue(player.gameMode() == GameType.CREATIVE, "test player is not in creative");
+        } finally {
+            TestPlayers.leave(player);
+        }
         helper.succeed();
     }
 
