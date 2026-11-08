@@ -1,7 +1,7 @@
 package bobbynooby.dev.mixin;
 
-import com.mojang.authlib.GameProfile;
-import net.minecraft.server.ServerMetadata;
+import net.minecraft.network.protocol.status.ServerStatus;
+import net.minecraft.server.players.NameAndId;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
-@Mixin(ServerMetadata.Players.class)
+@Mixin(ServerStatus.Players.class)
 public class PlayerCountSpoofer {
 
     @Inject(method = "max", at = @At("HEAD"), cancellable = true)
@@ -23,7 +23,7 @@ public class PlayerCountSpoofer {
     }
 
     @Inject(method = "sample", at = @At("HEAD"), cancellable = true)
-    private void getSamplePlayers(CallbackInfoReturnable<List<GameProfile>> cir) {
+    private void getSamplePlayers(CallbackInfoReturnable<List<NameAndId>> cir) {
         cir.setReturnValue(List.of());
     }
 }

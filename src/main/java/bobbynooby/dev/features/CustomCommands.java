@@ -2,19 +2,19 @@ package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.database.DatabaseHandler;
-import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.minecraft.command.argument.Vec2ArgumentType;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.Vec2Argument;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.Vec2f;
-import net.minecraft.world.dimension.DimensionTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.phys.Vec2;
 
 import java.util.Optional;
 
@@ -22,11 +22,11 @@ public class CustomCommands {
 
 
     public static void register() {
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(CommandManager.literal("yolt")
-                    .requires(source -> source.hasPermissionLevel(2)) // Require op
-                    .then(CommandManager.literal("border")
-                            .then(CommandManager.argument("diameter", IntegerArgumentType.integer()) // /yolt border <diameter>
+        CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
+            dispatcher.register(Commands.literal("yolt")
+                    .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)) // Require op
+                    .then(Commands.literal("border")
+                            .then(Commands.argument("diameter", IntegerArgumentType.integer()) // /yolt border <diameter>
                                     .executes(context -> {
 
                                         // Extract diameter value
@@ -40,29 +40,29 @@ public class CustomCommands {
                                         YouOnlyLiveTwice.LOGGER.info("{} set the world border diameter to {}", context.getSource().getPlayer().getName() != null ? context.getSource().getPlayer().getName().getString() : "Console", diameter);
 
                                         // Send feedback
-                                        context.getSource().sendFeedback(() -> {
-                                            return Text.of("World border diameter set to: " + diameter);
+                                        context.getSource().sendSuccess(() -> {
+                                            return Component.literal("World border diameter set to: " + diameter);
                                         }, false);
 
                                         return 1;
                                     })
                             )
                     )
-                    .then(CommandManager.literal("center")
-                            .then(CommandManager.argument("pos", Vec2ArgumentType.vec2()) // /yolt center <x> <z>
+                    .then(Commands.literal("center")
+                            .then(Commands.argument("pos", Vec2Argument.vec2()) // /yolt center <x> <z>
                                     .executes(context -> {
                                         // Extract the position
-                                        Vec2f pos = Vec2ArgumentType.getVec2(context, "pos");
+                                        Vec2 pos = Vec2Argument.getVec2(context, "pos");
                                         int x = (int) pos.x;
                                         int z = (int) pos.y;
 
                                         // Set the world border center for the specified dimensions
                                         MinecraftServer server = context.getSource().getServer();
-                                        for (ServerWorld world : server.getWorlds()) {
-                                            if (world.getDimensionEntry().matchesKey(DimensionTypes.OVERWORLD) || world.getDimensionEntry().matchesKey(DimensionTypes.THE_NETHER)) {
-                                                world.getWorldBorder().setCenter(x, z); // Set the center for overworld/nether
-                                            } else if (world.getDimensionEntry().matchesKey(DimensionTypes.THE_END)) {
-                                                world.getWorldBorder().setCenter(0, 0); // Keep the center at (0, 0) for the end
+                                        for (ServerLevel level : server.getAllLevels()) {
+                                            if (level.dimensionTypeRegistration().is(BuiltinDimensionTypes.OVERWORLD) || level.dimensionTypeRegistration().is(BuiltinDimensionTypes.NETHER)) {
+                                                level.getWorldBorder().setCenter(x, z); // Set the center for overworld/nether
+                                            } else if (level.dimensionTypeRegistration().is(BuiltinDimensionTypes.END)) {
+                                                level.getWorldBorder().setCenter(0, 0); // Keep the center at (0, 0) for the end
                                             }
                                         }
 
@@ -70,16 +70,16 @@ public class CustomCommands {
                                         YouOnlyLiveTwice.LOGGER.info("{} set the world border center to {}, {}", context.getSource().getPlayer().getName() != null ? context.getSource().getPlayer().getName().getString() : "Console", x, z);
 
                                         // Send feedback
-                                        context.getSource().sendFeedback(() -> {
-                                            return Text.of("World border center set to: " + x + ", " + z);
+                                        context.getSource().sendSuccess(() -> {
+                                            return Component.literal("World border center set to: " + x + ", " + z);
                                         }, false);
 
                                         return 1;
                                     })
                             )
                     )
-                    .then(CommandManager.literal("endscaling")
-                            .then(CommandManager.argument("scaling", DoubleArgumentType.doubleArg()) // /yolt endscaling <scaling>
+                    .then(Commands.literal("endscaling")
+                            .then(Commands.argument("scaling", DoubleArgumentType.doubleArg()) // /yolt endscaling <scaling>
                                     .executes(context -> {
                                         double scaling = DoubleArgumentType.getDouble(context, "scaling");
 
@@ -93,15 +93,15 @@ public class CustomCommands {
                                         YouOnlyLiveTwice.LOGGER.info("{} set the end world border scaling factor to {}", context.getSource().getPlayer().getName() != null ? context.getSource().getPlayer().getName().getString() : "Console", scaling);
 
                                         // Send feedback
-                                        context.getSource().sendFeedback(() -> {
-                                            return Text.of("End world border scaling factor set to: " + scaling);
+                                        context.getSource().sendSuccess(() -> {
+                                            return Component.literal("End world border scaling factor set to: " + scaling);
                                         }, false);
 
                                         return 1;
                                     })
                             )
-                    ).then(CommandManager.literal("respawncooldown")
-                            .then(CommandManager.argument("cooldown", IntegerArgumentType.integer()) // /yolt respawncooldown <cooldown>))
+                    ).then(Commands.literal("respawncooldown")
+                            .then(Commands.argument("cooldown", IntegerArgumentType.integer()) // /yolt respawncooldown <cooldown>))
                                     .executes(context -> {
 
                                         // Set the respawn cooldown
@@ -109,23 +109,23 @@ public class CustomCommands {
                                         Config.setRespawnCooldown(cooldown);
 
                                         // Send feedback
-                                        context.getSource().sendFeedback(() -> {
-                                            return Text.of("Respawn cooldown set to: " + cooldown);
+                                        context.getSource().sendSuccess(() -> {
+                                            return Component.literal("Respawn cooldown set to: " + cooldown);
                                         }, false);
                                         return 1;
                                     })
                             )
-                    ).then(CommandManager.literal("kill")
-                            .then(CommandManager.argument("player", StringArgumentType.string()) // /yolt kill <player>
+                    ).then(Commands.literal("kill")
+                            .then(Commands.argument("player", StringArgumentType.string()) // /yolt kill <player>
                                     .executes(context -> {
 
                                                 MinecraftServer server = context.getSource().getServer();
 
                                                 // Get the target player from cache
                                                 String playerName = StringArgumentType.getString(context, "player");
-                                                Optional<GameProfile> playerProfile = server.getUserCache().findByName(playerName);
+                                                Optional<NameAndId> playerProfile = server.services().nameToIdCache().get(playerName);
                                                 try {
-                                                    ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerName); // Get the target player from the ServerPlayerEntity
+                                                    ServerPlayer player = server.getPlayerList().getPlayerByName(playerName); // Get the target player from the ServerPlayer
 
                                                     if (player != null) {
 
@@ -134,8 +134,8 @@ public class CustomCommands {
                                                         PseudoHardcore.handleDeath(player);
 
                                                         // Send feedback
-                                                        context.getSource().sendFeedback(() -> {
-                                                            return Text.of("Killed " + player.getGameProfile().getName());
+                                                        context.getSource().sendSuccess(() -> {
+                                                            return Component.literal("Killed " + player.getGameProfile().name());
                                                         }, false);
                                                     } else if (playerProfile.isPresent()) {
 
@@ -143,13 +143,13 @@ public class CustomCommands {
                                                         DatabaseHandler.addNewDeathLog(playerProfile.get());
 
                                                         // Send feedback
-                                                        context.getSource().sendFeedback(() -> {
-                                                            return Text.of("Killed " + playerProfile.get().getName());
+                                                        context.getSource().sendSuccess(() -> {
+                                                            return Component.literal("Killed " + playerProfile.get().name());
                                                         }, false);
                                                     } else {
                                                         // No player found
-                                                        context.getSource().sendFeedback(() -> {
-                                                            return Text.of("Player" + playerName + " not found");
+                                                        context.getSource().sendSuccess(() -> {
+                                                            return Component.literal("Player" + playerName + " not found");
                                                         }, false);
                                                     }
                                                 } catch (Exception e) {
@@ -160,8 +160,8 @@ public class CustomCommands {
                                             }
                                     )
                             )
-                    ).then(CommandManager.literal("unkill")
-                            .then(CommandManager.argument("player", StringArgumentType.string()) // /yolt unkill <player>
+                    ).then(Commands.literal("unkill")
+                            .then(Commands.argument("player", StringArgumentType.string()) // /yolt unkill <player>
                                     .executes(context -> {
 
 
@@ -171,7 +171,7 @@ public class CustomCommands {
                                         // Get the target player from cache
                                         String playerName = StringArgumentType.getString(context, "player");
                                         try {
-                                            Optional<GameProfile> playerProfile = server.getUserCache().findByName(playerName);
+                                            Optional<NameAndId> playerProfile = server.services().nameToIdCache().get(playerName);
 
                                             if (playerProfile.isPresent()) {
 
@@ -179,14 +179,14 @@ public class CustomCommands {
                                                 PseudoHardcore.handleRevive(playerProfile.get());
 
                                                 // Send feedback
-                                                context.getSource().sendFeedback(() -> {
-                                                    return Text.of("Revived " + playerProfile.get().getName());
+                                                context.getSource().sendSuccess(() -> {
+                                                    return Component.literal("Revived " + playerProfile.get().name());
                                                 }, false);
                                             } else {
 
                                                 // No player found
-                                                context.getSource().sendFeedback(() -> {
-                                                    return Text.of("Player" + playerName + " not found");
+                                                context.getSource().sendSuccess(() -> {
+                                                    return Component.literal("Player" + playerName + " not found");
                                                 }, false);
 
                                             }

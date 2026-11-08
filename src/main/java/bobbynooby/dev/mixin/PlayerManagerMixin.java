@@ -1,17 +1,16 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.features.CustomTabHeaders;
-import net.minecraft.network.ClientConnection;
-import net.minecraft.network.message.MessageType;
-import net.minecraft.network.message.SentMessage;
-import net.minecraft.network.message.SignedMessage;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.PlayerListHeaderS2CPacket;
+import net.minecraft.network.Connection;
+import net.minecraft.network.chat.ChatType;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.OutgoingChatMessage;
+import net.minecraft.network.chat.PlayerChatMessage;
+import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.PlayerManager;
-import net.minecraft.server.network.ConnectedClientData;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -22,35 +21,30 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.List;
 import java.util.function.Predicate;
 
-@Mixin(PlayerManager.class)
+@Mixin(PlayerList.class)
 public abstract class PlayerManagerMixin {
 
     @Shadow
     @Final
     private MinecraftServer server;
     @Shadow
-    private int latencyUpdateTimer;
-    @Shadow
     @Final
-    private List<ServerPlayerEntity> players;
+    private List<ServerPlayer> players;
 
     @Shadow
-    protected abstract boolean verify(SignedMessage message);
-
-    @Shadow
-    public abstract void sendToAll(Packet<?> packet);
+    protected abstract boolean verifyChatTrusted(PlayerChatMessage message);
 
     // Rewrite the broadcast method for chat messages
-    @Inject(method = "broadcast(Lnet/minecraft/network/message/SignedMessage;Ljava/util/function/Predicate;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/network/message/MessageType$Parameters;)V", at = @At("HEAD"), cancellable = true)
-    private void chatBroadcast(SignedMessage message, Predicate<ServerPlayerEntity> shouldSendFiltered, ServerPlayerEntity sender, MessageType.Parameters params, CallbackInfo ci) {
+    @Inject(method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Ljava/util/function/Predicate;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V", at = @At("HEAD"), cancellable = true)
+    private void chatBroadcast(PlayerChatMessage message, Predicate<ServerPlayer> isFiltered, ServerPlayer sender, ChatType.Bound chatType, CallbackInfo ci) {
 
-        boolean verifiedMessage = this.verify(message);
-        this.server.logChatMessage(message.getContent(), params, verifiedMessage ? null : "Not Secure");
-        SentMessage sentMessage = SentMessage.of(message);
-        boolean bl3 = shouldSendFiltered.test(sender);
+        boolean verifiedMessage = this.verifyChatTrusted(message);
+        this.server.logChatMessage(message.decoratedContent(), chatType, verifiedMessage ? null : "Not Secure");
+        OutgoingChatMessage outgoingMessage = OutgoingChatMessage.create(message);
+        boolean filtered = isFiltered.test(sender);
 
         if (sender != null) {
-            sender.sendChatMessage(sentMessage, bl3, params);
+            sender.sendChatMessage(outgoingMessage, filtered, chatType);
         }
 
         // Cancel the original method completely with ci.cancel()
@@ -59,11 +53,11 @@ public abstract class PlayerManagerMixin {
 
 
     // Block join/leave/achievement/general server2client messages
-    @Inject(method = "broadcast(Lnet/minecraft/text/Text;Z)V", at = @At("HEAD"), cancellable = true)
-    private void joinLeaveDeathBroadcast(Text message, boolean overlay, CallbackInfo ci) {
+    @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
+    private void joinLeaveDeathBroadcast(Component message, boolean overlay, CallbackInfo ci) {
 
         // Send the message to the server only
-        this.server.sendMessage(message);
+        this.server.sendSystemMessage(message);
         // Cancel the original method completely with ci.cancel()
         ci.cancel();
     }
@@ -76,17 +70,17 @@ public abstract class PlayerManagerMixin {
      */
 
     // Generate custom tab header each time a player joins
-    @Inject(method = "onPlayerConnect", at = @At("HEAD"))
-    public void sendHeader(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+    @Inject(method = "placeNewPlayer", at = @At("HEAD"))
+    public void sendHeader(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
         CustomTabHeaders.onPlayerJoin(player);
     }
 
-    // Basically called every tick. Update the custom tab header
-    @Inject(method = "updatePlayerLatency", at = @At("HEAD"))
+    // Called every tick. Update the custom tab header
+    @Inject(method = "tick", at = @At("HEAD"))
     public void sendHeader(CallbackInfo ci) {
-        for (ServerPlayerEntity player : players) {
+        for (ServerPlayer player : players) {
             CustomTabHeaders.HeaderFooter headerFooter = CustomTabHeaders.getPlayerTab(player);
-            player.networkHandler.sendPacket(new PlayerListHeaderS2CPacket(Text.literal(headerFooter.HEADER_STRING), Text.literal(headerFooter.FOOTER_STRING)));
+            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.HEADER_STRING), Component.literal(headerFooter.FOOTER_STRING)));
         }
     }
 

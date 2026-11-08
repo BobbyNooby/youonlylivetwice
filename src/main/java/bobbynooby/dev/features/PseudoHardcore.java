@@ -2,11 +2,12 @@ package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.database.DatabaseHandler;
-import com.mojang.authlib.GameProfile;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -21,19 +22,26 @@ public class PseudoHardcore {
             handleJoin(handler.getPlayer(), server);
         });
 
-    }
-
-    public static void handleDeath(ServerPlayerEntity player) {
-        player.networkHandler.disconnect(Text.literal("You have died."));
-        DatabaseHandler.addNewDeathLog(player.getGameProfile());
-    }
-
-    public static void handleRevive(GameProfile playerProfile) {
-        DatabaseHandler.revivePlayer(playerProfile.getId());
+        // Graves used to start the lockout, so start it here on death instead
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+            if (entity instanceof ServerPlayer player) {
+                handleDeath(player);
+            }
+        });
 
     }
 
-    public static void handleJoin(ServerPlayerEntity player, MinecraftServer server) {
+    public static void handleDeath(ServerPlayer player) {
+        player.connection.disconnect(Component.literal("You have died."));
+        DatabaseHandler.addNewDeathLog(player.nameAndId());
+    }
+
+    public static void handleRevive(NameAndId playerProfile) {
+        DatabaseHandler.revivePlayer(playerProfile.id());
+
+    }
+
+    public static void handleJoin(ServerPlayer player, MinecraftServer server) {
         DatabaseHandler.DeathLog latestDeathlog = DatabaseHandler.getLatestDeathLog(player);
 
 
@@ -51,15 +59,15 @@ public class PseudoHardcore {
                 long remaining = (allowedTimeMillis - nowMillis);
 
                 if (nowMillis < allowedTimeMillis && !latestDeathlog.bypass) {
-                    player.networkHandler.disconnect(getCooldownFromMillis(remaining));
-                    YouOnlyLiveTwice.LOGGER.info("Kicked {} due to active cooldown. {}s remaining.", player.getGameProfile().getName(), remaining);
+                    player.connection.disconnect(getCooldownFromMillis(remaining));
+                    YouOnlyLiveTwice.LOGGER.info("Kicked {} due to active cooldown. {}s remaining.", player.getGameProfile().name(), remaining);
                 } else {
                     // Player's cooldown has expired — allow join and unban them
-                    server.getPlayerManager().getUserBanList().remove(player.getGameProfile());
-                    YouOnlyLiveTwice.LOGGER.info("Player {} cooldown expired. Allowed to join.", player.getGameProfile().getName());
+                    server.getPlayerList().getBans().remove(player.nameAndId());
+                    YouOnlyLiveTwice.LOGGER.info("Player {} cooldown expired. Allowed to join.", player.getGameProfile().name());
                 }
             } catch (Exception e) {
-                YouOnlyLiveTwice.LOGGER.error("Failed to parse death time for " + player.getGameProfile().getName(), e);
+                YouOnlyLiveTwice.LOGGER.error("Failed to parse death time for " + player.getGameProfile().name(), e);
             }
         }
 
@@ -67,7 +75,7 @@ public class PseudoHardcore {
     }
 
 
-    public static Text getCooldownFromMillis(long millis) {
+    public static Component getCooldownFromMillis(long millis) {
         long seconds = millis / 1000;
 
         long years = seconds / (60 * 60 * 24 * 365);
@@ -101,7 +109,7 @@ public class PseudoHardcore {
 
         // Clean up trailing comma and space
         String result = sb.toString().replaceAll(", $", "");
-        return Text.literal(result + ".");
+        return Component.literal(result + ".");
     }
 
 }

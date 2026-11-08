@@ -1,17 +1,17 @@
 package bobbynooby.dev.mixin;
 
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(ServerPlayerEntity.class)
+@Mixin(ServerPlayer.class)
 public class ServerPlayerEntityMixin {
 
 
-    @Inject(method = "getRespawn", at = @At("HEAD"), cancellable = true)
-    private void getRespawnPos(CallbackInfoReturnable<ServerPlayerEntity.Respawn> cir) {
+    @Inject(method = "getRespawnConfig", at = @At("HEAD"), cancellable = true)
+    private void getRespawnPos(CallbackInfoReturnable<ServerPlayer.RespawnConfig> cir) {
         cir.setReturnValue(null);
     }
 }

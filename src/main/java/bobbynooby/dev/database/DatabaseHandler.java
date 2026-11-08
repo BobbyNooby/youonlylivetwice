@@ -2,10 +2,10 @@ package bobbynooby.dev.database;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.features.Config;
-import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +24,7 @@ public class DatabaseHandler {
     public static void initialize(MinecraftServer server) {
         try {
             // Get database path
-            Path worldDir = server.getSavePath(WorldSavePath.ROOT);
+            Path worldDir = server.getWorldPath(LevelResource.ROOT);
             Path databaseDir = worldDir.resolve("database");
             Files.createDirectories(databaseDir);
 
@@ -50,10 +50,10 @@ public class DatabaseHandler {
 
     }
 
-    public static void addNewDeathLog(GameProfile player) {
+    public static void addNewDeathLog(NameAndId player) {
         // Get player data
-        String playerUuid = player.getId().toString();
-        String playerName = player.getName();
+        String playerUuid = player.id().toString();
+        String playerName = player.name();
         String deathTime = new Date().toString();
         int respawnCooldown = Config.getRespawnCooldown();
 
@@ -113,11 +113,11 @@ public class DatabaseHandler {
         return connection;
     }
 
-    public static DeathLog getLatestDeathLog(ServerPlayerEntity player) {
+    public static DeathLog getLatestDeathLog(ServerPlayer player) {
         try {
             String sql = "SELECT * FROM death_logs WHERE uuid = ? ORDER BY ROWID DESC LIMIT 1";
             PreparedStatement stmt = connection.prepareStatement(sql);
-            stmt.setString(1, player.getUuidAsString());
+            stmt.setString(1, player.getStringUUID());
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
@@ -126,7 +126,7 @@ public class DatabaseHandler {
                 int cooldown = rs.getInt("respawnCooldown");
                 boolean bypass = rs.getBoolean("bypass");
 
-                return new DeathLog(player.getUuidAsString(), username, deathTime, cooldown, bypass);
+                return new DeathLog(player.getStringUUID(), username, deathTime, cooldown, bypass);
 
             }
         } catch (Exception e) {

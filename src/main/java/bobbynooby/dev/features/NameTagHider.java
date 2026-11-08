@@ -1,38 +1,38 @@
 package bobbynooby.dev.features;
 
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.scores.Team;
 
 import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
-import static net.minecraft.scoreboard.AbstractTeam.VisibilityRule.NEVER;
 
 public class NameTagHider {
 
 
     public static void registerInitTeams() {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
-            var team = server.getScoreboard().getTeam(TEAM_NAME);
-            if (team == null || team.shouldShowFriendlyInvisibles()) {
-                team = server.getScoreboard().addTeam(TEAM_NAME);
-                team.setShowFriendlyInvisibles(false);
-                team.setNameTagVisibilityRule(NEVER);
+            var team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+            if (team == null || team.canSeeFriendlyInvisibles()) {
+                team = server.getScoreboard().addPlayerTeam(TEAM_NAME);
+                team.setSeeFriendlyInvisibles(false);
+                team.setNameTagVisibility(Team.Visibility.NEVER);
             }
         });
     }
 
     public static void registerAddPlayerToTeamOnJoin() {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            ServerPlayerEntity player = handler.getPlayer();
+            ServerPlayer player = handler.getPlayer();
 
-            if (player.getScoreboardTeam() == null || !player.getScoreboardTeam().getName().equals(TEAM_NAME))
-                server.getScoreboard().addScoreHolderToTeam(player.getNameForScoreboard(), server.getScoreboard().getTeam(TEAM_NAME));
+            if (player.getTeam() == null || !player.getTeam().getName().equals(TEAM_NAME))
+                server.getScoreboard().addPlayerToTeam(player.getScoreboardName(), server.getScoreboard().getPlayerTeam(TEAM_NAME));
         });
 
-        ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((handler, sender, server) -> {
-            if (handler.getScoreboardTeam() == null || !handler.getScoreboardTeam().getName().equals(TEAM_NAME))
-                server.getScoreboard().addScoreHolderToTeam(handler.getNameForScoreboard(), server.getScoreboard().getTeam(TEAM_NAME));
+        ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> {
+            if (player.getTeam() == null || !player.getTeam().getName().equals(TEAM_NAME))
+                destination.getScoreboard().addPlayerToTeam(player.getScoreboardName(), destination.getScoreboard().getPlayerTeam(TEAM_NAME));
         });
     }
 }

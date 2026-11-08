@@ -2,12 +2,11 @@ package bobbynooby.dev.features;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.database.DatabaseHandler;
-import bobbynooby.dev.graves.GravesRegistry;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.world.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -60,7 +59,7 @@ public class Config {
             DatabaseHandler.initialize(server);
 
             // Initialize GameRules
-            server.getGameRules().get(GameRules.DO_IMMEDIATE_RESPAWN).set(true, server);
+            server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
         });
 
         // Initialize WorldBorders
@@ -69,14 +68,8 @@ public class Config {
         // Initialize Custom Portal
         CustomCommands.register();
 
-        // Initialize Custom grave blocks
-        GravesRegistry.initialize();
-
         // Initialize PseudoHardcore
         PseudoHardcore.initialize();
-
-        // Initialize Graves
-        Graves.initialize();
 
         // Initialize NameTagHider
         NameTagHider.registerInitTeams();
