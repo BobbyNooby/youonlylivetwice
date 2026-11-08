@@ -3,14 +3,16 @@
   "package": "bobbynooby.dev.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PlayerCountSpoofer",
     "CommandManagerMixin",
-    "PlayerManagerMixin",
-    "PlayerListS2CPacketMixin",
-    "PlayerListS2CPacketAccessor",
     "DimensionTypeMixin",
-    "SpawnLocatingMixin",
-    "LivingEntityMixin"
+    "LivingEntityMixin",
+    "PlayerCountSpoofer",
+    "PlayerListS2CPacketAccessor",
+    "PlayerListS2CPacketMixin",
+    "PlayerManagerMixin",
+    "ServerPlayerEntityMixin",
+    "SleepManagerMixin",
+    "SpawnLocatingMixin"
   ],
   "injectors": {
     "defaultRequire": 1
