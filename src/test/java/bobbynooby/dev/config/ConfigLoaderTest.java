@@ -98,4 +98,19 @@ class ConfigLoaderTest {
         assertEquals(10000, r.config().worldBorder.diameter);
         assertFalse(r.warnings().isEmpty());
     }
+
+    @Test
+    void fileHasConfigVersion() throws IOException {
+        Path file = dir.resolve("config.json");
+        ConfigLoader.load(file);
+        assertTrue(Files.readString(file).contains("\"configVersion\": 1"));
+    }
+
+    @Test
+    void hugeNumberFallsBackForThatKeyOnly() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"diameter\":99999999999,\"endScale\":3.0}}");
+        assertEquals(10000, r.config().worldBorder.diameter);
+        assertEquals(3.0, r.config().worldBorder.endScale);
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.diameter")));
+    }
 }

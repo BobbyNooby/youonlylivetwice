@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 
 /** Mod settings. Field names are the JSON keys. */
 public class YoltConfig {
+    public int configVersion = 1;
     public WorldBorderSection worldBorder = new WorldBorderSection();
     public DeathLockoutSection deathLockout = new DeathLockoutSection();
     public GravesSection graves = new GravesSection();
@@ -13,8 +14,8 @@ public class YoltConfig {
     public boolean restrictCommands = true;
     public boolean netherScaleOneToOne = true;
     public boolean randomSpawn = true;
-    public boolean immediateRespawn = true;
     public SleepSection sleep = new SleepSection();
+    public boolean immediateRespawn = true;
     public BodiesSection bodies = new BodiesSection();
 
     public static class WorldBorderSection {

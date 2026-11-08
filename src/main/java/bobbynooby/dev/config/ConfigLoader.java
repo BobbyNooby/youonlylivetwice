@@ -146,8 +146,11 @@ public final class ConfigLoader {
             return "expected a number";
         }
         // whole-number settings can't take 2.5
-        if (d.getAsNumber() instanceof Integer && u.getAsDouble() != Math.floor(u.getAsDouble())) {
-            return "expected a whole number";
+        if (d.getAsNumber() instanceof Integer) {
+            double v = u.getAsDouble();
+            if (v != Math.floor(v) || v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
+                return "expected a whole number that fits in an int";
+            }
         }
         return null;
     }
