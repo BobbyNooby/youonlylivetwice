@@ -15,6 +15,8 @@ public final class ClientTests {
         try (TestDedicatedServerContext server = ctx.worldBuilder().createServer();
              TestDedicatedServerConnection connection = server.connect()) {
             connection.waitForChunksRender();
+            // Join toasts (offline chat warning, social tutorial) would cover the top right of every screenshot
+            ctx.runOnClient(mc -> mc.gui.toastManager().clear());
             body.accept(server, connection);
         }
     }
