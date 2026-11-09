@@ -1,15 +1,27 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.lockout.DeathLockout;
+import com.google.gson.JsonObject;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
+import com.mojang.brigadier.tree.CommandNode;
+import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.synchronization.ArgumentUtils;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
 
@@ -149,6 +161,62 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // What a client is sent: every path of /yolt, our /w and the non-op trees, with each argument's parser,
+    // the lowest permission level that may use the node, and whether it runs. Logged so a CI run shows it.
+    @GameTest
+    public void commandTreesKeepTheirShape(GameTestHelper helper) {
+        CommandDispatcher<CommandSourceStack> dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
+        List<String> lines = new ArrayList<>();
+        List<String> ours = new ArrayList<>();
+        for (CommandNode<CommandSourceStack> child : dispatcher.getRoot().getChildren()) {
+            if (child.getName().equals("yolt") || child.getName().equals("w")) {
+                ours.add(child.getName());
+            }
+        }
+        lines.add("root order: " + String.join(", ", ours));
+        dump(dispatcher, dispatcher.getRoot().getChild("yolt"), "", lines);
+        dump(dispatcher, dispatcher.getRoot().getChild("w"), "", lines);
+        lines.add("non-op tree, whispers off:");
+        dumpChildren(Whispers.nonOpTree(false), lines);
+        lines.add("non-op tree, whispers on:");
+        dumpChildren(Whispers.nonOpTree(true), lines);
+
+        String tree = String.join("\n", lines);
+        YouOnlyLiveTwice.LOGGER.info("Command trees:\n{}", tree);
+        helper.assertValueEqual(tree, """
+                root order: yolt, w
+                yolt | literal | level 2
+                yolt border | literal | level 0
+                yolt border <diameter> | brigadier:integer {"min":1,"max":59999968} | level 0 | runs
+                yolt center | literal | level 0
+                yolt center <pos> | minecraft:vec2 | level 0 | runs
+                yolt endscaling | literal | level 0
+                yolt endscaling <scaling> | brigadier:double | level 0 | runs
+                yolt respawncooldown | literal | level 0
+                yolt respawncooldown <days> | brigadier:integer {"min":0} | level 0 | runs
+                yolt kill | literal | level 0
+                yolt kill <player> | brigadier:string {"type":"phrase"} | level 0 | runs
+                yolt unkill | literal | level 0
+                yolt unkill <player> | brigadier:string {"type":"phrase"} | level 0 | runs
+                yolt grave | literal | level 0
+                yolt grave list | literal | level 0 | runs
+                yolt grave remove | literal | level 0
+                yolt grave remove <pos> | minecraft:block_pos | level 0 | runs
+                yolt adminview | literal | level 0 | runs
+                yolt reload | literal | level 0 | runs
+                w | literal | level 0
+                w <target> | brigadier:string {"type":"word"} | level 0
+                w <target> <message> | minecraft:message | level 0 | runs
+                non-op tree, whispers off:
+                help | literal | level 0 | runs
+                non-op tree, whispers on:
+                help | literal | level 0 | runs
+                w | literal | level 0
+                w <target> | brigadier:string {"type":"word"} | level 0
+                w <target> <message> | minecraft:message | level 0 | runs""", "command trees");
+        helper.succeed();
+    }
+
     @GameTest
     public void killUnknownNameChangesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -209,6 +277,51 @@ public class CommandGameTests {
         ServerLevel level = helper.getLevel().getServer().getLevel(dimension);
         helper.assertTrue(level != null, "test server has no level " + dimension);
         return level;
+    }
+
+    private static void dumpChildren(RootCommandNode<CommandSourceStack> root, List<String> lines) {
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>(root);
+        for (CommandNode<CommandSourceStack> child : root.getChildren()) {
+            dump(dispatcher, child, "", lines);
+        }
+    }
+
+    private static void dump(CommandDispatcher<CommandSourceStack> dispatcher, CommandNode<CommandSourceStack> node,
+                             String parent, List<String> lines) {
+        String path = parent + (node instanceof ArgumentCommandNode<?, ?> ? "<" + node.getName() + ">" : node.getName());
+        StringBuilder line = new StringBuilder(path).append(" | ");
+        if (node instanceof ArgumentCommandNode<?, ?> argument) {
+            // The parser name and properties the client is sent, as vanilla's commands report writes them
+            JsonObject json = ArgumentUtils.serializeNodeToJson(dispatcher, node);
+            line.append(json.get("parser").getAsString());
+            if (json.has("properties")) {
+                line.append(' ').append(json.get("properties"));
+            }
+            if (argument.getCustomSuggestions() != null) {
+                line.append(" | own suggestions");
+            }
+        } else {
+            line.append("literal");
+        }
+        line.append(" | ").append(lowestLevel(node));
+        if (node.getCommand() != null) {
+            line.append(" | runs");
+        }
+        lines.add(line.toString());
+        for (CommandNode<CommandSourceStack> child : node.getChildren()) {
+            dump(dispatcher, child, path + " ", lines);
+        }
+    }
+
+    private static String lowestLevel(CommandNode<CommandSourceStack> node) {
+        List<PermissionSet> levels = List.of(PermissionSet.NO_PERMISSIONS, LevelBasedPermissionSet.MODERATOR,
+                LevelBasedPermissionSet.GAMEMASTER, LevelBasedPermissionSet.ADMIN, LevelBasedPermissionSet.OWNER);
+        for (int level = 0; level < levels.size(); level++) {
+            if (node.canUse(Commands.createCompilationContext(levels.get(level)))) {
+                return "level " + level;
+            }
+        }
+        return "no level";
     }
 
     // Runs the command as the console and returns every line it sent back
