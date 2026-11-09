@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyRules;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class BodyDeathLootMixin {
     @Inject(method = "dropAllDeathLoot", at = @At("HEAD"), cancellable = true)
     private void dropNothingForBody(ServerLevel level, DamageSource source, CallbackInfo ci) {
-        if (Bodies.dropsNothing((LivingEntity) (Object) this)) {
+        if (BodyRules.dropsNothing((LivingEntity) (Object) this)) {
             ci.cancel();
         }
     }
@@ -24,7 +24,7 @@ public abstract class BodyDeathLootMixin {
     // A wither's kill leaves a rose, which would also take the block the owner's grave goes on
     @Inject(method = "createWitherRose", at = @At("HEAD"), cancellable = true)
     private void noWitherRoseForBody(@Nullable LivingEntity killer, CallbackInfo ci) {
-        if (Bodies.dropsNothing((LivingEntity) (Object) this)) {
+        if (BodyRules.dropsNothing((LivingEntity) (Object) this)) {
             ci.cancel();
         }
     }

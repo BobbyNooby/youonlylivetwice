@@ -6,15 +6,12 @@ import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.visibility.NameTagTeam;
 import com.mojang.authlib.GameProfile;
-import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.PlayerAdvancements;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.TextFilter;
-import net.minecraft.stats.ServerStatsCounter;
 import net.minecraft.stats.Stat;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Pose;
@@ -24,7 +21,6 @@ import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.portal.TeleportTransition;
-import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -44,7 +40,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
     private PlayerBody(ServerLevel level, GameProfile profile, UUID owner, YoltConfig.BodiesSection cfg) {
         super(level.getServer(), level, profile, ClientInformation.createDefault());
         this.owner = owner;
-        this.bodyPose = MannequinBodies.pose(cfg.pose);
+        this.bodyPose = BodySpawn.pose(cfg.pose);
         this.movable = cfg.movable;
         // The owner gets the body's health back on login, so healing here would heal them for logging out
         this.foodData = new FoodData() {
@@ -71,12 +67,8 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
         // A player entity's id is its profile's, and the world refuses a second entity with the owner's id
         PlayerBody body = new PlayerBody(level, new GameProfile(UUID.randomUUID(), from.name(), from.properties()),
                 player.getUUID(), cfg);
-        // Keeps the main-hand item in the hand the player held it in
-        body.setMainArm(player.getMainArm());
-        body.snapTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
-        body.setYHeadRot(player.getYHeadRot());
-        body.setYBodyRot(player.yBodyRot);
-        MannequinBodies.copyState(player, body, cfg);
+        BodySpawn.placeLike(player, body);
+        BodySpawn.copyState(player, body, cfg);
         body.addToWorld(level);
         return body;
     }
@@ -191,14 +183,14 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
     // Player's own wear, which skips the mixin a mannequin goes through, so the switch is checked here
     @Override
     public void hurtArmor(DamageSource source, float damage) {
-        if (Bodies.wearsArmour(this)) {
+        if (BodyRules.wearsArmour(this)) {
             super.hurtArmor(source, damage);
         }
     }
 
     @Override
     public void hurtHelmet(DamageSource source, float damage) {
-        if (Bodies.wearsArmour(this)) {
+        if (BodyRules.wearsArmour(this)) {
             super.hurtHelmet(source, damage);
         }
     }
@@ -210,35 +202,6 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
 
     @Override
     public void resetStat(Stat<?> stat) {
-    }
-
-    /** The body's own stats, never stored in the player list, so nothing is kept or written for the body's id. */
-    public static ServerStatsCounter detachedStats(PlayerBody body) {
-        MinecraftServer server = body.level().getServer();
-        return new ServerStatsCounter(server, server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(body.getUUID() + ".json")) {
-            @Override
-            public void save() {
-            }
-        };
-    }
-
-    /** The body's own advancements, kept the same way. It never makes one: the chat would announce its owner's name. */
-    public static PlayerAdvancements detachedAdvancements(PlayerBody body) {
-        MinecraftServer server = body.level().getServer();
-        PlayerAdvancements advancements = new PlayerAdvancements(server.getFixerUpper(), server.getPlayerList(), server.getAdvancements(),
-                server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR).resolve(body.getUUID() + ".json"), body) {
-            @Override
-            public boolean award(AdvancementHolder holder, String criterion) {
-                return false;
-            }
-
-            @Override
-            public void save() {
-            }
-        };
-        // Nothing to check its criteria against on every tick and move
-        advancements.clearTriggers();
-        return advancements;
     }
 
     // A text filter service would be told a player joined who never leaves

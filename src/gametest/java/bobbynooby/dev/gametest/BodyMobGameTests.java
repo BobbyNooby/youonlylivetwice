@@ -1,7 +1,9 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyMobs;
 import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.config.Settings;
@@ -166,7 +168,7 @@ public class BodyMobGameTests {
             helper.assertTrue(loaded instanceof Mannequin, "not loaded as a mannequin");
             Mannequin copy = (Mannequin) loaded;
             helper.assertTrue(copy.entityTags().contains(Bodies.TAG), "body tag lost");
-            helper.assertTrue(Bodies.isBody(copy), "loaded body no longer counts as a body");
+            helper.assertTrue(BodyRules.isBody(copy), "loaded body no longer counts as a body");
             helper.assertValueEqual(copy.getPose(), Pose.SWIMMING, "pose");
             helper.assertTrue(copy.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate lost");
             helper.assertTrue(copy.getItemBySlot(EquipmentSlot.MAINHAND).is(Items.IRON_SWORD), "sword lost");
@@ -183,8 +185,8 @@ public class BodyMobGameTests {
         List<Entity> spawned = new ArrayList<>();
         try {
             Mob zombie = spawnMob(helper, spawned, EntityTypes.ZOMBIE);
-            Bodies.addBodyGoal(zombie);
-            Bodies.addBodyGoal(zombie);
+            BodyMobs.addBodyGoal(zombie);
+            BodyMobs.addBodyGoal(zombie);
             helper.assertValueEqual(bodyGoalPriorities(zombie), List.of(2), "zombie's body goals");
             assertBodyGoals(helper, spawned, EntityTypes.ZOMBIE_VILLAGER, List.of(2));
             assertBodyGoals(helper, spawned, EntityTypes.SPIDER, List.of(2));

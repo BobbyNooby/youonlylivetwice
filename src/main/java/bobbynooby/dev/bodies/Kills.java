@@ -43,7 +43,7 @@ public final class Kills {
         // A pending record was taken over already, so the save is the player's real state
         Optional<BodyRecord> body = BodyStore.get(server).byOwner(who.id()).filter(record -> !record.pendingRemoval());
         if (body.isPresent()) {
-            return Bodies.killBody(server, body.get());
+            return BodyDeath.killBody(server, body.get());
         }
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
                 Profiles.of(who));

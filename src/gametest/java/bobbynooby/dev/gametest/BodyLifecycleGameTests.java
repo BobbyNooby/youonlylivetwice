@@ -1,7 +1,12 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyChunks;
+import bobbynooby.dev.bodies.BodyLogin;
+import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyRestart;
+import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.Settings;
@@ -71,7 +76,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(body.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate not copied");
             helper.assertTrue(body.getItemBySlot(EquipmentSlot.MAINHAND).is(Items.IRON_SWORD), "sword not copied");
             helper.assertValueEqual(body.getHealth(), 14.0F, "health");
-            helper.assertTrue(Bodies.isBody(body), "not recognised as a body");
+            helper.assertTrue(BodyRules.isBody(body), "not recognised as a body");
             helper.assertValueEqual(body.getProfile().partialProfile().id(), owner, "profile id");
             helper.assertTrue(body.getCustomName() == null, "body has a custom name");
             // The fields without a public getter, read the way they are saved
@@ -90,7 +95,7 @@ public class BodyLifecycleGameTests {
         YoltConfig.BodiesSection before = useDefaultBodies();
         try {
             Settings.get().bodies.enabled = false;
-            helper.assertTrue(Bodies.onLogout(player).isEmpty(), "body made with bodies off");
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "body made with bodies off");
             assertNoBody(helper, player);
         } finally {
             cleanUp(helper, player, before);
@@ -109,7 +114,7 @@ public class BodyLifecycleGameTests {
             // Still alive, so only the lockout check can stop this one
             DeathLockout.recordDeath(player.getUUID(), player.nameAndId().name());
             helper.assertTrue(DeathLockout.refusal(player.getUUID()) != null, "death not recorded");
-            helper.assertTrue(Bodies.onLogout(player).isEmpty(), "locked-out player got a body");
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "locked-out player got a body");
 
             // With the lockout off, being dead is all that stops it; graves off leaves nothing behind
             config.deathLockout.enabled = false;
@@ -117,7 +122,7 @@ public class BodyLifecycleGameTests {
             TestPlayers.markLoaded(player);
             player.kill(player.level());
             helper.assertTrue(player.isDeadOrDying(), "player did not die");
-            helper.assertTrue(Bodies.onLogout(player).isEmpty(), "dead player got a body");
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "dead player got a body");
             assertNoBody(helper, player);
         } finally {
             config.deathLockout.enabled = lockoutBefore;
@@ -132,7 +137,7 @@ public class BodyLifecycleGameTests {
         ServerPlayer player = join(helper, "Watcher", GameType.SPECTATOR);
         YoltConfig.BodiesSection before = useDefaultBodies();
         try {
-            helper.assertTrue(Bodies.onLogout(player).isEmpty(), "spectator got a body");
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "spectator got a body");
             assertNoBody(helper, player);
         } finally {
             cleanUp(helper, player, before);
@@ -324,7 +329,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(gravesOf(helper, owner).isEmpty(), "failed death left a grave");
             helper.assertTrue(DeathLockout.refusal(owner) == null, "failed death started the lockout");
             // What the removal at the end of the death animation runs
-            Bodies.onBodyUnload(body);
+            BodyChunks.onBodyUnload(body);
             helper.assertValueEqual(store(helper).byOwner(owner).map(record -> record.snapshot().health()), Optional.of(20.0F),
                     "saved health after the body died");
 
@@ -384,7 +389,7 @@ public class BodyLifecycleGameTests {
             Mannequin body = leaveBody(helper, player);
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             body.setHealth(11.0F);
-            Bodies.snapshotBodies(helper.getLevel().getServer());
+            BodyRestart.snapshotBodies(helper.getLevel().getServer());
 
             Optional<BodyRecord> record = store(helper).byOwner(owner);
             helper.assertTrue(record.isPresent(), "no body record");
@@ -413,7 +418,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(record.isPresent() && record.get().pendingRemoval(), "record not waiting for the body to load");
             // A record waiting for its body was taken over already, so a later login leaves the player alone
             back.setHealth(18.0F);
-            Bodies.onLogin(back);
+            BodyLogin.onLogin(back);
             helper.assertValueEqual(back.getHealth(), 18.0F, "health after a second login");
 
             Mannequin loaded = loadAgain(helper, saved);
@@ -483,7 +488,7 @@ public class BodyLifecycleGameTests {
     }
 
     private static Mannequin logOut(GameTestHelper helper, ServerPlayer player) {
-        Optional<Entity> body = Bodies.onLogout(player);
+        Optional<Entity> body = BodyLogout.onLogout(player);
         helper.assertTrue(body.isPresent() && body.get() instanceof Mannequin, "no mannequin body");
         return (Mannequin) body.get();
     }
@@ -505,7 +510,7 @@ public class BodyLifecycleGameTests {
     // Stands in for the body's chunk unloading: the hook saves its state, then it leaves the world.
     // Returns its save data, so loadAgain can bring it back the way a chunk load would.
     private static CompoundTag unload(GameTestHelper helper, Mannequin body) {
-        Bodies.onBodyUnload(body);
+        BodyChunks.onBodyUnload(body);
         CompoundTag saved = save(helper, body);
         body.discard();
         return saved;

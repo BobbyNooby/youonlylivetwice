@@ -1,5 +1,6 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.bodies.BodyStats;
 import bobbynooby.dev.bodies.PlayerBody;
 import net.minecraft.server.PlayerAdvancements;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,14 +19,14 @@ public abstract class PlayerListBodyStatsMixin {
     @Inject(method = "getPlayerStats", at = @At("HEAD"), cancellable = true)
     private void ownStatsForBody(Player player, CallbackInfoReturnable<ServerStatsCounter> cir) {
         if (player instanceof PlayerBody body) {
-            cir.setReturnValue(PlayerBody.detachedStats(body));
+            cir.setReturnValue(BodyStats.detachedStats(body));
         }
     }
 
     @Inject(method = "getPlayerAdvancements", at = @At("HEAD"), cancellable = true)
     private void ownAdvancementsForBody(ServerPlayer player, CallbackInfoReturnable<PlayerAdvancements> cir) {
         if (player instanceof PlayerBody body) {
-            cir.setReturnValue(PlayerBody.detachedAdvancements(body));
+            cir.setReturnValue(BodyStats.detachedAdvancements(body));
         }
     }
 }

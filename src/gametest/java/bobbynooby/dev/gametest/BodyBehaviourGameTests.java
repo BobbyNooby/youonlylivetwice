@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
@@ -113,7 +114,7 @@ public class BodyBehaviourGameTests {
         YoltConfig.BodiesSection before = useDefaultBodies();
         try {
             Mannequin body = leaveBody(helper, player);
-            helper.assertTrue(Bodies.isBody(body), "not recognised as a body");
+            helper.assertTrue(BodyRules.isBody(body), "not recognised as a body");
             helper.assertFalse(body.canUsePortal(false), "body can use a portal");
             // Never added to the world; only checks the hook leaves other mannequins alone
             Mannequin plain = new Mannequin(EntityTypes.MANNEQUIN, helper.getLevel());

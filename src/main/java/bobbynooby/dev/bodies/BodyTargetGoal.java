@@ -39,7 +39,7 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
      *                         height limit, a drowned's daylight rule); null when the mob has no such goal
      */
     public BodyTargetGoal(Mob mob, @Nullable TargetingConditions playerConditions) {
-        super(mob, Mannequin.class, true, (target, level) -> Bodies.isBody(target)
+        super(mob, Mannequin.class, true, (target, level) -> BodyRules.isBody(target)
                 && (playerConditions == null || playerConditions.test(level, mob, target))
                 // The guardian's own rule: nothing within 3 blocks, where its beam would stop
                 && !(mob instanceof Guardian && target.distanceToSqr(mob) <= 9.0));

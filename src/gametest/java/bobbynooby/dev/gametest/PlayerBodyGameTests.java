@@ -1,8 +1,10 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
+import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyRestart;
+import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.PlayerBody;
@@ -88,7 +90,7 @@ public class PlayerBodyGameTests {
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
             player.setHealth(14.0F);
             // The logout hook on its own, so what it returns can be checked
-            Optional<Entity> made = Bodies.onLogout(player);
+            Optional<Entity> made = BodyLogout.onLogout(player);
             helper.assertTrue(made.isPresent() && made.get() instanceof PlayerBody, "no player body");
             PlayerBody body = (PlayerBody) made.get();
 
@@ -99,7 +101,7 @@ public class PlayerBodyGameTests {
             helper.assertFalse(body.getUUID().equals(owner), "body has its owner's id");
             helper.assertValueEqual(body.owner(), owner, "body's owner");
             helper.assertValueEqual(body.getGameProfile().name(), player.getGameProfile().name(), "body's name");
-            helper.assertTrue(Bodies.isBody(body), "not recognised as a body");
+            helper.assertTrue(BodyRules.isBody(body), "not recognised as a body");
             helper.assertValueEqual(body.getPose(), Pose.SWIMMING, "pose");
             helper.assertValueEqual(body.position(), player.position(), "position");
             helper.assertTrue(body.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate not copied");
@@ -221,11 +223,11 @@ public class PlayerBodyGameTests {
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             body.setHealth(12.0F);
             Vec3 moved = body.position();
-            Bodies.snapshotBodies(server);
+            BodyRestart.snapshotBodies(server);
             body.discard();
             helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record went with the body");
 
-            Bodies.restorePlayerBodies(server);
+            BodyRestart.restorePlayerBodies(server);
             Entity found = helper.getLevel().getEntity(body.getUUID());
             helper.assertTrue(found instanceof PlayerBody && found != body, "no player body brought back");
             PlayerBody restored = (PlayerBody) found;
@@ -235,7 +237,7 @@ public class PlayerBodyGameTests {
             helper.assertTrue(restored.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate lost");
             helper.assertTrue(hasSkin(restored.getGameProfile().properties()), "restored body lost its skin");
             helper.assertTrue(hasSkin(restored.ownerProfile().partialProfile().properties()), "grave profile lost the skin");
-            helper.assertTrue(Bodies.isBody(restored), "restored body not recognised as a body");
+            helper.assertTrue(BodyRules.isBody(restored), "restored body not recognised as a body");
             helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
         } finally {
             cleanUp(helper, owner, before);
@@ -363,7 +365,7 @@ public class PlayerBodyGameTests {
                 body.discard();
             }
 
-            Bodies.restorePlayerBodies(server);
+            BodyRestart.restorePlayerBodies(server);
             for (ServerPlayer owner : owners) {
                 UUID bodyId = store.byOwner(owner.getUUID()).orElseThrow().bodyEntity();
                 helper.assertTrue(helper.getLevel().getEntity(bodyId) == null, "a body already due was brought back");

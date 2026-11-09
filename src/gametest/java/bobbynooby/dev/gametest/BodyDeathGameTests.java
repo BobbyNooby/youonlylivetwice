@@ -1,6 +1,8 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyChunks;
+import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
@@ -214,7 +216,7 @@ public class BodyDeathGameTests {
             Mannequin body = leaveBody(helper, player);
             body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
             // Stands in for the chunk unloading: the hook saves the body's state, then it leaves the world
-            Bodies.onBodyUnload(body);
+            BodyChunks.onBodyUnload(body);
             BlockPos at = body.blockPosition();
             body.discard();
 
@@ -265,7 +267,7 @@ public class BodyDeathGameTests {
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             // The logout hook on its own, so the owner stays online with a body and a record
-            Optional<Entity> made = Bodies.onLogout(player);
+            Optional<Entity> made = BodyLogout.onLogout(player);
             helper.assertTrue(made.isPresent() && made.get() instanceof Mannequin, "no mannequin body");
             helper.assertTrue(store(helper).byOwner(owner).isPresent(), "no body record");
             Mannequin body = (Mannequin) made.get();

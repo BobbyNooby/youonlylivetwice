@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyRules;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -18,7 +18,7 @@ public abstract class BodyArmourWearMixin {
 
     @Inject(method = "hurtArmor", at = @At("HEAD"))
     private void wearBodyArmour(DamageSource source, float damage, CallbackInfo ci) {
-        if (Bodies.wearsArmour((LivingEntity) (Object) this)) {
+        if (BodyRules.wearsArmour((LivingEntity) (Object) this)) {
             doHurtEquipment(source, damage, EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
         }
     }
@@ -26,7 +26,7 @@ public abstract class BodyArmourWearMixin {
     // A falling block or stalactite on the head
     @Inject(method = "hurtHelmet", at = @At("HEAD"))
     private void wearBodyHelmet(DamageSource source, float damage, CallbackInfo ci) {
-        if (Bodies.wearsArmour((LivingEntity) (Object) this)) {
+        if (BodyRules.wearsArmour((LivingEntity) (Object) this)) {
             doHurtEquipment(source, damage, EquipmentSlot.HEAD);
         }
     }

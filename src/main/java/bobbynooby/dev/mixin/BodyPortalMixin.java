@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyRules;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class BodyPortalMixin {
     @Inject(method = "canUsePortal", at = @At("HEAD"), cancellable = true)
     private void keepBodyOutOfPortals(boolean ignorePassenger, CallbackInfoReturnable<Boolean> cir) {
-        if (Bodies.blocksPortal((Entity) (Object) this)) {
+        if (BodyRules.blocksPortal((Entity) (Object) this)) {
             cir.setReturnValue(false);
         }
     }
