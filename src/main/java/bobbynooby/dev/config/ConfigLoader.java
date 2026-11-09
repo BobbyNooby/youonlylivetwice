@@ -84,7 +84,6 @@ public final class ConfigLoader {
             String backup = file.getFileName() + ".v" + version + ".bak";
             backup(file, backup);
             user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
-            user.addProperty(VERSION_KEY, currentVersion);
             warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
         }
 
@@ -100,10 +99,10 @@ public final class ConfigLoader {
             config = new YoltConfig();
         }
         validate(config, warnings);
+        // What is held is this build's layout, whatever the file said, so a save says so
+        config.configVersion = currentVersion;
         if (version > currentVersion) {
-            // Rewriting would drop what only the newer YOLT knows. What is held is this build's layout, so a later
-            // save says so.
-            config.configVersion = currentVersion;
+            // Rewriting would drop what only the newer YOLT knows
             warnings.add("config is from a newer version, so it was not rewritten");
             return new Result(config, warnings, false);
         }
@@ -111,12 +110,13 @@ public final class ConfigLoader {
         return new Result(config, warnings, false);
     }
 
-    // A missing or unusable version reads as the first one; merge still warns about an unusable value
+    // A missing or unusable version reads as the first one; merge still warns about one that isn't a number. Zero or
+    // below can only be a damaged file.
     private static int fileVersion(JsonObject user) {
         JsonElement value = user.get(VERSION_KEY);
         if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
             double version = value.getAsDouble();
-            if (version == Math.floor(version) && version >= Integer.MIN_VALUE && version <= Integer.MAX_VALUE) {
+            if (version == Math.floor(version) && version >= FIRST_VERSION && version <= Integer.MAX_VALUE) {
                 return (int) version;
             }
         }

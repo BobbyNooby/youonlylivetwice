@@ -141,20 +141,36 @@ class ConfigLoaderTest {
     @Test
     void olderConfigIsBackedUpThenUpgraded() throws IOException {
         Path file = dir.resolve("config.json");
-        String old = "{\"configVersion\": 0, \"spawnRandomly\": false}";
+        String old = "{\"configVersion\": 1, \"spawnRandomly\": false}";
         Files.writeString(file, old);
-        List<Migrations.Step<JsonObject>> steps = List.of(new Migrations.Step<JsonObject>(0, json -> {
+        List<Migrations.Step<JsonObject>> steps = List.of(new Migrations.Step<JsonObject>(1, json -> {
             json.add("randomSpawn", json.remove("spawnRandomly"));
             return json;
         }));
 
-        ConfigLoader.Result r = ConfigLoader.load(file, true, 1, steps);
-        assertEquals(old, Files.readString(dir.resolve("config.json.v0.bak")));
+        ConfigLoader.Result r = ConfigLoader.load(file, true, 2, steps);
+        assertEquals(old, Files.readString(dir.resolve("config.json.v1.bak")));
         JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
-        assertEquals(1, written.get("configVersion").getAsInt());
+        assertEquals(2, written.get("configVersion").getAsInt());
         assertFalse(written.get("randomSpawn").getAsBoolean());
         assertFalse(written.has("spawnRandomly"));
         assertFalse(r.config().randomSpawn);
+    }
+
+    // Only a damaged file has these, so they read as a missing version: no backup and no upgrade
+    @Test
+    void zeroOrNegativeConfigVersionReadsAsMissing() throws IOException {
+        Path file = dir.resolve("config.json");
+        for (String version : List.of("0", "-1", "-2147483648")) {
+            Files.writeString(file, "{\"configVersion\": " + version + ", \"randomSpawn\": false}");
+            ConfigLoader.Result r = ConfigLoader.load(file);
+            assertFalse(r.config().randomSpawn);
+            JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+            assertEquals(ConfigLoader.CURRENT_VERSION, written.get("configVersion").getAsInt(), "written for " + version);
+            try (Stream<Path> files = Files.list(dir)) {
+                assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList(), "files for " + version);
+            }
+        }
     }
 
     @Test

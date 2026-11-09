@@ -192,9 +192,16 @@ public class MigrationGameTests {
         helper.succeed();
     }
 
-    // The format and data version pairs both fixer tests load: older Minecraft, current, newer Minecraft, newer format
+    // The format and data version pairs both fixer tests load: older Minecraft, current, newer Minecraft, newer
+    // format, and the two damaged values that read as missing
     private static int[][] versionCases(int format, int current) {
-        return new int[][]{{format, current - 1}, {format, current}, {format, current + 1}, {format + 1, current}};
+        return new int[][]{{format, current - 1}, {format, current}, {format, current + 1}, {format + 1, current},
+                {0, current}, {format, 0}};
+    }
+
+    // How a store reads a saved value: zero or below is missing, and a missing data version is 26.3's (5023)
+    private static int asRead(int saved, int missing) {
+        return saved > 0 ? saved : missing;
     }
 
     // An older Minecraft's real item format can't be made here. This shows the fixer runs for an older file, is
@@ -210,8 +217,10 @@ public class MigrationGameTests {
             long before = StoreVersions.itemsFixed();
             GraveStore loaded = GraveStore.TYPE.codec()
                     .parse(ops, storeData("graves", graveTag, saved[0], saved[1])).getOrThrow();
-            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved[1] < current ? 1L : 0L, "items fixed at " + label);
-            helper.assertValueEqual(loaded.fromNewer(), saved[0] > GraveStore.FORMAT || saved[1] > current, "newer at " + label);
+            int format = asRead(saved[0], 1);
+            int dataVersion = asRead(saved[1], 5023);
+            helper.assertValueEqual(StoreVersions.itemsFixed() - before, dataVersion < current ? 1L : 0L, "items fixed at " + label);
+            helper.assertValueEqual(loaded.fromNewer(), format > GraveStore.FORMAT || dataVersion > current, "newer at " + label);
             List<ItemStack> items = loaded.byId(grave.id()).orElseThrow().items();
             helper.assertTrue(items.size() == 1 && items.get(0).is(Items.DIAMOND) && items.get(0).getCount() == 5,
                     "the diamonds changed at " + label + ": " + items);
@@ -236,8 +245,10 @@ public class MigrationGameTests {
             long before = StoreVersions.itemsFixed();
             BodyStore loaded = BodyStore.TYPE.codec()
                     .parse(ops, storeData("bodies", recordTag, saved[0], saved[1])).getOrThrow();
-            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved[1] < current ? 2L : 0L, "gear fixed at " + label);
-            helper.assertValueEqual(loaded.fromNewer(), saved[0] > BodyStore.FORMAT || saved[1] > current, "newer at " + label);
+            int format = asRead(saved[0], 1);
+            int dataVersion = asRead(saved[1], 5023);
+            helper.assertValueEqual(StoreVersions.itemsFixed() - before, dataVersion < current ? 2L : 0L, "gear fixed at " + label);
+            helper.assertValueEqual(loaded.fromNewer(), format > BodyStore.FORMAT || dataVersion > current, "newer at " + label);
             BodySnapshot kept = loaded.byOwner(record.owner()).orElseThrow().snapshot();
             ItemStack keptChest = kept.gear().get(EquipmentSlot.CHEST);
             ItemStack keptArrows = kept.gear().get(EquipmentSlot.OFFHAND);

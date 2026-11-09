@@ -76,8 +76,8 @@ public final class StoreVersions {
             @Override
             public <T> DataResult<Pair<Loaded<R>, T>> decode(DynamicOps<T> ops, T input) {
                 Dynamic<T> data = new Dynamic<>(ops, input);
-                int savedFormat = data.get(FORMAT).asInt(FIRST_FORMAT);
-                int savedDataVersion = data.get(DATA_VERSION).asInt(BEFORE_VERSIONING);
+                int savedFormat = usable(data.get(FORMAT).asInt(FIRST_FORMAT), FIRST_FORMAT);
+                int savedDataVersion = usable(data.get(DATA_VERSION).asInt(BEFORE_VERSIONING), BEFORE_VERSIONING);
                 int current = currentDataVersion();
                 Dynamic<?> upgraded = data;
                 if (savedFormat <= format) {
@@ -94,6 +94,12 @@ public final class StoreVersions {
             }
         };
         return Codec.of(encoder, decoder);
+    }
+
+    // Zero or below can only come from a damaged file, so it reads as if the field were missing. A data version of 0
+    // would otherwise run every item fix since 2016 on a current item.
+    private static int usable(int saved, int missing) {
+        return saved > 0 ? saved : missing;
     }
 
     /** Runs the fix on each element of the list under the key. Anything that isn't a list stays as it is. */
