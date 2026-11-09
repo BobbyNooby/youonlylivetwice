@@ -37,7 +37,8 @@ final class LockoutCommands {
         Settings.get().deathLockout.cooldownDays = days;
         Settings.save();
         LOGGER.info("{} set the respawn cooldown to {} days", source.getTextName(), days);
-        return YoltCommands.done(source, "Respawn cooldown set to: " + days);
+        return YoltCommands.done(source, "Respawn cooldown set to " + (days == 1 ? "1 day" : days + " days") + "."
+                + " It applies to deaths from now on; use /yolt unkill for the rest.");
     }
 
     private static int kill(CommandSourceStack source, String name) {
@@ -50,10 +51,10 @@ final class LockoutCommands {
             result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
         } catch (Kills.LoggedFailure e) {
             // The body death logged it already
-            return YoltCommands.fail(source, "Could not kill " + name + ", see the server log.");
+            return YoltCommands.fail(source, "Could not kill " + name + "; see the server log.");
         } catch (RuntimeException e) {
             LOGGER.error("{} could not kill {}", source.getTextName(), name, e);
-            return YoltCommands.fail(source, "Could not kill " + name + ", see the server log.");
+            return YoltCommands.fail(source, "Could not kill " + name + "; see the server log.");
         }
         String failure = switch (result) {
             case NOT_FOUND -> "Player " + name + " not found.";
@@ -69,7 +70,7 @@ final class LockoutCommands {
         if (!DeathLockout.deathRecordedAfter(who.get().id(), who.get().name(), before)) {
             return YoltCommands.fail(source, "Killed " + who.get().name() + ", but the death could not be recorded; see the server log.");
         }
-        return YoltCommands.done(source, "Killed " + who.get().name());
+        return YoltCommands.done(source, "Killed " + who.get().name() + ".");
     }
 
     private static int unkill(CommandSourceStack source, String name) {
@@ -81,11 +82,11 @@ final class LockoutCommands {
         return switch (DeathLockout.revive(who.get().id(), found, reviver(source))) {
             case REVIVED -> {
                 LOGGER.info("{} revived {}", source.getTextName(), found);
-                yield YoltCommands.done(source, "Revived " + found);
+                yield YoltCommands.done(source, "Revived " + found + ".");
             }
             case ALREADY_ENDED -> YoltCommands.fail(source, found + "'s lockout had already ended.");
             case NO_DEATH -> YoltCommands.fail(source, found + " has no death to undo.");
-            case FAILED -> YoltCommands.fail(source, "Could not revive " + found + ", see the server log.");
+            case FAILED -> YoltCommands.fail(source, "Could not revive " + found + "; see the server log.");
         };
     }
 

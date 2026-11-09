@@ -36,7 +36,7 @@ public class AdminViewGameTests {
         try {
             TestPlayers.op(admin);
             run(admin, "yolt adminview");
-            helper.assertTrue(said(admin, "Admin view on"), "the command did not reply \"Admin view on\"");
+            helper.assertTrue(said(admin, "Admin view on."), "the command did not reply \"Admin view on.\"");
             helper.assertTrue(AdminView.isOn(admin), "the command did not turn admin view on");
 
             // Leaving saves the player, like a real logout
@@ -161,7 +161,7 @@ public class AdminViewGameTests {
             // Compared as text, since a command failure arrives wrapped in another component
             helper.assertTrue(said(player, Component.translatable("command.unknown.command").getString()),
                     "a non-op's /yolt adminview was not refused");
-            helper.assertFalse(said(player, "Admin view on"), "a non-op was told admin view is on");
+            helper.assertFalse(said(player, "Admin view on."), "a non-op was told admin view is on");
             helper.assertFalse(player.hasAttached(AdminView.ATTACHMENT), "a non-op's command changed admin view");
         } finally {
             config.restrictCommands = restrictBefore;

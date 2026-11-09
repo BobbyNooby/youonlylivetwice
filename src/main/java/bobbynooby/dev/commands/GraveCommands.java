@@ -53,9 +53,9 @@ final class GraveCommands {
         if (dropped.isEmpty()) {
             return YoltCommands.fail(source, "Could not remove " + grave.get().ownerName() + "'s grave: its dimension is not loaded.");
         }
-        int stacks = dropped.getAsInt();
-        LOGGER.info("{} removed {}'s grave at {} {} and dropped {} stacks", source.getTextName(), grave.get().ownerName(),
+        String stacks = dropped.getAsInt() == 1 ? "1 stack" : dropped.getAsInt() + " stacks";
+        LOGGER.info("{} removed {}'s grave at {} {} and dropped {}", source.getTextName(), grave.get().ownerName(),
                 source.getLevel().dimension().identifier(), pos, stacks);
-        return YoltCommands.done(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + " stacks.");
+        return YoltCommands.done(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + ".");
     }
 }

@@ -158,7 +158,7 @@ final class BorderCommands {
         Settings.save();
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
-        return YoltCommands.done(source, "World border diameter set to: " + diameter + borderOffNote());
+        return YoltCommands.done(source, "World border diameter set to " + diameter + "." + borderOffNote());
     }
 
     // The centre isn't in the config: vanilla saves it with the world
@@ -184,7 +184,7 @@ final class BorderCommands {
             }
         });
         LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
-        return YoltCommands.done(source, "World border center set to: " + number(x) + ", " + number(z)
+        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "."
                 + borderOffNote() + spawnOutsideNote(server));
     }
 
@@ -203,7 +203,7 @@ final class BorderCommands {
         Settings.save();
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
-        return YoltCommands.done(source, "End world border scaling factor set to: " + scaling + borderOffNote());
+        return YoltCommands.done(source, "End world border scaling factor set to " + scaling + "." + borderOffNote());
     }
 
     // Read as doubles: Vec2Argument.getVec2 rounds to floats, which moves a centre past about 16 million by a block
@@ -218,7 +218,7 @@ final class BorderCommands {
 
     // With the feature off YOLT sizes no border: border and endscaling only save their value, center only moves vanilla's
     private static String borderOffNote() {
-        return Settings.get().worldBorder.enabled ? "" : " (world border feature is off)";
+        return Settings.get().worldBorder.enabled ? "" : " The world border feature is off, so YOLT sizes no border.";
     }
 
     // With random spawn off, a first join starts at the world spawn itself, not at a spot vanilla keeps inside the border

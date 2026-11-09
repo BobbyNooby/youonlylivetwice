@@ -58,7 +58,7 @@ public final class Revive {
         }
         String name = ownerName(stack, owner.get());
         if (DeathLockout.refusal(owner.get(), name) == null) {
-            user.sendSystemMessage(Component.literal(name + " is not dead"));
+            user.sendSystemMessage(Component.literal(notDead(name)));
             return Outcome.NOT_DEAD;
         }
         DeathLockout.ReviveResult result = DeathLockout.revive(owner.get(), name, user.nameAndId().name());
@@ -68,7 +68,7 @@ public final class Revive {
         }
         if (result != DeathLockout.ReviveResult.REVIVED) {
             // The lockout ran out between the check above and now
-            user.sendSystemMessage(Component.literal(name + " is not dead"));
+            user.sendSystemMessage(Component.literal(notDead(name)));
             return Outcome.NOT_DEAD;
         }
         stack.shrink(1);
@@ -78,6 +78,11 @@ public final class Revive {
         user.sendSystemMessage(Component.literal(name + " can come back now."));
         Yolt.LOGGER.info("{} revived {} with a revive head", user.nameAndId().name(), name);
         return Outcome.REVIVED;
+    }
+
+    // With the lockout off nobody is kept out, so "not dead" would be wrong for a player who did die
+    private static String notDead(String name) {
+        return name + (Settings.on(c -> c.deathLockout.enabled) ? " is not dead." : " is not locked out.");
     }
 
     private static InteractionResult onUseItem(Player player, Level level, InteractionHand hand) {

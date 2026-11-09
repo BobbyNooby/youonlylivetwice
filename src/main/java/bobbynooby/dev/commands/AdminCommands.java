@@ -34,7 +34,7 @@ final class AdminCommands {
         ServerPlayer player = source.getPlayerOrException();
         boolean on = AdminView.toggle(player);
         LOGGER.info("{} turned admin view {}", source.getTextName(), on ? "on" : "off");
-        return YoltCommands.done(source, on ? "Admin view on" : "Admin view off");
+        return YoltCommands.done(source, on ? "Admin view on." : "Admin view off.");
     }
 
     private static int reload(CommandSourceStack source) {
@@ -58,14 +58,14 @@ final class AdminCommands {
                 : List.of();
         if (!outside.isEmpty()) {
             Settings.get().worldBorder = liveBorder;
-            warnings.add("World border kept as it was, since the new one would leave outside it: " + BorderCommands.listed(outside)
-                    + ". The file still holds the new border and a restart will apply it: use /yolt border or endscaling with confirm"
-                    + " to apply it now, or change the file back.");
+            warnings.add("World border kept as it was, since the new one would leave " + BorderCommands.listed(outside)
+                    + " outside it. The file still holds the new border and a restart will apply it; use /yolt border or endscaling"
+                    + " with confirm to apply it now, or change the file back.");
         }
         LiveSettings.applyAll(server);
 
         LOGGER.info("{} reloaded the config", source.getTextName());
-        YoltCommands.reply(source, "Config reloaded");
+        YoltCommands.reply(source, "Config reloaded.");
         for (String warning : warnings) {
             LOGGER.warn("Config: {}", warning);
             YoltCommands.reply(source, warning);

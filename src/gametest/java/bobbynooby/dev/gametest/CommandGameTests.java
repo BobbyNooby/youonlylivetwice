@@ -68,7 +68,7 @@ public class CommandGameTests {
 
         border.enabled = true;
         try {
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to: 3000"), "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000."), "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 3000, "diameter setting");
             helper.assertTrue(Files.readString(Settings.path()).contains("\"diameter\": 3000"), "diameter not saved to the config file");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 3000.0, "overworld border size");
@@ -93,7 +93,7 @@ public class CommandGameTests {
         border.enabled = false;
         try {
             helper.assertValueEqual(run(server, "yolt border 3000"),
-                    List.of("World border diameter set to: 3000 (world border feature is off)"), "command output");
+                    List.of("World border diameter set to 3000. The world border feature is off, so YOLT sizes no border."), "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 3000, "diameter setting");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), sizeBefore, "overworld border size");
         } finally {
@@ -143,7 +143,7 @@ public class CommandGameTests {
         try {
             level(helper, Level.END).getWorldBorder().setCenter(5, 5);
             helper.assertValueEqual(run(server, "yolt center 100 -200"),
-                    List.of("World border center set to: 100, -200 (world border feature is off)"), "command output");
+                    List.of("World border center set to 100, -200. The world border feature is off, so YOLT sizes no border."), "command output");
             assertCentre(helper, server.overworld(), 100, -200);
             assertCentre(helper, level(helper, Level.NETHER), 100, -200);
             assertCentre(helper, level(helper, Level.END), 0, 0);
@@ -178,7 +178,7 @@ public class CommandGameTests {
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         try {
             List<String> output = run(server, "yolt center 100.5 -20.25");
-            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("World border center set to: 100.5, -20.25"),
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("World border center set to 100.5, -20.25."),
                     "command output: " + output);
             assertCentre(helper, server.overworld(), 100.5, -20.25);
         } finally {
@@ -198,7 +198,7 @@ public class CommandGameTests {
         border.enabled = false;
         try {
             List<String> output = run(server, "yolt center 10 20");
-            helper.assertTrue(output.size() == 1 && output.get(0).endsWith("(world border feature is off)"), "command output: " + output);
+            helper.assertTrue(output.size() == 1 && output.get(0).endsWith("The world border feature is off, so YOLT sizes no border."), "command output: " + output);
         } finally {
             border.enabled = enabledBefore;
             restoreBorders(bordersBefore);
@@ -230,7 +230,7 @@ public class CommandGameTests {
 
             // Centred on the spawn, it stays inside, so there's no note
             helper.assertValueEqual(run(server, "yolt center " + spawn.getX() + " " + spawn.getZ() + " confirm"),
-                    List.of("World border center set to: " + spawn.getX() + ", " + spawn.getZ()), "output with the spawn inside");
+                    List.of("World border center set to " + spawn.getX() + ", " + spawn.getZ() + "."), "output with the spawn inside");
         } finally {
             config.randomSpawn = randomSpawnBefore;
             config.worldBorder.enabled = enabledBefore;
@@ -264,7 +264,7 @@ public class CommandGameTests {
             helper.assertValueEqual(overworld.getSize(), sizeBefore, "overworld border size after the refusal");
             helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
 
-            helper.assertValueEqual(run(server, "yolt border 2000 confirm"), List.of("World border diameter set to: 2000"), "output with confirm");
+            helper.assertValueEqual(run(server, "yolt border 2000 confirm"), List.of("World border diameter set to 2000."), "output with confirm");
             helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size with confirm");
             helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded for " + name);
         } finally {
@@ -293,7 +293,7 @@ public class CommandGameTests {
             double size = overworld.getSize();
             overworld.lerpSizeBetween(size, size - 1000, 1_000_000L, server.overworld().getGameTime());
             // confirm, because the test structures sit far outside a 3000 block border
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to: 3000"), "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000."), "command output");
             helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
             helper.assertValueEqual(overworld.getSize(), 3000.0, "overworld border size");
         } finally {
@@ -315,7 +315,7 @@ public class CommandGameTests {
         DeathLockout.recordDeath(id, name);
         try {
             helper.assertTrue(DeathLockout.refusal(id) != null, "the death did not lock " + name + " out");
-            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name), "command output");
+            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name + "."), "command output");
             helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
         } finally {
             DeathLockout.revive(id, "console");
@@ -338,7 +338,7 @@ public class CommandGameTests {
         UUID id = UUID.randomUUID();
         DeathLockout.recordDeath(id, name);
         try {
-            helper.assertValueEqual(run(server, "yolt unkill " + name.toLowerCase(Locale.ROOT)), List.of("Revived " + name),
+            helper.assertValueEqual(run(server, "yolt unkill " + name.toLowerCase(Locale.ROOT)), List.of("Revived " + name + "."),
                     "command output");
             helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
         } finally {
@@ -356,7 +356,7 @@ public class CommandGameTests {
         withOwnDeathStore(false, store -> {
             DeathLockout.recordDeath(id, name, name + " drowned");
             long before = System.currentTimeMillis();
-            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name), "command output");
+            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name + "."), "command output");
             long after = System.currentTimeMillis();
 
             DeathLog log = store.latest(id).orElseThrow();
@@ -422,7 +422,7 @@ public class CommandGameTests {
         // No grave to clean up: the player carries nothing, and this test is about the lockout
         graves.enabled = false;
         try {
-            helper.assertValueEqual(run(server, "yolt kill " + who.name()), List.of("Killed " + who.name()), "command output");
+            helper.assertValueEqual(run(server, "yolt kill " + who.name()), List.of("Killed " + who.name() + "."), "command output");
             helper.assertTrue(DeathLockout.refusal(who.id()) != null, "the kill did not lock " + who.name() + " out");
         } finally {
             graves.enabled = gravesBefore;
@@ -535,7 +535,7 @@ public class CommandGameTests {
             Settings.get().randomSpawn = true;
             // The border stays off, as the test server needs
             Files.writeString(path, "{\"randomSpawn\": false, \"worldBorder\": {\"enabled\": false}}");
-            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded"), "command output");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
             helper.assertFalse(Settings.get().randomSpawn, "randomSpawn still on after reload");
         } finally {
             Files.writeString(path, fileBefore);
@@ -586,7 +586,7 @@ public class CommandGameTests {
             // The test structures sit millions of blocks out, far outside a 1000 block border
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000}}");
             List<String> output = run(server, "yolt reload");
-            helper.assertTrue(output.contains("Config reloaded") && output.stream().anyMatch(line -> line.contains(name)
+            helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line -> line.contains(name)
                     && line.contains("a restart will apply it") && line.contains("change the file back")), "command output: " + output);
             helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
             helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
@@ -616,7 +616,7 @@ public class CommandGameTests {
             live.diameter = 1000;
             live.endScale = 2.0;
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000, \"endScale\": 2.0}}");
-            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded"), "command output");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
         } finally {
             Files.writeString(path, fileBefore);
             Settings.reload();
@@ -641,7 +641,7 @@ public class CommandGameTests {
             live.diameter = 1000;
             WorldBorders.apply(server);
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000}}");
-            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded"), "command output");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 2000, "live diameter");
         } finally {
             Files.writeString(path, fileBefore);
