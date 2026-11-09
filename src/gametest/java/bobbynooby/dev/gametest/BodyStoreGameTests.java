@@ -9,6 +9,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
@@ -129,6 +131,34 @@ public class BodyStoreGameTests {
         Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD)),
                 Map.of(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_AXE)));
         helper.assertTrue(out.get(EquipmentSlot.MAINHAND).is(Items.IRON_AXE), "axe replaced");
+        helper.succeed();
+    }
+
+    @GameTest
+    public void gearSyncNeverRaisesCount(GameTestHelper helper) {
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.OFFHAND, new ItemStack(Items.ARROW, 3)),
+                Map.of(EquipmentSlot.OFFHAND, new ItemStack(Items.ARROW, 1)));
+        helper.assertValueEqual(out.get(EquipmentSlot.OFFHAND).getCount(), 1, "count");
+        helper.succeed();
+    }
+
+    @GameTest
+    public void badBodyTypeOnlySkipsThatRecord(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyRecord good = record(Map.of());
+        BodyRecord bad = record(Map.of());
+        CompoundTag goodTag = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, good).getOrThrow();
+        CompoundTag badTag = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, bad).getOrThrow();
+        badTag.putString("type", "ghost");
+        ListTag list = new ListTag();
+        list.add(badTag);
+        list.add(goodTag);
+        CompoundTag file = new CompoundTag();
+        file.put("bodies", list);
+
+        BodyStore store = BodyStore.TYPE.codec().parse(ops, file).getOrThrow();
+        helper.assertTrue(store.byOwner(good.owner()).isPresent(), "good record lost");
+        helper.assertTrue(store.byOwner(bad.owner()).isEmpty(), "bad record kept");
         helper.succeed();
     }
 }

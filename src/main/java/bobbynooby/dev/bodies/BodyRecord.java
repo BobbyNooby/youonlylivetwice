@@ -2,6 +2,7 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.YoltConfig;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
 
@@ -22,8 +23,13 @@ public record BodyRecord(
             UUIDUtil.CODEC.fieldOf("owner").forGetter(BodyRecord::owner),
             Codec.STRING.fieldOf("owner_name").forGetter(BodyRecord::ownerName),
             UUIDUtil.CODEC.fieldOf("body_entity").forGetter(BodyRecord::bodyEntity),
-            Codec.STRING.xmap(name -> YoltConfig.BodyType.valueOf(name.toUpperCase(Locale.ROOT)),
-                    type -> type.name().toLowerCase(Locale.ROOT)).fieldOf("type").forGetter(BodyRecord::type),
+            Codec.STRING.comapFlatMap(name -> {
+                try {
+                    return DataResult.success(YoltConfig.BodyType.valueOf(name.toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException e) {
+                    return DataResult.error(() -> "Unknown body type " + name);
+                }
+            }, type -> type.name().toLowerCase(Locale.ROOT)).fieldOf("type").forGetter(BodyRecord::type),
             Codec.LONG.fieldOf("logged_out_at").forGetter(BodyRecord::loggedOutAt),
             Codec.BOOL.fieldOf("pending_removal").forGetter(BodyRecord::pendingRemoval),
             BodySnapshot.CODEC.fieldOf("snapshot").forGetter(BodyRecord::snapshot)

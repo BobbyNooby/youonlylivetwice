@@ -30,7 +30,8 @@ public final class GearSync {
             } else if (ItemStack.isSameItem(body, real)) {
                 // A different item means the player swapped it elsewhere; only the same item's wear is carried over
                 ItemStack updated = real.copy();
-                updated.setCount(body.getCount());
+                // Never above the real count: a larger body stack would create items
+                updated.setCount(Math.min(body.getCount(), real.getCount()));
                 if (body.has(DataComponents.DAMAGE)) {
                     updated.set(DataComponents.DAMAGE, body.get(DataComponents.DAMAGE));
                 } else {
