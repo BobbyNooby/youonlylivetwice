@@ -50,9 +50,8 @@ public final class DeathLockout {
         // Runs before the body handover, so a throw here must not escape and skip it.
         ServerPlayerEvents.JOIN.register(player -> {
             Guard.run(() -> {
-                Component refusal = enabled() ? refusal(player.getUUID()) : null;
-                if (refusal != null) {
-                    kickLater(player, refusal);
+                if (enabled() && refusal(player.getUUID()) != null) {
+                    kickLater(player);
                 }
             }, "Could not check death lockout for {} as they joined", player.nameAndId().name());
         });
@@ -112,16 +111,19 @@ public final class DeathLockout {
             return;
         }
         recordDeath(player.getUUID(), player.nameAndId().name());
-        kickLater(player, Component.literal("You have died."));
+        kickLater(player);
     }
 
-    private static void kickLater(ServerPlayer player, Component reason) {
+    // Kicks with the login refusal's text. Checked again when it runs: a revive in the same tick, or a cooldown of 0
+    // days, leaves nothing to keep the player out for.
+    private static void kickLater(ServerPlayer player) {
         UUID uuid = player.getUUID();
         MinecraftServer server = player.level().getServer();
         Later.afterTick(server, () -> {
             // By uuid: they may have left already, or respawned as a new player object
             ServerPlayer current = server.getPlayerList().getPlayer(uuid);
-            if (current != null) {
+            Component reason = current == null ? null : refusal(uuid);
+            if (reason != null) {
                 current.connection.disconnect(reason);
             }
         });
