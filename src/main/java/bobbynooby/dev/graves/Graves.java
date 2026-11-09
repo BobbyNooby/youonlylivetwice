@@ -309,6 +309,8 @@ public final class Graves {
             }
         }
         if (container != null) {
+            // It already left OPEN, so emptying it can't write back; a menu still open on it now has nothing to give
+            container.clearContent();
             container.closeMenus();
         }
         BlockPos pos = grave.pos();
