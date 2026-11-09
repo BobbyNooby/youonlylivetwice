@@ -5,8 +5,10 @@ import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
@@ -57,8 +59,8 @@ public final class RandomSpawn {
 
     /**
      * Where a player could spawn in this column, or null. Runs the check vanilla gives each spawn candidate: standing on a
-     * block with a full top face, not in a fluid, with room for a player. Powder snow is refused too, since vanilla's
-     * check sees no collision in it and a player spawned there sinks and freezes.
+     * block with a full top face, not in a fluid, with room for a player. Vanilla's check sees no collision in powder
+     * snow, fire or sweet berry bushes and doesn't look underfoot, so those and magma are refused here.
      */
     public static @Nullable BlockPos spotAt(ServerLevel level, int x, int z) {
         BlockPos spot;
@@ -71,10 +73,16 @@ public final class RandomSpawn {
         if (spot == null || !PlayerSpawnFinderInvoker.yoltNoCollisionNoLiquid(level, spot)) {
             return null;
         }
-        if (level.getBlockState(spot).is(Blocks.POWDER_SNOW) || level.getBlockState(spot.above()).is(Blocks.POWDER_SNOW)) {
+        if (hurts(level.getBlockState(spot)) || hurts(level.getBlockState(spot.above()))
+                || level.getBlockState(spot.below()).is(Blocks.MAGMA_BLOCK)) {
             return null;
         }
         return spot;
+    }
+
+    // Blocks a player can stand in that freeze, burn or prick them
+    private static boolean hurts(BlockState state) {
+        return state.is(Blocks.POWDER_SNOW) || state.is(BlockTags.FIRE) || state.is(Blocks.SWEET_BERRY_BUSH);
     }
 
     /**
