@@ -24,7 +24,7 @@ import java.util.Map;
 
 /** Reads the config key by key, so one bad value only resets that value. */
 public final class ConfigLoader {
-    /** unparseable means the file was not valid JSON; config is then null if load was told not to write defaults. */
+    /** unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to write defaults. */
     public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable) {}
 
     // Vanilla's largest world border
