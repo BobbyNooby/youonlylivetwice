@@ -154,7 +154,7 @@ public final class DeathLockout {
         }
         DeathStore open = store;
         if (open == null) {
-            Yolt.LOGGER.warn("Death store is closed, not recording death of {}", name);
+            Yolt.LOGGER.error("Death store is closed, not recording death of {}", name);
             return;
         }
         try {
