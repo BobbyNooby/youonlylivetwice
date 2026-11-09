@@ -190,11 +190,16 @@ public final class Bodies {
         }
         BodyStore store = BodyStore.get(server);
         for (BodyRecord record : store.all()) {
-            // A dying body belongs to the death path, and its state is nothing to hand over
-            if (!record.pendingRemoval()
-                    && server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
-                    && !body.isDeadOrDying()) {
-                store.put(record.withSnapshot(BodySnapshot.of(body)));
+            // This runs at the start of the stop, before the world and players are saved, which must go ahead anyway
+            try {
+                // A dying body belongs to the death path, and its state is nothing to hand over
+                if (!record.pendingRemoval()
+                        && server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
+                        && !body.isDeadOrDying()) {
+                    store.put(record.withSnapshot(BodySnapshot.of(body)));
+                }
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not save the state of the body of {}", record.ownerName(), e);
             }
         }
     }
