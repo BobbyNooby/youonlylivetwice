@@ -6,6 +6,7 @@ import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.OutgoingChatMessage;
@@ -91,7 +92,20 @@ public final class ChatDelivery {
     }
 
     private static boolean onCommandMessage(PlayerChatMessage message, CommandSourceStack source, ChatType.Bound chatType) {
-        if (!Settings.active() || !Settings.get().hide.distantPlayers) {
+        if (!Settings.active()) {
+            return true;
+        }
+        ServerPlayer player = source.getPlayer();
+        // Only a gamemaster's /me is an announcement; anyone else's is chat, heard like their chat.
+        // The source's permissions, so an op's "execute as" stays an announcement.
+        if (player != null && !Commands.LEVEL_GAMEMASTERS.check(source.permissions())) {
+            if (Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
+                return true;
+            }
+            deliver(source.getServer(), message, source::shouldFilterMessageTo, player, chatType, chatRecipients(player));
+            return false;
+        }
+        if (!Settings.get().hide.distantPlayers) {
             return true;
         }
         MinecraftServer server = source.getServer();
