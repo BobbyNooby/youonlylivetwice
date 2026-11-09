@@ -12,13 +12,13 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(QueryThreadGs4.class)
 public abstract class PlayerCountQueryMixin {
     // enable-query answers with the real counts and every online name
-    @WrapOperation(method = {"processPacket", "buildRuleResponse"}, at = @At(value = "INVOKE",
+    @WrapOperation(method = {"processPacket", "buildRuleResponse"}, require = 2, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/ServerInterface;getPlayerCount()I"))
     private int shownOnline(ServerInterface server, Operation<Integer> original) {
         return PlayerCount.online(original.call(server));
     }
 
-    @ModifyExpressionValue(method = {"processPacket", "buildRuleResponse"}, at = @At(value = "FIELD",
+    @ModifyExpressionValue(method = {"processPacket", "buildRuleResponse"}, require = 2, at = @At(value = "FIELD",
             target = "Lnet/minecraft/server/rcon/thread/QueryThreadGs4;maxPlayers:I"))
     private int shownMax(int real) {
         return PlayerCount.max(real);
