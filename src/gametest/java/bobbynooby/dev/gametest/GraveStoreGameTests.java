@@ -9,16 +9,25 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -129,5 +138,25 @@ public class GraveStoreGameTests {
         helper.assertValueEqual(grave.withItems(List.of(ItemStack.EMPTY)).items().size(), 0, "items after withItems");
         roundTrip(helper, grave);
         helper.succeed();
+    }
+
+    // The graves in the grave file right now, whatever the store holds in memory
+    static List<Grave> onDisk(MinecraftServer server) {
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        if (!Files.exists(file)) {
+            return List.of();
+        }
+        CompoundTag root;
+        try {
+            root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        RegistryOps<Tag> ops = server.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        List<Grave> graves = new ArrayList<>();
+        for (Tag entry : root.getCompoundOrEmpty("data").getListOrEmpty("graves")) {
+            Grave.CODEC.parse(ops, entry).result().ifPresent(graves::add);
+        }
+        return graves;
     }
 }

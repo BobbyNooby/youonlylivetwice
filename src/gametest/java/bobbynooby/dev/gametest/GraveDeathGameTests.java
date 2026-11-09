@@ -58,6 +58,26 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // The death kick saves the emptied player straight away, so the grave has to be in the file by then
+    @GameTest
+    public void deathWritesGraveToDisk(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Disk");
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            List<Grave> onDisk = GraveStoreGameTests.onDisk(helper.getLevel().getServer()).stream()
+                    .filter(saved -> saved.id().equals(grave.id()))
+                    .toList();
+            helper.assertValueEqual(onDisk.size(), 1, "copies of the grave on disk");
+            helper.assertTrue(contains(onDisk.get(0), Items.DIAMOND), "grave on disk lacks the diamond");
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void emptyInventoryStillMakesGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Empty");
