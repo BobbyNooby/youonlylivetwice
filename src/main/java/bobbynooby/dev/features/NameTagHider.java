@@ -132,10 +132,15 @@ public class NameTagHider {
 
     /**
      * Sends a broadcast packet about our team to each player, cut down to the names that player's client knows.
-     * Returns false, sending nothing, for any other packet or when everyone shares the team.
+     * Returns false, sending nothing, for any other packet, and for any but a settings change when everyone shares the team.
      */
     public static boolean broadcast(List<ServerPlayer> players, Packet<?> packet) {
-        if (!(packet instanceof ClientboundSetPlayerTeamPacket team) || !team.getName().equals(TEAM_NAME) || !perViewer()) {
+        if (!(packet instanceof ClientboundSetPlayerTeamPacket team) || !team.getName().equals(TEAM_NAME)) {
+            return false;
+        }
+        // A settings change lists no names, and each viewer keeps its own nametag rule in both modes
+        boolean change = team.getTeamAction() == null && team.getParameters().isPresent();
+        if (!perViewer() && !change) {
             return false;
         }
         for (ServerPlayer viewer : players) {
