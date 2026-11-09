@@ -42,7 +42,7 @@ class DeathStoreTest {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {
             store.recordDeath(uuid, "Bob", 1000L, 7);
-            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, false), store.latest(uuid).orElseThrow());
+            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, false, null, null, null), store.latest(uuid).orElseThrow());
         } finally {
             store.close();
         }
@@ -112,13 +112,16 @@ class DeathStoreTest {
     private static final String REASON_COLUMNS =
             "SELECT COUNT(*) FROM pragma_table_info('death_logs') WHERE name = 'reason'";
 
+    // Steps past this build's schema, as the next build would add them
+    private static final int NOW = DeathStore.SCHEMA_VERSION;
+
     @Test
     void schemaStepsRunAndSetTheVersion() throws SQLException {
         Path file = dir.resolve("test.db");
         DeathStore.open(file).close();
-        DeathStore upgraded = DeathStore.open(file, 2, List.of(DeathStore.sql(1, "ALTER TABLE death_logs ADD COLUMN reason TEXT")));
+        DeathStore upgraded = DeathStore.open(file, NOW + 1, List.of(DeathStore.sql(NOW, "ALTER TABLE death_logs ADD COLUMN reason TEXT")));
         upgraded.close();
-        assertEquals(2, query(file, "PRAGMA user_version"));
+        assertEquals(NOW + 1, query(file, "PRAGMA user_version"));
         assertEquals(1, query(file, REASON_COLUMNS));
     }
 
@@ -128,10 +131,10 @@ class DeathStoreTest {
         Path file = dir.resolve("test.db");
         DeathStore.open(file).close();
         List<Migrations.Step<Statement>> steps = List.of(
-                DeathStore.sql(1, "ALTER TABLE death_logs ADD COLUMN reason TEXT"),
-                DeathStore.sql(2, "NOT SQL AT ALL"));
-        assertThrows(IllegalStateException.class, () -> DeathStore.open(file, 3, steps));
-        assertEquals(1, query(file, "PRAGMA user_version"));
+                DeathStore.sql(NOW, "ALTER TABLE death_logs ADD COLUMN reason TEXT"),
+                DeathStore.sql(NOW + 1, "NOT SQL AT ALL"));
+        assertThrows(IllegalStateException.class, () -> DeathStore.open(file, NOW + 2, steps));
+        assertEquals(NOW, query(file, "PRAGMA user_version"));
         assertEquals(0, query(file, REASON_COLUMNS));
     }
 
@@ -150,7 +153,8 @@ class DeathStoreTest {
              Statement statement = writer.createStatement()) {
             statement.execute("PRAGMA synchronous = OFF");
             writer.setAutoCommit(false);
-            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 2000, 7, 0)");
+            statement.execute("INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass) "
+                    + "VALUES ('" + uuid + "', 'Bob', 2000, 7, 0)");
             Files.copy(file, copy);
             Files.copy(dir.resolve("crashed.db-journal"), dir.resolve("copy.db-journal"));
             writer.rollback();

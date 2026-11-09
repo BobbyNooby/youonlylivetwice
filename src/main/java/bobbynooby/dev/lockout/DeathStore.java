@@ -21,9 +21,18 @@ import java.util.UUID;
 /** SQLite-backed death log. Methods are synchronized to be safe, though the login check and death handling both run on the server thread. */
 public final class DeathStore {
     /** The schema this build writes, kept in SQLite's user_version. */
-    public static final int SCHEMA_VERSION = 1;
+    public static final int SCHEMA_VERSION = 2;
     // Each step upgrades the schema from its version to the next; they all run in one transaction
-    static final List<Migrations.Step<Statement>> STEPS = List.of();
+    static final List<Migrations.Step<Statement>> STEPS = List.of(
+            // How the player died, and who revived them and when: a revive keeps the row as history. Old rows keep
+            // nulls, and a bypass from before still counts as a revive.
+            sql(1, "ALTER TABLE death_logs ADD COLUMN death_message TEXT",
+                    "ALTER TABLE death_logs ADD COLUMN revived_at INTEGER",
+                    "ALTER TABLE death_logs ADD COLUMN revived_by TEXT",
+                    // Every login looks a player up by uuid, and the commands by name, ignoring case
+                    "CREATE INDEX IF NOT EXISTS death_logs_uuid ON death_logs (uuid)",
+                    "CREATE INDEX IF NOT EXISTS death_logs_name ON death_logs (username COLLATE NOCASE)"));
+    private static final String COLUMNS = "uuid, username, death_time_ms, cooldown_days, bypass, death_message, revived_at, revived_by";
 
     private final Connection connection;
 
@@ -156,13 +165,15 @@ public final class DeathStore {
         }
     }
 
-    /** A schema step that runs one SQL statement, for STEPS. */
-    static Migrations.Step<Statement> sql(int from, String sql) {
+    /** A schema step that runs SQL statements in order, for STEPS. */
+    static Migrations.Step<Statement> sql(int from, String... statements) {
         return new Migrations.Step<>(from, statement -> {
-            try {
-                statement.execute(sql);
-            } catch (SQLException e) {
-                throw new IllegalStateException("Could not upgrade the death database with: " + sql, e);
+            for (String sql : statements) {
+                try {
+                    statement.execute(sql);
+                } catch (SQLException e) {
+                    throw new IllegalStateException("Could not upgrade the death database with: " + sql, e);
+                }
             }
             return statement;
         });
@@ -182,18 +193,24 @@ public final class DeathStore {
     }
 
     public synchronized Optional<DeathLog> latest(UUID uuid) {
-        String sql = "SELECT username, death_time_ms, cooldown_days, bypass FROM death_logs WHERE uuid = ? ORDER BY ROWID DESC LIMIT 1";
+        String sql = "SELECT " + COLUMNS + " FROM death_logs WHERE uuid = ? ORDER BY ROWID DESC LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, uuid.toString());
             try (ResultSet rs = statement.executeQuery()) {
-                if (rs.next()) {
-                    return Optional.of(new DeathLog(uuid, rs.getString(1), rs.getLong(2), rs.getInt(3), rs.getInt(4) != 0));
-                }
-                return Optional.empty();
+                return rs.next() ? Optional.of(read(rs)) : Optional.empty();
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Could not read death log for " + uuid, e);
         }
+    }
+
+    private static DeathLog read(ResultSet rs) throws SQLException {
+        long revivedAt = rs.getLong("revived_at");
+        // getLong reads a null as 0
+        Long revived = rs.wasNull() ? null : revivedAt;
+        return new DeathLog(UUID.fromString(rs.getString("uuid")), rs.getString("username"), rs.getLong("death_time_ms"),
+                rs.getInt("cooldown_days"), rs.getInt("bypass") != 0, rs.getString("death_message"), revived,
+                rs.getString("revived_by"));
     }
 
     /** Sets bypass on the newest row; false when the player has no deaths. */

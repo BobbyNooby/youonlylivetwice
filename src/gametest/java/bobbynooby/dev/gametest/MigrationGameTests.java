@@ -98,7 +98,7 @@ public class MigrationGameTests {
 
             DeathStore store = DeathStore.open(file);
             try {
-                helper.assertValueEqual(store.latest(uuid).orElse(null), new DeathLog(uuid, "Before", 1000L, 7, false), "kept row");
+                helper.assertValueEqual(store.latest(uuid).orElse(null), new DeathLog(uuid, "Before", 1000L, 7, false, null, null, null), "kept row");
             } finally {
                 store.close();
             }

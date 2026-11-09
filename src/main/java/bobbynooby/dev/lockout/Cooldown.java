@@ -14,9 +14,9 @@ public final class Cooldown {
 
     private Cooldown() {}
 
-    /** Milliseconds until the player may join again; 0 when bypassed or expired. */
+    /** Milliseconds until the player may join again; 0 when revived or expired. */
     public static long remainingMillis(DeathLog log, long nowMillis) {
-        if (log.bypass()) {
+        if (log.revived()) {
             return 0;
         }
         long end = log.deathTimeMillis() + log.cooldownDays() * DAY_MS;

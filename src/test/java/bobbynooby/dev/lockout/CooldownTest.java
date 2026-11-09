@@ -14,7 +14,7 @@ class CooldownTest {
     private static final UUID UUID_A = UUID.randomUUID();
 
     private static DeathLog log(int days, boolean bypass) {
-        return new DeathLog(UUID_A, "Bob", 0L, days, bypass);
+        return new DeathLog(UUID_A, "Bob", 0L, days, bypass, null, null, null);
     }
 
     @Test
@@ -30,6 +30,12 @@ class CooldownTest {
     @Test
     void bypassIsZero() {
         assertEquals(0, Cooldown.remainingMillis(log(7, true), DAY));
+    }
+
+    // A revive fills in who and when; it ends the lockout without the bypass flag too
+    @Test
+    void revivedIsZero() {
+        assertEquals(0, Cooldown.remainingMillis(new DeathLog(UUID_A, "Bob", 0L, 7, false, null, DAY / 2, "Alex"), DAY));
     }
 
     @Test
