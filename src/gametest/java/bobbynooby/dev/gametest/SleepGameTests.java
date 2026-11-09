@@ -3,12 +3,18 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.storage.LevelData;
 
 import java.util.List;
@@ -38,10 +44,16 @@ public class SleepGameTests {
     // Same one-tick flip as above. The status is fed directly, so no clock or bed is involved.
     @GameTest
     public void hideSleepersReportsNoSleepers(GameTestHelper helper) {
-        ServerPlayer player = TestPlayers.join(helper, "Sleepy", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        // Vanilla only lets a player sleep in a real bed
+        BlockPos foot = new BlockPos(1, 1, 1);
+        BlockPos head = foot.relative(Direction.SOUTH);
+        BlockState bed = Blocks.BED.pick(DyeColor.RED).defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
+        helper.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
+        helper.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD));
+        ServerPlayer player = TestPlayers.join(helper, "Sleepy", GameType.SURVIVAL, new BlockPos(1, 1, 0));
         boolean before = Settings.get().sleep.hideSleepers;
         try {
-            player.startSleeping(helper.absolutePos(new BlockPos(1, 1, 1)));
+            helper.assertTrue(player.startSleeping(helper.absolutePos(head)), "the test player could not get into the bed");
             helper.assertTrue(player.isSleeping(), "the test player is not sleeping");
             SleepStatus status = new SleepStatus();
             status.update(List.of(player));
