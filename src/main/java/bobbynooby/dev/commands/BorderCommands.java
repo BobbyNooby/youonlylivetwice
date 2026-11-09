@@ -37,6 +37,8 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt border, center and endscaling. */
 final class BorderCommands {
+    private static final int LISTED = 10;
+
     private BorderCommands() {}
 
     // Each takes an optional "confirm", needed only when the change would leave someone outside the border
@@ -134,7 +136,15 @@ final class BorderCommands {
         List<String> outside = stranded(server, diameter, endScale, centerX, centerZ);
         return outside.isEmpty()
                 ? null
-                : "This would leave outside the world border: " + String.join(", ", outside) + ". Add confirm to the command to do it anyway.";
+                : "This would leave outside the world border: " + listed(outside) + ". Add confirm to the command to do it anyway.";
+    }
+
+    /** The first ten names and how many more, so a long list doesn't flood the chat. */
+    static String listed(List<String> names) {
+        if (names.size() <= LISTED) {
+            return String.join(", ", names);
+        }
+        return String.join(", ", names.subList(0, LISTED)) + " and " + (names.size() - LISTED) + " more";
     }
 
     private static int border(CommandSourceStack source, int diameter, boolean confirmed) {
