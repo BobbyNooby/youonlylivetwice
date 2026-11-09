@@ -4,18 +4,11 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.features.NameTagHider;
 import com.mojang.authlib.GameProfile;
-import io.netty.channel.ChannelFutureListener;
-import net.fabricmc.fabric.impl.networking.UntrackedPacketListener;
 import net.minecraft.core.SectionPos;
-import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.Packet;
-import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.CommonListenerCookie;
-import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.network.TextFilter;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -28,7 +21,6 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.UUID;
-import java.util.function.Consumer;
 
 /**
  * A body that is a real player entity: it is in the world, so its area keeps running and mobs spawn around it, but it
@@ -53,7 +45,7 @@ public final class PlayerBody extends ServerPlayer {
             }
         };
         // Sets this.connection
-        new Listener(this);
+        new BodyPacketListener(this);
         // A creative or adventure default would make the body something mobs and players can't hurt
         setGameMode(GameType.SURVIVAL);
         // The client information has every layer off, which would draw the skin without its outer layer
@@ -174,14 +166,14 @@ public final class PlayerBody extends ServerPlayer {
 
     // Player's own wear, which skips the mixin a mannequin goes through, so the switch is checked here
     @Override
-    protected void hurtArmor(DamageSource source, float damage) {
+    public void hurtArmor(DamageSource source, float damage) {
         if (Bodies.wearsArmour(this)) {
             super.hurtArmor(source, damage);
         }
     }
 
     @Override
-    protected void hurtHelmet(DamageSource source, float damage) {
+    public void hurtHelmet(DamageSource source, float damage) {
         if (Bodies.wearsArmour(this)) {
             super.hurtHelmet(source, damage);
         }
@@ -199,54 +191,5 @@ public final class PlayerBody extends ServerPlayer {
             mask |= part.getMask();
         }
         return (byte) mask;
-    }
-
-    // The body's connection: vanilla reads its latency and sends it packets, which have no client to go to.
-    // Fabric's own fake players use the untracked marker, so its networking doesn't keep the listener forever.
-    private static final class Listener extends ServerGamePacketListenerImpl implements UntrackedPacketListener {
-        private Listener(PlayerBody body) {
-            super(body.level().getServer(), new NoConnection(), body, CommonListenerCookie.createInitial(body.getGameProfile(), false));
-        }
-
-        @Override
-        public void send(Packet<?> packet) {
-        }
-
-        @Override
-        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener) {
-        }
-
-        // Vanilla keeps a player unhurtable until its client says the world has loaded, which a body never does
-        @Override
-        public boolean hasClientLoaded() {
-            return true;
-        }
-    }
-
-    // Never connected, so anything sent straight to it would otherwise queue up for good
-    private static final class NoConnection extends Connection {
-        private NoConnection() {
-            super(PacketFlow.SERVERBOUND);
-        }
-
-        @Override
-        public void send(Packet<?> packet) {
-        }
-
-        @Override
-        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener) {
-        }
-
-        @Override
-        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener, boolean flush) {
-        }
-
-        @Override
-        public void runOnceConnected(Consumer<Connection> action) {
-        }
-
-        @Override
-        public void flushChannel() {
-        }
     }
 }
