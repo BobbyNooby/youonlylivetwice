@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest.client;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -14,6 +15,8 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.Mannequin;
@@ -165,6 +168,28 @@ public class BodyTakeoverClientTest implements FabricClientGameTest {
                         + " wear, not its body's " + away.chestWear());
         if (ctx.computeOnClient(mc -> mc.level.getEntity(away.body()) != null)) {
             throw new AssertionError("the client still sees the body it took over");
+        }
+        // Listed in the log, so whatever shows in the screenshot can be told apart
+        List<String> seen = ctx.computeOnClient(mc -> {
+            List<String> entities = new ArrayList<>();
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity != mc.player) {
+                    entities.add(EntityType.getKey(entity.getType()) + " at " + entity.position());
+                }
+            }
+            return entities;
+        });
+        YouOnlyLiveTwice.LOGGER.info("After the takeover the client at {} sees {}", away.pos(), seen);
+        // Any mannequin at all would be a second body
+        if (ctx.computeOnClient(mc -> {
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity instanceof Mannequin) {
+                    return true;
+                }
+            }
+            return false;
+        })) {
+            throw new AssertionError("the client sees a mannequin after taking over its body: " + seen);
         }
     }
 
