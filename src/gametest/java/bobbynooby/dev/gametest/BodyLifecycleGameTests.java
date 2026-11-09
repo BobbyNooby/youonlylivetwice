@@ -375,7 +375,7 @@ public class BodyLifecycleGameTests {
     }
 
     // The record is what a login uses while the chunk stays unloaded, so the stop brings it up to date
-    @GameTest
+    @GameTest(environment = PlayerBodyGameTests.BODY_RESTART)
     public void stopSavesMannequinState(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Stopping", GameType.SURVIVAL);
         UUID owner = player.getUUID();

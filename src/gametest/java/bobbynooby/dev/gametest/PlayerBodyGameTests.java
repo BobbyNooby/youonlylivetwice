@@ -61,9 +61,11 @@ import java.util.UUID;
 
 // Like the other body tests: each one turns on the default body switches with the player type and puts the server's
 // own back in the same tick. A player body is a player to every mob, so a test that keeps one in the world across
-// ticks runs in a batch of its own, away from the mob tests.
+// ticks runs in a batch of its own, away from the mob tests. So does a test that saves or restores every body.
 public class PlayerBodyGameTests {
     private static final String PLAYER_BODY = "you-only-live-twice-gametest:player_body";
+    // For tests that save or bring back every body on the server, which would rewrite the records of other tests
+    static final String BODY_RESTART = "you-only-live-twice-gametest:body_restart";
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
 
     @GameTest
@@ -192,7 +194,7 @@ public class PlayerBodyGameTests {
     }
 
     // A restart, done by hand: the stop saves the body's state, the body is gone, and the start brings it back
-    @GameTest
+    @GameTest(environment = BODY_RESTART)
     public void playerBodiesRecreatedFromRecords(GameTestHelper helper) {
         // Test players have no skin, so this one gets one the restored body has to keep
         UUID id = UUID.randomUUID();
