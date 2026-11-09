@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.world.Sleep;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
@@ -26,7 +26,7 @@ public abstract class SleepStatusMixin {
     // Player bodies are among the level's players but can't sleep, so each one would hold the night up for everyone
     @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true)
     private List<ServerPlayer> withoutBodies(List<ServerPlayer> players) {
-        return PlayerBody.withoutBodies(players);
+        return StandIn.without(players);
     }
 
     @Inject(method = "sleepersNeeded", at = @At("HEAD"), cancellable = true)

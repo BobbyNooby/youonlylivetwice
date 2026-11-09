@@ -1,7 +1,7 @@
 package bobbynooby.dev.visibility;
 
-import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.mixin.PlayerInfoUpdatePacketAccessor;
 import net.minecraft.network.protocol.Packet;
@@ -57,7 +57,7 @@ public final class PlayerVisibility {
     /** Sends the entry for a player whose entity the viewer starts tracking. Runs before the spawn packet. */
     public static void onPairingStart(ServerPlayer viewer, ServerPlayer seen) {
         // A player body tracks entities like a player but has no client to tell, so it never gets any state here
-        if (viewer instanceof PlayerBody) {
+        if (StandIn.is(viewer)) {
             return;
         }
         Viewer state = state(viewer);
@@ -71,7 +71,7 @@ public final class PlayerVisibility {
 
     /** Removes the entry once the viewer stops tracking that player's entity. */
     public static void onPairingStop(ServerPlayer viewer, ServerPlayer seen) {
-        if (viewer instanceof PlayerBody) {
+        if (StandIn.is(viewer)) {
             return;
         }
         Viewer state = state(viewer);

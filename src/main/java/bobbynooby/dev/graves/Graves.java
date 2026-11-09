@@ -1,12 +1,12 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
-import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.mixin.PlayerInvoker;
 import bobbynooby.dev.revive.Revive;
@@ -127,7 +127,7 @@ public final class Graves {
     public static boolean onPlayerDeathDrops(ServerPlayer player, ServerLevel level) {
         // Before every switch: a player body only wears copies of its owner's saved gear, and the owner's real
         // grave comes from the body's death. Dropping the copies would make the items exist twice.
-        if (player instanceof PlayerBody) {
+        if (StandIn.is(player)) {
             player.getInventory().clearContent();
             return true;
         }

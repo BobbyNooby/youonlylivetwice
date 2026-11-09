@@ -1,10 +1,10 @@
 package bobbynooby.dev.lockout;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
-import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
+import bobbynooby.dev.core.StandIn;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -39,7 +39,7 @@ public final class DeathLockout {
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             // A player body's death records its owner's, through the offline death
-            if (entity instanceof ServerPlayer player && !(player instanceof PlayerBody)) {
+            if (entity instanceof ServerPlayer player && !StandIn.is(player)) {
                 recordDeath(player);
             }
         });

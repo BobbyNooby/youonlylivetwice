@@ -2,6 +2,7 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.features.NameTagHider;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.advancements.AdvancementHolder;
@@ -26,14 +27,13 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
  * A body that is a real player entity: it is in the world, so its area keeps running and mobs spawn around it, but it
  * never joins the player list, so it never counts as online.
  */
-public final class PlayerBody extends ServerPlayer {
+public final class PlayerBody extends ServerPlayer implements StandIn {
     private static final byte ALL_SKIN_LAYERS = allSkinLayers();
 
     private final UUID owner;
@@ -98,16 +98,6 @@ public final class PlayerBody extends ServerPlayer {
         // Its effects are its own, from when it was made
         snapshot.applyTo(body, true);
         return body.addToWorld(level) ? body : null;
-    }
-
-    /** The players that aren't bodies. The same list when there are none, which is nearly always. */
-    public static List<ServerPlayer> withoutBodies(List<ServerPlayer> players) {
-        for (ServerPlayer player : players) {
-            if (player instanceof PlayerBody) {
-                return players.stream().filter(p -> !(p instanceof PlayerBody)).toList();
-            }
-        }
-        return players;
     }
 
     // Like a player: the name goes in the nametag team before anyone can see the body
