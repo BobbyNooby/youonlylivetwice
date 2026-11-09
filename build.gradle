@@ -41,6 +41,16 @@ loom.runs.named("gameTest") { run ->
             layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
 }
 
+// Gradle's -D flags don't reach the forked test server, so the flake-hunt ones are handed over here
+loom.runs.named("gameTest") { run ->
+    ["filter", "verify"].each { key ->
+        def value = System.getProperty("fabric-api.gametest." + key)
+        if (value) {
+            run.systemProperties.put("fabric-api.gametest." + key, value)
+        }
+    }
+}
+
 // A production client only loads mods from jars, so the test mod gets its own
 def gametestJar = tasks.register("gametestJar", Jar) {
     archiveClassifier = "gametest"
