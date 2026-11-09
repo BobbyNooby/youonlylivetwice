@@ -25,6 +25,7 @@
     "PlayerDropEquipmentMixin",
     "PlayerInfoUpdatePacketAccessor",
     "PlayerInvoker",
+    "PlayerListBodyStatsMixin",
     "PlayerListLoginMixin",
     "PlayerListVisibilityMixin",
     "PlayerManagerMixin",

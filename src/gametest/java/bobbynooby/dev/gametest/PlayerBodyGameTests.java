@@ -12,11 +12,16 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.PlayerList;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -28,12 +33,16 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
 
+import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -276,6 +285,41 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // The player list keeps stats and advancements by id until a player leaves, which a body never does, and saves them
+    @GameTest
+    public void playerBodyLeavesNoStats(GameTestHelper helper) throws ReflectiveOperationException {
+        ServerPlayer player = join(helper, "NoStats", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            UUID id = body.getUUID();
+            helper.assertFalse(playerListMap(server, "stats").containsKey(id), "player list keeps the body's stats");
+            helper.assertFalse(playerListMap(server, "advancements").containsKey(id), "player list keeps the body's advancements");
+
+            body.awardStat(Stats.JUMP);
+            helper.assertValueEqual(body.getStats().getValue(Stats.CUSTOM.get(Stats.JUMP)), 0, "stat counted for the body");
+            AdvancementHolder root = server.getAdvancements().get(Identifier.withDefaultNamespace("story/root"));
+            helper.assertTrue(root != null, "no story advancement to try");
+            helper.assertFalse(body.getAdvancements().award(root, "crafting_table"), "body made an advancement");
+            helper.assertTrue(body.getAdvancements().getTriggerMapForType(CriteriaTriggers.INVENTORY_CHANGED) == null,
+                    "body's advancements still listen for triggers");
+
+            // What a save of every player writes, and the body's own files if anything saved them
+            server.getPlayerList().saveAll();
+            body.getStats().save();
+            body.getAdvancements().save();
+            helper.assertFalse(Files.exists(server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(id + ".json")),
+                    "stats file written for the body");
+            helper.assertFalse(Files.exists(server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR).resolve(id + ".json")),
+                    "advancements file written for the body");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // Five blocks above a stone floor. The switches only matter while the body spawns, so they go back before the wait.
     private static void fallTest(GameTestHelper helper, String name, boolean movable) {
         helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
@@ -333,6 +377,13 @@ public class PlayerBodyGameTests {
         Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
         helper.assertTrue(entity instanceof PlayerBody, "no player body for the record");
         return (PlayerBody) entity;
+    }
+
+    // Private and only read here; the names are Mojang's, the same at runtime
+    private static Map<?, ?> playerListMap(MinecraftServer server, String name) throws ReflectiveOperationException {
+        Field field = PlayerList.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return (Map<?, ?>) field.get(server.getPlayerList());
     }
 
     private static BodyStore store(GameTestHelper helper) {

@@ -4,12 +4,16 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.features.NameTagHider;
 import com.mojang.authlib.GameProfile;
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.PlayerAdvancements;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.TextFilter;
+import net.minecraft.stats.ServerStatsCounter;
+import net.minecraft.stats.Stat;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Pose;
@@ -17,6 +21,7 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -177,6 +182,44 @@ public final class PlayerBody extends ServerPlayer {
         if (Bodies.wearsArmour(this)) {
             super.hurtHelmet(source, damage);
         }
+    }
+
+    // A stat objective on the scoreboard is kept under the body's name, which is its owner's
+    @Override
+    public void awardStat(Stat<?> stat, int count) {
+    }
+
+    @Override
+    public void resetStat(Stat<?> stat) {
+    }
+
+    /** The body's own stats, never stored in the player list, so nothing is kept or written for the body's id. */
+    public static ServerStatsCounter detachedStats(PlayerBody body) {
+        MinecraftServer server = body.level().getServer();
+        return new ServerStatsCounter(server, server.getWorldPath(LevelResource.PLAYER_STATS_DIR).resolve(body.getUUID() + ".json")) {
+            @Override
+            public void save() {
+            }
+        };
+    }
+
+    /** The body's own advancements, kept the same way. It never makes one: the chat would announce its owner's name. */
+    public static PlayerAdvancements detachedAdvancements(PlayerBody body) {
+        MinecraftServer server = body.level().getServer();
+        PlayerAdvancements advancements = new PlayerAdvancements(server.getFixerUpper(), server.getPlayerList(), server.getAdvancements(),
+                server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR).resolve(body.getUUID() + ".json"), body) {
+            @Override
+            public boolean award(AdvancementHolder holder, String criterion) {
+                return false;
+            }
+
+            @Override
+            public void save() {
+            }
+        };
+        // Nothing to check its criteria against on every tick and move
+        advancements.clearTriggers();
+        return advancements;
     }
 
     // A text filter service would be told a player joined who never leaves
