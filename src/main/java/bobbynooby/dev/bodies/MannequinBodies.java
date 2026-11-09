@@ -7,7 +7,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -49,11 +48,6 @@ public final class MannequinBodies {
 
     /** What both body types take from their player: fall, fire and air, copies of the gear, health and effects. */
     static void copyState(ServerPlayer player, LivingEntity body, YoltConfig.BodiesSection cfg) {
-        // Logging out mid-fall, on fire or under water doesn't get the player out of it
-        body.fallDistance = player.fallDistance;
-        body.setRemainingFireTicks(player.getRemainingFireTicks());
-        body.setAirSupply(player.getAirSupply());
-
         for (EquipmentSlot slot : GearSync.SLOTS) {
             ItemStack copy = player.getItemBySlot(slot).copy();
             // A totem only works from a hand
@@ -62,18 +56,12 @@ public final class MannequinBodies {
             }
             body.setItemSlot(slot, copy);
         }
-
         if (cfg.copyEffects) {
-            // Effects first: health boost and absorption raise the caps the values below are clamped to
-            for (MobEffectInstance effect : player.getActiveEffects()) {
-                body.addEffect(new MobEffectInstance(effect));
-            }
             body.getAttribute(Attributes.MAX_HEALTH).setBaseValue(player.getAttributeBaseValue(Attributes.MAX_HEALTH));
-            body.setHealth(player.getHealth());
-            body.setAbsorptionAmount(player.getAbsorptionAmount());
-        } else {
-            body.setHealth(Math.min(player.getHealth(), body.getMaxHealth()));
         }
+        // Logging out mid-fall, on fire or under water doesn't get the player out of it. Without the effects, the
+        // health is clamped to the body's own maximum and there is no absorption cap to keep any.
+        BodySnapshot.of(player).applyTo(body, cfg.copyEffects);
     }
 
     static Pose pose(YoltConfig.BodyPose pose) {

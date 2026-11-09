@@ -56,6 +56,25 @@ public record BodySnapshot(
             Codec.unboundedMap(EquipmentSlot.CODEC, ItemStack.CODEC).fieldOf("gear").forGetter(BodySnapshot::gear)
     ).apply(i, BodySnapshot::new));
 
+    /**
+     * Puts this fall, fire, air, health and absorption, and the effects when asked, on a body or a player. Effects go
+     * first: health boost and absorption raise the caps the health and absorption are clamped to. The effects are
+     * copies, so a record kept for later doesn't change as they tick.
+     */
+    public void applyTo(LivingEntity entity, boolean copyEffects) {
+        entity.fallDistance = fallDistance;
+        entity.setRemainingFireTicks(fireTicks);
+        entity.setAirSupply(air);
+        if (copyEffects) {
+            entity.removeAllEffects();
+            for (MobEffectInstance effect : effects) {
+                entity.addEffect(new MobEffectInstance(effect));
+            }
+        }
+        entity.setHealth(health);
+        entity.setAbsorptionAmount(absorption);
+    }
+
     /** Reads a live body, mannequin or player type. Effects and stacks are copied, so later changes don't leak in. */
     public static BodySnapshot of(LivingEntity body) {
         List<MobEffectInstance> effects = new ArrayList<>();

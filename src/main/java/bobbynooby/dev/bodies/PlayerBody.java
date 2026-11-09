@@ -15,7 +15,6 @@ import net.minecraft.server.network.TextFilter;
 import net.minecraft.stats.ServerStatsCounter;
 import net.minecraft.stats.Stat;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.PlayerModelPart;
@@ -95,16 +94,9 @@ public final class PlayerBody extends ServerPlayer {
         body.snapTo(pos.x, pos.y, pos.z, snapshot.yRot(), 0.0F);
         body.setYHeadRot(snapshot.yRot());
         body.setYBodyRot(snapshot.yRot());
-        body.fallDistance = snapshot.fallDistance();
-        body.setRemainingFireTicks(snapshot.fireTicks());
-        body.setAirSupply(snapshot.air());
         snapshot.gear().forEach((slot, stack) -> body.setItemSlot(slot, stack.copy()));
-        // Effects first: health boost and absorption raise the caps the values below are clamped to
-        for (MobEffectInstance effect : snapshot.effects()) {
-            body.addEffect(new MobEffectInstance(effect));
-        }
-        body.setHealth(snapshot.health());
-        body.setAbsorptionAmount(snapshot.absorption());
+        // Its effects are its own, from when it was made
+        snapshot.applyTo(body, true);
         return body.addToWorld(level) ? body : null;
     }
 

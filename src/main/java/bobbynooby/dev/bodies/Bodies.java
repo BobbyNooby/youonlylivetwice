@@ -21,7 +21,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -393,19 +392,7 @@ public final class Bodies {
             player.teleportTo(level, pos.x, pos.y, pos.z, Set.of(), snapshot.yRot(), player.getXRot(), true);
         }
         // After the teleport, so nothing it resets undoes these
-        player.fallDistance = snapshot.fallDistance();
-        player.setRemainingFireTicks(snapshot.fireTicks());
-        player.setAirSupply(snapshot.air());
-        if (copyEffects) {
-            player.removeAllEffects();
-            for (MobEffectInstance effect : snapshot.effects()) {
-                // A copy: a record kept for later must not change as the effect ticks
-                player.addEffect(new MobEffectInstance(effect));
-            }
-        }
-        // After the effects: health boost and absorption raise the caps these are clamped to
-        player.setHealth(snapshot.health());
-        player.setAbsorptionAmount(snapshot.absorption());
+        snapshot.applyTo(player, copyEffects);
         GearSync.applyBodyGear(snapshot.gear(), player::getItemBySlot, player::setItemSlot);
     }
 }
