@@ -1,5 +1,6 @@
 package bobbynooby.dev;
 
+import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.NameTagHider;
@@ -45,6 +46,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         Graves.init();
         Revive.init();
         TabHeaders.init();
+        ChatDelivery.init();
         NameTagHider.registerInitTeams();
         NameTagHider.registerAddPlayerToTeamOnJoin();
 
