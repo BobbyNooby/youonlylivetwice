@@ -1,11 +1,8 @@
 package bobbynooby.dev.graves;
 
-import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.Util;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -29,15 +26,6 @@ public final class GraveItems {
         stack.set(DataComponents.PROFILE, profile);
         stack.set(DataComponents.CUSTOM_DATA, marker(GRAVE_HEAD));
         return stack;
-    }
-
-    // Keeps the signed textures property so the skin shows without a lookup
-    public static ResolvableProfile profileOf(ServerPlayer player) {
-        return ResolvableProfile.createResolved(player.getGameProfile());
-    }
-
-    public static ResolvableProfile profileOf(NameAndId who) {
-        return ResolvableProfile.createResolved(new GameProfile(who.id(), who.name()));
     }
 
     public static boolean isGraveHead(ItemStack stack) {

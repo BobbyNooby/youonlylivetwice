@@ -6,8 +6,8 @@ import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.Grave;
-import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineDeath;
@@ -356,7 +356,7 @@ public class BodyLifecycleGameTests {
             MinecraftServer server = helper.getLevel().getServer();
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
-                    GraveItems.profileOf(player.nameAndId()));
+                    Profiles.of(player.nameAndId()));
             helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.items().stream()
                     .anyMatch(item -> item.is(Items.IRON_CHESTPLATE))), "no grave holds the chestplate");
 

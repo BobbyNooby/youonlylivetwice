@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.GraveItems;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -19,7 +20,7 @@ public class GraveItemsGameTests {
     public void graveHeadCarriesMarkerAndProfile(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Grave", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            ItemStack head = GraveItems.graveHead(GraveItems.profileOf(player));
+            ItemStack head = GraveItems.graveHead(Profiles.of(player));
             helper.assertTrue(head.is(Items.PLAYER_HEAD), "not a player head");
             helper.assertTrue(GraveItems.isGraveHead(head), "grave marker missing");
             helper.assertFalse(GraveItems.isReviveHead(head), "grave head counted as revive head");
@@ -43,7 +44,7 @@ public class GraveItemsGameTests {
     @GameTest
     public void profileOfNameAndIdKeepsIdAndName(GameTestHelper helper) {
         UUID id = UUID.randomUUID();
-        ResolvableProfile profile = GraveItems.profileOf(new NameAndId(id, "Ghost"));
+        ResolvableProfile profile = Profiles.of(new NameAndId(id, "Ghost"));
         helper.assertValueEqual(profile.partialProfile().id(), id, "profile id");
         helper.assertValueEqual(profile.name(), Optional.of("Ghost"), "profile name");
         helper.assertTrue(profile.partialProfile().properties().values().stream()

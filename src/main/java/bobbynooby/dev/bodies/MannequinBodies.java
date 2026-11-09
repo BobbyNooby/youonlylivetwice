@@ -1,7 +1,7 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.YoltConfig;
-import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.core.Profiles;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -32,7 +32,7 @@ public final class MannequinBodies {
         fields.putBoolean("hide_description", true);
         body.load(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), fields));
 
-        body.setComponent(DataComponents.PROFILE, GraveItems.profileOf(player));
+        body.setComponent(DataComponents.PROFILE, Profiles.of(player));
         body.setPose(pose(cfg.pose));
         // Keeps the main-hand item in the hand the player held it in
         body.setMainArm(player.getMainArm());

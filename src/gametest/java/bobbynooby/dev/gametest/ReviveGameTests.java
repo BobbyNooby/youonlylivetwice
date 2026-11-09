@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
@@ -47,7 +48,7 @@ public class ReviveGameTests {
     public void recipeTransmutesGraveHeadToReviveHead(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Crafted", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            CraftingInput input = grid(GraveItems.graveHead(GraveItems.profileOf(player)), new ItemStack(Items.NETHER_STAR));
+            CraftingInput input = grid(GraveItems.graveHead(Profiles.of(player)), new ItemStack(Items.NETHER_STAR));
             Optional<RecipeHolder<CraftingRecipe>> recipe = findRecipe(helper, input);
             helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and a nether star");
             helper.assertValueEqual(recipe.get().id().identifier(), YouOnlyLiveTwice.id("revive"), "recipe id");

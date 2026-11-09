@@ -2,6 +2,7 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.features.NameTagHider;
 import com.mojang.authlib.GameProfile;
@@ -112,7 +113,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
 
     /** The owner's own profile with the body's skin, for the grave head. The body's profile has the body's id. */
     public ResolvableProfile ownerProfile() {
-        return ResolvableProfile.createResolved(new GameProfile(owner, getGameProfile().name(), getGameProfile().properties()));
+        return Profiles.of(new GameProfile(owner, getGameProfile().name(), getGameProfile().properties()));
     }
 
     // A client would send the movement that runs the rest of a player's tick: physics, effects, fire and air

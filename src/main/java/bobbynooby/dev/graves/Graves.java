@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Undo;
@@ -143,7 +144,7 @@ public final class Graves {
         // Until the graves exist, any failure falls back to vanilla dropping everything
         List<ItemStack> fromMenus = List.of();
         try {
-            ResolvableProfile profile = GraveItems.profileOf(player);
+            ResolvableProfile profile = Profiles.of(player);
             // The head comes first and is always there: it is the revive token
             List<ItemStack> items = new ArrayList<>();
             items.add(GraveItems.graveHead(profile));

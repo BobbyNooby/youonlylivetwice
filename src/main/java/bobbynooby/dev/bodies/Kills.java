@@ -1,6 +1,6 @@
 package bobbynooby.dev.bodies;
 
-import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.minecraft.nbt.CompoundTag;
@@ -46,7 +46,7 @@ public final class Kills {
             return Bodies.killBody(server, body.get());
         }
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
-                GraveItems.profileOf(who));
+                Profiles.of(who));
         return Result.KILLED_OFFLINE;
     }
 }

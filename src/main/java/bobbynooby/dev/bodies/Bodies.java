@@ -5,7 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
-import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
@@ -321,7 +321,7 @@ public final class Bodies {
         BodySnapshot snapshot = record.snapshot();
         // No entity, so no skin to keep: the grave head is built from the name
         killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
-                GraveItems.profileOf(record.who()));
+                Profiles.of(record.who()));
         return Kills.Result.KILLED_OFFLINE;
     }
 
@@ -387,7 +387,7 @@ public final class Bodies {
     private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
         ResolvableProfile profile = body instanceof PlayerBody playerBody ? playerBody.ownerProfile()
                 : body instanceof Avatar avatar ? avatar.getProfile()
-                : GraveItems.profileOf(record.who());
+                : Profiles.of(record.who());
         killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
                 profile);
     }
