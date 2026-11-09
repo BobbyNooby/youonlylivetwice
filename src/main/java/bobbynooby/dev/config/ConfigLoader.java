@@ -65,8 +65,9 @@ public final class ConfigLoader {
                 throw new JsonParseException("root is not an object");
             }
             user = parsed.getAsJsonObject();
-        } catch (JsonParseException e) {
-            String problem = "config is not valid JSON (" + e.getMessage() + ")";
+        } catch (JsonParseException | IOException e) {
+            // A file that can't be read (not UTF-8, say) is as unusable as one that isn't JSON
+            String problem = (e instanceof IOException ? "config could not be read (" : "config is not valid JSON (") + e.getMessage() + ")";
             if (!writeDefaultsOnError) {
                 warnings.add(problem);
                 return new Result(null, warnings, true);
@@ -74,8 +75,6 @@ public final class ConfigLoader {
             backup(file, file.getFileName() + ".bak");
             warnings.add(problem + ", old file saved as " + file.getFileName() + ".bak, using defaults");
             return new Result(writeDefaults(file), warnings, true);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
 
         int version = fileVersion(user);

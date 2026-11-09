@@ -117,6 +117,25 @@ class ConfigLoaderTest {
         assertFalse(Files.exists(dir.resolve("config.json.bak")));
     }
 
+    // Bytes C3 28 are not valid UTF-8, so reading the file throws
+    @Test
+    void nonUtf8FileIsTreatedAsInvalid() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] bad = {(byte) 0xC3, 0x28};
+        Files.write(file, bad);
+
+        ConfigLoader.Result reload = ConfigLoader.load(file, false);
+        assertTrue(reload.unparseable());
+        assertNull(reload.config());
+        assertFalse(reload.warnings().isEmpty());
+        assertArrayEquals(bad, Files.readAllBytes(file));
+
+        ConfigLoader.Result startup = ConfigLoader.load(file);
+        assertTrue(startup.unparseable());
+        assertEquals(10000, startup.config().worldBorder.diameter);
+        assertArrayEquals(bad, Files.readAllBytes(dir.resolve("config.json.bak")));
+    }
+
     @Test
     void writeReplacesFileAndLeavesNoTempFile() throws IOException {
         Path file = dir.resolve("config.json");
