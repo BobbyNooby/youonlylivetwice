@@ -12,6 +12,7 @@
 			"bobbynooby.dev.gametest.CommandGameTests",
 			"bobbynooby.dev.gametest.GraveDeathGameTests",
 			"bobbynooby.dev.gametest.GraveItemsGameTests",
+			"bobbynooby.dev.gametest.GraveMenuGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
 			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.OfflineGameTests",

@@ -4,19 +4,29 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.PlayerInvoker;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.ContainerUser;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SkullBlock;
@@ -24,15 +34,22 @@ import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RotationSegment;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.BlockHitResult;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
-/** Moves a dead player's items into graves. */
+/** Moves a dead player's items into graves and lets players loot them. */
 public final class Graves {
     // A grave opens as a 6-row chest menu
-    private static final int SLOTS_PER_GRAVE = 54;
+    private static final int SLOTS_PER_GRAVE = GraveMenu.GRAVE_SLOTS;
+
+    // One container per grave while anyone has it open, keyed by grave id. Server thread only.
+    private static final Map<UUID, SharedContainer> OPEN = new HashMap<>();
 
     // Non-null only while a dying player's menus close. Server thread only.
     private static ServerPlayer collectingFor;
@@ -43,6 +60,9 @@ public final class Graves {
 
     // Grave event handlers register here. The death hook is a mixin, since no Fabric event runs before the drops.
     public static void init() {
+        UseBlockCallback.EVENT.register(Graves::onUseBlock);
+        // A container must never outlive its server and save into the next one started in the same game
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> OPEN.clear());
     }
 
     /** True when the items went into a grave, so vanilla must not drop them as well. */
@@ -140,6 +160,62 @@ public final class Graves {
         return true;
     }
 
+    /** Opens the grave's take-only menu. Everyone looking at one grave shares the same items. */
+    public static void open(ServerPlayer player, Grave grave) {
+        if (GraveStore.get(player.level().getServer()).byId(grave.id()).isEmpty()) {
+            return;
+        }
+        player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new GraveMenu(id, inventory, grave),
+                Component.literal(grave.ownerName() + "'s Grave")));
+    }
+
+    /** The container every open menu on this grave shares, or null when nobody has the grave open. */
+    public static Container containerFor(Grave grave) {
+        return OPEN.get(grave.id());
+    }
+
+    // Filled from the stored record, never the caller's copy, which may still list items someone has taken
+    static Container sharedContainer(MinecraftServer server, Grave grave) {
+        return OPEN.computeIfAbsent(grave.id(), id -> new SharedContainer(server, id,
+                GraveStore.get(server).byId(id).map(Grave::items).orElse(List.of())));
+    }
+
+    /** Once the stored record is empty: the head goes, then the record, then every menu still showing it. */
+    static void removeIfEmpty(MinecraftServer server, Grave grave) {
+        GraveStore store = GraveStore.get(server);
+        if (store.byId(grave.id()).filter(stored -> stored.items().isEmpty()).isEmpty()) {
+            return;
+        }
+        ServerLevel level = server.getLevel(grave.dimension());
+        if (level != null && level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD)) {
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        store.remove(grave.id());
+        SharedContainer container = OPEN.remove(grave.id());
+        if (container != null) {
+            container.closeMenus();
+        }
+    }
+
+    private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+        if (!Settings.active() || !Settings.get().graves.enabled) {
+            return InteractionResult.PASS;
+        }
+        if (!(player instanceof ServerPlayer serverPlayer) || !level.getBlockState(hit.getBlockPos()).is(Blocks.PLAYER_HEAD)) {
+            return InteractionResult.PASS;
+        }
+        Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), hit.getBlockPos());
+        if (grave.isEmpty()) {
+            return InteractionResult.PASS;
+        }
+        // A vanilla client sees no use for a head, so it tries the off hand straight after; that must not reopen it
+        if (hand == InteractionHand.MAIN_HAND) {
+            open(serverPlayer, grave.get());
+            return InteractionResult.SUCCESS;
+        }
+        return InteractionResult.CONSUME;
+    }
+
     private static void addStacks(List<ItemStack> into, Container container) {
         for (int i = 0; i < container.getContainerSize(); i++) {
             ItemStack stack = container.getItem(i);
@@ -178,6 +254,69 @@ public final class Graves {
         if (level.getBlockEntity(pos) instanceof SkullBlockEntity skull) {
             skull.applyComponents(DataComponentMap.EMPTY, DataComponentPatch.builder().set(DataComponents.PROFILE, profile).build());
             skull.setChanged();
+        }
+    }
+
+    // Every viewer of a grave clicks into this one container, so two looters can never both take a stack
+    private static final class SharedContainer extends SimpleContainer {
+        private final MinecraftServer server;
+        private final UUID graveId;
+        private final List<ContainerUser> viewers = new ArrayList<>();
+
+        SharedContainer(MinecraftServer server, UUID graveId, List<ItemStack> items) {
+            // Room for every stored stack, so saving back can never drop one the menu has no slot for
+            super(Math.max(SLOTS_PER_GRAVE, items.size()));
+            this.server = server;
+            this.graveId = graveId;
+            int slot = 0;
+            for (ItemStack stack : items) {
+                if (!stack.isEmpty()) {
+                    // A copy, so taking from the menu never changes the record behind its back. Put in the list
+                    // directly because setItem would cut an oversized stack down to the slot limit.
+                    getItems().set(slot++, stack.copy());
+                }
+            }
+        }
+
+        // Every change goes straight into the record, so a save or restart never brings back a taken item.
+        // Only the live container writes: one let go of could otherwise overwrite newer contents.
+        @Override
+        public void setChanged() {
+            if (OPEN.get(graveId) != this) {
+                return;
+            }
+            GraveStore store = GraveStore.get(server);
+            store.byId(graveId).ifPresent(grave -> {
+                List<ItemStack> left = new ArrayList<>();
+                for (ItemStack stack : getItems()) {
+                    if (!stack.isEmpty()) {
+                        left.add(stack.copy());
+                    }
+                }
+                store.put(grave.withItems(left));
+            });
+        }
+
+        @Override
+        public void startOpen(ContainerUser user) {
+            viewers.add(user);
+        }
+
+        @Override
+        public void stopOpen(ContainerUser user) {
+            viewers.remove(user);
+            if (viewers.isEmpty()) {
+                OPEN.remove(graveId, this);
+            }
+        }
+
+        void closeMenus() {
+            for (ContainerUser viewer : List.copyOf(viewers)) {
+                if (viewer instanceof ServerPlayer player && player.containerMenu instanceof GraveMenu menu
+                        && menu.graveId().equals(graveId)) {
+                    player.closeContainer();
+                }
+            }
         }
     }
 }
