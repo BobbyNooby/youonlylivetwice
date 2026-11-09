@@ -92,8 +92,11 @@ public final class TestPlayers {
     // Every packet the server has sent this player so far, oldest first
     public static List<Packet<?>> sentPackets(ServerPlayer player) {
         EmbeddedChannel channel = CHANNELS.get(player.getUUID());
-        // Sends during a tick wait in the channel until the end of the tick
-        channel.flushOutbound();
+        // Sends during a tick wait in the channel until the end of the tick. A kicked player's channel is closed and
+        // can't be flushed, but what it sent before, the disconnect included, is still there.
+        if (channel.isOpen()) {
+            channel.flushOutbound();
+        }
         List<Packet<?>> packets = new ArrayList<>();
         for (Object message : channel.outboundMessages()) {
             if (message instanceof Packet<?> packet) {

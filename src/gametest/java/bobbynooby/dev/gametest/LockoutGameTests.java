@@ -11,6 +11,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -146,6 +148,119 @@ public class LockoutGameTests {
                 cleanUpJoiner(helper, uuid, before);
             }
         }
+    }
+
+    // A revive in the same tick as the death, before the kick runs
+    @GameTest(maxTicks = 20)
+    public void reviveInSameTickCancelsKick(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Saved", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        boolean waiting = false;
+        try {
+            killWithoutGrave(helper, player);
+            DeathLockout.revive(player.getUUID());
+            assertStillOnlineLater(helper, player);
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                leaveIfOnline(player);
+            }
+        }
+    }
+
+    // No wait means nothing to keep the player out for. Only this death has 0 days; the setting goes back at once.
+    @GameTest(maxTicks = 20)
+    public void zeroDayDeathDoesNotKick(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "NoWait", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        int daysBefore = lockout.cooldownDays;
+        boolean waiting = false;
+        try {
+            lockout.cooldownDays = 0;
+            try {
+                killWithoutGrave(helper, player);
+            } finally {
+                lockout.cooldownDays = daysBefore;
+            }
+            assertStillOnlineLater(helper, player);
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                leaveIfOnline(player);
+            }
+        }
+    }
+
+    // /kill's own message, so a fallback "<name> died" can't pass for it
+    @GameTest(maxTicks = 20)
+    public void kickAtDeathShowsDeathMessage(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Kicked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        String name = player.getGameProfile().name();
+        boolean waiting = false;
+        try {
+            killWithoutGrave(helper, player);
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(uuid) == null, "the dead player was not kicked");
+                    String reason = disconnectReason(player);
+                    helper.assertTrue(reason.startsWith("You died: " + name + " was killed\nTry again in "), "kick reason: " + reason);
+                } finally {
+                    leaveIfOnline(player);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                leaveIfOnline(player);
+            }
+        }
+    }
+
+    // Graves are off for the death and back on in the same tick: these players carry nothing, and the tests are
+    // about the kick
+    private static void killWithoutGrave(GameTestHelper helper, ServerPlayer player) {
+        TestPlayers.markLoaded(player);
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean before = graves.enabled;
+        graves.enabled = false;
+        try {
+            player.kill(player.level());
+        } finally {
+            graves.enabled = before;
+        }
+        helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+    }
+
+    // A server running behind still runs queued tasks within 4 ticks
+    private static void assertStillOnlineLater(GameTestHelper helper, ServerPlayer player) {
+        MinecraftServer server = helper.getLevel().getServer();
+        helper.runAfterDelay(5, () -> {
+            try {
+                helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, "the dead player was kicked");
+            } finally {
+                leaveIfOnline(player);
+            }
+            helper.succeed();
+        });
+    }
+
+    private static void leaveIfOnline(ServerPlayer player) {
+        ServerPlayer online = player.level().getServer().getPlayerList().getPlayer(player.getUUID());
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+    }
+
+    private static String disconnectReason(ServerPlayer player) {
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundDisconnectPacket disconnect) {
+                return disconnect.reason().getString();
+            }
+        }
+        return "(no disconnect packet)";
     }
 
     private static boolean canLogin(GameTestHelper helper, UUID uuid) {

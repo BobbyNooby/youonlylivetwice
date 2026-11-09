@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -192,5 +193,64 @@ class DeathStoreTest {
         assertNull(DeathLockout.openStore(file));
         assertEquals(0, query(file, "PRAGMA user_version"));
         assertEquals(1, query(file, "SELECT COUNT(*) FROM death_logs"));
+    }
+
+    // Every login looks a player up by uuid, and the name lookup ignores case
+    @Test
+    void indexesExist() throws SQLException {
+        Path file = dir.resolve("test.db");
+        DeathStore.open(file).close();
+        assertEquals(1, query(file, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'death_logs_uuid'"));
+        assertEquals(1, query(file, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'death_logs_name'"));
+    }
+
+    // A database written before deaths kept their message and who revived them
+    @Test
+    void oldDatabaseGetsNewColumns() throws SQLException {
+        Path file = dir.resolve("v1.db");
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE death_logs (uuid TEXT, username TEXT, death_time_ms INTEGER, cooldown_days INTEGER, bypass INTEGER)");
+            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 1000, 7, 1)");
+            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 2000, 7, 0)");
+            statement.execute("PRAGMA user_version = 1");
+        }
+
+        DeathStore.open(file).close();
+        assertEquals(DeathStore.SCHEMA_VERSION, query(file, "PRAGMA user_version"));
+        assertEquals(3, query(file, "SELECT COUNT(*) FROM pragma_table_info('death_logs') "
+                + "WHERE name IN ('death_message', 'revived_at', 'revived_by')"));
+        assertEquals(2, query(file, "SELECT COUNT(*) FROM death_logs WHERE uuid = '" + uuid + "' AND death_time_ms IN (1000, 2000) "
+                + "AND death_message IS NULL AND revived_at IS NULL AND revived_by IS NULL"));
+        assertEquals(1, query(file, "SELECT bypass FROM death_logs WHERE death_time_ms = 1000"));
+    }
+
+    // The 1.21.5 release's table. Worlds start fresh after the port, so it isn't converted: it is moved aside, its
+    // lockouts end, and a new database takes its place
+    @Test
+    void oldFormatDatabaseIsMovedAside() throws IOException, SQLException {
+        Path file = dir.resolve("old.db");
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE death_logs (uuid TEXT, username TEXT, deathTime TEXT, respawnCooldown INTEGER, bypass BOOLEAN)");
+            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 'Mon Jun 02 12:00:00 UTC 2025', 7, 0)");
+        }
+
+        DeathStore store = DeathStore.open(file);
+        try {
+            assertTrue(store.latest(uuid).isEmpty());
+            store.recordDeath(uuid, "Bob", 1000L, 7);
+            assertEquals(1000L, store.latest(uuid).orElseThrow().deathTimeMillis());
+        } finally {
+            store.close();
+        }
+        assertEquals(DeathStore.SCHEMA_VERSION, query(file, "PRAGMA user_version"));
+
+        List<Path> kept;
+        try (Stream<Path> files = Files.list(dir)) {
+            kept = files.filter(path -> path.getFileName().toString().matches("old\\.db\\.1\\.21\\.5-\\d+\\.bak")).toList();
+        }
+        assertEquals(1, kept.size(), "copies kept: " + kept);
+        assertEquals(1, query(kept.get(0), "SELECT COUNT(*) FROM death_logs WHERE deathTime = 'Mon Jun 02 12:00:00 UTC 2025'"));
     }
 }

@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.world.WorldBorders;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
@@ -36,10 +37,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
 public class CommandGameTests {
@@ -320,6 +325,88 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         helper.assertValueEqual(run(server, "yolt unkill Ghost2"), List.of("Ghost2 has no death to undo."), "command output");
         helper.succeed();
+    }
+
+    // A locked-out player never joins, so the name cache never learns their id; the death log has it, in any case
+    @GameTest
+    public void unkillFindsPlayerByLoggedName(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Wanderer");
+        UUID id = UUID.randomUUID();
+        DeathLockout.recordDeath(id, name);
+        try {
+            helper.assertValueEqual(run(server, "yolt unkill " + name.toLowerCase(Locale.ROOT)), List.of("Revived " + name),
+                    "command output");
+            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
+        } finally {
+            DeathLockout.revive(id);
+        }
+        helper.succeed();
+    }
+
+    // Died long ago with 7 days to wait, so there is nothing left to revive and the row stays as it is
+    @GameTest
+    public void unkillAfterLockoutEndedSaysSo(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Ended");
+        UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
+        withOwnDeathStore(false, store -> {
+            store.recordDeath(id, name, 1000L, 7);
+            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of(name + "'s lockout had already ended."),
+                    "command output");
+            helper.assertTrue(!store.latest(id).orElseThrow().bypass(), "the ended death was marked revived");
+        });
+        helper.succeed();
+    }
+
+    // The kill itself goes through; only the lockout is missing, and the admin is told
+    @GameTest
+    public void killWithClosedStoreSaysSo(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Unrecorded", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        // Leaving saves the player, so the kill is an offline one
+        TestPlayers.leave(player);
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        // No grave to clean up: the player carries nothing, and this test is about the lockout
+        graves.enabled = false;
+        try {
+            withOwnDeathStore(true, closed -> helper.assertValueEqual(run(server, "yolt kill " + who.name()),
+                    List.of("Killed " + who.name() + ", but the death could not be recorded; see the server log."),
+                    "command output"));
+        } finally {
+            graves.enabled = gravesBefore;
+        }
+        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "a death was recorded");
+        helper.succeed();
+    }
+
+    // Name lookups go through the death log, so a name another test also records could find that test's player
+    private static String uniqueName(String prefix) {
+        return prefix + UUID.randomUUID().toString().substring(0, 6);
+    }
+
+    // A death store of the test's own, swapped in for this one call so no other test's death lands in it. A closed
+    // one makes every query throw, like a failing database.
+    private static void withOwnDeathStore(boolean closed, Consumer<DeathStore> use) throws IOException {
+        Path dir = Files.createTempDirectory("yolt-death-store");
+        DeathStore store = DeathStore.open(dir.resolve("deaths.db"));
+        if (closed) {
+            store.close();
+        }
+        DeathStore real = DeathLockout.swapStoreForTesting(store);
+        try {
+            use.accept(store);
+        } finally {
+            DeathLockout.swapStoreForTesting(real);
+            store.close();
+            try (Stream<Path> files = Files.walk(dir)) {
+                for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
     }
 
     // What a client is sent: every path of /yolt, our /w and the non-op trees, with each argument's parser,
