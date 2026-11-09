@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
@@ -22,6 +21,7 @@ import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.Vec3;
 
@@ -30,7 +30,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 // The test server keeps bodies off. Each test runs with the default body switches (bodies on) and puts the
-// server's own back before any other test runs, since none of them waits a tick.
+// server's own back in the same tick, before any other test runs. The tests that wait only wait for the
+// check a body load queues, which doesn't read them.
 public class BodyLifecycleGameTests {
     @GameTest
     public void logoutSpawnsProneBodyWithGear(GameTestHelper helper) {
@@ -257,6 +258,80 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    @GameTest(maxTicks = 20)
+    public void loginWithUnloadedBodyUsesSnapshot(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unloaded", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        boolean waiting = false;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(12.0F);
+            CompoundTag saved = unload(helper, body);
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.getHealth(), 12.0F, "health after login");
+            Optional<BodyRecord> record = store(helper).byOwner(owner);
+            helper.assertTrue(record.isPresent() && record.get().pendingRemoval(), "record not waiting for the body to load");
+            // A record waiting for its body was taken over already, so a later login leaves the player alone
+            back.setHealth(18.0F);
+            Bodies.onLogin(back);
+            helper.assertValueEqual(back.getHealth(), 18.0F, "health after a second login");
+
+            Mannequin loaded = loadAgain(helper, saved);
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(loaded.isRemoved(), "body kept after its chunk loaded");
+                    helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "record kept after the body loaded");
+                } finally {
+                    removeBodies(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            restore(helper, owner, before);
+            if (!waiting) {
+                removeBodies(helper, owner);
+            }
+        }
+    }
+
+    @GameTest(maxTicks = 20)
+    public void relogThenLogoutBeforeOldBodyLoads(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Relog", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        boolean waiting = false;
+        try {
+            CompoundTag first = unload(helper, leaveBody(helper, player));
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(store(helper).byOwner(owner).map(BodyRecord::pendingRemoval).orElse(false),
+                    "record not waiting for the first body to load");
+            Mannequin second = leaveBody(helper, back);
+
+            Mannequin firstLoaded = loadAgain(helper, first);
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(firstLoaded.isRemoved(), "first body kept after its chunk loaded");
+                    helper.assertFalse(second.isRemoved(), "second body removed");
+                    helper.assertValueEqual(store(helper).byOwner(owner).map(BodyRecord::bodyEntity),
+                            Optional.of(second.getUUID()), "record's body");
+                } finally {
+                    removeBodies(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            restore(helper, owner, before);
+            if (!waiting) {
+                removeBodies(helper, owner);
+            }
+        }
+    }
+
     private static ServerPlayer join(GameTestHelper helper, String name, GameType mode) {
         return TestPlayers.join(helper, name, mode, new BlockPos(1, 1, 1));
     }
@@ -289,6 +364,22 @@ public class BodyLifecycleGameTests {
         return TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
     }
 
+    // Stands in for the body's chunk unloading: the hook saves its state, then it leaves the world.
+    // Returns its save data, so loadAgain can bring it back the way a chunk load would.
+    private static CompoundTag unload(GameTestHelper helper, Mannequin body) {
+        Bodies.onBodyUnload(body);
+        CompoundTag saved = save(helper, body);
+        body.discard();
+        return saved;
+    }
+
+    private static Mannequin loadAgain(GameTestHelper helper, CompoundTag saved) {
+        Mannequin body = new Mannequin(EntityTypes.MANNEQUIN, helper.getLevel());
+        body.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
+        helper.assertTrue(helper.getLevel().addFreshEntity(body), "body could not be loaded again");
+        return body;
+    }
+
     private static BodyStore store(GameTestHelper helper) {
         return BodyStore.get(helper.getLevel().getServer());
     }
@@ -309,16 +400,23 @@ public class BodyLifecycleGameTests {
         return output.buildResult();
     }
 
-    // The switches go back first, so a player still online leaves without making another body
     private static void cleanUp(GameTestHelper helper, ServerPlayer player, YoltConfig.BodiesSection before) {
+        restore(helper, player.getUUID(), before);
+        removeBodies(helper, player.getUUID());
+    }
+
+    // The switches go back first, so a player still online leaves without making another body
+    private static void restore(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
         Settings.get().bodies = before;
-        MinecraftServer server = helper.getLevel().getServer();
         // By uuid: after a relog the player online is a new object
-        ServerPlayer online = server.getPlayerList().getPlayer(player.getUUID());
+        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
         if (online != null) {
             TestPlayers.leave(online);
         }
-        bodiesOf(helper, player.getUUID()).forEach(Entity::discard);
-        store(helper).remove(player.getUUID());
+    }
+
+    private static void removeBodies(GameTestHelper helper, UUID owner) {
+        bodiesOf(helper, owner).forEach(Entity::discard);
+        store(helper).remove(owner);
     }
 }
