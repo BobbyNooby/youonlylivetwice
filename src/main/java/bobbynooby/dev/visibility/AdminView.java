@@ -11,7 +11,8 @@ import net.minecraft.server.players.PlayerList;
 
 /** Whether an op sees everyone and every hidden message. Saved with the player, so it survives relogs and restarts. */
 public final class AdminView {
-    // Copied on death as well, since a respawn makes a new player object
+    // Copied on death as well, since a respawn makes a new player object. Saved in player files as a bare boolean
+    // with no version, so a different shape needs a new id and a one-time copy from this one.
     public static final AttachmentType<Boolean> ATTACHMENT = AttachmentRegistry.create(Yolt.id("admin_view"),
             builder -> builder.persistent(Codec.BOOL).copyOnDeath());
 
