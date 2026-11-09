@@ -172,6 +172,8 @@ class ConfigLoaderTest {
 
         ConfigLoader.Result r = ConfigLoader.load(file, base, false);
         assertEquals(32, r.config().chat.radius);
+        // /yolt reload tells "nothing was read" by getting the live config itself back
+        assertSame(base, r.config());
         assertEquals(List.of("config file is missing, nothing changed"), r.warnings());
         assertFalse(r.unparseable());
         assertFalse(Files.exists(file));

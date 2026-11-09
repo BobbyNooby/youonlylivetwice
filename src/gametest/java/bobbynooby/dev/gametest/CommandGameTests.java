@@ -37,6 +37,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import java.util.stream.Stream;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
@@ -586,6 +588,32 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // A moved file is no reload: the command fails, keeps the live config and writes no new file
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadWithMissingFileChangesNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        Path moved = path.resolveSibling(path.getFileName() + ".moved");
+        YoltConfig configBefore = Settings.get();
+        Files.move(path, moved, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            int[] result = {-1};
+            List<String> output = run(server, "yolt reload", value -> result[0] = value);
+            helper.assertValueEqual(output, List.of("Config not reloaded, nothing changed: config file is missing, nothing changed"),
+                    "command output");
+            helper.assertValueEqual(result[0], 0, "command result");
+            helper.assertFalse(Files.exists(path), "a config file was written");
+            helper.assertTrue(Settings.get() == configBefore, "live config was replaced");
+        } finally {
+            Files.move(moved, path, StandardCopyOption.REPLACE_EXISTING);
+            if (Settings.get() != configBefore) {
+                Settings.reload();
+                TestServerSetup.applyTestSettings();
+            }
+        }
+        helper.succeed();
+    }
+
     // A reload can't be confirmed, so it keeps the live border. The settings are put back before the player leaves,
     // since the reloaded file turns bodies on.
     @GameTest(environment = CONFIG_COMMAND)
@@ -746,6 +774,11 @@ public class CommandGameTests {
 
     // Runs the command as the console and returns every line it sent back
     private static List<String> run(MinecraftServer server, String command) {
+        return run(server, command, value -> {});
+    }
+
+    // The same, and hands the command's return value to result
+    private static List<String> run(MinecraftServer server, String command, IntConsumer result) {
         List<String> output = new ArrayList<>();
         CommandSource capture = new CommandSource() {
             @Override
@@ -768,7 +801,8 @@ public class CommandGameTests {
                 return false;
             }
         };
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(capture), command);
+        server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack().withSource(capture).withCallback((success, value) -> result.accept(value)), command);
         return output;
     }
 }

@@ -39,9 +39,11 @@ final class AdminCommands {
 
     private static int reload(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
-        YoltConfig.WorldBorderSection liveBorder = Settings.get().worldBorder;
+        YoltConfig live = Settings.get();
+        YoltConfig.WorldBorderSection liveBorder = live.worldBorder;
         ConfigLoader.Result result = Settings.reload();
-        if (result.unparseable()) {
+        // With no file the loader hands back the live config itself: nothing was read, so it is refused like a broken file
+        if (result.unparseable() || result.config() == live) {
             String problem = String.join(", ", result.warnings());
             LOGGER.warn("{} tried to reload the config: {}", source.getTextName(), problem);
             return YoltCommands.fail(source, "Config not reloaded, nothing changed: " + problem);

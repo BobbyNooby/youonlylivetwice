@@ -58,7 +58,8 @@ public final class ConfigLoader {
         List<String> warnings = new ArrayList<>();
         if (!Files.exists(file)) {
             if (base != null) {
-                // A moved file must not reset a running server, so nothing is written either
+                // A moved file must not reset a running server, so nothing is written either. The base itself comes
+                // back, which is how /yolt reload tells that nothing was read
                 warnings.add("config file is missing, nothing changed");
                 return new Result(base, warnings, false);
             }
