@@ -75,7 +75,7 @@ public class LockoutGameTests {
     public void revivedPlayerCanLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
-        helper.assertValueEqual(DeathLockout.revive(uuid, "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
+        helper.assertValueEqual(DeathLockout.revive(uuid, "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
         helper.assertTrue(canLogin(helper, uuid), "revived player was refused");
         helper.succeed();
     }
@@ -118,9 +118,9 @@ public class LockoutGameTests {
         broken.close();
         DeathStore real = DeathLockout.swapStoreForTesting(broken);
         try {
-            helper.assertTrue(DeathLockout.refusal(uuid) == null, "player refused while the store is failing");
+            helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "player refused while the store is failing");
             DeathLockout.recordDeath(uuid, "Ghost");
-            helper.assertValueEqual(DeathLockout.revive(uuid, "console"), DeathLockout.ReviveResult.FAILED, "revive result on a failing store");
+            helper.assertValueEqual(DeathLockout.revive(uuid, "Test", "console"), DeathLockout.ReviveResult.FAILED, "revive result on a failing store");
         } finally {
             DeathLockout.swapStoreForTesting(real);
         }
@@ -168,7 +168,7 @@ public class LockoutGameTests {
         boolean waiting = false;
         try {
             killWithoutGrave(helper, player);
-            helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
+            helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
             assertStillOnlineLater(helper, player);
             waiting = true;
         } finally {
@@ -252,7 +252,7 @@ public class LockoutGameTests {
         helper.runAfterDelay(5, () -> {
             try {
                 helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, "the dead player was kicked");
-                helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "console"), DeathLockout.ReviveResult.ALREADY_ENDED,
+                helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "Test", "console"), DeathLockout.ReviveResult.ALREADY_ENDED,
                         "revive of the death row");
             } finally {
                 leaveIfOnline(player);
@@ -292,7 +292,7 @@ public class LockoutGameTests {
 
     // What a locked-out player is told, or "" when they may join
     static String refusalText(UUID uuid) {
-        Component refusal = DeathLockout.refusal(uuid);
+        Component refusal = DeathLockout.refusal(uuid, "Test");
         return refusal == null ? "" : refusal.getString();
     }
 

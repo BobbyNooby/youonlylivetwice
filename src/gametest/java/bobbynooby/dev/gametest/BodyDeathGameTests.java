@@ -244,7 +244,7 @@ public class BodyDeathGameTests {
             body.kill(helper.getLevel());
             helper.assertTrue(body.isDeadOrDying(), "body did not die");
             helper.assertTrue(gravesOf(helper, owner).isEmpty(), "stale body made a grave");
-            helper.assertTrue(DeathLockout.refusal(owner) == null, "stale body started the lockout");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "stale body started the lockout");
             helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "owner's save changed");
         } finally {
             cleanUp(helper, owner, before);
@@ -296,7 +296,7 @@ public class BodyDeathGameTests {
             helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");
             helper.assertValueEqual(countInGraves(graves, Items.IRON_HELMET), 1, "helmets in the graves");
             helper.assertTrue(graves.stream().allMatch(grave -> grave.pos().closerThan(at, 2.0)), "grave not at the body");
-            helper.assertTrue(DeathLockout.refusal(owner) != null, "kill did not start the lockout");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "kill did not start the lockout");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
             cleanUp(helper, owner, before);
@@ -345,7 +345,7 @@ public class BodyDeathGameTests {
 
             helper.assertTrue(body.isDeadOrDying(), "body did not die");
             helper.assertTrue(gravesOf(helper, owner).isEmpty(), "body death made a grave");
-            helper.assertTrue(DeathLockout.refusal(owner) == null, "body death started the lockout");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "body death started the lockout");
             helper.assertFalse(player.isDeadOrDying(), "owner died");
             helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 1, "owner's diamonds");
         } finally {

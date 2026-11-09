@@ -137,7 +137,7 @@ public class BodyStoryClientTest implements FabricClientGameTest {
                         steps.add(() -> removeBody(s, owner));
                         steps.add(() -> removeGraves(s, owner));
                         // A body's death locks its owner out
-                        steps.add(() -> DeathLockout.revive(owner, "console"));
+                        steps.add(() -> DeathLockout.revive(owner, "Test", "console"));
                     }
                     ClientTests.runAll(steps);
                 });

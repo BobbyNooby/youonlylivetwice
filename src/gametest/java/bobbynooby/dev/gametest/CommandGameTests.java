@@ -266,7 +266,7 @@ public class CommandGameTests {
 
             helper.assertValueEqual(run(server, "yolt border 2000 confirm"), List.of("World border diameter set to 2000."), "output with confirm");
             helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size with confirm");
-            helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded for " + name);
+            helper.assertTrue(DeathLockout.refusal(player.getUUID(), "Test") == null, "a death was recorded for " + name);
         } finally {
             border.enabled = enabledBefore;
             border.diameter = diameterBefore;
@@ -314,11 +314,11 @@ public class CommandGameTests {
         UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
         DeathLockout.recordDeath(id, name);
         try {
-            helper.assertTrue(DeathLockout.refusal(id) != null, "the death did not lock " + name + " out");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") != null, "the death did not lock " + name + " out");
             helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name + "."), "command output");
-            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") == null, name + " is still locked out");
         } finally {
-            DeathLockout.revive(id, "console");
+            DeathLockout.revive(id, "Test", "console");
         }
         helper.succeed();
     }
@@ -340,9 +340,9 @@ public class CommandGameTests {
         try {
             helper.assertValueEqual(run(server, "yolt unkill " + name.toLowerCase(Locale.ROOT)), List.of("Revived " + name + "."),
                     "command output");
-            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") == null, name + " is still locked out");
         } finally {
-            DeathLockout.revive(id, "console");
+            DeathLockout.revive(id, "Test", "console");
         }
         helper.succeed();
     }
@@ -364,7 +364,7 @@ public class CommandGameTests {
             helper.assertTrue(log.revivedAt() != null && log.revivedAt() >= before && log.revivedAt() <= after,
                     "revived at " + log.revivedAt() + ", not between " + before + " and " + after);
             helper.assertValueEqual(log.deathMessage(), name + " drowned", "the death kept");
-            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") == null, name + " is still locked out");
         });
         helper.succeed();
     }
@@ -403,7 +403,7 @@ public class CommandGameTests {
         } finally {
             graves.enabled = gravesBefore;
         }
-        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "a death was recorded");
+        helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "a death was recorded");
         helper.succeed();
     }
 
@@ -416,17 +416,17 @@ public class CommandGameTests {
         // Leaving saves the player, so the kill is an offline one
         TestPlayers.leave(player);
         DeathLockout.recordDeath(who.id(), who.name(), "an older death");
-        helper.assertValueEqual(DeathLockout.revive(who.id(), "console"), DeathLockout.ReviveResult.REVIVED, "revive of the older death");
+        helper.assertValueEqual(DeathLockout.revive(who.id(), "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive of the older death");
         YoltConfig.GravesSection graves = Settings.get().graves;
         boolean gravesBefore = graves.enabled;
         // No grave to clean up: the player carries nothing, and this test is about the lockout
         graves.enabled = false;
         try {
             helper.assertValueEqual(run(server, "yolt kill " + who.name()), List.of("Killed " + who.name() + "."), "command output");
-            helper.assertTrue(DeathLockout.refusal(who.id()) != null, "the kill did not lock " + who.name() + " out");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "the kill did not lock " + who.name() + " out");
         } finally {
             graves.enabled = gravesBefore;
-            DeathLockout.revive(who.id(), "console");
+            DeathLockout.revive(who.id(), "Test", "console");
         }
         helper.succeed();
     }
@@ -522,7 +522,7 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         helper.assertValueEqual(run(server, "yolt kill NoSuchPlayer123"), List.of("Player NoSuchPlayer123 not found."), "command output");
         // The test server's name lookup makes up an offline id for any name, so that id must not be locked out
-        helper.assertTrue(DeathLockout.refusal(NameAndId.createOffline("NoSuchPlayer123").id()) == null, "a death was recorded");
+        helper.assertTrue(DeathLockout.refusal(NameAndId.createOffline("NoSuchPlayer123").id(), "Test") == null, "a death was recorded");
         helper.succeed();
     }
 

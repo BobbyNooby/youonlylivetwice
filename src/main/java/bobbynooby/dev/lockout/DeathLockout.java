@@ -93,11 +93,6 @@ public final class DeathLockout {
     }
 
     /** Null when the player may join. */
-    public static @Nullable Component refusal(UUID uuid) {
-        return refusal(uuid, uuid.toString());
-    }
-
-    /** Like the above, with the name the logs use for the player. */
     public static @Nullable Component refusal(UUID uuid, String name) {
         DeathStore open = store;
         if (open == null || !Settings.get().deathLockout.enabled) {
@@ -217,11 +212,6 @@ public final class DeathLockout {
      * Ends the newest death's lockout, keeping the death and who revived it: a player's name, or "console". A lockout
      * that is already over is left as it is.
      */
-    public static ReviveResult revive(UUID uuid, String by) {
-        return revive(uuid, uuid.toString(), by);
-    }
-
-    /** Like the above, with the name the logs use for the player. */
     public static ReviveResult revive(UUID uuid, String name, String by) {
         DeathStore open = store;
         if (open == null) {

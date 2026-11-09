@@ -113,7 +113,7 @@ public class BodyLifecycleGameTests {
         try {
             // Still alive, so only the lockout check can stop this one
             DeathLockout.recordDeath(player.getUUID(), player.nameAndId().name());
-            helper.assertTrue(DeathLockout.refusal(player.getUUID()) != null, "death not recorded");
+            helper.assertTrue(DeathLockout.refusal(player.getUUID(), "Test") != null, "death not recorded");
             helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "locked-out player got a body");
 
             // With the lockout off, being dead is all that stops it; graves off leaves nothing behind
@@ -327,7 +327,7 @@ public class BodyLifecycleGameTests {
             }
             helper.assertTrue(body.isDeadOrDying(), "body did not die");
             helper.assertTrue(gravesOf(helper, owner).isEmpty(), "failed death left a grave");
-            helper.assertTrue(DeathLockout.refusal(owner) == null, "failed death started the lockout");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "failed death started the lockout");
             // What the removal at the end of the death animation runs
             BodyChunks.onBodyUnload(body);
             helper.assertValueEqual(store(helper).byOwner(owner).map(record -> record.snapshot().health()), Optional.of(20.0F),

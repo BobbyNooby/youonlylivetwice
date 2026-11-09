@@ -78,13 +78,13 @@ public class ReviveGameTests {
     public void reviveEndsLockoutAndUsesOneHead(GameTestHelper helper) {
         UUID owner = UUID.randomUUID();
         DeathLockout.recordDeath(owner, "Ghost");
-        helper.assertTrue(DeathLockout.refusal(owner) != null, "owner is not locked out to begin with");
+        helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner is not locked out to begin with");
         ServerPlayer user = TestPlayers.join(helper, "Reviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
             ItemStack heads = reviveHead(staticProfile(owner), 2);
             helper.assertValueEqual(Revive.tryUse(user, heads), Revive.Outcome.REVIVED, "outcome");
             helper.assertValueEqual(heads.getCount(), 1, "heads left");
-            helper.assertTrue(DeathLockout.refusal(owner) == null, "owner is still locked out");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
         } finally {
             TestPlayers.leave(user);
         }
@@ -136,7 +136,7 @@ public class ReviveGameTests {
             ItemStack head = reviveHead(staticProfile(owner), 1);
             helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.DISABLED, "outcome");
             helper.assertValueEqual(head.getCount(), 1, "heads left");
-            helper.assertTrue(DeathLockout.refusal(owner) != null, "owner was revived with revives off");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner was revived with revives off");
         } finally {
             Settings.get().revive.enabled = before;
             TestPlayers.leave(user);
@@ -212,7 +212,7 @@ public class ReviveGameTests {
     public void reviveHeadOnBlockUsesHook(GameTestHelper helper) {
         UUID owner = UUID.randomUUID();
         DeathLockout.recordDeath(owner, "Ghost");
-        helper.assertTrue(DeathLockout.refusal(owner) != null, "owner is not locked out to begin with");
+        helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner is not locked out to begin with");
         BlockPos stone = new BlockPos(3, 1, 3);
         helper.setBlock(stone, Blocks.STONE);
         helper.setBlock(stone.above(), Blocks.AIR);
@@ -224,7 +224,7 @@ public class ReviveGameTests {
             InteractionResult result = UseBlockCallback.EVENT.invoker().interact(user, user.level(), InteractionHand.MAIN_HAND, hit);
             helper.assertTrue(result instanceof InteractionResult.Fail, "using a revive head on a block did not fail: " + result);
             helper.assertBlockPresent(Blocks.AIR, stone.above());
-            helper.assertTrue(DeathLockout.refusal(owner) == null, "owner is still locked out");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
             helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
         } finally {
             TestPlayers.leave(user);

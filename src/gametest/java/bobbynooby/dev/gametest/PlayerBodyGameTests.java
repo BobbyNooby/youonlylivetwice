@@ -201,7 +201,7 @@ public class PlayerBodyGameTests {
             String refusal = LockoutGameTests.refusalText(owner);
             helper.assertTrue(refusal.startsWith("You died: Killed while away (" + player.getGameProfile().name() + " was killed)\n"),
                     "owner's lockout: " + refusal);
-            helper.assertTrue(DeathLockout.refusal(body.getUUID()) == null, "a death was recorded for the body itself");
+            helper.assertTrue(DeathLockout.refusal(body.getUUID(), "Test") == null, "a death was recorded for the body itself");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
             cleanUp(helper, owner, before);

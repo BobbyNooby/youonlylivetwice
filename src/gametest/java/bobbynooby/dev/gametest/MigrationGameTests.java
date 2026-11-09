@@ -133,7 +133,7 @@ public class MigrationGameTests {
             DeathStore real = DeathLockout.swapStoreForTesting(opened);
             try {
                 DeathLockout.recordDeath(uuid, "Newer");
-                helper.assertTrue(DeathLockout.refusal(uuid) == null, "a player was refused with a newer database");
+                helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "a player was refused with a newer database");
             } finally {
                 DeathLockout.swapStoreForTesting(real);
                 if (opened != null) {

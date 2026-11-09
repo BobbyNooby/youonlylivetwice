@@ -341,11 +341,11 @@ public class SleepGameTests {
             TestPlayers.markLoaded(player);
             player.kill(player.level());
             helper.assertTrue(player.isDeadOrDying(), "the player did not die");
-            helper.assertTrue(DeathLockout.refusal(id) != null, "the death started no lockout");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") != null, "the death started no lockout");
 
             // A real logout saves the dead player, and a revive lets them back in
             TestPlayers.leave(player);
-            helper.assertValueEqual(DeathLockout.revive(id, "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
+            helper.assertValueEqual(DeathLockout.revive(id, "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(4, 1, 4));
             helper.assertTrue(back.isDeadOrDying(), "the player did not join dead");
 
@@ -363,7 +363,7 @@ public class SleepGameTests {
             if (online != null) {
                 TestPlayers.leave(online);
             }
-            DeathLockout.revive(id, "console");
+            DeathLockout.revive(id, "Test", "console");
             removeGraves(server, id);
         }
         helper.succeed();
@@ -410,7 +410,7 @@ public class SleepGameTests {
                 if (online != null) {
                     TestPlayers.leave(online);
                 }
-                DeathLockout.revive(id, "console");
+                DeathLockout.revive(id, "Test", "console");
                 removeGraves(server, id);
             }
         }

@@ -194,7 +194,7 @@ public class GraveProtectionGameTests {
             helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
             helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess()).isEmpty(), "save still has items");
             helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 0, "saved XP level");
-            helper.assertTrue(DeathLockout.refusal(who.id()) != null, "offline kill did not start the lockout");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "offline kill did not start the lockout");
         } finally {
             removeGraves(helper, gravesOf(helper, who.id()));
         }
@@ -257,7 +257,7 @@ public class GraveProtectionGameTests {
                 "stacks left in the saved inventory");
         helper.assertValueEqual(OfflinePlayerData.takeEnderChest(saved, server.registryAccess()).size(), 27,
                 "stacks left in the saved ender chest");
-        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "failed kill started the lockout");
+        helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "failed kill started the lockout");
         helper.succeed();
     }
 
@@ -365,7 +365,7 @@ public class GraveProtectionGameTests {
             helper.assertTrue(gravesOf(helper, who.id()).isEmpty(), "a spectator got a grave");
             helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
             helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
-            helper.assertTrue(DeathLockout.refusal(who.id()) != null, "offline kill did not start the lockout");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "offline kill did not start the lockout");
         } finally {
             removeGraves(helper, gravesOf(helper, who.id()));
         }

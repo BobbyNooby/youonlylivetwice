@@ -120,7 +120,7 @@ public class OfflineGameTests {
         helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess()).stream().anyMatch(item -> item.is(Items.DIAMOND)),
                 "save lost the diamond");
         helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 30, "saved XP level");
-        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "failed kill started the lockout");
+        helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "failed kill started the lockout");
         try (Stream<Path> files = Files.list(dir)) {
             helper.assertTrue(files.noneMatch(file -> file.getFileName().toString().startsWith(who.id() + "-")), "temp save file left behind");
         }
@@ -146,7 +146,7 @@ public class OfflineGameTests {
             // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
             helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
             helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
-            helper.assertValueEqual(DeathLockout.revive(who.id(), "console"), DeathLockout.ReviveResult.REVIVED, "revive after the first kill");
+            helper.assertValueEqual(DeathLockout.revive(who.id(), "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive after the first kill");
             byte[][] filesBefore = saveFiles(server, who);
             int gravesBefore = gravesOf(helper, who.id()).size();
 
@@ -155,7 +155,7 @@ public class OfflineGameTests {
             helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
             helper.assertValueEqual(gravesOf(helper, who.id()).size(), gravesBefore, "graves after the second kill");
             helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
-            helper.assertTrue(DeathLockout.refusal(who.id()) == null, "second kill restarted the lockout");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "second kill restarted the lockout");
         } finally {
             removeGraves(helper, who.id());
         }
@@ -236,7 +236,7 @@ public class OfflineGameTests {
             helper.assertTrue(player.isDeadOrDying(), "player is still alive");
             // The death kick waits for the end of the tick, so the death code still sees a connected player
             helper.assertTrue(server.getPlayerList().getPlayer(uuid) != null, "player was kicked inside the death call");
-            helper.assertTrue(DeathLockout.refusal(uuid) != null, "death did not start the lockout");
+            helper.assertTrue(DeathLockout.refusal(uuid, "Test") != null, "death did not start the lockout");
             helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.ALREADY_DEAD, "second kill result");
 
             // A server running behind still runs queued tasks within 4 ticks
@@ -266,7 +266,7 @@ public class OfflineGameTests {
         try {
             helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.NOT_KILLED, "kill result");
             helper.assertFalse(player.isDeadOrDying(), "loading player died");
-            helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded");
+            helper.assertTrue(DeathLockout.refusal(player.getUUID(), "Test") == null, "a death was recorded");
         } finally {
             TestPlayers.leave(player);
         }
