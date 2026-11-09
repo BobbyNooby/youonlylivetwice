@@ -221,6 +221,10 @@ public class CommandGameTests {
             helper.assertTrue(output.size() == 1
                             && output.get(0).endsWith(" The world spawn is outside the new border; move it with /setworldspawn."),
                     "command output: " + output);
+
+            // Centred on the spawn, it stays inside, so there's no note
+            helper.assertValueEqual(run(server, "yolt center " + spawn.getX() + " " + spawn.getZ() + " confirm"),
+                    List.of("World border center set to: " + spawn.getX() + ", " + spawn.getZ()), "output with the spawn inside");
         } finally {
             config.randomSpawn = randomSpawnBefore;
             config.worldBorder.enabled = enabledBefore;
