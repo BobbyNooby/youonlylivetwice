@@ -116,27 +116,30 @@ public class BodyStoryClientTest implements FabricClientGameTest {
                 showPlayerBodyHunted(ctx, server, connection, stage, made);
             } finally {
                 server.runOnServer(s -> {
+                    // The switches first: they are static, so later client tests in this JVM would see them
                     YoltConfig.BodiesSection bodies = Settings.get().bodies;
-                    // Switched back first, so a test player still online leaves no body
                     bodies.enabled = enabledWas;
                     bodies.type = typeWas;
                     bodies.pose = poseWas;
-                    s.setDifficulty(difficultyWas, true);
-                    ServerPlayer player = s.getPlayerList().getPlayer(self);
-                    if (player != null) {
-                        player.setGameMode(modeWas);
-                    }
-                    made.mobs.forEach(mob -> discard(s, mob));
-                    for (UUID owner : made.players) {
-                        ServerPlayer online = s.getPlayerList().getPlayer(owner);
-                        if (online != null) {
-                            TestPlayers.leave(online);
+                    List<Runnable> steps = new ArrayList<>();
+                    steps.add(() -> s.setDifficulty(difficultyWas, true));
+                    steps.add(() -> {
+                        ServerPlayer player = s.getPlayerList().getPlayer(self);
+                        if (player != null) {
+                            player.setGameMode(modeWas);
                         }
-                        removeBody(s, owner);
-                        removeGraves(s, owner);
-                        // A body's death locks its owner out
-                        DeathLockout.revive(owner);
+                    });
+                    for (UUID mob : made.mobs) {
+                        steps.add(() -> discard(s, mob));
                     }
+                    for (UUID owner : made.players) {
+                        steps.add(() -> ClientTests.leaveWithoutBody(s, owner));
+                        steps.add(() -> removeBody(s, owner));
+                        steps.add(() -> removeGraves(s, owner));
+                        // A body's death locks its owner out
+                        steps.add(() -> DeathLockout.revive(owner));
+                    }
+                    ClientTests.runAll(steps);
                 });
             }
         });
@@ -223,7 +226,7 @@ public class BodyStoryClientTest implements FabricClientGameTest {
         ClientTests.assertInView(ctx, body.entity(), "body");
         ClientTests.assertInView(ctx, punch.brawler(), "brawler");
         ClientTests.screenshotWithoutHud(ctx, "05-body-knocked-back");
-        server.runOnServer(s -> leaveWithoutBody(s, punch.brawler()));
+        server.runOnServer(s -> ClientTests.leaveWithoutBody(s, punch.brawler()));
     }
 
     private static void showArmourWorn(ClientGameTestContext ctx, TestDedicatedServerContext server,
@@ -426,21 +429,6 @@ public class BodyStoryClientTest implements FabricClientGameTest {
         Entity entity = s.overworld().getEntity(id);
         if (entity != null) {
             entity.discard();
-        }
-    }
-
-    private static void leaveWithoutBody(MinecraftServer s, UUID id) {
-        ServerPlayer player = s.getPlayerList().getPlayer(id);
-        if (player == null) {
-            return;
-        }
-        YoltConfig.BodiesSection bodies = Settings.get().bodies;
-        boolean enabled = bodies.enabled;
-        bodies.enabled = false;
-        try {
-            TestPlayers.leave(player);
-        } finally {
-            bodies.enabled = enabled;
         }
     }
 

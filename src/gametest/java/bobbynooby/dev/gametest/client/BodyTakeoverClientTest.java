@@ -74,13 +74,16 @@ public class BodyTakeoverClientTest implements FabricClientGameTest {
                 }
             } finally {
                 server.runOnServer(s -> {
+                    // The switches first: they are static, so later client tests in this JVM would see them
                     Settings.get().bodies.enabled = enabledWas;
                     Settings.get().bodies.type = typeWas;
+                    List<Runnable> steps = new ArrayList<>();
                     for (BlockPos pos : forced) {
-                        s.overworld().setChunkForced(SectionPos.blockToSectionCoord(pos.getX()),
-                                SectionPos.blockToSectionCoord(pos.getZ()), false);
+                        steps.add(() -> s.overworld().setChunkForced(SectionPos.blockToSectionCoord(pos.getX()),
+                                SectionPos.blockToSectionCoord(pos.getZ()), false));
                     }
-                    BodyStoryClientTest.removeBody(s, self);
+                    steps.add(() -> BodyStoryClientTest.removeBody(s, self));
+                    ClientTests.runAll(steps);
                 });
             }
         }

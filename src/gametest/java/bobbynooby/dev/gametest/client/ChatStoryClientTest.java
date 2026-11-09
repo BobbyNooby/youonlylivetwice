@@ -72,24 +72,27 @@ public class ChatStoryClientTest implements FabricClientGameTest {
                 showAdminView(ctx, server, connection, near, far);
             } finally {
                 server.runOnServer(s -> {
-                    ServerPlayer player = s.getPlayerList().getPlayer(self);
-                    if (player != null) {
-                        AdminView.set(player, false);
-                        // Only undo the op this test gave
-                        if (!wasOp) {
-                            TestPlayers.deop(player);
-                        }
-                    }
+                    // The switches first: they are static, so later client tests in this JVM would see them
                     Settings.get().chat.mode = modeWas;
                     Settings.get().chat.radius = radiusWas;
                     Settings.get().chat.allowWhispers = whispersWas;
                     Settings.get().hide.distantPlayers = distantWas;
                     Settings.get().hide.tabList = tabListWas;
-                    // The client's command tree follows the whisper switch
+                    List<Runnable> steps = new ArrayList<>();
+                    ServerPlayer player = s.getPlayerList().getPlayer(self);
                     if (player != null) {
-                        s.getCommands().sendCommands(player);
+                        steps.add(() -> AdminView.set(player, false));
+                        // Only undo the op this test gave
+                        if (!wasOp) {
+                            steps.add(() -> TestPlayers.deop(player));
+                        }
+                        // The client's command tree follows the whisper switch
+                        steps.add(() -> s.getCommands().sendCommands(player));
                     }
-                    joined.forEach(TestPlayers::leave);
+                    for (ServerPlayer testPlayer : joined) {
+                        steps.add(() -> ClientTests.leaveWithoutBody(s, testPlayer.getUUID()));
+                    }
+                    ClientTests.runAll(steps);
                 });
             }
         });

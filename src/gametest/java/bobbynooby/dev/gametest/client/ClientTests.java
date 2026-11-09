@@ -1,5 +1,9 @@
 package bobbynooby.dev.gametest.client;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.gametest.TestPlayers;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -7,13 +11,16 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 public final class ClientTests {
     // The screen is 35 degrees tall each way at the default field of view, so this keeps an entity fully on it
@@ -43,12 +50,11 @@ public final class ClientTests {
     public static void screenshotWithoutHud(ClientGameTestContext ctx, String name) {
         ctx.getInput().pressKey(options -> options.keyToggleGui);
         ctx.waitFor(mc -> mc.gui.hud.isHidden());
-        try {
-            screenshot(ctx, name);
-        } finally {
+        // The HUD comes back even if the screenshot fails, and a failure there doesn't hide that one
+        runAll(List.of(() -> screenshot(ctx, name), () -> {
             ctx.getInput().pressKey(options -> options.keyToggleGui);
             ctx.waitFor(mc -> !mc.gui.hud.isHidden());
-        }
+        }));
     }
 
     // Like waitFor, but a timeout says what was wrong at the end, read on the server
@@ -57,7 +63,7 @@ public final class ClientTests {
         try {
             server.waitFor(condition, timeout);
         } catch (AssertionError e) {
-            throw new AssertionError(server.computeOnServer(failure::apply), e);
+            throw explained(e, () -> server.computeOnServer(failure::apply));
         }
     }
 
@@ -66,7 +72,59 @@ public final class ClientTests {
         try {
             ctx.waitFor(condition, timeout);
         } catch (AssertionError e) {
-            throw new AssertionError(ctx.computeOnClient(failure::apply), e);
+            throw explained(e, () -> ctx.computeOnClient(failure::apply));
+        }
+    }
+
+    // Reading what was wrong can fail too, say when the entity it looks at is gone. The wait's own failure is kept.
+    private static AssertionError explained(AssertionError failed, Supplier<String> message) {
+        try {
+            return new AssertionError(message.get(), failed);
+        } catch (RuntimeException | Error e) {
+            failed.addSuppressed(e);
+            return failed;
+        }
+    }
+
+    /**
+     * Runs every step even when one fails, so one broken cleanup step can't leave the rest undone for the tests after
+     * it in this JVM. The first failure is thrown at the end, with any later ones attached.
+     */
+    public static void runAll(List<Runnable> steps) {
+        Throwable first = null;
+        for (Runnable step : steps) {
+            try {
+                step.run();
+            } catch (RuntimeException | Error e) {
+                YouOnlyLiveTwice.LOGGER.error("A client test step failed", e);
+                if (first == null) {
+                    first = e;
+                } else {
+                    first.addSuppressed(e);
+                }
+            }
+        }
+        if (first instanceof RuntimeException e) {
+            throw e;
+        }
+        if (first instanceof Error e) {
+            throw e;
+        }
+    }
+
+    // With bodies on, a test player's leave would leave a body behind, so they are off for it
+    public static void leaveWithoutBody(MinecraftServer server, UUID id) {
+        ServerPlayer player = server.getPlayerList().getPlayer(id);
+        if (player == null) {
+            return;
+        }
+        YoltConfig.BodiesSection bodies = Settings.get().bodies;
+        boolean enabled = bodies.enabled;
+        bodies.enabled = false;
+        try {
+            TestPlayers.leave(player);
+        } finally {
+            bodies.enabled = enabled;
         }
     }
 
