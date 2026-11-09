@@ -118,6 +118,11 @@ While you're offline the body is you:
   state. The body also starts with your max health. Hunger and XP stay as they were. Nobody can take items off a body.
 - **Killing a body kills you.** A grave appears at the body with your saved inventory, your save is cleared, and
   your lockout starts. `/yolt kill` on an offline player does the same.
+- **Don't clear lag with `/kill`.** Every body is an entity, so a `/kill` selector that matches bodies, like
+  `/kill @e[type=!player]` or `/kill @e[type=mannequin]`, kills every logged-out player for real: each gets a
+  grave, a wiped save and a lockout. `/yolt kill` is the only intended way to kill a body. Lag-clear mods that
+  remove entities without killing them are safe: the owner takes over the body's last saved state at their next
+  login.
 - **Logging back in:** you take over the body as it is now. You appear where it is, with its health, effects and
   gear (a popped totem stays used, worn armour stays worn). Then the body is removed.
 - **How long it stays:** `bodies.duration` is `offline` (the default, the body stays the whole time you're away) or
@@ -127,7 +132,8 @@ While you're offline the body is you:
   suffocate a body that was crawling through a 1-block gap.
 - **Mobs hunt bodies** (`bodies.mobsAttack`). Mobs that hunt players on sight hunt bodies the same way. Mobs that
   are calm until provoked stay calm: endermen, zombified piglins, and spiders in daylight. Piglins, hoglins, wardens,
-  breezes and creakings ignore bodies. Slimes and magma cubes follow a body but can't hurt it by touch.
+  breezes and creakings ignore mannequin bodies (a player body is another matter, see below). Slimes and magma cubes
+  follow a body but can't hurt it by touch.
 - **Totems, armour wear and potion effects** work on the body like they would on you (each has a switch).
 - **Bodies move like players:** gravity, knockback, water and fall damage all apply, and you log back in wherever the
   body ended up. They **can't use portals yet**; portal travel for bodies is on the list below.
@@ -154,9 +160,16 @@ logs in. Only new logouts use the new setting.
     - World events treat it as a player. A Bad Omen effect copied onto it (`bodies.copyEffects`) can start a village
       raid, and trial spawners, patrols and wandering traders can pick it.
     - It never gets phantoms, doesn't pick up items, and slimes, magma cubes and pufferfish don't hurt it by touch.
+    - Piglins, hoglins, wardens, breezes and creakings see a real player in it and go after it. They ignore a
+      mannequin.
     - With the `pvp` game rule off, or friendly fire off on a team, players can't hurt it (they can hurt a mannequin).
-    - After a server restart, a player body has the default main hand and max health. Gear and health are restored
-      from the save when its owner logs in.
+    - Players near it get a player entry for it with the owner's name, kept out of the tab list. A vanilla client
+      reads every player entry for chat tab-complete and the Social Interactions screen, listed or not, so a nearby
+      player can find the offline owner's name there, the same as if the owner stood there. The body is you.
+    - With `hide.nametags` off, it shows its owner's nametag. A mannequin never shows one.
+    - After a server restart, a player body comes back with the default main hand and the default max health (plus
+      any health boost effect it has), and health above that is lost. When its owner logs in, they take over the
+      body's health and gear as usual. Only their max health comes from their save.
     - It uses a Fabric internal class to run with no real connection (`UntrackedPacketListener`), which a Fabric
       update could move. If a Fabric update breaks it, that is the first place to look.
 
@@ -252,7 +265,9 @@ Notes:
 ## `bodies`
 
 Settings that describe how a body is built (`type`, `pose`, `movable`, `totems`) apply to bodies made after the
-change. The rest apply at once.
+change. The rest apply at once. A player body is built again each time the server starts, so after a restart it
+takes `pose` and `movable` from the config as it is then. A mannequin keeps the ones it was made with, since it is
+saved with its chunk.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
@@ -290,6 +305,9 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 
 # Known limits
 
+- A vanilla `/kill` selector that matches bodies, such as a lag clear with `@e[type=!player]`, kills every
+  logged-out player for real. Use `/yolt kill` for bodies. Lag-clear mods that remove entities without killing them
+  are safe.
 - Turning `keepInventory` off before an offline-killed player respawns loses the items kept in their save.
 - With `keepInventory` on, items on the cursor or in the crafting grid still drop at respawn (vanilla).
 - A grave from an offline kill shows the default skin when no body was loaded, for example `/yolt kill` while the
