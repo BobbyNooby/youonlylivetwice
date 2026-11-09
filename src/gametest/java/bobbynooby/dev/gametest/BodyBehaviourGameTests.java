@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.BodyDuration;
@@ -141,7 +142,7 @@ public class BodyBehaviourGameTests {
             store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
                     System.currentTimeMillis() - 61_000L, false, record.snapshot()));
 
-            Bodies.tickExpiry(server);
+            BodyExpiry.tick(server);
             helper.assertTrue(body.isRemoved(), "body still in the world");
             helper.assertTrue(store.byOwner(owner).isEmpty(), "body record kept");
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
