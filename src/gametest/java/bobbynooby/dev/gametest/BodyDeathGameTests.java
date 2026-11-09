@@ -107,7 +107,7 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
     public void loginAfterBodyDiedIsRefused(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Refused");
         UUID owner = player.getUUID();
@@ -116,8 +116,8 @@ public class BodyDeathGameTests {
         try {
             Mannequin body = leaveBody(helper, player);
             body.kill(helper.getLevel());
-            helper.assertTrue(LockoutGameTests.loginRefusal(helper.getLevel().getServer(), who) != null,
-                    "owner let in after their body died");
+            helper.assertTrue(LockoutGameTests.refusedForLockout(LockoutGameTests.loginRefusal(helper.getLevel().getServer(), who)),
+                    "owner not refused with the lockout message after their body died");
         } finally {
             cleanUp(helper, owner, before);
         }

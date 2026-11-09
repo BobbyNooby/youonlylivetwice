@@ -11,7 +11,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -28,16 +27,20 @@ public class LockoutGameTests {
     private static final SocketAddress ADDRESS = new InetSocketAddress("127.0.0.1", 25565);
     // A batch of its own: the join test keeps bodies on across ticks, so another test's logout would leave a body
     private static final String LOCKED_OUT_JOIN = "you-only-live-twice-gametest:locked_out_join";
+    // The GameTest server allows one player (GameTestServer.getMaxPlayers), and vanilla refuses "server full" before
+    // our check runs. Batches run one at a time, so in this one no other test's player can be online.
+    static final String LOGIN_CHECK = "you-only-live-twice-gametest:login_check";
 
-    @GameTest
+    @GameTest(environment = LOGIN_CHECK)
     public void lockedOutPlayerIsRefusedAtLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
-        helper.assertTrue(!canLogin(helper, uuid), "locked-out player was let in");
+        helper.assertTrue(refusedForLockout(loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Ghost"))),
+                "locked-out player was not refused with the lockout message");
         helper.succeed();
     }
 
-    @GameTest
+    @GameTest(environment = LOGIN_CHECK)
     public void revivedPlayerCanLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
@@ -46,7 +49,7 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    @GameTest(environment = LOGIN_CHECK)
     public void lockoutOffLetsEveryoneIn(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
@@ -61,7 +64,7 @@ public class LockoutGameTests {
     }
 
     // The switch is checked inside recordDeath, so no caller can start a lockout while it's off
-    @GameTest
+    @GameTest(environment = LOGIN_CHECK)
     public void lockoutOffRecordsNoDeath(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         boolean before = Settings.get().deathLockout.enabled;
@@ -131,15 +134,13 @@ public class LockoutGameTests {
         return loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Ghost")) == null;
     }
 
-    // The GameTest server allows one player (GameTestServer.getMaxPlayers), so other tests' players can make vanilla
-    // refuse as "server full". Only a refusal from anything else counts here.
     static Component loginRefusal(MinecraftServer server, NameAndId who) {
-        Component refusal = server.getPlayerList().canPlayerLogin(ADDRESS, who);
-        if (refusal != null && refusal.getContents() instanceof TranslatableContents translatable
-                && translatable.getKey().equals("multiplayer.disconnect.server_full")) {
-            return null;
-        }
-        return refusal;
+        return server.getPlayerList().canPlayerLogin(ADDRESS, who);
+    }
+
+    // Our refusal, not vanilla's (server full, banned, whitelist)
+    static boolean refusedForLockout(Component refusal) {
+        return refusal != null && refusal.getString().startsWith("You are dead.");
     }
 
     // The switches go back first, so a player still online leaves without making a body
