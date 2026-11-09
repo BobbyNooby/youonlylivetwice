@@ -18,6 +18,8 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.Team;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
@@ -51,6 +53,44 @@ public class AdminViewGameTests {
             if (online != null) {
                 AdminView.set(online, false);
                 TestPlayers.leave(online);
+            }
+        }
+        helper.succeed();
+    }
+
+    // Admin view only counts for ops, so a deop must take it away at once and an op give it back
+    @GameTest
+    public void deopDropsAdminView(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer admin = null;
+        try {
+            hide.distantPlayers = true;
+            admin = TestPlayers.join(helper, "avdeop", GameType.SURVIVAL, BlockPos.ZERO);
+            joined.add(admin);
+            ServerPlayer far = TestPlayers.join(helper, "avdeopfar", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            joined.add(far);
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            TestPlayers.op(admin);
+            helper.assertTrue(AdminView.toggle(admin), "toggle did not turn admin view on");
+            helper.assertTrue(PlayerVisibility.known(admin).contains(far.getUUID()), "admin view does not know the far player");
+
+            TestPlayers.deop(admin);
+            helper.assertFalse(AdminView.isOn(admin), "admin view still counts after a deop");
+            helper.assertFalse(PlayerVisibility.known(admin).contains(far.getUUID()), "a de-opped player still knows the far player");
+
+            TestPlayers.op(admin);
+            helper.assertTrue(AdminView.isOn(admin), "admin view did not come back with op");
+            helper.assertTrue(PlayerVisibility.known(admin).contains(far.getUUID()), "a re-opped admin does not know the far player");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+                TestPlayers.deop(admin);
+            }
+            for (ServerPlayer player : joined) {
+                TestPlayers.leave(player);
             }
         }
         helper.succeed();

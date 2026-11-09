@@ -14,6 +14,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -21,6 +22,7 @@ import net.minecraft.world.level.storage.TagValueInput;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -67,6 +69,15 @@ public final class TestPlayers {
     // Vanilla makes a player invulnerable until their client says the world has loaded, which a test player never does
     public static void markLoaded(ServerPlayer player) {
         player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
+    }
+
+    // The test server gives ops level 0 unless told otherwise, below the level /yolt and admin view need
+    public static void op(ServerPlayer player) {
+        player.level().getServer().getPlayerList().op(player.nameAndId(), Optional.of(LevelBasedPermissionSet.GAMEMASTER), Optional.empty());
+    }
+
+    public static void deop(ServerPlayer player) {
+        player.level().getServer().getPlayerList().deop(player.nameAndId());
     }
 
     public static void leave(ServerPlayer player) {
