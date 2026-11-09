@@ -40,6 +40,10 @@ public final class MannequinBodies {
         body.snapTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         body.setYHeadRot(player.getYHeadRot());
         body.setYBodyRot(player.yBodyRot);
+        // Logging out mid-fall, on fire or under water doesn't get the player out of it
+        body.fallDistance = player.fallDistance;
+        body.setRemainingFireTicks(player.getRemainingFireTicks());
+        body.setAirSupply(player.getAirSupply());
 
         for (EquipmentSlot slot : GearSync.SLOTS) {
             ItemStack copy = player.getItemBySlot(slot).copy();

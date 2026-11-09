@@ -37,7 +37,7 @@ public class BodyStoreGameTests {
     }
 
     private static BodyRecord record(Map<EquipmentSlot, ItemStack> gear) {
-        BodySnapshot snapshot = new BodySnapshot(Level.OVERWORLD, new Vec3(1.5, 64, -2.5), 90f, 14f, 2f,
+        BodySnapshot snapshot = new BodySnapshot(Level.OVERWORLD, new Vec3(1.5, 64, -2.5), 90f, 14f, 2f, 3.5, 40, 120,
                 List.of(new MobEffectInstance(MobEffects.SPEED, 200, 1)), gear);
         return new BodyRecord(UUID.randomUUID(), "Alex", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN, 1234L, false, snapshot);
     }
@@ -60,11 +60,33 @@ public class BodyStoreGameTests {
         helper.assertValueEqual(snap.yRot(), 90f, "yRot");
         helper.assertValueEqual(snap.health(), 14f, "health");
         helper.assertValueEqual(snap.absorption(), 2f, "absorption");
+        helper.assertValueEqual(snap.fallDistance(), 3.5, "fall distance");
+        helper.assertValueEqual(snap.fireTicks(), 40, "fire ticks");
+        helper.assertValueEqual(snap.air(), 120, "air");
         helper.assertValueEqual(snap.effects().size(), 1, "effect count");
         helper.assertTrue(snap.effects().get(0).is(MobEffects.SPEED) && snap.effects().get(0).getAmplifier() == 1, "effect changed");
         ItemStack chest = snap.gear().get(EquipmentSlot.CHEST);
         helper.assertTrue(chest != null && chest.is(Items.IRON_CHESTPLATE), "chestplate lost");
         helper.assertValueEqual(chest.getOrDefault(DataComponents.DAMAGE, 0), 10, "chestplate damage");
+        helper.succeed();
+    }
+
+    // A record saved before bodies kept their fall, fire and air still loads, with none of the three
+    @GameTest
+    public void snapshotWithoutFallFireAndAirLoads(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        CompoundTag encoded = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, record(Map.of())).getOrThrow();
+        CompoundTag snapshot = encoded.getCompoundOrEmpty("snapshot");
+        snapshot.remove("fall_distance");
+        snapshot.remove("fire_ticks");
+        snapshot.remove("air");
+        encoded.put("snapshot", snapshot);
+
+        BodySnapshot snap = BodyRecord.CODEC.parse(ops, encoded).getOrThrow().snapshot();
+        helper.assertValueEqual(snap.fallDistance(), 0.0, "fall distance");
+        helper.assertValueEqual(snap.fireTicks(), 0, "fire ticks");
+        helper.assertValueEqual(snap.air(), 300, "air");
+        helper.assertValueEqual(snap.health(), 14f, "health");
         helper.succeed();
     }
 

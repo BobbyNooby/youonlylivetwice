@@ -265,6 +265,10 @@ public final class Bodies {
             Vec3 pos = snapshot.pos();
             player.teleportTo(level, pos.x, pos.y, pos.z, Set.of(), snapshot.yRot(), player.getXRot(), true);
         }
+        // After the teleport, so nothing it resets undoes these
+        player.fallDistance = snapshot.fallDistance();
+        player.setRemainingFireTicks(snapshot.fireTicks());
+        player.setAirSupply(snapshot.air());
         if (copyEffects) {
             player.removeAllEffects();
             for (MobEffectInstance effect : snapshot.effects()) {

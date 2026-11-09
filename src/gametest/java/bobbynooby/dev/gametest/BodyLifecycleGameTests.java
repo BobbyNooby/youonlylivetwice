@@ -271,6 +271,34 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // Logging out doesn't put out a fire or refill the air: the body has them, and the player gets the body's back
+    @GameTest
+    public void fallFireAndAirCarryOver(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Burning", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.fallDistance = 4.0;
+            player.setRemainingFireTicks(100);
+            player.setAirSupply(150);
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(body.fallDistance, 4.0, "body fall distance");
+            helper.assertValueEqual(body.getRemainingFireTicks(), 100, "body fire ticks");
+            helper.assertValueEqual(body.getAirSupply(), 150, "body air");
+
+            // Different from the logout save, so the values can only come from the body
+            body.fallDistance = 6.0;
+            body.setRemainingFireTicks(60);
+            body.setAirSupply(90);
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.fallDistance, 6.0, "fall distance after login");
+            helper.assertValueEqual(back.getRemainingFireTicks(), 60, "fire ticks after login");
+            helper.assertValueEqual(back.getAirSupply(), 90, "air after login");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
     // A body whose death could not kill its owner: a non-empty folder where the old save gets moved makes the
     // save swap fail, so the death is taken back and the save stays as it was
     @GameTest

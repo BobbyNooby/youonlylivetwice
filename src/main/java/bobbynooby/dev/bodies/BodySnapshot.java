@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
@@ -15,13 +16,16 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/** What a body looked like when last saved: where it stands, its health, effects and worn gear. */
+/** What a body looked like when last saved: where it stands, its health, fall, fire and air, effects and worn gear. */
 public record BodySnapshot(
         ResourceKey<Level> dimension,
         Vec3 pos,
         float yRot,
         float health,
         float absorption,
+        double fallDistance,
+        int fireTicks,
+        int air,
         List<MobEffectInstance> effects,
         Map<EquipmentSlot, ItemStack> gear
 ) {
@@ -43,6 +47,11 @@ public record BodySnapshot(
             Codec.FLOAT.fieldOf("y_rot").forGetter(BodySnapshot::yRot),
             Codec.FLOAT.fieldOf("health").forGetter(BodySnapshot::health),
             Codec.FLOAT.fieldOf("absorption").forGetter(BodySnapshot::absorption),
+            // Optional, so records saved before these were kept still load. Mannequins and players all have
+            // vanilla's full air supply.
+            Codec.DOUBLE.optionalFieldOf("fall_distance", 0.0).forGetter(BodySnapshot::fallDistance),
+            Codec.INT.optionalFieldOf("fire_ticks", 0).forGetter(BodySnapshot::fireTicks),
+            Codec.INT.optionalFieldOf("air", Entity.TOTAL_AIR_SUPPLY).forGetter(BodySnapshot::air),
             MobEffectInstance.CODEC.listOf().fieldOf("effects").forGetter(BodySnapshot::effects),
             Codec.unboundedMap(EquipmentSlot.CODEC, ItemStack.CODEC).fieldOf("gear").forGetter(BodySnapshot::gear)
     ).apply(i, BodySnapshot::new));
@@ -58,6 +67,6 @@ public record BodySnapshot(
             gear.put(slot, body.getItemBySlot(slot).copy());
         }
         return new BodySnapshot(body.level().dimension(), body.position(), body.getYRot(), body.getHealth(),
-                body.getAbsorptionAmount(), effects, gear);
+                body.getAbsorptionAmount(), body.fallDistance, body.getRemainingFireTicks(), body.getAirSupply(), effects, gear);
     }
 }
