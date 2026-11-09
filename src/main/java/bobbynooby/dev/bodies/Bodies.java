@@ -9,6 +9,7 @@ import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
 import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import com.mojang.authlib.properties.PropertyMap;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
@@ -96,8 +97,12 @@ public final class Bodies {
         LivingEntity body = cfg.type == YoltConfig.BodyType.PLAYER
                 ? PlayerBody.spawn(player, cfg)
                 : MannequinBodies.spawn(player, cfg);
+        // A player body comes back from its record after a restart, so the record keeps its skin
+        PropertyMap skin = body instanceof PlayerBody playerBody
+                ? playerBody.getGameProfile().properties()
+                : PropertyMap.EMPTY;
         store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
-                System.currentTimeMillis(), false, BodySnapshot.of(body)));
+                System.currentTimeMillis(), false, BodySnapshot.of(body), skin));
         return Optional.of(body);
     }
 

@@ -85,7 +85,7 @@ public final class PlayerBody extends ServerPlayer {
             return null;
         }
         // Same body id as before, so the record still points at it
-        PlayerBody body = new PlayerBody(level, new GameProfile(record.bodyEntity(), record.ownerName()),
+        PlayerBody body = new PlayerBody(level, new GameProfile(record.bodyEntity(), record.ownerName(), record.skin()),
                 record.owner(), Settings.get().bodies);
         Vec3 pos = snapshot.pos();
         body.snapTo(pos.x, pos.y, pos.z, snapshot.yRot(), 0.0F);

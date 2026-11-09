@@ -11,6 +11,10 @@ import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
+import com.google.common.collect.ImmutableMultimap;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
@@ -185,7 +189,11 @@ public class PlayerBodyGameTests {
     // A restart, done by hand: the stop saves the body's state, the body is gone, and the start brings it back
     @GameTest
     public void playerBodiesRecreatedFromRecords(GameTestHelper helper) {
-        ServerPlayer player = join(helper, "Restarted", ON_FLOOR);
+        // Test players have no skin, so this one gets one the restored body has to keep
+        UUID id = UUID.randomUUID();
+        PropertyMap skin = new PropertyMap(ImmutableMultimap.of("textures", new Property("textures", "dGVzdA==")));
+        ServerPlayer player = TestPlayers.join(helper, new GameProfile(id, "Skin" + id.toString().substring(0, 8), skin),
+                GameType.SURVIVAL, ON_FLOOR);
         UUID owner = player.getUUID();
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.BodiesSection before = usePlayerBodies();
@@ -208,6 +216,8 @@ public class PlayerBodyGameTests {
             helper.assertValueEqual(restored.position(), moved, "restored body's position");
             helper.assertValueEqual(restored.getHealth(), 12.0F, "restored body's health");
             helper.assertTrue(restored.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate lost");
+            helper.assertTrue(hasSkin(restored.getGameProfile().properties()), "restored body lost its skin");
+            helper.assertTrue(hasSkin(restored.ownerProfile().partialProfile().properties()), "grave profile lost the skin");
             helper.assertTrue(Bodies.isBody(restored), "restored body not recognised as a body");
             helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
         } finally {
@@ -486,6 +496,10 @@ public class PlayerBodyGameTests {
         Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
         helper.assertTrue(entity instanceof PlayerBody, "no player body for the record");
         return (PlayerBody) entity;
+    }
+
+    private static boolean hasSkin(PropertyMap properties) {
+        return properties.values().stream().anyMatch(property -> property.name().equals("textures"));
     }
 
     private static boolean isDeathMessage(Component message) {
