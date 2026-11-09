@@ -182,26 +182,36 @@ public class BodyMobGameTests {
     public void huntersGetOneBodyGoal(GameTestHelper helper) {
         List<Entity> spawned = new ArrayList<>();
         try {
-            Mob zombie = spawnInRow(helper, spawned, EntityTypes.ZOMBIE);
+            Mob zombie = spawnMob(helper, spawned, EntityTypes.ZOMBIE);
             Bodies.addBodyGoal(zombie);
             Bodies.addBodyGoal(zombie);
             helper.assertValueEqual(bodyGoalPriorities(zombie), List.of(2), "zombie's body goals");
-            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.SPIDER)), List.of(2), "spider's body goals");
-            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.CREEPER)), List.of(1), "creeper's body goals");
+            assertBodyGoals(helper, spawned, EntityTypes.ZOMBIE_VILLAGER, List.of(2));
+            assertBodyGoals(helper, spawned, EntityTypes.SPIDER, List.of(2));
+            assertBodyGoals(helper, spawned, EntityTypes.CREEPER, List.of(1));
+            assertBodyGoals(helper, spawned, EntityTypes.ILLUSIONER, List.of(2));
+            assertBodyGoals(helper, spawned, EntityTypes.GHAST, List.of(1));
+            assertBodyGoals(helper, spawned, EntityTypes.SHULKER, List.of(2));
             // No player goal of the usual kind
-            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.PHANTOM)), List.of(1), "phantom's body goals");
-            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.ENDERMAN)).isEmpty(), "enderman got a body goal");
-            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.ZOMBIFIED_PIGLIN)).isEmpty(),
-                    "zombified piglin got a body goal");
-            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.IRON_GOLEM)).isEmpty(), "iron golem got a body goal");
+            assertBodyGoals(helper, spawned, EntityTypes.PHANTOM, List.of(1));
+            assertBodyGoals(helper, spawned, EntityTypes.ENDERMAN, List.of());
+            assertBodyGoals(helper, spawned, EntityTypes.ZOMBIFIED_PIGLIN, List.of());
+            assertBodyGoals(helper, spawned, EntityTypes.IRON_GOLEM, List.of());
         } finally {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();
     }
 
-    private static Mob spawnInRow(GameTestHelper helper, List<Entity> spawned, EntityType<? extends Mob> type) {
-        Mob mob = helper.spawn(type, new BlockPos(spawned.size(), 0, 1));
+    private static void assertBodyGoals(GameTestHelper helper, List<Entity> spawned, EntityType<? extends Mob> type,
+                                        List<Integer> priorities) {
+        helper.assertValueEqual(bodyGoalPriorities(spawnMob(helper, spawned, type)), priorities,
+                EntityType.getKey(type) + " body goal priorities");
+    }
+
+    // All in one spot: they are gone again before they ever tick
+    private static Mob spawnMob(GameTestHelper helper, List<Entity> spawned, EntityType<? extends Mob> type) {
+        Mob mob = helper.spawn(type, new BlockPos(3, 0, 3));
         spawned.add(mob);
         return mob;
     }

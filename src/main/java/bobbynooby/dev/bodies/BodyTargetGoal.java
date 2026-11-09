@@ -1,6 +1,7 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Mob;
@@ -9,6 +10,7 @@ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Guardian;
 import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.spider.Spider;
 import net.minecraft.world.phys.AABB;
 import org.jspecify.annotations.Nullable;
@@ -22,12 +24,12 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
      * are left out, and so are the brain-based ones, whose targeting doesn't use goals.
      */
     public static final Set<EntityType<?>> HUNTERS = Set.of(
-            EntityTypes.ZOMBIE, EntityTypes.HUSK, EntityTypes.DROWNED,
+            EntityTypes.ZOMBIE, EntityTypes.HUSK, EntityTypes.DROWNED, EntityTypes.ZOMBIE_VILLAGER,
             EntityTypes.SKELETON, EntityTypes.STRAY, EntityTypes.BOGGED, EntityTypes.PARCHED, EntityTypes.WITHER_SKELETON,
             EntityTypes.CREEPER, EntityTypes.SPIDER, EntityTypes.CAVE_SPIDER, EntityTypes.WITCH,
-            EntityTypes.PILLAGER, EntityTypes.VINDICATOR, EntityTypes.EVOKER, EntityTypes.RAVAGER, EntityTypes.VEX,
-            EntityTypes.BLAZE, EntityTypes.SLIME, EntityTypes.MAGMA_CUBE, EntityTypes.PHANTOM,
-            EntityTypes.SILVERFISH, EntityTypes.ENDERMITE, EntityTypes.GUARDIAN, EntityTypes.ELDER_GUARDIAN);
+            EntityTypes.PILLAGER, EntityTypes.VINDICATOR, EntityTypes.EVOKER, EntityTypes.ILLUSIONER, EntityTypes.RAVAGER,
+            EntityTypes.VEX, EntityTypes.BLAZE, EntityTypes.GHAST, EntityTypes.SLIME, EntityTypes.MAGMA_CUBE, EntityTypes.PHANTOM,
+            EntityTypes.SILVERFISH, EntityTypes.ENDERMITE, EntityTypes.GUARDIAN, EntityTypes.ELDER_GUARDIAN, EntityTypes.SHULKER);
 
     // What the phantom's own player search reaches: it circles far above whoever it is after
     private static final double PHANTOM_RANGE = 64.0;
@@ -65,9 +67,17 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
 
     @Override
     protected AABB getTargetSearchArea(double followDistance) {
-        return this.mob instanceof Phantom
-                ? this.mob.getBoundingBox().inflate(16.0, PHANTOM_RANGE, 16.0)
-                : super.getTargetSearchArea(followDistance);
+        AABB box = this.mob.getBoundingBox();
+        if (this.mob instanceof Phantom) {
+            return box.inflate(16.0, PHANTOM_RANGE, 16.0);
+        }
+        // The shulker's own search: only 4 blocks either way along the axis of the face it sits on
+        if (this.mob instanceof Shulker shulker) {
+            Direction.Axis axis = shulker.getAttachFace().getAxis();
+            return box.inflate(axis == Direction.Axis.X ? 4.0 : followDistance, axis == Direction.Axis.Y ? 4.0 : followDistance,
+                    axis == Direction.Axis.Z ? 4.0 : followDistance);
+        }
+        return super.getTargetSearchArea(followDistance);
     }
 
     private static boolean switchedOn() {
