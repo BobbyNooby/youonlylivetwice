@@ -17,6 +17,7 @@ import net.minecraft.stats.Stat;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -59,6 +60,8 @@ public final class PlayerBody extends ServerPlayer {
         getEntityData().set(DATA_PLAYER_MODE_CUSTOMISATION, ALL_SKIN_LAYERS);
         // Set now too, so the hitbox is right before the first tick
         setPose(bodyPose);
+        // Vanilla also tracks a transmitter again whenever this range changes, as when invisibility wears off
+        getAttribute(Attributes.WAYPOINT_TRANSMIT_RANGE).setBaseValue(0.0);
         addTag(Bodies.TAG);
     }
 
@@ -177,6 +180,18 @@ public final class PlayerBody extends ServerPlayer {
         ServerPlayer moved = super.teleport(transition);
         hasChangedDimension();
         return moved;
+    }
+
+    // The locator bar would point every player at an offline player's body; a mannequin sends nothing either
+    @Override
+    public boolean isTransmittingWaypoint() {
+        return false;
+    }
+
+    // No client to show a locator bar to
+    @Override
+    public boolean isReceivingWaypoints() {
+        return false;
     }
 
     // Peaceful healing, for the same reason as the food above

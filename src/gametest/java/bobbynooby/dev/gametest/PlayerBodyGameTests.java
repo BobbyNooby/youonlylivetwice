@@ -28,7 +28,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.server.players.SleepStatus;
+import net.minecraft.server.waypoints.ServerWaypointManager;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -316,6 +319,27 @@ public class PlayerBodyGameTests {
                 cleanUp(helper, owner, before);
             }
         }
+    }
+
+    // The locator bar would show where an offline player's body is
+    @GameTest
+    public void playerBodySendsNoWaypoint(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unmarked", ON_FLOOR);
+        UUID owner = player.getUUID();
+        ServerWaypointManager waypoints = helper.getLevel().getWaypointManager();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            helper.assertTrue(waypoints.transmitters().contains(player), "the player sends no waypoint to begin with");
+            PlayerBody body = leaveBody(helper, player);
+            helper.assertFalse(waypoints.transmitters().contains(body), "body sends a waypoint");
+            // Invisibility wearing off makes vanilla check the range again
+            body.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 200));
+            body.removeEffect(MobEffects.INVISIBILITY);
+            helper.assertFalse(waypoints.transmitters().contains(body), "body sends a waypoint once invisibility ends");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
     }
 
     // Vanilla keeps a player changing dimension unhurtable until its client accepts the teleport
