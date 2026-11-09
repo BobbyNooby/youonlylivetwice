@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
@@ -7,7 +8,6 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -177,7 +177,7 @@ public class GraveProtectionGameTests {
         }
 
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             Grave grave = onlyGrave(helper, who.id());
             List<ItemStack> items = grave.items();
             helper.assertValueEqual(items.size(), 3, "grave item count");
@@ -233,7 +233,7 @@ public class GraveProtectionGameTests {
         List<Grave> onDisk = List.of();
         List<Grave> left;
         try {
-            OfflineKill.kill(server, who);
+            Kills.kill(server, who);
         } catch (RuntimeException expected) {
             failed = true;
             // Both graves reached the file before the save swap was tried; the undo leaves it for the next save
@@ -278,7 +278,7 @@ public class GraveProtectionGameTests {
             boolean before = rules.get(GameRules.KEEP_INVENTORY);
             rules.set(GameRules.KEEP_INVENTORY, true, server);
             try {
-                helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             } finally {
                 rules.set(GameRules.KEEP_INVENTORY, before, server);
             }
@@ -316,7 +316,7 @@ public class GraveProtectionGameTests {
         }
 
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             Grave grave = onlyGrave(helper, who.id());
             helper.assertFalse(contains(grave.items(), Items.IRON_HELMET), "cursed helmet went into the grave");
             helper.assertTrue(contains(grave.items(), Items.DIAMOND), "diamond missing from the grave");
@@ -349,7 +349,7 @@ public class GraveProtectionGameTests {
         try {
             graves.enderChestOnDeath = YoltConfig.EnderChestMode.GRAVE;
             try {
-                helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             } finally {
                 graves.enderChestOnDeath = mode;
             }

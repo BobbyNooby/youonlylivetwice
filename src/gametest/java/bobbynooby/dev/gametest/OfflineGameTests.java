@@ -1,11 +1,11 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -59,7 +59,7 @@ public class OfflineGameTests {
         boolean gravesBefore = graves.enabled;
         graves.enabled = false;
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
         } finally {
             graves.enabled = gravesBefore;
         }
@@ -103,7 +103,7 @@ public class OfflineGameTests {
         graves.enabled = false;
         boolean failed = false;
         try {
-            OfflineKill.kill(server, who);
+            Kills.kill(server, who);
         } catch (RuntimeException expected) {
             failed = true;
         } finally {
@@ -140,7 +140,7 @@ public class OfflineGameTests {
             TestPlayers.leave(player);
         }
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "first kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "first kill result");
 
             // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
             helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
@@ -149,7 +149,7 @@ public class OfflineGameTests {
             byte[][] filesBefore = saveFiles(server, who);
             int gravesBefore = gravesOf(helper, who.id()).size();
 
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.ALREADY_DEAD, "second kill result");
             helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 2.0).isEmpty(), "second kill dropped items");
             helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
             helper.assertValueEqual(gravesOf(helper, who.id()).size(), gravesBefore, "graves after the second kill");
@@ -179,7 +179,7 @@ public class OfflineGameTests {
         try {
             graves.enderChestOnDeath = YoltConfig.EnderChestMode.WIPE;
             try {
-                helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             } finally {
                 graves.enderChestOnDeath = before;
             }
@@ -213,7 +213,7 @@ public class OfflineGameTests {
         graves.enabled = false;
         graves.enderChestOnDeath = YoltConfig.EnderChestMode.WIPE;
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
         } finally {
             graves.enabled = enabledBefore;
             graves.enderChestOnDeath = modeBefore;
@@ -231,12 +231,12 @@ public class OfflineGameTests {
         boolean waitingForKick = false;
         try {
             TestPlayers.markLoaded(player);
-            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.KILLED_ONLINE, "kill result");
+            helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.KILLED_ONLINE, "kill result");
             helper.assertTrue(player.isDeadOrDying(), "player is still alive");
             // The death kick waits for the end of the tick, so the death code still sees a connected player
             helper.assertTrue(server.getPlayerList().getPlayer(uuid) != null, "player was kicked inside the death call");
             helper.assertTrue(DeathLockout.refusal(uuid) != null, "death did not start the lockout");
-            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+            helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.ALREADY_DEAD, "second kill result");
 
             // A server running behind still runs queued tasks within 4 ticks
             helper.runAfterDelay(5, () -> {
@@ -263,7 +263,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Loading", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.NOT_KILLED, "kill result");
+            helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.NOT_KILLED, "kill result");
             helper.assertFalse(player.isDeadOrDying(), "loading player died");
             helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded");
         } finally {

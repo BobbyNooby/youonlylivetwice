@@ -1,5 +1,6 @@
 package bobbynooby.dev.commands;
 
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.WorldBorders;
@@ -7,7 +8,6 @@ import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.world.LiveSettings;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -129,9 +129,9 @@ public final class YoltCommands {
     private static int kill(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         Optional<NameAndId> who = lookup(server, name);
-        OfflineKill.KillResult result;
+        Kills.Result result;
         try {
-            result = who.map(found -> OfflineKill.kill(server, found)).orElse(OfflineKill.KillResult.NOT_FOUND);
+            result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
         } catch (RuntimeException e) {
             LOGGER.error("{} could not kill {}", source.getTextName(), name, e);
             source.sendFailure(Component.literal("Could not kill " + name + ", see the server log."));
@@ -147,7 +147,7 @@ public final class YoltCommands {
             source.sendFailure(Component.literal(failure));
             return 0;
         }
-        LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == OfflineKill.KillResult.KILLED_ONLINE ? "online" : "offline");
+        LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
         reply(source, "Killed " + who.get().name());
         return 1;
     }

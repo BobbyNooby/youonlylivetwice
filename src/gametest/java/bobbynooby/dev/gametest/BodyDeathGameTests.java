@@ -3,13 +3,13 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
@@ -218,7 +218,7 @@ public class BodyDeathGameTests {
             BlockPos at = body.blockPosition();
             body.discard();
 
-            helper.assertValueEqual(OfflineKill.kill(server, player.nameAndId()), OfflineKill.KillResult.KILLED_OFFLINE,
+            helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.KILLED_OFFLINE,
                     "kill result");
             List<Grave> graves = gravesOf(helper, owner);
             helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");

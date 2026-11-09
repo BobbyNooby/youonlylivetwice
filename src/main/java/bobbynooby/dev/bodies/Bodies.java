@@ -9,7 +9,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
-import bobbynooby.dev.offline.OfflineKill;
+import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.properties.PropertyMap;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -304,17 +304,17 @@ public final class Bodies {
      * one in an unloaded chunk dies at its last saved spot, and goes when its chunk next loads.
      * Throws if the owner could not be killed.
      */
-    public static OfflineKill.KillResult killBody(MinecraftServer server, BodyRecord record) {
+    public static Kills.Result killBody(MinecraftServer server, BodyRecord record) {
         // A body still dying from a death that failed to kill its owner counts as gone
         if (entityOf(server, record) instanceof LivingEntity body
                 && !body.isDeadOrDying() && body.level() instanceof ServerLevel level) {
             body.kill(level);
             if (BodyStore.get(server).byOwner(record.owner()).isEmpty()) {
-                return OfflineKill.KillResult.KILLED_OFFLINE;
+                return Kills.Result.KILLED_OFFLINE;
             }
             if (!body.isDeadOrDying()) {
                 // Another mod stopped the death
-                return OfflineKill.KillResult.NOT_KILLED;
+                return Kills.Result.NOT_KILLED;
             }
             throw new IllegalStateException("The body of " + record.ownerName() + " died, but they could not be killed");
         }
@@ -322,7 +322,7 @@ public final class Bodies {
         // No entity, so no skin to keep: the grave head is built from the name
         killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
                 GraveItems.profileOf(record.who()));
-        return OfflineKill.KillResult.KILLED_OFFLINE;
+        return Kills.Result.KILLED_OFFLINE;
     }
 
     /** True for anything we spawned as a body: it wears copies of its owner's saved gear, so its death drops nothing. */
@@ -401,7 +401,7 @@ public final class Bodies {
         if (!OfflinePlayerData.isDead(tag)) {
             // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
             BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess());
-            OfflineKill.applyOfflineDeath(server, who, tag, where, profile);
+            OfflineDeath.applyOfflineDeath(server, who, tag, where, profile);
         }
         BodyStore.get(server).remove(record.owner());
     }

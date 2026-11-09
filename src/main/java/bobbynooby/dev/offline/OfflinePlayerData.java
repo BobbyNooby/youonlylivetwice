@@ -23,6 +23,7 @@ import net.minecraft.world.entity.EntityEquipment;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec2;
@@ -53,6 +54,11 @@ public final class OfflinePlayerData {
     private static final String ENDER_ITEMS = "EnderItems";
     private static final String EFFECTS = "active_effects";
     private static final String ATTRIBUTES = "attributes";
+    private static final String GAME_TYPE = "playerGameType";
+    private static final String XP_LEVEL = "XpLevel";
+    private static final String XP_TOTAL = "XpTotal";
+    private static final String XP_PROGRESS = "XpP";
+    private static final String LAST_DEATH_LOCATION = "LastDeathLocation";
 
     private OfflinePlayerData() {}
 
@@ -69,6 +75,27 @@ public final class OfflinePlayerData {
     /** True for a save that holds a dead player. A save with no health loads at full health, so it isn't dead. */
     public static boolean isDead(CompoundTag tag) {
         return tag.getFloatOr(HEALTH, 1.0F) <= 0.0F;
+    }
+
+    /** The saved game mode; survival when the save has none. */
+    public static GameType gameType(CompoundTag tag) {
+        return GameType.byId(tag.getIntOr(GAME_TYPE, 0));
+    }
+
+    /** Clears the save's experience and returns the level it had. */
+    public static int takeExperience(CompoundTag tag) {
+        int level = tag.getIntOr(XP_LEVEL, 0);
+        tag.putInt(XP_LEVEL, 0);
+        tag.putInt(XP_TOTAL, 0);
+        tag.putFloat(XP_PROGRESS, 0.0F);
+        return level;
+    }
+
+    /** Makes the save a dead player's, who died at where: no effects and no health. */
+    public static void markDead(CompoundTag tag, GlobalPos where) {
+        tag.remove(EFFECTS);
+        tag.putFloat(HEALTH, 0.0F);
+        tag.store(LAST_DEATH_LOCATION, GlobalPos.CODEC, where);
     }
 
     /** Writes the save the way vanilla does: a temp file, then a swap that keeps the previous save as .dat_old. */

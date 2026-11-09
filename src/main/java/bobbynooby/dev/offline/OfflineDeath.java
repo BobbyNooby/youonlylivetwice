@@ -1,8 +1,5 @@
 package bobbynooby.dev.offline;
 
-import bobbynooby.dev.bodies.Bodies;
-import bobbynooby.dev.bodies.BodyRecord;
-import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.graves.GraveItems;
@@ -13,7 +10,6 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
@@ -29,46 +25,10 @@ import net.minecraft.world.phys.Vec3;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
-/** Kills a player whether they are online or not, so both end in the same state. */
-public final class OfflineKill {
-    public enum KillResult { KILLED_ONLINE, KILLED_OFFLINE, NOT_FOUND, ALREADY_DEAD, NOT_KILLED }
-
-    private OfflineKill() {}
-
-    /**
-     * A player who is already dead is left exactly as they are, so a second kill can't restart their lockout.
-     * An offline player whose body still stands dies through that body.
-     */
-    public static KillResult kill(MinecraftServer server, NameAndId who) {
-        ServerPlayer online = server.getPlayerList().getPlayer(who.id());
-        if (online != null) {
-            if (online.isDeadOrDying()) {
-                return KillResult.ALREADY_DEAD;
-            }
-            // Same as vanilla /kill: the normal death runs, and its death event starts the lockout
-            online.kill(online.level());
-            // Vanilla ignores the kill while the player is still loading in or changing dimension
-            return online.isDeadOrDying() ? KillResult.KILLED_ONLINE : KillResult.NOT_KILLED;
-        }
-        // No save file means they never played here
-        Optional<CompoundTag> tag = OfflinePlayerData.load(server, who);
-        if (tag.isEmpty()) {
-            return KillResult.NOT_FOUND;
-        }
-        // Logged out dead, or killed offline before. A save with no health loads at full health.
-        if (OfflinePlayerData.isDead(tag.get())) {
-            return KillResult.ALREADY_DEAD;
-        }
-        // A pending record was taken over already, so the save is the player's real state
-        Optional<BodyRecord> body = BodyStore.get(server).byOwner(who.id()).filter(record -> !record.pendingRemoval());
-        if (body.isPresent()) {
-            return Bodies.killBody(server, body.get());
-        }
-        applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()), GraveItems.profileOf(who));
-        return KillResult.KILLED_OFFLINE;
-    }
+/** Turns an offline player's save into a dead player's. Every offline death goes through here, and only here. */
+public final class OfflineDeath {
+    private OfflineDeath() {}
 
     /**
      * Turns the save into a dead player's, so the next login goes through vanilla's respawn.
@@ -83,7 +43,7 @@ public final class OfflineKill {
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
         // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory, but
         // only while graves are on, since an online death with graves off never reaches it.
-        boolean spectator = GameType.byId(tag.getIntOr("playerGameType", 0)) == GameType.SPECTATOR;
+        boolean spectator = OfflinePlayerData.gameType(tag) == GameType.SPECTATOR;
         boolean graves = Settings.on(c -> c.graves.enabled);
         boolean dropsLoot = !spectator && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
         List<ItemStack> items = new ArrayList<>();
@@ -96,10 +56,7 @@ public final class OfflineKill {
                 }
             }
             // Vanilla's Player.getBaseExperienceReward, read from the save instead of a live player
-            experience = Math.min(tag.getIntOr("XpLevel", 0) * 7, 100);
-            tag.putInt("XpLevel", 0);
-            tag.putInt("XpTotal", 0);
-            tag.putFloat("XpP", 0.0F);
+            experience = Math.min(OfflinePlayerData.takeExperience(tag) * 7, 100);
         }
         if (!spectator && graves) {
             switch (Settings.get().graves.enderChestOnDeath) {
@@ -109,9 +66,7 @@ public final class OfflineKill {
                 }
             }
         }
-        tag.remove("active_effects");
-        tag.putFloat("Health", 0.0F);
-        tag.store("LastDeathLocation", GlobalPos.CODEC, where);
+        OfflinePlayerData.markDead(tag, where);
         Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 
         // Deposit, then commit. A failed commit takes the deposit back, so the items never exist twice.
@@ -138,8 +93,8 @@ public final class OfflineKill {
      * Puts the items in the world at where, and returns how to take them back out. With graves on they go into
      * graves with a grave head first, as in an online death, and the graves are on disk before this returns.
      */
-    public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where,
-                                   ResolvableProfile profile) {
+    private static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where,
+                                    ResolvableProfile profile) {
         ServerLevel level = levelFor(server, where);
         if (Settings.on(c -> c.graves.enabled)) {
             return depositInGraves(server, level, who, items, where, profile);
