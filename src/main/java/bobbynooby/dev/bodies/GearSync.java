@@ -17,12 +17,25 @@ public final class GearSync {
     private GearSync() {
     }
 
+    /**
+     * Applies the body's gear to the real slots, one slot at a time:
+     * <ul>
+     *   <li>body empty, real not: the real slot is cleared (a popped totem, broken armour);</li>
+     *   <li>body has an item, real empty: the real slot gets a copy (armour a dispenser put on the body);</li>
+     *   <li>same item: the body's damage and count go onto the real stack, never above the real count;</li>
+     *   <li>a different item: the real stack is left alone.</li>
+     * </ul>
+     * Only for a body that is being removed, or the copied gear would exist twice.
+     */
     public static void applyBodyGear(Map<EquipmentSlot, ItemStack> bodyGear, Function<EquipmentSlot, ItemStack> getReal,
                                      BiConsumer<EquipmentSlot, ItemStack> setReal) {
         for (EquipmentSlot slot : SLOTS) {
             ItemStack body = bodyGear.getOrDefault(slot, ItemStack.EMPTY);
             ItemStack real = getReal.apply(slot);
             if (real.isEmpty()) {
+                if (!body.isEmpty()) {
+                    setReal.accept(slot, body.copy());
+                }
                 continue;
             }
             if (body.isEmpty()) {
