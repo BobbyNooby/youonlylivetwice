@@ -60,7 +60,7 @@ public final class Graves {
 
     // Non-null only while a dying player's menus close. Server thread only.
     private static ServerPlayer collectingFor;
-    private static final List<ItemStack> collected = new ArrayList<>();
+    private static List<ItemStack> collected = new ArrayList<>();
 
     private Graves() {
     }
@@ -126,29 +126,30 @@ public final class Graves {
         YoltConfig.EnderChestMode enderMode = Settings.get().graves.enderChestOnDeath;
         Inventory inventory = player.getInventory();
         PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
-        ResolvableProfile profile = GraveItems.profileOf(player);
-
-        // The head comes first and is always there: it is the revive token
-        List<ItemStack> items = new ArrayList<>();
-        items.add(GraveItems.graveHead(profile));
-        List<ItemStack> fromMenus = List.of();
-        if (!keepInventory) {
-            ((PlayerInvoker) player).invokeDestroyVanishingCursedItems();
-            addStacks(items, inventory);
-            fromMenus = takeMenuItems(player);
-            items.addAll(fromMenus);
-        }
-        if (enderMode == YoltConfig.EnderChestMode.GRAVE) {
-            addStacks(items, enderChest);
-        }
-
         String name = player.nameAndId().name();
+
+        // Until the graves exist, any failure falls back to vanilla dropping everything
+        List<ItemStack> fromMenus = List.of();
         try {
+            ResolvableProfile profile = GraveItems.profileOf(player);
+            // The head comes first and is always there: it is the revive token
+            List<ItemStack> items = new ArrayList<>();
+            items.add(GraveItems.graveHead(profile));
+            if (!keepInventory) {
+                // Menus close first, so a menu that hands items back into the inventory is covered by the scan
+                fromMenus = takeMenuItems(player);
+                ((PlayerInvoker) player).invokeDestroyVanishingCursedItems();
+                addStacks(items, inventory);
+                items.addAll(fromMenus);
+            }
+            if (enderMode == YoltConfig.EnderChestMode.GRAVE) {
+                addStacks(items, enderChest);
+            }
             create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
             // Only the menu items have left the player; put them back so vanilla drops them with the rest
             YouOnlyLiveTwice.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
-            fromMenus.forEach(stack -> inventory.placeItemBackInInventory(stack, Prediction.SERVER_ONLY));
+            handBack(player, fromMenus);
             return false;
         }
 
@@ -359,17 +360,46 @@ public final class Graves {
     // Closes the menus with their own vanilla code, so any menu hands back its cursor and input items (crafting
     // grids, anvil, loom, trades...). The hooks catch each item on its way to the inventory or the ground.
     private static List<ItemStack> takeMenuItems(ServerPlayer player) {
+        List<ItemStack> taken = new ArrayList<>();
+        try {
+            closeMenusInto(player, taken);
+        } catch (RuntimeException e) {
+            // The items caught so far would go down with the grave, so they go back for vanilla to drop
+            handBack(player, taken);
+            throw e;
+        }
+        return taken;
+    }
+
+    // A menu's close code could kill another player and start their collection, so each call keeps its own list
+    // and restores the one before
+    private static void closeMenusInto(ServerPlayer player, List<ItemStack> into) {
+        ServerPlayer previousFor = collectingFor;
+        List<ItemStack> previous = collected;
         collectingFor = player;
+        collected = into;
         try {
             if (player.containerMenu != player.inventoryMenu) {
-                player.closeContainer();
+                // No close packet: the client already shows the death screen, and a close would swap it for one
+                // without the death message
+                player.doCloseContainer();
             }
             // The inventory menu is never closed, but this returns its cursor and 2x2 grid the same way
             player.inventoryMenu.removed(player);
-            return List.copyOf(collected);
         } finally {
-            collectingFor = null;
-            collected.clear();
+            collectingFor = previousFor;
+            collected = previous;
+        }
+    }
+
+    // Each stack on its own, so one that can't go back doesn't keep the rest from being dropped
+    private static void handBack(ServerPlayer player, List<ItemStack> stacks) {
+        for (ItemStack stack : stacks) {
+            try {
+                player.getInventory().placeItemBackInInventory(stack, Prediction.SERVER_ONLY);
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not hand {} back to {}", stack, player.nameAndId().name(), e);
+            }
         }
     }
 
