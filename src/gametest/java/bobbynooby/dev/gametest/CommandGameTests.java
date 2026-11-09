@@ -7,9 +7,11 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.Level;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
 public class CommandGameTests {
@@ -100,6 +103,52 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // The end is moved off 0, 0 first, so the command putting it back is what the test sees
+    @GameTest
+    public void centerMovesOverworldAndNetherOnly(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Map<ServerLevel, double[]> centresBefore = new HashMap<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            centresBefore.put(level, new double[] {level.getWorldBorder().getCenterX(), level.getWorldBorder().getCenterZ()});
+        }
+        try {
+            level(helper, Level.END).getWorldBorder().setCenter(5, 5);
+            helper.assertValueEqual(run(server, "yolt center 100 -200"), List.of("World border center set to: 100, -200"), "command output");
+            assertCentre(helper, server.overworld(), 100, -200);
+            assertCentre(helper, level(helper, Level.NETHER), 100, -200);
+            assertCentre(helper, level(helper, Level.END), 0, 0);
+        } finally {
+            for (ServerLevel level : server.getAllLevels()) {
+                double[] centre = centresBefore.get(level);
+                level.getWorldBorder().setCenter(centre[0], centre[1]);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The test server's name cache makes up an id for any name, so the death is recorded under that id
+    @GameTest
+    public void unkillEndsLockoutAndReplies(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID id = server.services().nameToIdCache().get("Ghost").orElseThrow().id();
+        DeathLockout.recordDeath(id, "Ghost");
+        try {
+            helper.assertTrue(DeathLockout.refusal(id) != null, "the death did not lock Ghost out");
+            helper.assertValueEqual(run(server, "yolt unkill Ghost"), List.of("Revived Ghost"), "command output");
+            helper.assertTrue(DeathLockout.refusal(id) == null, "Ghost is still locked out");
+        } finally {
+            DeathLockout.revive(id);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void unkillWithoutDeathFails(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        helper.assertValueEqual(run(server, "yolt unkill Ghost2"), List.of("Ghost2 has no death to undo."), "command output");
+        helper.succeed();
+    }
+
     @GameTest
     public void killUnknownNameChangesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -149,6 +198,17 @@ public class CommandGameTests {
             }
         }
         helper.succeed();
+    }
+
+    private static void assertCentre(GameTestHelper helper, ServerLevel level, double x, double z) {
+        helper.assertValueEqual(level.getWorldBorder().getCenterX(), x, level.dimension().identifier() + " border centre x");
+        helper.assertValueEqual(level.getWorldBorder().getCenterZ(), z, level.dimension().identifier() + " border centre z");
+    }
+
+    private static ServerLevel level(GameTestHelper helper, ResourceKey<Level> dimension) {
+        ServerLevel level = helper.getLevel().getServer().getLevel(dimension);
+        helper.assertTrue(level != null, "test server has no level " + dimension);
+        return level;
     }
 
     // Runs the command as the console and returns every line it sent back
