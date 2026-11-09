@@ -10,6 +10,7 @@ import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.features.WorldBorders;
 import bobbynooby.dev.revive.Revive;
+import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
@@ -42,6 +43,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::applyImmediateRespawn);
         ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::apply);
 
+        AdminView.init();
         YoltCommands.register();
         DeathLockout.init();
         Graves.init();

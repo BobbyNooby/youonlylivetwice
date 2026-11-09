@@ -10,10 +10,12 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
+import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -71,6 +73,8 @@ public final class YoltCommands {
                                 .then(Commands.literal("remove")
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                                 .executes(c -> graveRemove(c.getSource(), BlockPosArgument.getLoadedBlockPos(c, "pos"))))))
+                        .then(Commands.literal("adminview")
+                                .executes(c -> adminView(c.getSource())))
                         .then(Commands.literal("reload")
                                 .executes(c -> reload(c.getSource())))));
     }
@@ -195,6 +199,15 @@ public final class YoltCommands {
         LOGGER.info("{} removed {}'s grave at {} {} and dropped {} stacks", source.getTextName(), grave.get().ownerName(),
                 source.getLevel().dimension().identifier(), pos, stacks);
         reply(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + " stacks.");
+        return 1;
+    }
+
+    // Admin view is about what a client is sent, so the console gets vanilla's "a player is required" error
+    private static int adminView(CommandSourceStack source) throws CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        boolean on = AdminView.toggle(player);
+        LOGGER.info("{} turned admin view {}", source.getTextName(), on ? "on" : "off");
+        reply(source, on ? "Admin view on" : "Admin view off");
         return 1;
     }
 

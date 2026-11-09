@@ -14,7 +14,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.storage.TagValueInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +46,18 @@ public final class TestPlayers {
 
     public static ServerPlayer join(MinecraftServer server, String name, GameType mode, BlockPos absolutePos) {
         return join(server.overworld(), uniqueProfile(name), mode, absolutePos);
+    }
+
+    // A returning player: like a real login, their save is read before they are placed in the world
+    public static ServerPlayer rejoin(GameTestHelper helper, GameProfile profile, GameType mode, BlockPos relativePos) {
+        return join(helper.getLevel(), profile, mode, helper.absolutePos(relativePos), (level, cookie) -> {
+            MinecraftServer server = level.getServer();
+            ServerPlayer player = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation());
+            server.getPlayerList().loadPlayerData(player.nameAndId())
+                    .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, server.registryAccess(), tag))
+                    .ifPresent(player::load);
+            return player;
+        });
     }
 
     public static Recording joinRecording(GameTestHelper helper, String name, GameType mode, BlockPos relativePos) {
