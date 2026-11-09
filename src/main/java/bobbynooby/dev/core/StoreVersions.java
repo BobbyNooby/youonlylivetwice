@@ -52,7 +52,7 @@ public final class StoreVersions {
         return SharedConstants.getCurrentVersion().dataVersion().version();
     }
 
-    /** How many stored items went through the item fixer since the server started; tests read it. */
+    /** How many stored items the item fixer ran on without failing since the server started; tests read it. */
     public static long itemsFixed() {
         return FIXED_ITEMS.get();
     }
@@ -115,9 +115,9 @@ public final class StoreVersions {
     // The same fixer the server was started with, run on plain NBT as vanilla runs it on saved files. A stack the
     // fixer can't handle is read as it was saved.
     private static <T> Dynamic<T> fixItem(Dynamic<T> stack, int from, int to) {
-        FIXED_ITEMS.incrementAndGet();
         try {
             Dynamic<Tag> fixed = DataFixers.getDataFixer().update(References.ITEM_STACK, stack.convert(NbtOps.INSTANCE), from, to);
+            FIXED_ITEMS.incrementAndGet();
             return fixed.convert(stack.getOps());
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not run a stored item through the data fixer, reading it as it was saved", e);
