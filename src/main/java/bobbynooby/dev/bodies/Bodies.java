@@ -168,10 +168,15 @@ public final class Bodies {
                 continue;
             }
             // One that fails keeps its record, so the owner's login still takes over its last saved state
+            if (server.getLevel(record.snapshot().dimension()) == null) {
+                YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: its dimension {} is gone",
+                        record.ownerName(), record.snapshot().dimension().identifier());
+                continue;
+            }
             try {
                 if (PlayerBody.fromRecord(server, record) == null) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: its dimension {} is gone",
-                            record.ownerName(), record.snapshot().dimension().identifier());
+                    YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: the world refused the entity {}",
+                            record.ownerName(), record.bodyEntity());
                 }
             } catch (RuntimeException e) {
                 YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}", record.ownerName(), e);
