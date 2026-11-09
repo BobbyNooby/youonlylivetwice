@@ -3,7 +3,12 @@ package bobbynooby.dev.lockout;
 import bobbynooby.dev.core.Migrations;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteErrorCode;
+import org.sqlite.SQLiteException;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -127,5 +132,47 @@ class DeathStoreTest {
         assertThrows(IllegalStateException.class, () -> DeathStore.open(file, 3, steps));
         assertEquals(1, query(file, "PRAGMA user_version"));
         assertEquals(0, query(file, REASON_COLUMNS));
+    }
+
+    // A crash during a write leaves a "hot" journal beside the file. Copying the file and its journal while a write is
+    // still open makes one, since nothing holds the copy, as after a crash. synchronous=OFF writes the journal's header
+    // straight away, which is what makes it count as hot.
+    @Test
+    void hotJournalStillOpens() throws IOException, SQLException {
+        Path file = dir.resolve("crashed.db");
+        DeathStore before = DeathStore.open(file);
+        before.recordDeath(uuid, "Bob", 1000L, 7);
+        before.close();
+
+        Path copy = dir.resolve("copy.db");
+        try (Connection writer = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = writer.createStatement()) {
+            statement.execute("PRAGMA synchronous = OFF");
+            writer.setAutoCommit(false);
+            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 2000, 7, 0)");
+            Files.copy(file, copy);
+            Files.copy(dir.resolve("crashed.db-journal"), dir.resolve("copy.db-journal"));
+            writer.rollback();
+        }
+
+        // What failed before: a read-only connection can't roll the journal back
+        SQLiteConfig readOnly = new SQLiteConfig();
+        readOnly.setReadOnly(true);
+        SQLiteException refused = assertThrows(SQLiteException.class, () -> {
+            try (Connection reader = DriverManager.getConnection("jdbc:sqlite:" + copy.toAbsolutePath(), readOnly.toProperties());
+                 Statement statement = reader.createStatement()) {
+                statement.executeQuery("PRAGMA user_version").close();
+            }
+        });
+        assertEquals(SQLiteErrorCode.SQLITE_READONLY_ROLLBACK, refused.getResultCode());
+
+        DeathStore recovered = DeathStore.open(copy);
+        try {
+            assertEquals(1000L, recovered.latest(uuid).orElseThrow().deathTimeMillis());
+        } finally {
+            recovered.close();
+        }
+        assertEquals(1, query(copy, "SELECT COUNT(*) FROM death_logs"));
+        assertEquals(DeathStore.SCHEMA_VERSION, query(copy, "PRAGMA user_version"));
     }
 }

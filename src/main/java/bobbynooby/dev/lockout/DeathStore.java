@@ -2,6 +2,8 @@ package bobbynooby.dev.lockout;
 
 import bobbynooby.dev.core.Migrations;
 import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteErrorCode;
+import org.sqlite.SQLiteException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +15,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /** SQLite-backed death log. Methods are synchronized to be safe, though the login check and death handling both run on the server thread. */
@@ -44,7 +47,10 @@ public final class DeathStore {
             }
             String url = "jdbc:sqlite:" + dbFile.toAbsolutePath();
             if (Files.exists(dbFile)) {
-                refuseNewer(dbFile, readOnlyVersion(url), schemaVersion);
+                OptionalInt found = readOnlyVersion(url);
+                if (found.isPresent()) {
+                    refuseNewer(dbFile, found.getAsInt(), schemaVersion);
+                }
             }
             Connection connection = DriverManager.getConnection(url);
             try {
@@ -59,12 +65,22 @@ public final class DeathStore {
         }
     }
 
-    private static int readOnlyVersion(String url) throws SQLException {
+    /**
+     * Empty when a crash cut off a write and left its journal beside the file: a read-only connection can't roll that
+     * back. The read-write open then does, which is SQLite's own crash recovery and only puts back the last committed
+     * state. The check inside the upgrade's transaction still refuses a newer schema before anything of ours is written.
+     */
+    private static OptionalInt readOnlyVersion(String url) throws SQLException {
         SQLiteConfig readOnly = new SQLiteConfig();
         readOnly.setReadOnly(true);
         try (Connection connection = DriverManager.getConnection(url, readOnly.toProperties());
              Statement statement = connection.createStatement()) {
-            return userVersion(statement);
+            return OptionalInt.of(userVersion(statement));
+        } catch (SQLiteException e) {
+            if (e.getResultCode() == SQLiteErrorCode.SQLITE_READONLY_ROLLBACK) {
+                return OptionalInt.empty();
+            }
+            throw e;
         }
     }
 
