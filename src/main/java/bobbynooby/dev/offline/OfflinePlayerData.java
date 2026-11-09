@@ -21,10 +21,13 @@ import net.minecraft.util.Util;
 import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityEquipment;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
@@ -37,6 +40,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -200,8 +204,10 @@ public final class OfflinePlayerData {
         tag.putShort("Air", (short) snapshot.air());
         if (copyEffects) {
             List<MobEffectInstance> before = tag.read(EFFECTS, MobEffectInstance.CODEC.listOf(), ops).orElse(List.of());
-            tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops).ifPresent(attributes -> tag.store(ATTRIBUTES,
-                    AttributeInstance.Packed.LIST_CODEC, ops, swapEffectModifiers(attributes, before, snapshot.effects())));
+            List<AttributeInstance.Packed> attributes = tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops)
+                    .orElse(List.of());
+            tag.store(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops,
+                    swapEffectModifiers(attributes, before, snapshot.effects()));
             // Vanilla leaves the key out when there are no effects
             if (snapshot.effects().isEmpty()) {
                 tag.remove(EFFECTS);
@@ -225,13 +231,14 @@ public final class OfflinePlayerData {
     }
 
     // An effect's attribute modifiers are saved with the attributes and loading doesn't add them again, so the old
-    // effects' come off and the new ones' go on, as removing and adding the effects on a live player would. An
-    // attribute the save doesn't list is left out: there is no base value to keep for it.
+    // effects' come off and the new ones' go on, as removing and adding the effects on a live player would
     private static List<AttributeInstance.Packed> swapEffectModifiers(List<AttributeInstance.Packed> attributes,
                                                                       List<MobEffectInstance> before,
                                                                       List<MobEffectInstance> after) {
+        Map<Holder<Attribute>, Double> bases = new LinkedHashMap<>();
         Map<Holder<Attribute>, List<AttributeModifier>> modifiers = new HashMap<>();
         for (AttributeInstance.Packed packed : attributes) {
+            bases.put(packed.attribute(), packed.baseValue());
             modifiers.put(packed.attribute(), new ArrayList<>(packed.modifiers()));
         }
         for (MobEffectInstance effect : before) {
@@ -242,19 +249,25 @@ public final class OfflinePlayerData {
                 }
             });
         }
+        // The save only lists the attributes the player has used. One it lacks starts from a player's default, which is
+        // what loading would have given it; one a player doesn't have at all would be dropped by the load anyway.
+        AttributeSupplier defaults = DefaultAttributes.getSupplier(EntityTypes.PLAYER);
         for (MobEffectInstance effect : after) {
             effect.getEffect().value().createModifiers(effect.getAmplifier(), (attribute, modifier) -> {
-                List<AttributeModifier> list = modifiers.get(attribute);
-                if (list != null) {
-                    list.removeIf(existing -> existing.id().equals(modifier.id()));
-                    list.add(modifier);
+                if (!bases.containsKey(attribute)) {
+                    if (!defaults.hasAttribute(attribute)) {
+                        return;
+                    }
+                    bases.put(attribute, defaults.getBaseValue(attribute));
+                    modifiers.put(attribute, new ArrayList<>());
                 }
+                List<AttributeModifier> list = modifiers.get(attribute);
+                list.removeIf(existing -> existing.id().equals(modifier.id()));
+                list.add(modifier);
             });
         }
         List<AttributeInstance.Packed> swapped = new ArrayList<>();
-        for (AttributeInstance.Packed packed : attributes) {
-            swapped.add(new AttributeInstance.Packed(packed.attribute(), packed.baseValue(), modifiers.get(packed.attribute())));
-        }
+        bases.forEach((attribute, base) -> swapped.add(new AttributeInstance.Packed(attribute, base, modifiers.get(attribute))));
         return swapped;
     }
 

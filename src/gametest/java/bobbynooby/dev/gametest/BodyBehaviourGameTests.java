@@ -14,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -37,6 +38,7 @@ import net.minecraft.world.phys.Vec3;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -165,6 +167,43 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // The save only lists the attributes the player has used, so an effect gained on the body may need one it lacks
+    @GameTest
+    public void effectGainedOnBodyKeepsItsModifier(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Weakened", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            CompoundTag lacking = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            lacking.store("attributes", AttributeInstance.Packed.LIST_CODEC, ops, attributes(helper, lacking).stream()
+                    .filter(packed -> packed.attribute().value() != Attributes.ATTACK_DAMAGE.value())
+                    .toList());
+            OfflinePlayerData.save(server, owner, lacking);
+            body.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 12000));
+            expiredLogout(helper, owner);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            Optional<AttributeInstance.Packed> attack = attributes(helper, saved).stream()
+                    .filter(packed -> packed.attribute().value() == Attributes.ATTACK_DAMAGE.value())
+                    .findFirst();
+            helper.assertTrue(attack.isPresent(), "attack damage not saved");
+            helper.assertValueEqual(attack.get().baseValue(), 1.0, "attack damage base");
+            List<Identifier> weakness = new ArrayList<>();
+            MobEffects.WEAKNESS.value().createModifiers(0, (attribute, modifier) -> weakness.add(modifier.id()));
+            helper.assertTrue(attack.get().modifiers().stream().anyMatch(modifier -> weakness.contains(modifier.id())),
+                    "weakness's modifier not saved");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // Only the offline-death routine edits a dead player's save, so the expiry leaves it exactly as it is
     @GameTest
     public void expiryOfDeadSaveOnlyDropsRecord(GameTestHelper helper) throws IOException {
@@ -227,9 +266,13 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
-    private static List<AttributeModifier> speedModifiers(GameTestHelper helper, CompoundTag saved) {
+    private static List<AttributeInstance.Packed> attributes(GameTestHelper helper, CompoundTag saved) {
         RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
-        return saved.read("attributes", AttributeInstance.Packed.LIST_CODEC, ops).orElse(List.of()).stream()
+        return saved.read("attributes", AttributeInstance.Packed.LIST_CODEC, ops).orElse(List.of());
+    }
+
+    private static List<AttributeModifier> speedModifiers(GameTestHelper helper, CompoundTag saved) {
+        return attributes(helper, saved).stream()
                 .filter(packed -> packed.attribute().value() == Attributes.MOVEMENT_SPEED.value())
                 .flatMap(packed -> packed.modifiers().stream())
                 .toList();
