@@ -167,8 +167,9 @@ public final class YoltCommands {
     private static int graveList(CommandSourceStack source) {
         Collection<Grave> graves = GraveStore.get(source.getServer()).all();
         if (graves.isEmpty()) {
+            // An empty list is still an answer, so the command succeeded
             reply(source, "No graves.");
-            return 0;
+            return 1;
         }
         for (Grave grave : graves) {
             BlockPos pos = grave.pos();
