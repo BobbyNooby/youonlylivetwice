@@ -64,8 +64,10 @@ public final class GravePlacement {
         return pos;
     }
 
+    // Past the border nobody could reach the grave to open it
     private static boolean usable(ServerLevel level, BlockPos pos, GraveStore store) {
-        return level.getBlockState(pos).canBeReplaced() && store.at(level.dimension(), pos).isEmpty();
+        return level.getBlockState(pos).canBeReplaced() && store.at(level.dimension(), pos).isEmpty()
+                && level.getWorldBorder().isWithinBounds(pos);
     }
 
     // A grave over the void can't be reached, so a column with nothing solid below counts as one
