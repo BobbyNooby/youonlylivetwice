@@ -10,6 +10,7 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
@@ -40,6 +41,14 @@ public final class MannequinBodies {
         body.snapTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         body.setYHeadRot(player.getYHeadRot());
         body.setYBodyRot(player.yBodyRot);
+        copyState(player, body, cfg);
+
+        level.addFreshEntity(body);
+        return body;
+    }
+
+    /** What both body types take from their player: fall, fire and air, copies of the gear, health and effects. */
+    static void copyState(ServerPlayer player, LivingEntity body, YoltConfig.BodiesSection cfg) {
         // Logging out mid-fall, on fire or under water doesn't get the player out of it
         body.fallDistance = player.fallDistance;
         body.setRemainingFireTicks(player.getRemainingFireTicks());
@@ -65,12 +74,9 @@ public final class MannequinBodies {
         } else {
             body.setHealth(Math.min(player.getHealth(), body.getMaxHealth()));
         }
-
-        level.addFreshEntity(body);
-        return body;
     }
 
-    private static Pose pose(YoltConfig.BodyPose pose) {
+    static Pose pose(YoltConfig.BodyPose pose) {
         return switch (pose) {
             case PRONE -> Pose.SWIMMING;
             case SLEEPING -> Pose.SLEEPING;

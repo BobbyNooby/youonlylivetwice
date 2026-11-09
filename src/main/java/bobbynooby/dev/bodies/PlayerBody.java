@@ -1,0 +1,252 @@
+package bobbynooby.dev.bodies;
+
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.features.NameTagHider;
+import com.mojang.authlib.GameProfile;
+import io.netty.channel.ChannelFutureListener;
+import net.fabricmc.fabric.impl.networking.UntrackedPacketListener;
+import net.minecraft.core.SectionPos;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.server.network.TextFilter;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.player.PlayerModelPart;
+import net.minecraft.world.food.FoodData;
+import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
+
+import java.util.UUID;
+import java.util.function.Consumer;
+
+/**
+ * A body that is a real player entity: it is in the world, so its area keeps running and mobs spawn around it, but it
+ * never joins the player list, so it never counts as online.
+ */
+public final class PlayerBody extends ServerPlayer {
+    private static final byte ALL_SKIN_LAYERS = allSkinLayers();
+
+    private final UUID owner;
+    private final Pose bodyPose;
+    private final boolean movable;
+
+    private PlayerBody(ServerLevel level, GameProfile profile, UUID owner, YoltConfig.BodiesSection cfg) {
+        super(level.getServer(), level, profile, ClientInformation.createDefault());
+        this.owner = owner;
+        this.bodyPose = MannequinBodies.pose(cfg.pose);
+        this.movable = cfg.movable;
+        // The owner gets the body's health back on login, so healing here would heal them for logging out
+        this.foodData = new FoodData() {
+            @Override
+            public void tick(ServerPlayer player) {
+            }
+        };
+        // Sets this.connection
+        new Listener(this);
+        // A creative or adventure default would make the body something mobs and players can't hurt
+        setGameMode(GameType.SURVIVAL);
+        // The client information has every layer off, which would draw the skin without its outer layer
+        getEntityData().set(DATA_PLAYER_MODE_CUSTOMISATION, ALL_SKIN_LAYERS);
+        // Set now too, so the hitbox is right before the first tick
+        setPose(bodyPose);
+        addTag(Bodies.TAG);
+    }
+
+    public static PlayerBody spawn(ServerPlayer player, YoltConfig.BodiesSection cfg) {
+        ServerLevel level = player.level();
+        GameProfile from = player.getGameProfile();
+        // A player entity's id is its profile's, and the world refuses a second entity with the owner's id
+        PlayerBody body = new PlayerBody(level, new GameProfile(UUID.randomUUID(), from.name(), from.properties()),
+                player.getUUID(), cfg);
+        // Keeps the main-hand item in the hand the player held it in
+        body.setMainArm(player.getMainArm());
+        body.snapTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
+        body.setYHeadRot(player.getYHeadRot());
+        body.setYBodyRot(player.yBodyRot);
+        MannequinBodies.copyState(player, body, cfg);
+        body.addToWorld(level);
+        return body;
+    }
+
+    /** Brings back a body from its record after a restart. Null when its dimension is gone or it can't be added. */
+    public static @Nullable PlayerBody fromRecord(MinecraftServer server, BodyRecord record) {
+        BodySnapshot snapshot = record.snapshot();
+        ServerLevel level = server.getLevel(snapshot.dimension());
+        if (level == null) {
+            return null;
+        }
+        // Same body id as before, so the record still points at it
+        PlayerBody body = new PlayerBody(level, new GameProfile(record.bodyEntity(), record.ownerName()),
+                record.owner(), Settings.get().bodies);
+        Vec3 pos = snapshot.pos();
+        body.snapTo(pos.x, pos.y, pos.z, snapshot.yRot(), 0.0F);
+        body.setYHeadRot(snapshot.yRot());
+        body.setYBodyRot(snapshot.yRot());
+        body.fallDistance = snapshot.fallDistance();
+        body.setRemainingFireTicks(snapshot.fireTicks());
+        body.setAirSupply(snapshot.air());
+        snapshot.gear().forEach((slot, stack) -> body.setItemSlot(slot, stack.copy()));
+        // Effects first: health boost and absorption raise the caps the values below are clamped to
+        for (MobEffectInstance effect : snapshot.effects()) {
+            body.addEffect(new MobEffectInstance(effect));
+        }
+        body.setHealth(snapshot.health());
+        body.setAbsorptionAmount(snapshot.absorption());
+        return body.addToWorld(level) ? body : null;
+    }
+
+    // Like a player: the name goes in the nametag team before anyone can see the body
+    private boolean addToWorld(ServerLevel level) {
+        NameTagHider.addToTeam(level.getServer(), this);
+        return level.addFreshEntity(this);
+    }
+
+    public UUID owner() {
+        return owner;
+    }
+
+    /** The owner's own profile with the body's skin, for the grave head. The body's profile has the body's id. */
+    public ResolvableProfile ownerProfile() {
+        return ResolvableProfile.createResolved(new GameProfile(owner, getGameProfile().name(), getGameProfile().properties()));
+    }
+
+    // A client would send the movement that runs the rest of a player's tick: physics, effects, fire and air
+    @Override
+    public void tick() {
+        super.tick();
+        if (isRemoved()) {
+            return;
+        }
+        doTick();
+        // A client's movement also moves a player in the chunk map, which keeps its area loaded and lets mobs spawn
+        // there. Only when it changes section: the move checks every tracked entity.
+        if (!isRemoved() && !SectionPos.of(this).equals(getLastSectionPos())) {
+            level().getChunkSource().move(this);
+        }
+    }
+
+    // So the server moves the body itself, and checks its fall damage as it lands
+    @Override
+    public boolean isClientAuthoritative() {
+        return false;
+    }
+
+    // Vanilla picks the pose from what the client is doing, which would stand the body up every tick
+    @Override
+    protected void updatePlayerPose() {
+        if (!isDeadOrDying()) {
+            setPose(bodyPose);
+        }
+    }
+
+    // The same as an immovable mannequin
+    @Override
+    protected boolean isImmobile() {
+        return !movable || super.isImmobile();
+    }
+
+    @Override
+    public boolean isEffectiveAi() {
+        return movable && super.isEffectiveAi();
+    }
+
+    // Peaceful healing, for the same reason as the food above
+    @Override
+    protected void tickRegeneration() {
+    }
+
+    // Read live, so turning the switch off also stops a hunt already under way
+    @Override
+    public boolean canBeSeenAsEnemy() {
+        return Settings.get().bodies.mobsAttack && super.canBeSeenAsEnemy();
+    }
+
+    // Player's own wear, which skips the mixin a mannequin goes through, so the switch is checked here
+    @Override
+    protected void hurtArmor(DamageSource source, float damage) {
+        if (Bodies.wearsArmour(this)) {
+            super.hurtArmor(source, damage);
+        }
+    }
+
+    @Override
+    protected void hurtHelmet(DamageSource source, float damage) {
+        if (Bodies.wearsArmour(this)) {
+            super.hurtHelmet(source, damage);
+        }
+    }
+
+    // A text filter service would be told a player joined who never leaves
+    @Override
+    public TextFilter getTextFilter() {
+        return TextFilter.DUMMY;
+    }
+
+    private static byte allSkinLayers() {
+        int mask = 0;
+        for (PlayerModelPart part : PlayerModelPart.values()) {
+            mask |= part.getMask();
+        }
+        return (byte) mask;
+    }
+
+    // The body's connection: vanilla reads its latency and sends it packets, which have no client to go to.
+    // Fabric's own fake players use the untracked marker, so its networking doesn't keep the listener forever.
+    private static final class Listener extends ServerGamePacketListenerImpl implements UntrackedPacketListener {
+        private Listener(PlayerBody body) {
+            super(body.level().getServer(), new NoConnection(), body, CommonListenerCookie.createInitial(body.getGameProfile(), false));
+        }
+
+        @Override
+        public void send(Packet<?> packet) {
+        }
+
+        @Override
+        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener) {
+        }
+
+        // Vanilla keeps a player unhurtable until its client says the world has loaded, which a body never does
+        @Override
+        public boolean hasClientLoaded() {
+            return true;
+        }
+    }
+
+    // Never connected, so anything sent straight to it would otherwise queue up for good
+    private static final class NoConnection extends Connection {
+        private NoConnection() {
+            super(PacketFlow.SERVERBOUND);
+        }
+
+        @Override
+        public void send(Packet<?> packet) {
+        }
+
+        @Override
+        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener) {
+        }
+
+        @Override
+        public void send(Packet<?> packet, @Nullable ChannelFutureListener listener, boolean flush) {
+        }
+
+        @Override
+        public void runOnceConnected(Consumer<Connection> action) {
+        }
+
+        @Override
+        public void flushChannel() {
+        }
+    }
+}

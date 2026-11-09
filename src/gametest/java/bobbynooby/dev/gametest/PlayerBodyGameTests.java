@@ -1,0 +1,385 @@
+package bobbynooby.dev.gametest;
+
+import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.lockout.DeathLockout;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.PlayerTeam;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+// Like the other body tests: each one turns on the default body switches with the player type and puts the server's
+// own back in the same tick. A player body is a player to every mob, so a test that keeps one in the world across
+// ticks runs in a batch of its own, away from the mob tests.
+public class PlayerBodyGameTests {
+    private static final String PLAYER_BODY = "you-only-live-twice-gametest:player_body";
+    private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
+
+    @GameTest
+    public void playerBodySpawnsWhenTypeIsPlayer(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "PlayerBody", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            player.setHealth(14.0F);
+            // The logout hook on its own, so what it returns can be checked
+            Optional<Entity> made = Bodies.onLogout(player);
+            helper.assertTrue(made.isPresent() && made.get() instanceof PlayerBody, "no player body");
+            PlayerBody body = (PlayerBody) made.get();
+
+            Optional<BodyRecord> record = store(helper).byOwner(owner);
+            helper.assertTrue(record.isPresent(), "no body record");
+            helper.assertValueEqual(record.get().type(), YoltConfig.BodyType.PLAYER, "body type");
+            helper.assertValueEqual(record.get().bodyEntity(), body.getUUID(), "record's body");
+            helper.assertFalse(body.getUUID().equals(owner), "body has its owner's id");
+            helper.assertValueEqual(body.owner(), owner, "body's owner");
+            helper.assertValueEqual(body.getGameProfile().name(), player.getGameProfile().name(), "body's name");
+            helper.assertTrue(Bodies.isBody(body), "not recognised as a body");
+            helper.assertValueEqual(body.getPose(), Pose.SWIMMING, "pose");
+            helper.assertValueEqual(body.position(), player.position(), "position");
+            helper.assertTrue(body.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate not copied");
+            helper.assertTrue(body.getItemBySlot(EquipmentSlot.MAINHAND).is(Items.IRON_SWORD), "sword not copied");
+            helper.assertValueEqual(body.getHealth(), 14.0F, "health");
+            helper.assertValueEqual(body.gameMode(), GameType.SURVIVAL, "game mode");
+            PlayerTeam team = helper.getLevel().getScoreboard().getPlayerTeam(YouOnlyLiveTwice.TEAM_NAME);
+            helper.assertTrue(team != null && body.getTeam() == team, "body not in the nametag team");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Spec 11.2 only inferred this; if it fails, the player type doesn't work without the player list
+    @GameTest
+    public void playerBodyCountsForSpawningButNotOnline(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Spawner", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            ServerLevel level = helper.getLevel();
+            helper.assertTrue(level.getChunkSource().chunkMap.getPlayersCloseForSpawning(body.chunkPosition()).contains(body),
+                    "body doesn't count for spawning");
+            helper.assertTrue(level.players().contains(body), "body not among the level's players");
+            helper.assertFalse(server.getPlayerList().getPlayers().contains(body), "body in the player list");
+            helper.assertTrue(server.getPlayerList().getPlayer(body.getUUID()) == null, "body online by its id");
+            helper.assertTrue(server.getPlayerList().getPlayer(owner) == null, "owner still online");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(maxTicks = 60, environment = PLAYER_BODY)
+    public void playerBodyFalls(GameTestHelper helper) {
+        fallTest(helper, "PlayerFalls", true);
+    }
+
+    @GameTest(maxTicks = 60, environment = PLAYER_BODY)
+    public void playerBodyStaysWhenImmovable(GameTestHelper helper) {
+        fallTest(helper, "PlayerStays", false);
+    }
+
+    @GameTest
+    public void ownerCanLogInWhileBodyExists(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Returns", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 5.0F);
+
+            ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, ON_FLOOR);
+            helper.assertTrue(helper.getLevel().getEntity(owner) == back, "owner not in the level");
+            helper.assertTrue(helper.getLevel().players().contains(back), "owner not among the level's players");
+            helper.assertValueEqual(back.getHealth(), 15.0F, "health after login");
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertFalse(helper.getLevel().players().contains(body), "body still among the level's players");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void killingPlayerBodyMakesOneGrave(GameTestHelper helper) {
+        // Something solid under the body, so its grave goes on the body's own block
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "PlayerGrave", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            PlayerBody body = leaveBody(helper, player);
+            BlockPos at = body.blockPosition();
+            AABB around = new AABB(at).inflate(4.0);
+            body.kill(helper.getLevel());
+
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            List<Grave> graves = gravesOf(helper, owner);
+            helper.assertValueEqual(graves.size(), 1, "graves for the owner");
+            helper.assertValueEqual(graves.get(0).pos(), at, "grave position");
+            helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the grave");
+            helper.assertValueEqual(countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the grave");
+            // The revive token has to name the owner, not the body
+            helper.assertValueEqual(GraveItems.ownerId(graves.get(0).items().get(0)), Optional.of(owner), "grave head's owner");
+            helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, Entity::isAlive).isEmpty(), "items dropped");
+            helper.assertTrue(helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, around, Entity::isAlive).isEmpty(),
+                    "XP dropped");
+            helper.assertTrue(DeathLockout.refusal(owner) != null, "owner not locked out");
+            helper.assertTrue(DeathLockout.refusal(body.getUUID()) == null, "a death was recorded for the body itself");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A restart, done by hand: the stop saves the body's state, the body is gone, and the start brings it back
+    @GameTest
+    public void playerBodiesRecreatedFromRecords(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Restarted", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            PlayerBody body = leaveBody(helper, player);
+            // Different from the logout, so the values can only come from the stop's snapshot
+            body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
+            body.setHealth(12.0F);
+            Vec3 moved = body.position();
+            Bodies.snapshotPlayerBodies(server);
+            body.discard();
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record went with the body");
+
+            Bodies.restorePlayerBodies(server);
+            Entity found = helper.getLevel().getEntity(body.getUUID());
+            helper.assertTrue(found instanceof PlayerBody && found != body, "no player body brought back");
+            PlayerBody restored = (PlayerBody) found;
+            helper.assertValueEqual(restored.owner(), owner, "restored body's owner");
+            helper.assertValueEqual(restored.position(), moved, "restored body's position");
+            helper.assertValueEqual(restored.getHealth(), 12.0F, "restored body's health");
+            helper.assertTrue(restored.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate lost");
+            helper.assertTrue(Bodies.isBody(restored), "restored body not recognised as a body");
+            helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // The targeting checks every goal and brain sensor goes through, for a mob that would go for the body
+    @GameTest
+    public void playerBodyIgnoredWhenMobsAttackOff(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unhunted", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            // Never added to the world: it only has to be the one looking
+            Zombie zombie = new Zombie(helper.getLevel());
+            helper.assertTrue(zombie.canAttack(body), "a zombie can't attack the body with the switch on");
+            Settings.get().bodies.mobsAttack = false;
+            helper.assertFalse(body.canBeSeenAsEnemy(), "body seen as an enemy with the switch off");
+            helper.assertFalse(zombie.canAttack(body), "a zombie can attack the body with the switch off");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Its health goes back to the owner on login, so any healing would be free health for logging out
+    @GameTest(maxTicks = 60, environment = PLAYER_BODY)
+    public void playerBodyDoesNotRegenerate(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "NoRegen", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        boolean waiting = false;
+        try {
+            player.setHealth(10.0F);
+            PlayerBody body = leaveBody(helper, player);
+            int food = body.getFoodData().getFoodLevel();
+            float saturation = body.getFoodData().getSaturationLevel();
+            // Enough to cost a vanilla player food straight away
+            body.causeFoodExhaustion(40.0F);
+            Settings.get().bodies = before;
+            // A full vanilla player heals every 10 ticks
+            helper.runAfterDelay(40, () -> {
+                try {
+                    helper.assertValueEqual(body.getHealth(), 10.0F, "body health");
+                    helper.assertValueEqual(body.getFoodData().getFoodLevel(), food, "body food");
+                    helper.assertValueEqual(body.getFoodData().getSaturationLevel(), saturation, "body saturation");
+                } finally {
+                    removeBody(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
+    // Vanilla keeps a player unhurtable until its client has loaded the world; a body has no client
+    @GameTest
+    public void playerBodyTakesDamageAtOnce(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Hurt", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            helper.assertTrue(body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 5.0F),
+                    "body refused the damage");
+            helper.assertValueEqual(body.getHealth(), 15.0F, "body health after the hit");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Five blocks above a stone floor. The switches only matter while the body spawns, so they go back before the wait.
+    private static void fallTest(GameTestHelper helper, String name, boolean movable) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, name, new BlockPos(1, 6, 1));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        boolean waiting = false;
+        try {
+            Settings.get().bodies.movable = movable;
+            PlayerBody body = leaveBody(helper, player);
+            double startY = body.getY();
+            Settings.get().bodies = before;
+            helper.runAfterDelay(40, () -> {
+                try {
+                    if (movable) {
+                        helper.assertTrue(body.getY() < startY, "movable body did not fall");
+                        helper.assertTrue(body.getHealth() < 20.0F, "body took no fall damage");
+                    } else {
+                        helper.assertValueEqual(body.getY(), startY, "immovable body's height");
+                    }
+                    // Vanilla would have stood it up on its first tick
+                    helper.assertValueEqual(body.getPose(), Pose.SWIMMING, "pose after ticking");
+                } finally {
+                    removeBody(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
+    private static ServerPlayer join(GameTestHelper helper, String name, BlockPos at) {
+        return TestPlayers.join(helper, name, GameType.SURVIVAL, at);
+    }
+
+    // A fresh section has the default switches, with bodies on; the caller puts the returned one back
+    private static YoltConfig.BodiesSection usePlayerBodies() {
+        YoltConfig config = Settings.get();
+        YoltConfig.BodiesSection before = config.bodies;
+        config.bodies = new YoltConfig.BodiesSection();
+        config.bodies.type = YoltConfig.BodyType.PLAYER;
+        return before;
+    }
+
+    // A real logout: leaving fires the hook and saves the player
+    private static PlayerBody leaveBody(GameTestHelper helper, ServerPlayer player) {
+        TestPlayers.leave(player);
+        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
+        helper.assertTrue(record.isPresent(), "no body record");
+        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
+        helper.assertTrue(entity instanceof PlayerBody, "no player body for the record");
+        return (PlayerBody) entity;
+    }
+
+    private static BodyStore store(GameTestHelper helper) {
+        return BodyStore.get(helper.getLevel().getServer());
+    }
+
+    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
+        return GraveStore.get(helper.getLevel().getServer()).all().stream()
+                .filter(grave -> grave.owner().equals(owner))
+                .toList();
+    }
+
+    private static int countInGraves(List<Grave> graves, Item item) {
+        int total = 0;
+        for (Grave grave : graves) {
+            for (ItemStack stack : grave.items()) {
+                if (stack.is(item)) {
+                    total += stack.getCount();
+                }
+            }
+        }
+        return total;
+    }
+
+    // The switches go back first, so a player still online leaves without making another body.
+    // Bodies, records and graves left behind would sit in another test's way.
+    private static void cleanUp(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
+        Settings.get().bodies = before;
+        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+        removeBody(helper, owner);
+        GraveStore graves = GraveStore.get(helper.getLevel().getServer());
+        for (Grave grave : gravesOf(helper, owner)) {
+            graves.remove(grave.id());
+            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+    }
+
+    // A copy: discarding a body takes it out of the level's players
+    private static void removeBody(GameTestHelper helper, UUID owner) {
+        for (ServerPlayer player : new ArrayList<>(helper.getLevel().players())) {
+            if (player instanceof PlayerBody body && body.owner().equals(owner)) {
+                body.discard();
+            }
+        }
+        store(helper).remove(owner);
+    }
+}

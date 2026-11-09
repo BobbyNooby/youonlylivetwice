@@ -69,7 +69,8 @@ public class NameTagHider {
         ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> addToTeam(destination.getServer(), player));
     }
 
-    private static void addToTeam(MinecraftServer server, ServerPlayer player) {
+    /** Player bodies never join, so they are put in the team here too and their nametags hide the same way. */
+    public static void addToTeam(MinecraftServer server, ServerPlayer player) {
         if (!Settings.active()) {
             return;
         }

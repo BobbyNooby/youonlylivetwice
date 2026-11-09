@@ -1,5 +1,6 @@
 package bobbynooby.dev.visibility;
 
+import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.mixin.PlayerInfoUpdatePacketAccessor;
@@ -55,6 +56,10 @@ public final class PlayerVisibility {
 
     /** Sends the entry for a player whose entity the viewer starts tracking. Runs before the spawn packet. */
     public static void onPairingStart(ServerPlayer viewer, ServerPlayer seen) {
+        // A player body tracks entities like a player but has no client to tell, so it never gets any state here
+        if (viewer instanceof PlayerBody) {
+            return;
+        }
         Viewer state = state(viewer);
         state.tracked.add(seen.getUUID());
         if (state.known.add(seen.getUUID())) {
@@ -66,6 +71,9 @@ public final class PlayerVisibility {
 
     /** Removes the entry once the viewer stops tracking that player's entity. */
     public static void onPairingStop(ServerPlayer viewer, ServerPlayer seen) {
+        if (viewer instanceof PlayerBody) {
+            return;
+        }
         Viewer state = state(viewer);
         state.tracked.remove(seen.getUUID());
         // A player outside the player list (a plan 04 body) would otherwise stay on as an online name.

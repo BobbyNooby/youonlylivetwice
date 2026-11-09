@@ -12,6 +12,7 @@ import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
@@ -29,7 +30,6 @@ import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
-import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -75,6 +75,8 @@ public final class Bodies {
         });
         // Fires inside die(), after the death drops, which the body never has
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
+        ServerLifecycleEvents.SERVER_STARTED.register(Bodies::restorePlayerBodies);
+        ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotPlayerBodies);
         BodyExpiry.init();
     }
 
@@ -91,8 +93,10 @@ public final class Bodies {
         // Out again before the old body was taken back: it goes, so there is never a second one
         store.byOwner(player.getUUID()).ifPresent(old -> discard(server, old));
 
-        Mannequin body = MannequinBodies.spawn(player, cfg);
-        store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), YoltConfig.BodyType.MANNEQUIN,
+        LivingEntity body = cfg.type == YoltConfig.BodyType.PLAYER
+                ? PlayerBody.spawn(player, cfg)
+                : MannequinBodies.spawn(player, cfg);
+        store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
                 System.currentTimeMillis(), false, BodySnapshot.of(body)));
         return Optional.of(body);
     }
@@ -121,6 +125,11 @@ public final class Bodies {
             // The record goes first, so the discard's unload no longer counts this as a body
             store.remove(record.owner());
             body.discard();
+        } else if (record.type() == YoltConfig.BodyType.PLAYER) {
+            // A player body isn't saved with its chunk, so it can't load later: the record is all there is
+            snapshot = record.snapshot();
+            bodyAlive = snapshot.health() > 0.0F;
+            store.remove(record.owner());
         } else {
             // Its chunk isn't loaded: the last saved state is used, and the body goes when it next loads
             snapshot = record.snapshot();
@@ -131,6 +140,53 @@ public final class Bodies {
         // stays dead: their gear may be in a grave already, and the body only holds copies of it.
         if (bodyAlive && !player.isDeadOrDying()) {
             takeOver(player, snapshot, Settings.get().bodies.copyEffects);
+        }
+    }
+
+    /**
+     * Player bodies aren't saved with their chunks, so each comes back from its record when the server starts.
+     * With bodies switched off this still runs, since a body left from before still stands for its owner.
+     */
+    public static void restorePlayerBodies(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        BodyStore store = BodyStore.get(server);
+        for (BodyRecord record : store.all()) {
+            if (record.type() != YoltConfig.BodyType.PLAYER
+                    || server.overworld().getEntityInAnyDimension(record.bodyEntity()) != null) {
+                continue;
+            }
+            // Taken over already, so there is no body to bring back
+            if (record.pendingRemoval()) {
+                store.remove(record.owner());
+                continue;
+            }
+            // One that fails keeps its record, so the owner's login still takes over its last saved state
+            try {
+                if (PlayerBody.fromRecord(server, record) == null) {
+                    YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: its dimension {} is gone",
+                            record.ownerName(), record.snapshot().dimension().identifier());
+                }
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}", record.ownerName(), e);
+            }
+        }
+    }
+
+    /** Saves each player body's state as the server stops, since the body itself isn't saved with its chunk. */
+    public static void snapshotPlayerBodies(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        BodyStore store = BodyStore.get(server);
+        for (BodyRecord record : store.all()) {
+            // A dying body belongs to the death path, and its state is nothing to hand over
+            if (record.type() == YoltConfig.BodyType.PLAYER && !record.pendingRemoval()
+                    && server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
+                    && !body.isDeadOrDying()) {
+                store.put(record.withSnapshot(BodySnapshot.of(body)));
+            }
         }
     }
 
@@ -285,10 +341,11 @@ public final class Bodies {
         }
     }
 
-    // The body's gear as it is now, where it fell, and its skin for the grave head
+    // The body's gear as it is now, where it fell, and its skin for the grave head. A player body's own profile
+    // has the body's id, and a revive head needs the owner's.
     private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
-        ResolvableProfile profile = body instanceof Avatar avatar
-                ? avatar.getProfile()
+        ResolvableProfile profile = body instanceof PlayerBody playerBody ? playerBody.ownerProfile()
+                : body instanceof Avatar avatar ? avatar.getProfile()
                 : GraveItems.profileOf(new NameAndId(record.owner(), record.ownerName()));
         killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
                 profile);
