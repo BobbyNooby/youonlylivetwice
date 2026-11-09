@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       filter:
-        description: GameTest name filter (empty runs everything)
+        description: GameTest id pattern, e.g. you-only-live-twice-gametest:lockout_game_tests_* (empty runs everything)
         type: string
         required: false
       verify:
@@ -56,10 +56,7 @@ jobs:
         run: |
           args=()
           if [ -n "$GAMETEST_FILTER" ]; then args+=("-Dfabric-api.gametest.filter=$GAMETEST_FILTER"); fi
-          if [ "$GAMETEST_VERIFY" = "true" ]; then
-            echo "Verify requested"
-            args+=("-Dfabric-api.gametest.verify=true")
-          fi
+          if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
           # --continue keeps JUnit running after a GameTest failure
           ./gradlew build --continue "${args[@]}"
       - name: summarise failed tests
