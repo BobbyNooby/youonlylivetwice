@@ -6,6 +6,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import com.mojang.authlib.GameProfile;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -201,6 +202,31 @@ public class ReviveGameTests {
             player.closeContainer();
         } finally {
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A right-click on a block reaches the revive through the use-block hook, not the item use
+    @GameTest
+    public void reviveHeadOnBlockUsesHook(GameTestHelper helper) {
+        UUID owner = UUID.randomUUID();
+        DeathLockout.recordDeath(owner, "Ghost");
+        helper.assertTrue(DeathLockout.refusal(owner) != null, "owner is not locked out to begin with");
+        BlockPos stone = new BlockPos(3, 1, 3);
+        helper.setBlock(stone, Blocks.STONE);
+        helper.setBlock(stone.above(), Blocks.AIR);
+        ServerPlayer user = TestPlayers.join(helper, "HookReviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            user.setItemInHand(InteractionHand.MAIN_HAND, reviveHead(staticProfile(owner), 2));
+            BlockPos pos = helper.absolutePos(stone);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos).add(0.0, 0.5, 0.0), Direction.UP, pos, false);
+            InteractionResult result = UseBlockCallback.EVENT.invoker().interact(user, user.level(), InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(result instanceof InteractionResult.Fail, "using a revive head on a block did not fail: " + result);
+            helper.assertBlockPresent(Blocks.AIR, stone.above());
+            helper.assertTrue(DeathLockout.refusal(owner) == null, "owner is still locked out");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
+        } finally {
+            TestPlayers.leave(user);
         }
         helper.succeed();
     }
