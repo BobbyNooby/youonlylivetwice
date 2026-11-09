@@ -259,8 +259,8 @@ public class CommandGameTests {
             double sizeBefore = overworld.getSize();
 
             List<String> refused = run(server, "yolt border 2000");
-            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave outside the world border: ")
-                    && refused.get(0).contains(name), "refusal: " + refused);
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave ")
+                    && refused.get(0).contains(name) && refused.get(0).contains(" outside the world border."), "refusal: " + refused);
             helper.assertValueEqual(overworld.getSize(), sizeBefore, "overworld border size after the refusal");
             helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
 

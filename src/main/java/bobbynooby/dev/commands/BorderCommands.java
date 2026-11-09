@@ -136,7 +136,7 @@ final class BorderCommands {
         List<String> outside = stranded(server, diameter, endScale, centerX, centerZ);
         return outside.isEmpty()
                 ? null
-                : "This would leave outside the world border: " + listed(outside) + ". Add confirm to the command to do it anyway.";
+                : "This would leave " + listed(outside) + " outside the world border. Add confirm to the command to do it anyway.";
     }
 
     /** The first ten names and how many more, so a long list doesn't flood the chat. */
