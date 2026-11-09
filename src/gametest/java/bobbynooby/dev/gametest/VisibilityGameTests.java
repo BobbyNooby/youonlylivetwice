@@ -165,6 +165,7 @@ public class VisibilityGameTests {
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
             helper.assertFalse(PlayerVisibility.known(admin).contains(far.getUUID()), "far player known before admin view");
 
+            TestPlayers.op(admin);
             AdminView.set(admin, true);
             PlayerVisibility.refresh(admin);
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -186,6 +187,7 @@ public class VisibilityGameTests {
             hide.tabList = tabListBefore;
             if (admin != null) {
                 AdminView.set(admin, false);
+                TestPlayers.deop(admin);
             }
             leaveAll(joined);
         }
@@ -307,6 +309,7 @@ public class VisibilityGameTests {
             ServerPlayer other = join(helper, joined, "visoffother", new BlockPos(1, 0, 0));
             helper.assertFalse(listedFor(admin, other), "other is listed before admin view");
 
+            TestPlayers.op(admin);
             AdminView.set(admin, true);
             PlayerVisibility.refresh(admin);
             helper.assertTrue(listedFor(admin, other), "admin view did not list a known player with the switch off");
@@ -318,6 +321,7 @@ public class VisibilityGameTests {
             hide.tabList = tabListBefore;
             if (admin != null) {
                 AdminView.set(admin, false);
+                TestPlayers.deop(admin);
             }
             leaveAll(joined);
         }
@@ -339,6 +343,7 @@ public class VisibilityGameTests {
             admin = join(helper, joined, "visbodyadmin", BlockPos.ZERO);
             ServerPlayer body = TestPlayers.join(helper, "visbody", GameType.SURVIVAL, new BlockPos(1, 0, 0));
             TestPlayers.leave(body);
+            TestPlayers.op(admin);
             AdminView.set(admin, true);
 
             PlayerVisibility.onPairingStart(admin, body);
@@ -354,6 +359,7 @@ public class VisibilityGameTests {
             hide.tabList = tabListBefore;
             if (admin != null) {
                 AdminView.set(admin, false);
+                TestPlayers.deop(admin);
             }
             leaveAll(joined);
         }

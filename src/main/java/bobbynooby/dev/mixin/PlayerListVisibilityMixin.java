@@ -2,6 +2,7 @@ package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.NameTagHider;
+import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -10,6 +11,8 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.scores.PlayerTeam;
 import org.spongepowered.asm.mixin.Mixin;
@@ -19,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListVisibilityMixin {
@@ -51,6 +55,23 @@ public abstract class PlayerListVisibilityMixin {
         List<ServerPlayer> players = ((PlayerList) (Object) this).getPlayers();
         if (Settings.active() && (PlayerVisibility.broadcast(players, packet) || NameTagHider.broadcast(players, packet))) {
             ci.cancel();
+        }
+    }
+
+    // Admin view only counts for ops, so the client must catch up as soon as op status changes.
+    // The other overload of op calls this one.
+    @Inject(method = "op(Lnet/minecraft/server/players/NameAndId;Ljava/util/Optional;Ljava/util/Optional;)V", at = @At("TAIL"))
+    private void afterOp(NameAndId nameAndId, Optional<LevelBasedPermissionSet> permissions, Optional<Boolean> canBypassPlayerLimit,
+                         CallbackInfo ci) {
+        if (Settings.active()) {
+            AdminView.onOpChange((PlayerList) (Object) this, nameAndId);
+        }
+    }
+
+    @Inject(method = "deop", at = @At("TAIL"))
+    private void afterDeop(NameAndId nameAndId, CallbackInfo ci) {
+        if (Settings.active()) {
+            AdminView.onOpChange((PlayerList) (Object) this, nameAndId);
         }
     }
 }

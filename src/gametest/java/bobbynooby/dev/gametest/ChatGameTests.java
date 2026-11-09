@@ -78,6 +78,7 @@ public class ChatGameTests {
         try {
             admin = join(helper, joined, "msgadmin", BlockPos.ZERO);
             ServerPlayer other = join(helper, joined, "msgother", new BlockPos(1, 0, 0));
+            TestPlayers.op(admin);
             AdminView.set(admin, true);
 
             hide.gameMessages = true;
@@ -93,6 +94,7 @@ public class ChatGameTests {
             hide.gameMessages = hiddenBefore;
             if (admin != null) {
                 AdminView.set(admin, false);
+                TestPlayers.deop(admin);
             }
             leaveAll(joined);
         }

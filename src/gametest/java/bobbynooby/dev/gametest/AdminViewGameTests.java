@@ -13,14 +13,12 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.Team;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
 
@@ -32,8 +30,7 @@ public class AdminViewGameTests {
         NameAndId who = admin.nameAndId();
         ServerPlayer online = admin;
         try {
-            // The test server gives ops level 0 unless told otherwise, below what /yolt needs
-            server.getPlayerList().op(who, Optional.of(LevelBasedPermissionSet.GAMEMASTER), Optional.empty());
+            TestPlayers.op(admin);
             run(admin, "yolt adminview");
             helper.assertTrue(said(admin, "Admin view on"), "the command did not reply \"Admin view on\"");
             helper.assertTrue(AdminView.isOn(admin), "the command did not turn admin view on");
@@ -144,6 +141,7 @@ public class AdminViewGameTests {
         ServerPlayer admin = TestPlayers.join(helper, "avtag", GameType.SURVIVAL, BlockPos.ZERO);
         ServerPlayer other = TestPlayers.join(helper, "avtagother", GameType.SURVIVAL, new BlockPos(1, 0, 0));
         try {
+            TestPlayers.op(admin);
             AdminView.set(admin, true);
             PlayerVisibility.refresh(admin);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, mode + ": admin's nametag rule");
@@ -157,6 +155,7 @@ public class AdminViewGameTests {
             helper.assertValueEqual(lastRule(admin), Team.Visibility.NEVER, mode + ": nametag rule after admin view is off");
         } finally {
             AdminView.set(admin, false);
+            TestPlayers.deop(admin);
             TestPlayers.leave(admin);
             TestPlayers.leave(other);
         }

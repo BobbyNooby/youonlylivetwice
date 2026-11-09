@@ -4,7 +4,10 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
+import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.PlayerList;
 
 /** Whether an op sees everyone and every hidden message. Saved with the player, so it survives relogs and restarts. */
 public final class AdminView {
@@ -18,17 +21,26 @@ public final class AdminView {
     public static void init() {
     }
 
+    // Only while they are still an op at the level /yolt needs, so a de-opped player stops seeing hidden things
     public static boolean isOn(ServerPlayer player) {
-        return player.getAttachedOrElse(ATTACHMENT, false);
+        return player.getAttachedOrElse(ATTACHMENT, false) && Commands.LEVEL_GAMEMASTERS.check(player.permissions());
     }
 
-    /** Flips admin view and brings the player's client in line. Returns the new state. */
+    /** Flips the saved flag and brings the player's client in line. Returns the new flag, which only counts for ops. */
     public static boolean toggle(ServerPlayer player) {
-        boolean on = !isOn(player);
+        boolean on = !player.getAttachedOrElse(ATTACHMENT, false);
         set(player, on);
         // Entries, the tab list and the nametag rule all depend on it; this also resends the nametag team
         PlayerVisibility.refresh(player);
         return on;
+    }
+
+    /** Runs after an op or deop. The flag stays, so opping the player again brings admin view back. */
+    public static void onOpChange(PlayerList playerList, NameAndId who) {
+        ServerPlayer player = playerList.getPlayer(who.id());
+        if (player != null && player.hasAttached(ATTACHMENT)) {
+            PlayerVisibility.refresh(player);
+        }
     }
 
     /** Only writes the flag: the caller refreshes what the player's client has. */
