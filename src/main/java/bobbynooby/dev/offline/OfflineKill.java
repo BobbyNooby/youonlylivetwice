@@ -1,5 +1,6 @@
 package bobbynooby.dev.offline;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
@@ -109,7 +110,14 @@ public final class OfflineKill {
             undo.add(dropExperience(level, where, experience));
             OfflinePlayerData.commitSave(server, who.id(), prepared);
         } catch (RuntimeException e) {
-            undo.forEach(Runnable::run);
+            // Every step is tried, since one failing must not leave another's items in the world
+            for (Runnable step : undo) {
+                try {
+                    step.run();
+                } catch (RuntimeException undoError) {
+                    YouOnlyLiveTwice.LOGGER.error("Could not take back part of {}'s offline death", who.name(), undoError);
+                }
+            }
             OfflinePlayerData.discardSave(prepared);
             throw e;
         }

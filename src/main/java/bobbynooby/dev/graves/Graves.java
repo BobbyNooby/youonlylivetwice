@@ -186,7 +186,16 @@ public final class Graves {
 
         List<Grave> created = new ArrayList<>();
         List<Runnable> undo = new ArrayList<>();
-        Runnable undoAll = () -> undo.forEach(Runnable::run);
+        // Each step on its own, so one that fails can't leave the other graves standing
+        Runnable undoAll = () -> {
+            for (Runnable step : undo) {
+                try {
+                    step.run();
+                } catch (RuntimeException e) {
+                    YouOnlyLiveTwice.LOGGER.error("Could not take back one of {}'s graves", ownerName, e);
+                }
+            }
+        };
         try {
             BlockPos from = near;
             int start = 0;
@@ -196,8 +205,14 @@ public final class Graves {
                 Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now);
                 BlockState previous = level.getBlockState(pos);
                 undo.add(() -> {
+                    // The record goes first, so a block that can't be put back still leaves no grave holding items
                     store.remove(grave.id());
-                    level.setBlock(pos, previous, Block.UPDATE_ALL);
+                    try {
+                        level.setBlock(pos, previous, Block.UPDATE_ALL);
+                    } catch (RuntimeException e) {
+                        YouOnlyLiveTwice.LOGGER.error("Could not put back the block {}'s taken-back grave replaced at {} {}",
+                                ownerName, level.dimension().identifier(), pos, e);
+                    }
                 });
                 placeHead(level, pos, profile, rotation);
                 // Stored before the next search, so the next grave can't land on this one
