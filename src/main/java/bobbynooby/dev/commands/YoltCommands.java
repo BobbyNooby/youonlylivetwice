@@ -5,6 +5,9 @@ import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
@@ -13,7 +16,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.commands.arguments.coordinates.Vec2Argument;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -23,6 +28,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.phys.Vec2;
 
+import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -57,6 +63,12 @@ public final class YoltCommands {
                         .then(Commands.literal("unkill")
                                 .then(Commands.argument("player", StringArgumentType.string())
                                         .executes(c -> unkill(c.getSource(), StringArgumentType.getString(c, "player")))))
+                        .then(Commands.literal("grave")
+                                .then(Commands.literal("list")
+                                        .executes(c -> graveList(c.getSource())))
+                                .then(Commands.literal("remove")
+                                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                                .executes(c -> graveRemove(c.getSource(), BlockPosArgument.getBlockPos(c, "pos"))))))
                         .then(Commands.literal("reload")
                                 .executes(c -> reload(c.getSource())))));
     }
@@ -148,6 +160,33 @@ public final class YoltCommands {
         }
         LOGGER.info("{} revived {}", source.getTextName(), who.get().name());
         reply(source, "Revived " + who.get().name());
+        return 1;
+    }
+
+    private static int graveList(CommandSourceStack source) {
+        Collection<Grave> graves = GraveStore.get(source.getServer()).all();
+        if (graves.isEmpty()) {
+            reply(source, "No graves.");
+            return 0;
+        }
+        for (Grave grave : graves) {
+            BlockPos pos = grave.pos();
+            reply(source, grave.ownerName() + " " + grave.dimension().identifier() + " " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+        }
+        return graves.size();
+    }
+
+    private static int graveRemove(CommandSourceStack source, BlockPos pos) {
+        MinecraftServer server = source.getServer();
+        Optional<Grave> grave = GraveStore.get(server).at(source.getLevel().dimension(), pos);
+        if (grave.isEmpty()) {
+            source.sendFailure(Component.literal("No grave at " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + "."));
+            return 0;
+        }
+        int stacks = Graves.removeAndDrop(server, grave.get());
+        LOGGER.info("{} removed {}'s grave at {} {} and dropped {} stacks", source.getTextName(), grave.get().ownerName(),
+                source.getLevel().dimension().identifier(), pos, stacks);
+        reply(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + " stacks.");
         return 1;
     }
 

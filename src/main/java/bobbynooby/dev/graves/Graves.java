@@ -23,6 +23,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.ContainerUser;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
@@ -236,6 +237,38 @@ public final class Graves {
         if (container != null) {
             container.closeMenus();
         }
+    }
+
+    /**
+     * Admin removal: drops everything at the grave, clears the head and deletes the record. Returns the stacks dropped.
+     * The container leaves OPEN before any menu closes, so nothing can save the grave back or drop an item twice.
+     */
+    public static int removeAndDrop(MinecraftServer server, Grave grave) {
+        GraveStore store = GraveStore.get(server);
+        SharedContainer container = OPEN.remove(grave.id());
+        List<ItemStack> items = new ArrayList<>();
+        // The live container is newer than the record while anyone has the grave open
+        List<ItemStack> source = container != null ? container.getItems() : store.byId(grave.id()).map(Grave::items).orElse(grave.items());
+        for (ItemStack stack : source) {
+            if (!stack.isEmpty()) {
+                items.add(stack.copy());
+            }
+        }
+        if (container != null) {
+            container.closeMenus();
+        }
+        ServerLevel level = server.getLevel(grave.dimension());
+        if (level != null) {
+            BlockPos pos = grave.pos();
+            for (ItemStack stack : items) {
+                level.addFreshEntity(new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack));
+            }
+            if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        }
+        store.remove(grave.id());
+        return items.size();
     }
 
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
