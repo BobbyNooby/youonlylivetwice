@@ -15,5 +15,7 @@ public class TestServerSetup implements ModInitializer {
     // Only the live settings change, so a test that reloads the config file calls this again.
     public static void applyTestSettings() {
         Settings.get().worldBorder.enabled = false;
+        // Every test player's leave is a logout, so bodies stay off unless a body test turns them on
+        Settings.get().bodies.enabled = false;
     }
 }

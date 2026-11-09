@@ -1,5 +1,6 @@
 package bobbynooby.dev;
 
+import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
@@ -48,6 +49,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         YoltCommands.register();
         DeathLockout.init();
         Graves.init();
+        Bodies.init();
         Revive.init();
         TabHeaders.init();
         ChatDelivery.init();

@@ -10,6 +10,7 @@
 		],
 		"fabric-gametest": [
 			"bobbynooby.dev.gametest.AdminViewGameTests",
+			"bobbynooby.dev.gametest.BodyLifecycleGameTests",
 			"bobbynooby.dev.gametest.BodyStoreGameTests",
 			"bobbynooby.dev.gametest.ChatGameTests",
 			"bobbynooby.dev.gametest.CommandGameTests",
