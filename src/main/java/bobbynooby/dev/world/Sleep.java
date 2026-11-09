@@ -23,6 +23,7 @@ public final class Sleep {
         return hidesSleepers() || blocksNightSkip();
     }
 
+    /** True when beds and respawn anchors set no respawn point. A point already stored, or set by /spawnpoint, still works. */
     public static boolean ignoresRespawnPoint() {
         return Settings.on(c -> c.sleep.noBedRespawn);
     }

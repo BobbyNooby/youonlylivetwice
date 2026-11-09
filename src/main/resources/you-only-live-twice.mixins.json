@@ -27,6 +27,7 @@
     "MobAccessor",
     "NearestAttackableTargetGoalAccessor",
     "NetherScaleMixin",
+    "NoBedRespawnAnchorMixin",
     "NoBedRespawnMixin",
     "PlayerCountMixin",
     "PlayerInfoUpdatePacketAccessor",
