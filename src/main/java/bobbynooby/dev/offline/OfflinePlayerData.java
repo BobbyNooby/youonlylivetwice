@@ -1,12 +1,9 @@
 package bobbynooby.dev.offline;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
-import bobbynooby.dev.bodies.BodySnapshot;
-import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.core.Stacks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
-import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -15,6 +12,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -22,17 +20,13 @@ import net.minecraft.util.Util;
 import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityEquipment;
-import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
-import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -40,8 +34,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,9 +41,15 @@ import java.util.UUID;
 
 /** Reads and edits the save file of a player who is not online. Key names follow vanilla's Player save code. */
 public final class OfflinePlayerData {
+    public static final String HEALTH = "Health";
+    public static final String ABSORPTION = "AbsorptionAmount";
+    public static final String FALL_DISTANCE = "fall_distance";
+    public static final String FIRE = "Fire";
+    public static final String AIR = "Air";
     private static final String INVENTORY = "Inventory";
     private static final String EQUIPMENT = "equipment";
     private static final String SELECTED_SLOT = "SelectedItemSlot";
+    private static final String SLOT = "Slot";
     private static final String ENDER_ITEMS = "EnderItems";
     private static final String EFFECTS = "active_effects";
     private static final String ATTRIBUTES = "attributes";
@@ -70,7 +68,7 @@ public final class OfflinePlayerData {
 
     /** True for a save that holds a dead player. A save with no health loads at full health, so it isn't dead. */
     public static boolean isDead(CompoundTag tag) {
-        return tag.getFloatOr("Health", 1.0F) <= 0.0F;
+        return tag.getFloatOr(HEALTH, 1.0F) <= 0.0F;
     }
 
     /** Writes the save the way vanilla does: a temp file, then a swap that keeps the previous save as .dat_old. */
@@ -121,7 +119,7 @@ public final class OfflinePlayerData {
 
     /** Main inventory plus every equipment slot (armour, offhand), which 26.x saves under its own key. */
     public static List<ItemStack> takeInventory(CompoundTag tag, HolderLookup.Provider registries) {
-        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        RegistryOps<Tag> ops = ops(registries);
         List<ItemStack> items = takeSlots(tag, INVENTORY, ops);
         tag.read(EQUIPMENT, EntityEquipment.CODEC, ops).ifPresent(equipment -> {
             List<ItemStack> worn = new ArrayList<>();
@@ -136,10 +134,10 @@ public final class OfflinePlayerData {
 
     /**
      * Every worn or held item in the save. The main hand is the selected hotbar slot of the inventory list; the
-     * other slots sit under equipment. Empty slots are left out.
+     * other slots sit under equipment. Empty slots, and items that don't read back, are left out.
      */
     public static Map<EquipmentSlot, ItemStack> readGear(CompoundTag tag, HolderLookup.Provider registries) {
-        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        RegistryOps<Tag> ops = ops(registries);
         Map<EquipmentSlot, ItemStack> gear = new EnumMap<>(EquipmentSlot.class);
         CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
         for (EquipmentSlot slot : EquipmentSlot.values()) {
@@ -157,10 +155,11 @@ public final class OfflinePlayerData {
 
     /**
      * Writes the given slots into the save; an empty stack clears its slot. Slots not in the map, and every other
-     * inventory entry, stay exactly as saved, so an entry that doesn't read back is never rewritten or lost.
+     * inventory entry, stay exactly as saved. A slot in the map is overwritten even if its saved item didn't read
+     * back (readGear reports that slot as empty), so such an item is lost.
      */
     public static void writeGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> gear, HolderLookup.Provider registries) {
-        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        RegistryOps<Tag> ops = ops(registries);
         CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
         ListTag inventory = tag.getListOrEmpty(INVENTORY);
         int selected = selectedSlot(tag);
@@ -185,100 +184,55 @@ public final class OfflinePlayerData {
         }
     }
 
-    /**
-     * Carries what happened to a body's gear over to the gear in the save, by GearSync's rules. Only for a body
-     * that is being removed, or its copies would exist twice.
-     */
-    public static void applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear, HolderLookup.Provider registries) {
-        Map<EquipmentSlot, ItemStack> saved = readGear(tag, registries);
-        Map<EquipmentSlot, ItemStack> changed = new EnumMap<>(EquipmentSlot.class);
-        GearSync.applyBodyGear(bodyGear, slot -> saved.getOrDefault(slot, ItemStack.EMPTY), changed::put);
-        writeGear(tag, changed, registries);
+    /** The saved effects; none when the key is missing. */
+    public static List<MobEffectInstance> readEffects(CompoundTag tag, HolderLookup.Provider registries) {
+        return tag.read(EFFECTS, MobEffectInstance.CODEC.listOf(), ops(registries)).orElse(List.of());
     }
 
-    /**
-     * Writes a body's state into its owner's save, as a login would have taken it over: where it stands, its
-     * health, fall, fire and air, its effects when copyEffects is on, and its gear. Only for a body being removed.
-     */
-    public static void applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects, HolderLookup.Provider registries) {
-        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
-        ServerPlayer.SavedPosition saved = tag.read(ServerPlayer.SavedPosition.MAP_CODEC).orElse(ServerPlayer.SavedPosition.EMPTY);
-        // The body only keeps which way it faces, so the saved pitch stays
-        float xRot = saved.rotation().map(rotation -> rotation.y).orElse(0.0F);
-        tag.store(ServerPlayer.SavedPosition.MAP_CODEC, new ServerPlayer.SavedPosition(Optional.of(snapshot.dimension()),
-                Optional.of(snapshot.pos()), Optional.of(new Vec2(snapshot.yRot(), xRot))));
-        tag.putFloat("Health", snapshot.health());
-        tag.putFloat("AbsorptionAmount", snapshot.absorption());
-        tag.putDouble("fall_distance", snapshot.fallDistance());
-        tag.putShort("Fire", (short) snapshot.fireTicks());
-        tag.putShort("Air", (short) snapshot.air());
-        if (copyEffects) {
-            List<MobEffectInstance> before = tag.read(EFFECTS, MobEffectInstance.CODEC.listOf(), ops).orElse(List.of());
-            List<AttributeInstance.Packed> attributes = tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops)
-                    .orElse(List.of());
-            tag.store(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops,
-                    swapEffectModifiers(attributes, before, snapshot.effects()));
-            // Vanilla leaves the key out when there are no effects
-            if (snapshot.effects().isEmpty()) {
-                tag.remove(EFFECTS);
-            } else {
-                tag.store(EFFECTS, MobEffectInstance.CODEC.listOf(), ops, snapshot.effects());
-            }
+    public static void writeEffects(CompoundTag tag, List<MobEffectInstance> effects, HolderLookup.Provider registries) {
+        // Vanilla leaves the key out when there are no effects
+        if (effects.isEmpty()) {
+            tag.remove(EFFECTS);
+        } else {
+            tag.store(EFFECTS, MobEffectInstance.CODEC.listOf(), ops(registries), effects);
         }
-        applyBodyGear(tag, snapshot.gear(), registries);
+    }
+
+    /** The saved attributes; none when the key is missing. */
+    public static List<AttributeInstance.Packed> readAttributes(CompoundTag tag, HolderLookup.Provider registries) {
+        return tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops(registries)).orElse(List.of());
+    }
+
+    public static void writeAttributes(CompoundTag tag, List<AttributeInstance.Packed> attributes,
+                                       HolderLookup.Provider registries) {
+        tag.store(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops(registries), attributes);
+    }
+
+    /** Moves the saved player to pos in dimension, facing yRot. The saved pitch stays. */
+    public static void writePosition(CompoundTag tag, ResourceKey<Level> dimension, Vec3 pos, float yRot) {
+        float xRot = savedPosition(tag).rotation().map(rotation -> rotation.y).orElse(0.0F);
+        tag.store(ServerPlayer.SavedPosition.MAP_CODEC, new ServerPlayer.SavedPosition(Optional.of(dimension),
+                Optional.of(pos), Optional.of(new Vec2(yRot, xRot))));
     }
 
     public static List<ItemStack> takeEnderChest(CompoundTag tag, HolderLookup.Provider registries) {
-        return takeSlots(tag, ENDER_ITEMS, registries.createSerializationContext(NbtOps.INSTANCE));
+        return takeSlots(tag, ENDER_ITEMS, ops(registries));
     }
 
     /** Falls back to the overworld origin only for a save with no position, which vanilla never writes. */
     public static GlobalPos lastPosition(CompoundTag tag) {
-        ServerPlayer.SavedPosition saved = tag.read(ServerPlayer.SavedPosition.MAP_CODEC).orElse(ServerPlayer.SavedPosition.EMPTY);
+        ServerPlayer.SavedPosition saved = savedPosition(tag);
         return GlobalPos.of(
                 saved.dimension().orElse(Level.OVERWORLD),
                 saved.position().map(BlockPos::containing).orElse(BlockPos.ZERO));
     }
 
-    // An effect's attribute modifiers are saved with the attributes and loading doesn't add them again, so the old
-    // effects' come off and the new ones' go on, as removing and adding the effects on a live player would
-    private static List<AttributeInstance.Packed> swapEffectModifiers(List<AttributeInstance.Packed> attributes,
-                                                                      List<MobEffectInstance> before,
-                                                                      List<MobEffectInstance> after) {
-        Map<Holder<Attribute>, Double> bases = new LinkedHashMap<>();
-        Map<Holder<Attribute>, List<AttributeModifier>> modifiers = new HashMap<>();
-        for (AttributeInstance.Packed packed : attributes) {
-            bases.put(packed.attribute(), packed.baseValue());
-            modifiers.put(packed.attribute(), new ArrayList<>(packed.modifiers()));
-        }
-        for (MobEffectInstance effect : before) {
-            effect.getEffect().value().createModifiers(effect.getAmplifier(), (attribute, modifier) -> {
-                List<AttributeModifier> list = modifiers.get(attribute);
-                if (list != null) {
-                    list.removeIf(existing -> existing.id().equals(modifier.id()));
-                }
-            });
-        }
-        // The save only lists the attributes the player has used. One it lacks starts from a player's default, which is
-        // what loading would have given it; one a player doesn't have at all would be dropped by the load anyway.
-        AttributeSupplier defaults = DefaultAttributes.getSupplier(EntityTypes.PLAYER);
-        for (MobEffectInstance effect : after) {
-            effect.getEffect().value().createModifiers(effect.getAmplifier(), (attribute, modifier) -> {
-                if (!bases.containsKey(attribute)) {
-                    if (!defaults.hasAttribute(attribute)) {
-                        return;
-                    }
-                    bases.put(attribute, defaults.getBaseValue(attribute));
-                    modifiers.put(attribute, new ArrayList<>());
-                }
-                List<AttributeModifier> list = modifiers.get(attribute);
-                list.removeIf(existing -> existing.id().equals(modifier.id()));
-                list.add(modifier);
-            });
-        }
-        List<AttributeInstance.Packed> swapped = new ArrayList<>();
-        bases.forEach((attribute, base) -> swapped.add(new AttributeInstance.Packed(attribute, base, modifiers.get(attribute))));
-        return swapped;
+    private static RegistryOps<Tag> ops(HolderLookup.Provider registries) {
+        return registries.createSerializationContext(NbtOps.INSTANCE);
+    }
+
+    private static ServerPlayer.SavedPosition savedPosition(CompoundTag tag) {
+        return tag.read(ServerPlayer.SavedPosition.MAP_CODEC).orElse(ServerPlayer.SavedPosition.EMPTY);
     }
 
     private static int selectedSlot(CompoundTag tag) {
@@ -287,7 +241,7 @@ public final class OfflinePlayerData {
 
     // A missing Slot reads as 0, the same as vanilla's codec
     private static boolean isSlot(Tag entry, int slot) {
-        return entry instanceof CompoundTag item && Byte.toUnsignedInt(item.getByteOr("Slot", (byte) 0)) == slot;
+        return entry instanceof CompoundTag item && Byte.toUnsignedInt(item.getByteOr(SLOT, (byte) 0)) == slot;
     }
 
     private static List<ItemStack> takeSlots(CompoundTag tag, String key, RegistryOps<Tag> ops) {

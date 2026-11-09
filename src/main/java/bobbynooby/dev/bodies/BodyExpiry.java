@@ -110,7 +110,7 @@ public final class BodyExpiry {
         // An owner already dead (say killed offline after a crash lost this record's removal) keeps the save they
         // have. Health 0 without a death would respawn them and drop their inventory.
         if (!OfflinePlayerData.isDead(tag) && snapshot.health() > 0.0F) {
-            OfflinePlayerData.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects, server.registryAccess());
+            BodySaves.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects, server.registryAccess());
             OfflinePlayerData.save(server, record.owner(), tag);
         }
         // The record goes first, so the discard's unload no longer counts this as a body. One that isn't loaded
