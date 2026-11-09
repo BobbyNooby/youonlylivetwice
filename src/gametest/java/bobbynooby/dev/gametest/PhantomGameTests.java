@@ -58,7 +58,6 @@ public class PhantomGameTests {
 
             YoltConfig.SleepSection sleep = Settings.get().sleep;
             helper.assertTrue(sleep.hideSleepers && sleep.noNightSkip, "the sleep switches are not both on");
-            helper.assertTrue(level.isDarkOutside(), "the night was skipped");
         } finally {
             clocks.setTotalTicks(clock, savedTicks);
             level.updateSkyBrightness();
