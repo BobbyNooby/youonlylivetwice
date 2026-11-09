@@ -13,6 +13,7 @@
 			"bobbynooby.dev.gametest.BodyBehaviourGameTests",
 			"bobbynooby.dev.gametest.BodyDeathGameTests",
 			"bobbynooby.dev.gametest.BodyLifecycleGameTests",
+			"bobbynooby.dev.gametest.BodyMobGameTests",
 			"bobbynooby.dev.gametest.BodyStoreGameTests",
 			"bobbynooby.dev.gametest.ChatGameTests",
 			"bobbynooby.dev.gametest.CommandGameTests",
