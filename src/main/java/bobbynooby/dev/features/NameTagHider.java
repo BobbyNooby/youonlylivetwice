@@ -85,7 +85,7 @@ public class NameTagHider {
 
     /** Our team as a joining client first gets it. Fabric's join event has already put the joiner in it. */
     public static ClientboundSetPlayerTeamPacket joinPacket(ServerPlayer joiner, PlayerTeam team) {
-        Set<String> members = members(joiner, team);
+        Set<String> members = members(joiner, team.getPlayers());
         reset(joiner, members);
         return create(joiner, new ClientboundSetPlayerTeamPacket.Parameters(team), members);
     }
@@ -109,7 +109,8 @@ public class NameTagHider {
             return;
         }
         String name = seen.getScoreboardName();
-        if (state(viewer).remove(name)) {
+        // A plan 04 body has its owner's name, so the name stays while the client still knows either of them
+        if (!knownNames(viewer).contains(name) && state(viewer).remove(name)) {
             viewer.connection.send(players(LEAVE, List.of(name)));
         }
     }
@@ -123,7 +124,7 @@ public class NameTagHider {
         if (team == null) {
             return;
         }
-        Set<String> members = members(viewer, team);
+        Set<String> members = members(viewer, team.getPlayers());
         reset(viewer, members);
         // Starting over drops whatever names this client had before
         viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(team));
@@ -131,18 +132,14 @@ public class NameTagHider {
     }
 
     /**
-     * Sends a broadcast packet about our team to each player, cut down to the names that player's client knows.
-     * Returns false, sending nothing, for any other packet, and for any but a settings change when everyone shares the team.
+     * Sends a broadcast packet about our team to each player, cut down to the names that player's client may have.
+     * Returns false, sending nothing, for any other packet.
      */
     public static boolean broadcast(List<ServerPlayer> players, Packet<?> packet) {
         if (!(packet instanceof ClientboundSetPlayerTeamPacket team) || !team.getName().equals(TEAM_NAME)) {
             return false;
         }
-        // A settings change lists no names, and each viewer keeps its own nametag rule in both modes
-        boolean change = team.getTeamAction() == null && team.getParameters().isPresent();
-        if (!perViewer() && !change) {
-            return false;
-        }
+        // In both modes, so each client's names stay exact and each viewer keeps its own nametag rule
         for (ServerPlayer viewer : players) {
             send(viewer, team);
         }
@@ -157,12 +154,7 @@ public class NameTagHider {
             return;
         }
         if (packet.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
-            Set<String> members = new LinkedHashSet<>();
-            for (String name : packet.getPlayers()) {
-                if (knows(viewer, name)) {
-                    members.add(name);
-                }
-            }
+            Set<String> members = members(viewer, packet.getPlayers());
             reset(viewer, members);
             viewer.connection.send(create(viewer, packet.getParameters().orElseThrow(), members));
             return;
@@ -174,8 +166,8 @@ public class NameTagHider {
         }
         boolean joining = packet.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD;
         List<String> names = new ArrayList<>();
-        for (String name : packet.getPlayers()) {
-            if (joining ? knows(viewer, name) && state.add(name) : state.remove(name)) {
+        for (String name : joining ? members(viewer, packet.getPlayers()) : packet.getPlayers()) {
+            if (joining ? state.add(name) : state.remove(name)) {
                 names.add(name);
             }
         }
@@ -189,15 +181,19 @@ public class NameTagHider {
         return Settings.get().hide.distantPlayers;
     }
 
-    // The members this viewer's client may have: every member when shared, otherwise itself and the players it knows
-    private static Set<String> members(ServerPlayer viewer, PlayerTeam team) {
-        if (!perViewer()) {
-            return new LinkedHashSet<>(team.getPlayers());
+    // The names out of these that this viewer's client may have: all of them when shared, otherwise the ones it knows
+    private static Set<String> members(ServerPlayer viewer, Collection<String> names) {
+        Set<String> members = new LinkedHashSet<>(names);
+        if (perViewer()) {
+            members.retainAll(knownNames(viewer));
         }
-        Set<String> members = new LinkedHashSet<>();
-        if (team.getPlayers().contains(viewer.getScoreboardName())) {
-            members.add(viewer.getScoreboardName());
-        }
+        return members;
+    }
+
+    // The viewer's own name and the name of each player whose entry its client has
+    private static Set<String> knownNames(ServerPlayer viewer) {
+        Set<String> names = new HashSet<>();
+        names.add(viewer.getScoreboardName());
         PlayerList playerList = viewer.level().getServer().getPlayerList();
         for (UUID id : PlayerVisibility.known(viewer)) {
             ServerPlayer player = playerList.getPlayer(id);
@@ -205,21 +201,11 @@ public class NameTagHider {
             if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {
                 player = body;
             }
-            if (player != null && team.getPlayers().contains(player.getScoreboardName())) {
-                members.add(player.getScoreboardName());
+            if (player != null) {
+                names.add(player.getScoreboardName());
             }
         }
-        return members;
-    }
-
-    // Whether the viewer may hear this name: its own, or an online player whose entry its client has
-    private static boolean knows(ServerPlayer viewer, String name) {
-        if (name.equals(viewer.getScoreboardName())) {
-            return true;
-        }
-        ServerPlayer player = viewer.level().getServer().getPlayerList().getPlayerByName(name);
-        // The lookup ignores case and team names don't
-        return player != null && player.getScoreboardName().equals(name) && PlayerVisibility.known(viewer).contains(player.getUUID());
+        return names;
     }
 
     // Admin view shows every nametag

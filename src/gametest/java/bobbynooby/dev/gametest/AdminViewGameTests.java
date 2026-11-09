@@ -12,9 +12,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 
 import java.util.ArrayList;
@@ -133,6 +135,62 @@ public class AdminViewGameTests {
             hide.nametags = nametagsBefore;
             // The test re-applied the team's settings, so match them to the live switches again
             NameTagHider.apply(server);
+        }
+        helper.succeed();
+    }
+
+    // What /team remove and /team add do. Removing our team takes every player out of it, so this runs on its own.
+    @GameTest(environment = "you-only-live-twice-gametest:solo")
+    public void adminKeepsNametagsWhenTeamIsMadeAgain(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean nametagsBefore = hide.nametags;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer admin = null;
+        try {
+            hide.distantPlayers = false;
+            hide.nametags = true;
+            admin = TestPlayers.join(helper, "avteam", GameType.SURVIVAL, BlockPos.ZERO);
+            joined.add(admin);
+            ServerPlayer other = TestPlayers.join(helper, "avteamother", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            joined.add(other);
+            TestPlayers.op(admin);
+            AdminView.set(admin, true);
+            PlayerVisibility.refresh(admin);
+
+            scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(TEAM_NAME));
+            scoreboard.addPlayerTeam(TEAM_NAME);
+            helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after the team was made again");
+            // A reload puts our settings back on the new team
+            NameTagHider.apply(server);
+            helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after a reload");
+            helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, "normal player's nametag rule after a reload");
+
+            // The new team has no names on any client, so forgetting a player must not send a LEAVE
+            int mark = TestPlayers.sentPackets(other).size();
+            hide.distantPlayers = true;
+            PlayerVisibility.onPairingStop(other, admin);
+            helper.assertValueEqual(NameTagGameTests.moves(other, admin, mark), List.of(), "team changes after the team was made again");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.nametags = nametagsBefore;
+            NameTagHider.apply(server);
+            // Back in the team, as joining would have put them
+            PlayerTeam team = scoreboard.getPlayerTeam(TEAM_NAME);
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (player.getTeam() == null) {
+                    scoreboard.addPlayerToTeam(player.getScoreboardName(), team);
+                }
+            }
+            if (admin != null) {
+                AdminView.set(admin, false);
+                TestPlayers.deop(admin);
+            }
+            for (ServerPlayer player : joined) {
+                TestPlayers.leave(player);
+            }
         }
         helper.succeed();
     }
