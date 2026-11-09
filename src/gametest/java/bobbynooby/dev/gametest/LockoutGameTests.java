@@ -10,6 +10,8 @@ import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -126,7 +128,18 @@ public class LockoutGameTests {
     }
 
     private static boolean canLogin(GameTestHelper helper, UUID uuid) {
-        return helper.getLevel().getServer().getPlayerList().canPlayerLogin(ADDRESS, new NameAndId(uuid, "Ghost")) == null;
+        return loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Ghost")) == null;
+    }
+
+    // The GameTest server allows one player (GameTestServer.getMaxPlayers), so other tests' players can make vanilla
+    // refuse as "server full". Only a refusal from anything else counts here.
+    static Component loginRefusal(MinecraftServer server, NameAndId who) {
+        Component refusal = server.getPlayerList().canPlayerLogin(ADDRESS, who);
+        if (refusal != null && refusal.getContents() instanceof TranslatableContents translatable
+                && translatable.getKey().equals("multiplayer.disconnect.server_full")) {
+            return null;
+        }
+        return refusal;
     }
 
     // The switches go back first, so a player still online leaves without making a body

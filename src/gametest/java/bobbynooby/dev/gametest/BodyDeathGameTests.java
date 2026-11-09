@@ -39,7 +39,6 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -117,8 +116,8 @@ public class BodyDeathGameTests {
         try {
             Mannequin body = leaveBody(helper, player);
             body.kill(helper.getLevel());
-            helper.assertTrue(helper.getLevel().getServer().getPlayerList()
-                    .canPlayerLogin(new InetSocketAddress("127.0.0.1", 25565), who) != null, "owner let in after their body died");
+            helper.assertTrue(LockoutGameTests.loginRefusal(helper.getLevel().getServer(), who) != null,
+                    "owner let in after their body died");
         } finally {
             cleanUp(helper, owner, before);
         }
