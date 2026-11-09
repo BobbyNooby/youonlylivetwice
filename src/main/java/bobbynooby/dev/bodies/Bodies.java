@@ -334,9 +334,24 @@ public final class Bodies {
         return Settings.active() && Settings.get().bodies.armourWears && isBody(entity);
     }
 
-    /** Bodies stay out of portals: in another dimension a body is hard to keep track of, and nothing handles that yet. */
+    /**
+     * Bodies stay out of portals: in another dimension a body is hard to keep track of, and nothing handles that yet.
+     * A vehicle carrying one stays out too, since vanilla takes the passengers along without asking them.
+     */
     public static boolean blocksPortal(Entity entity) {
-        return Settings.active() && isTaggedBody(entity);
+        if (!Settings.active()) {
+            return false;
+        }
+        if (isTaggedBody(entity)) {
+            return true;
+        }
+        // Every passenger, not only the first: a boat holds two, and a passenger can carry passengers of its own
+        for (Entity passenger : entity.getIndirectPassengers()) {
+            if (isTaggedBody(passenger)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** True when the entity carries our tag and a record still points at it. */

@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -28,6 +29,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -117,6 +119,31 @@ public class BodyBehaviourGameTests {
             Mannequin plain = new Mannequin(EntityTypes.MANNEQUIN, helper.getLevel());
             helper.assertTrue(plain.canUsePortal(false), "a plain mannequin can't use a portal");
         } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // Minecarts pick up mobs, and vanilla takes a vehicle's passengers through a portal without asking them
+    @GameTest
+    public void vehicleWithBodyCannotUsePortal(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Rider", new BlockPos(1, 1, 1));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Minecart minecart = null;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            minecart = EntityTypes.MINECART.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+            helper.assertTrue(minecart != null, "no minecart");
+            minecart.snapTo(body.getX(), body.getY(), body.getZ(), 0.0F, 0.0F);
+            helper.assertTrue(helper.getLevel().addFreshEntity(minecart), "minecart not added");
+            helper.assertTrue(body.startRiding(minecart, true, false), "body did not get in the minecart");
+            helper.assertFalse(minecart.canUsePortal(false), "a minecart carrying a body can use a portal");
+            body.stopRiding();
+            helper.assertTrue(minecart.canUsePortal(false), "an empty minecart can't use a portal");
+        } finally {
+            if (minecart != null) {
+                minecart.discard();
+            }
             cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
