@@ -79,6 +79,9 @@ public class BodyClientTest implements FabricClientGameTest {
         String name = pose.name().toLowerCase(Locale.ROOT);
         Body body = leaveBody(server, connection, owners, pose);
         waitForBody(ctx, connection, EntityTypes.MANNEQUIN);
+        if (pose == YoltConfig.BodyPose.PRONE) {
+            ClientTests.waitUntilProne(ctx, body.entity());
+        }
         checkHitbox(ctx, body.entity(), name, width, height);
         screenshot(ctx, "04-body-" + name);
         // So the client never has two bodies in view
@@ -91,6 +94,7 @@ public class BodyClientTest implements FabricClientGameTest {
         server.runOnServer(s -> Settings.get().bodies.type = YoltConfig.BodyType.PLAYER);
         Body body = leaveBody(server, connection, owners, YoltConfig.BodyPose.PRONE);
         waitForBody(ctx, connection, EntityTypes.PLAYER);
+        ClientTests.waitUntilProne(ctx, body.entity());
 
         if (!ctx.computeOnClient(mc -> mc.level.getEntity(body.entity()) instanceof Player)) {
             throw new AssertionError("the client has no player entity for the player body");

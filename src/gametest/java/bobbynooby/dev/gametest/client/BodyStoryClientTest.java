@@ -149,10 +149,7 @@ public class BodyStoryClientTest implements FabricClientGameTest {
                                        TestDedicatedServerConnection connection, Stage stage, Made made) {
         Body body = leaveBody(server, stage, made, "Knight", DIAMOND_GEAR);
         connection.waitForClientboundEntityUpdates(EntityTypes.MANNEQUIN);
-        // A new body on the client tips over into its pose over half a second
-        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
-                mc -> clientLiving(mc, body.entity(), "armoured body").getSwimAmount(0.0F) >= 1.0F,
-                mc -> "the client's body never finished lying down");
+        ClientTests.waitUntilProne(ctx, body.entity());
         ctx.runOnClient(mc -> {
             LivingEntity seen = clientLiving(mc, body.entity(), "armoured body");
             DIAMOND_GEAR.forEach((slot, item) -> {

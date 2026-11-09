@@ -13,6 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
@@ -126,6 +127,13 @@ public final class ClientTests {
         } finally {
             bodies.enabled = enabled;
         }
+    }
+
+    // A new prone body on the client tips over into its pose over about half a second
+    public static void waitUntilProne(ClientGameTestContext ctx, UUID id) {
+        waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
+                mc -> mc.level.getEntity(id) instanceof LivingEntity body && body.getSwimAmount(0.0F) >= 1.0F,
+                mc -> mc.level.getEntity(id) == null ? "the client has no body " + id : "the client's body never finished lying down");
     }
 
     // Checks the camera points at the entity as the client has it, so a screenshot taken now shows it
