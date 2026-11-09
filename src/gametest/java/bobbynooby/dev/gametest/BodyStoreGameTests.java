@@ -5,6 +5,7 @@ import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.UnreadableFiles;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -22,12 +23,19 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 public class BodyStoreGameTests {
     private static ItemStack damaged(net.minecraft.world.item.Item item, int damage) {
@@ -192,5 +200,39 @@ public class BodyStoreGameTests {
         helper.assertTrue(store.byOwner(good.owner()).isPresent(), "good record lost");
         helper.assertTrue(store.byOwner(bad.owner()).isEmpty(), "bad record kept");
         helper.succeed();
+    }
+
+    // Junk in a temp file stands in for a body file the storage couldn't read
+    @GameTest
+    public void unreadableBodyFileIsCopied(GameTestHelper helper) throws IOException {
+        Path dir = helper.getLevel().getServer().getWorldPath(LevelResource.DATA);
+        Files.createDirectories(dir);
+        Path file = Files.createTempFile(dir, "bodies-test-", ".dat");
+        byte[] junk = {1, 2, 3, 4, 5};
+        try {
+            Files.write(file, junk);
+            helper.assertTrue(UnreadableFiles.keepCopy(file, true, "body").isEmpty(), "copied a file the store was read from");
+            helper.assertTrue(copiesOf(file).isEmpty(), "a copy appeared for a file the store was read from");
+            helper.assertTrue(UnreadableFiles.keepCopy(dir.resolve(file.getFileName() + ".missing"), false, "body").isEmpty(),
+                    "copied a file that isn't there");
+
+            Optional<Path> copy = UnreadableFiles.keepCopy(file, false, "body");
+            helper.assertTrue(copy.isPresent() && Files.exists(copy.get()), "no copy of the unreadable file");
+            helper.assertValueEqual(copiesOf(file).size(), 1, "copies next to the file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copy.get()), junk), "the copy differs from the file");
+        } finally {
+            Files.deleteIfExists(file);
+            for (Path left : copiesOf(file)) {
+                Files.deleteIfExists(left);
+            }
+        }
+        helper.succeed();
+    }
+
+    private static List<Path> copiesOf(Path file) throws IOException {
+        String prefix = file.getFileName() + ".unreadable-";
+        try (Stream<Path> files = Files.list(file.getParent())) {
+            return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
+        }
     }
 }

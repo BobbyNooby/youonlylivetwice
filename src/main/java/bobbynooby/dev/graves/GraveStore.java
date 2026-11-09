@@ -1,8 +1,9 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.core.LenientCodecs;
+import bobbynooby.dev.core.UnreadableFiles;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.Dynamic;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
@@ -19,7 +20,6 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,9 +32,8 @@ import java.util.UUID;
 /** Every grave in the world, saved with the world's data. Graves are few, so lookups just scan. */
 public final class GraveStore extends SavedData {
     // A broken grave record is logged and skipped; failing here would make the storage start empty and overwrite the file
-    private static final Codec<GraveStore> CODEC = Codec.of(
-            Grave.CODEC.listOf().fieldOf("graves").codec().comap(store -> List.copyOf(store.graves.values())),
-            Codec.PASSTHROUGH.listOf().fieldOf("graves").codec().map(GraveStore::readLeniently));
+    private static final Codec<GraveStore> CODEC = LenientCodecs.list(Grave.CODEC, "grave").fieldOf("graves")
+            .xmap(GraveStore::new, store -> List.copyOf(store.graves.values())).codec();
 
     // The storage runs this fixer on every load and fails on null, which would lose the graves after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -57,51 +56,20 @@ public final class GraveStore extends SavedData {
         }
     }
 
-    private static GraveStore readLeniently(List<Dynamic<?>> entries) {
-        List<Grave> loaded = new ArrayList<>();
-        for (Dynamic<?> entry : entries) {
-            Grave.CODEC.parse(entry)
-                    .resultOrPartial(error -> YouOnlyLiveTwice.LOGGER.error("Skipping unreadable grave record: {}", error))
-                    .ifPresent(loaded::add);
-        }
-        return new GraveStore(loaded);
-    }
-
     public static GraveStore get(MinecraftServer server) {
         GraveStore store = server.getDataStorage().computeIfAbsent(TYPE);
         // Checked on first use, before anything can save: a dedicated server saves once before its start event,
         // and chunk loads can fetch the graves before that
         if (!store.fileChecked) {
             store.fileChecked = true;
-            keepUnreadableCopy(file(server), store.fromDisk);
+            UnreadableFiles.keepCopy(file(server), store.fromDisk, "grave");
         }
         return store;
     }
 
     /** Where the storage keeps the graves. */
-    public static Path file(MinecraftServer server) {
+    private static Path file(MinecraftServer server) {
         return TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
-    }
-
-    /**
-     * A store that wasn't read from its file while the file is there means the file couldn't be read, and the next
-     * save would overwrite it with no graves. So a copy is kept next to it. Returns the copy, if one was made.
-     */
-    public static Optional<Path> keepUnreadableCopy(Path file, boolean fromDisk) {
-        if (fromDisk || !Files.exists(file)) {
-            return Optional.empty();
-        }
-        Path copy = file.resolveSibling(file.getFileName() + ".unreadable-" + System.currentTimeMillis());
-        try {
-            Files.copy(file, copy);
-        } catch (IOException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not read the grave file {}, and could not copy it to {}; graves start empty "
-                    + "and the next save overwrites it", file, copy, e);
-            return Optional.empty();
-        }
-        YouOnlyLiveTwice.LOGGER.error("Could not read the grave file {}, so graves start empty. A copy of it is kept at {}",
-                file, copy);
-        return Optional.of(copy);
     }
 
     /**

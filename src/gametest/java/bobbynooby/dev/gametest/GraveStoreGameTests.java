@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import com.mojang.serialization.DataResult;
@@ -152,12 +153,12 @@ public class GraveStoreGameTests {
         byte[] junk = {1, 2, 3, 4, 5};
         try {
             Files.write(file, junk);
-            helper.assertTrue(GraveStore.keepUnreadableCopy(file, true).isEmpty(), "copied a file the store was read from");
+            helper.assertTrue(UnreadableFiles.keepCopy(file, true, "grave").isEmpty(), "copied a file the store was read from");
             helper.assertTrue(copiesOf(file).isEmpty(), "a copy appeared for a file the store was read from");
-            helper.assertTrue(GraveStore.keepUnreadableCopy(dir.resolve(file.getFileName() + ".missing"), false).isEmpty(),
+            helper.assertTrue(UnreadableFiles.keepCopy(dir.resolve(file.getFileName() + ".missing"), false, "grave").isEmpty(),
                     "copied a file that isn't there");
 
-            Optional<Path> copy = GraveStore.keepUnreadableCopy(file, false);
+            Optional<Path> copy = UnreadableFiles.keepCopy(file, false, "grave");
             helper.assertTrue(copy.isPresent() && Files.exists(copy.get()), "no copy of the unreadable file");
             helper.assertValueEqual(copiesOf(file).size(), 1, "copies next to the file");
             helper.assertTrue(Arrays.equals(Files.readAllBytes(copy.get()), junk), "the copy differs from the file");
