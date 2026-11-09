@@ -2,6 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
@@ -19,6 +21,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 
@@ -50,7 +54,15 @@ public class OfflineGameTests {
         helper.assertFalse(before.getListOrEmpty("Inventory").isEmpty(), "inventory was not saved");
         helper.assertFalse(before.getCompoundOrEmpty("equipment").isEmpty(), "equipment was not saved");
 
-        helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+        // With graves off the items are dropped, which is the path this test covers
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        graves.enabled = false;
+        try {
+            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+        } finally {
+            graves.enabled = gravesBefore;
+        }
         helper.assertValueEqual(itemEntities(helper, Items.DIAMOND, last), 1, "diamond item entities");
         helper.assertItemEntityCountIs(Items.DIAMOND, last, 2.0, 1);
         helper.assertValueEqual(itemEntities(helper, Items.IRON_HELMET, last), 1, "iron helmet item entities");
@@ -66,7 +78,8 @@ public class OfflineGameTests {
         helper.succeed();
     }
 
-    // A non-empty folder where the old save gets moved can't be deleted, so the swap of the new save fails
+    // A non-empty folder where the old save gets moved can't be deleted, so the swap of the new save fails.
+    // Graves are off so this covers taking dropped items back; GraveProtectionGameTests covers graves.
     @GameTest
     public void offlineKillFailureLeavesNoDuplicate(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -85,12 +98,16 @@ public class OfflineGameTests {
         Path blockerContent = blocker.resolve("blocker");
         Files.createDirectories(blocker);
         Files.writeString(blockerContent, "");
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        graves.enabled = false;
         boolean failed = false;
         try {
             OfflineKill.kill(server, who);
         } catch (RuntimeException expected) {
             failed = true;
         } finally {
+            graves.enabled = gravesBefore;
             Files.delete(blockerContent);
             Files.delete(blocker);
         }
@@ -122,19 +139,25 @@ public class OfflineGameTests {
         } finally {
             TestPlayers.leave(player);
         }
-        helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "first kill result");
+        try {
+            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "first kill result");
 
-        // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
-        helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
-        helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
-        helper.assertTrue(DeathLockout.revive(who.id()), "first kill recorded no death");
-        byte[][] filesBefore = saveFiles(server, who);
+            // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
+            helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
+            helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
+            helper.assertTrue(DeathLockout.revive(who.id()), "first kill recorded no death");
+            byte[][] filesBefore = saveFiles(server, who);
+            int gravesBefore = gravesOf(helper, who.id()).size();
 
-        helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
-        helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 2.0).isEmpty(), "second kill dropped items");
-        helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
-        helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
-        helper.assertTrue(DeathLockout.refusal(who.id()) == null, "second kill restarted the lockout");
+            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.ALREADY_DEAD, "second kill result");
+            helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 2.0).isEmpty(), "second kill dropped items");
+            helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
+            helper.assertValueEqual(gravesOf(helper, who.id()).size(), gravesBefore, "graves after the second kill");
+            helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
+            helper.assertTrue(DeathLockout.refusal(who.id()) == null, "second kill restarted the lockout");
+        } finally {
+            removeGraves(helper, who.id());
+        }
         helper.succeed();
     }
 
@@ -153,15 +176,21 @@ public class OfflineGameTests {
 
         YoltConfig.GravesSection graves = Settings.get().graves;
         YoltConfig.EnderChestMode before = graves.enderChestOnDeath;
-        graves.enderChestOnDeath = YoltConfig.EnderChestMode.WIPE;
         try {
-            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            graves.enderChestOnDeath = YoltConfig.EnderChestMode.WIPE;
+            try {
+                helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            } finally {
+                graves.enderChestOnDeath = before;
+            }
+            helper.assertTrue(enderChest(server, who).isEmpty(), "ender chest not wiped");
+            // Wiped means gone, not dropped or kept in a grave
+            helper.assertItemEntityNotPresent(Items.EMERALD, last, 2.0);
+            helper.assertFalse(gravesOf(helper, who.id()).stream()
+                    .anyMatch(grave -> grave.items().stream().anyMatch(item -> item.is(Items.EMERALD))), "grave holds the wiped emerald");
         } finally {
-            graves.enderChestOnDeath = before;
+            removeGraves(helper, who.id());
         }
-        helper.assertTrue(enderChest(server, who).isEmpty(), "ender chest not wiped");
-        // Wiped means gone, not dropped
-        helper.assertItemEntityNotPresent(Items.EMERALD, last, 2.0);
         helper.succeed();
     }
 
@@ -186,6 +215,7 @@ public class OfflineGameTests {
                 if (!kicked) {
                     TestPlayers.leave(player);
                 }
+                removeGraves(helper, uuid);
                 helper.assertTrue(kicked, "player was not kicked after dying");
                 helper.succeed();
             });
@@ -193,6 +223,7 @@ public class OfflineGameTests {
         } finally {
             if (!waitingForKick) {
                 TestPlayers.leave(player);
+                removeGraves(helper, uuid);
             }
         }
     }
@@ -226,5 +257,20 @@ public class OfflineGameTests {
 
     private static List<ItemStack> enderChest(MinecraftServer server, NameAndId who) {
         return OfflinePlayerData.takeEnderChest(OfflinePlayerData.load(server, who).orElseThrow(), server.registryAccess());
+    }
+
+    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
+        return GraveStore.get(helper.getLevel().getServer()).all().stream()
+                .filter(grave -> grave.owner().equals(owner))
+                .toList();
+    }
+
+    // Kills make graves while graves are on, and a grave left behind would sit in another test's way
+    private static void removeGraves(GameTestHelper helper, UUID owner) {
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        for (Grave grave : gravesOf(helper, owner)) {
+            store.remove(grave.id());
+            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
     }
 }
