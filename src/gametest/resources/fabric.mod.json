@@ -23,7 +23,8 @@
 			"bobbynooby.dev.gametest.ReviveGameTests",
 			"bobbynooby.dev.gametest.SmokeGameTests",
 			"bobbynooby.dev.gametest.SwitchGameTests",
-			"bobbynooby.dev.gametest.TabHeaderGameTests"
+			"bobbynooby.dev.gametest.TabHeaderGameTests",
+			"bobbynooby.dev.gametest.WhisperGameTests"
 		],
 		"fabric-client-gametest": [
 			"bobbynooby.dev.gametest.client.GraveClientTest",

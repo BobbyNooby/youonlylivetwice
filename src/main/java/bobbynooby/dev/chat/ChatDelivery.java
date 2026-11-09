@@ -115,7 +115,7 @@ public final class ChatDelivery {
         }
     }
 
-    private static ChatRules.Listener listener(ServerPlayer player) {
+    static ChatRules.Listener listener(ServerPlayer player) {
         return new ChatRules.Listener(player.getUUID(), player.level().dimension().identifier().toString(),
                 player.getX(), player.getY(), player.getZ(), AdminView.isOn(player));
     }

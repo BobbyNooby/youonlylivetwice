@@ -5,6 +5,7 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
@@ -13,8 +14,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.level.GameType;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 
 // Fake players that join through PlayerList.placeNewPlayer, so join events and our mixins run like for a real client
 public final class TestPlayers {
@@ -36,6 +40,10 @@ public final class TestPlayers {
         return join(server.overworld(), uniqueProfile(name), mode, absolutePos);
     }
 
+    public static Recording joinRecording(GameTestHelper helper, String name, GameType mode, BlockPos relativePos) {
+        return join(helper.getLevel(), uniqueProfile(name), mode, helper.absolutePos(relativePos), Recording::new);
+    }
+
     // Vanilla makes a player invulnerable until their client says the world has loaded, which a test player never does
     public static void markLoaded(ServerPlayer player) {
         player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
@@ -49,11 +57,17 @@ public final class TestPlayers {
         return new GameProfile(UUID.randomUUID(), name + COUNTER.incrementAndGet());
     }
 
-    // Same steps as vanilla's makeMockServerPlayerInLevel, which always forces creative
     private static ServerPlayer join(ServerLevel level, GameProfile profile, GameType mode, BlockPos pos) {
+        return join(level, profile, mode, pos,
+                (l, cookie) -> new ServerPlayer(l.getServer(), l, cookie.gameProfile(), cookie.clientInformation()));
+    }
+
+    // Same steps as vanilla's makeMockServerPlayerInLevel, which always forces creative
+    private static <P extends ServerPlayer> P join(ServerLevel level, GameProfile profile, GameType mode, BlockPos pos,
+                                                   BiFunction<ServerLevel, CommonListenerCookie, P> create) {
         MinecraftServer server = level.getServer();
         CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
-        ServerPlayer player = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation());
+        P player = create.apply(level, cookie);
         player.snapTo(pos, 0.0F, 0.0F);
 
         Connection connection = new Connection(PacketFlow.SERVERBOUND);
@@ -63,5 +77,20 @@ public final class TestPlayers {
         // setGameMode sends a packet, so it has to wait for the connection placeNewPlayer sets up
         player.setGameMode(mode);
         return player;
+    }
+
+    // A test player that keeps every system message sent to it, since it has no client to show them
+    public static final class Recording extends ServerPlayer {
+        public final List<Component> messages = new ArrayList<>();
+
+        private Recording(ServerLevel level, CommonListenerCookie cookie) {
+            super(level.getServer(), level, cookie.gameProfile(), cookie.clientInformation());
+        }
+
+        @Override
+        public void sendSystemMessage(Component message, boolean overlay) {
+            messages.add(message);
+            super.sendSystemMessage(message, overlay);
+        }
     }
 }

@@ -1,10 +1,8 @@
 package bobbynooby.dev.mixin;
 
+import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.config.Settings;
 import com.mojang.brigadier.ParseResults;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.tree.LiteralCommandNode;
-import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -27,7 +25,7 @@ public class CommandManagerMixin {
     @Final
     private static ClientboundCommandsPacket.NodeInspector<CommandSourceStack> COMMAND_NODE_INSPECTOR;
 
-    // Restrict non-op players to only using help
+    // Restrict non-op players to help, plus /w when whispers are on
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
         if (!Settings.active() || !Settings.get().restrictCommands) {
@@ -48,9 +46,11 @@ public class CommandManagerMixin {
 
                     // Send help message to non-op players
                     player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
+                } else if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
+                    Whispers.runCommand(player, command);
                 }
 
-                // Just ignore the command if it is not help
+                // Vanilla never runs a non-op's command
                 ci.cancel();
             }
 
@@ -70,20 +70,8 @@ public class CommandManagerMixin {
         if (playerList != null) {
             boolean isOp = playerList.isOp(player.nameAndId());
             if (!isOp) {
-
-                // Create restricted command tree
-                RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
-
-                // Create restricted help command ( funtionality is in previous inject )
-                LiteralCommandNode<CommandSourceStack> help = LiteralArgumentBuilder.<CommandSourceStack>literal("help").executes((context) -> {
-                    return 1;
-                }).build();
-
-                // Add help command to restricted command tree
-                root.addChild(help);
-
-                // Send restricted command tree
-                player.connection.send(new ClientboundCommandsPacket(root, COMMAND_NODE_INSPECTOR));
+                player.connection.send(new ClientboundCommandsPacket(
+                        Whispers.nonOpTree(Settings.get().chat.allowWhispers), COMMAND_NODE_INSPECTOR));
 
                 // Cancel the rest of the original method.
                 ci.cancel();
