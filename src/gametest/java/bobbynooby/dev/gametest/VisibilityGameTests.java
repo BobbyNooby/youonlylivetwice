@@ -367,7 +367,7 @@ public class VisibilityGameTests {
     }
 
     // The last listed flag this viewer's client was sent for seen
-    private static boolean listedFor(ServerPlayer viewer, ServerPlayer seen) {
+    static boolean listedFor(ServerPlayer viewer, ServerPlayer seen) {
         boolean listed = false;
         for (Packet<?> packet : TestPlayers.sentPackets(viewer)) {
             if (packet instanceof ClientboundPlayerInfoUpdatePacket info

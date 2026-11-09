@@ -15,6 +15,7 @@
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
     "MarkedHeadPlacementMixin",
+    "MinecraftOperatorListServiceImplMixin",
     "PlayerCountSpoofer",
     "PlayerDropEquipmentMixin",
     "PlayerInfoUpdatePacketAccessor",

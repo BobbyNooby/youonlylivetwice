@@ -13,8 +13,10 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerScoreboard;
+import net.minecraft.server.jsonrpc.internalapi.MinecraftOperatorListServiceImpl;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.ServerOpListEntry;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
@@ -62,10 +64,14 @@ public class AdminViewGameTests {
     public void deopDropsAdminView(GameTestHelper helper) {
         YoltConfig.HideSection hide = Settings.get().hide;
         boolean distantBefore = hide.distantPlayers;
+        boolean tabListBefore = hide.tabList;
+        boolean nametagsBefore = hide.nametags;
         List<ServerPlayer> joined = new ArrayList<>();
         ServerPlayer admin = null;
         try {
             hide.distantPlayers = true;
+            hide.tabList = true;
+            hide.nametags = true;
             admin = TestPlayers.join(helper, "avdeop", GameType.SURVIVAL, BlockPos.ZERO);
             joined.add(admin);
             ServerPlayer far = TestPlayers.join(helper, "avdeopfar", GameType.SURVIVAL, new BlockPos(1, 0, 0));
@@ -74,19 +80,67 @@ public class AdminViewGameTests {
             TestPlayers.op(admin);
             helper.assertTrue(AdminView.toggle(admin), "toggle did not turn admin view on");
             helper.assertTrue(PlayerVisibility.known(admin).contains(far.getUUID()), "admin view does not know the far player");
+            helper.assertTrue(VisibilityGameTests.listedFor(admin, admin), "admin view does not list the admin");
+            helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "nametag rule with admin view on");
 
             TestPlayers.deop(admin);
             helper.assertFalse(AdminView.isOn(admin), "admin view still counts after a deop");
             helper.assertFalse(PlayerVisibility.known(admin).contains(far.getUUID()), "a de-opped player still knows the far player");
+            helper.assertFalse(VisibilityGameTests.listedFor(admin, admin), "a de-opped player is still listed in its own tab list");
+            helper.assertValueEqual(lastRule(admin), Team.Visibility.NEVER, "nametag rule after a deop");
 
             TestPlayers.op(admin);
             helper.assertTrue(AdminView.isOn(admin), "admin view did not come back with op");
             helper.assertTrue(PlayerVisibility.known(admin).contains(far.getUUID()), "a re-opped admin does not know the far player");
         } finally {
             hide.distantPlayers = distantBefore;
+            hide.tabList = tabListBefore;
+            hide.nametags = nametagsBefore;
             if (admin != null) {
                 AdminView.set(admin, false);
                 TestPlayers.deop(admin);
+            }
+            for (ServerPlayer player : joined) {
+                TestPlayers.leave(player);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The test server has no management API, so this empties the list the way operators/clear does and calls our hook's helper.
+    // Emptying the list deops everyone online, so this runs on its own.
+    @GameTest(environment = "you-only-live-twice-gametest:solo")
+    public void clearedOpListDropsAdminView(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerOpListEntry> opsBefore = List.copyOf(server.getPlayerList().getOps().getEntries());
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer admin = null;
+        try {
+            hide.distantPlayers = true;
+            admin = TestPlayers.join(helper, "avclear", GameType.SURVIVAL, BlockPos.ZERO);
+            joined.add(admin);
+            ServerPlayer far = TestPlayers.join(helper, "avclearfar", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            joined.add(far);
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            TestPlayers.op(admin);
+            helper.assertTrue(AdminView.toggle(admin), "toggle did not turn admin view on");
+            helper.assertTrue(PlayerVisibility.known(admin).contains(far.getUUID()), "admin view does not know the far player");
+
+            server.getPlayerList().getOps().clear();
+            AdminView.onOpListCleared(server.getPlayerList());
+            helper.assertFalse(AdminView.isOn(admin), "admin view still counts after the op list was cleared");
+            helper.assertFalse(PlayerVisibility.known(admin).contains(far.getUUID()), "a de-opped player still knows the far player");
+            // Nothing else loads the class our hook is on here; loading it applies the hook, which fails if clear is gone
+            helper.assertTrue(MinecraftOperatorListServiceImpl.class.getDeclaredMethods().length > 0, "the operator list service has no methods");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+            }
+            for (ServerOpListEntry entry : opsBefore) {
+                server.getPlayerList().getOps().add(entry);
             }
             for (ServerPlayer player : joined) {
                 TestPlayers.leave(player);

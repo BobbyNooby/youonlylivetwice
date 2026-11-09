@@ -43,6 +43,15 @@ public final class AdminView {
         }
     }
 
+    /** Runs after the whole op list is emptied at once, which skips the deop vanilla does for each player. */
+    public static void onOpListCleared(PlayerList playerList) {
+        for (ServerPlayer player : playerList.getPlayers()) {
+            // What a deop sends, so the client's permission level and command tree match too
+            playerList.sendPlayerPermissionLevel(player);
+            onOpChange(playerList, player.nameAndId());
+        }
+    }
+
     /** Only writes the flag: the caller refreshes what the player's client has. */
     public static void set(ServerPlayer player, boolean on) {
         if (on) {
