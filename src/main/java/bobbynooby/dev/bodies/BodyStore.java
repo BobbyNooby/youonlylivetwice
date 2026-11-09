@@ -1,9 +1,12 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.core.LenientCodecs;
+import bobbynooby.dev.core.Migrations;
+import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.Dynamic;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -20,9 +23,19 @@ import java.util.UUID;
 
 /** Every logged-out player's body record, saved with the world's data. Bodies are few, so lookups just scan. */
 public final class BodyStore extends SavedData {
-    // A broken record is logged and skipped; failing here would make the storage start empty and overwrite the file
-    private static final Codec<BodyStore> CODEC = LenientCodecs.list(BodyRecord.CODEC, "body").fieldOf("bodies")
-            .xmap(BodyStore::new, store -> List.copyOf(store.bodies.values())).codec();
+    /** The layout of the body file's own fields. */
+    public static final int FORMAT = 1;
+    // Each step upgrades the body file from its format to the next
+    private static final List<Migrations.Step<Dynamic<?>>> STEPS = List.of();
+
+    // A broken record is logged and skipped; failing here would make the storage start empty and overwrite the file.
+    // Effects have no fixer of their own in 26.3 (vanilla fixes them only inside whole entities), so only gear is fixed.
+    private static final Codec<BodyStore> CODEC = StoreVersions.codec("body", FORMAT, STEPS,
+                    (data, fix) -> StoreVersions.eachInList(data, "bodies",
+                            body -> body.update("snapshot", snapshot -> StoreVersions.eachInMap(snapshot, "gear", fix))),
+                    LenientCodecs.list(BodyRecord.CODEC, "body").fieldOf("bodies"))
+            .xmap(loaded -> new BodyStore(loaded.records(), loaded.fromNewer()),
+                    store -> new StoreVersions.Loaded<>(List.copyOf(store.bodies.values()), false));
 
     // The storage runs this fixer on every load and fails on null, which would lose the bodies after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -32,14 +45,18 @@ public final class BodyStore extends SavedData {
     private final Map<UUID, BodyRecord> bodies = new LinkedHashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
+    // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
+    private final boolean fromNewer;
     private boolean fileChecked;
 
     private BodyStore() {
         fromDisk = false;
+        fromNewer = false;
     }
 
-    private BodyStore(List<BodyRecord> loaded) {
+    private BodyStore(List<BodyRecord> loaded, boolean fromNewer) {
         fromDisk = true;
+        this.fromNewer = fromNewer;
         for (BodyRecord record : loaded) {
             bodies.put(record.owner(), record);
         }
@@ -51,6 +68,9 @@ public final class BodyStore extends SavedData {
         if (!store.fileChecked) {
             store.fileChecked = true;
             UnreadableFiles.keepCopy(file(server), store.fromDisk, "body");
+            if (store.fromNewer) {
+                UnreadableFiles.keepNewerCopy(file(server), "body");
+            }
         }
         return store;
     }

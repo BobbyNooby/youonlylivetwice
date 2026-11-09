@@ -1,9 +1,12 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.core.LenientCodecs;
+import bobbynooby.dev.core.Migrations;
+import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.Dynamic;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
@@ -31,9 +34,17 @@ import java.util.UUID;
 
 /** Every grave in the world, saved with the world's data. Graves are few, so lookups just scan. */
 public final class GraveStore extends SavedData {
+    /** The layout of the grave file's own fields. */
+    public static final int FORMAT = 1;
+    // Each step upgrades the grave file from its format to the next
+    private static final List<Migrations.Step<Dynamic<?>>> STEPS = List.of();
+
     // A broken grave record is logged and skipped; failing here would make the storage start empty and overwrite the file
-    private static final Codec<GraveStore> CODEC = LenientCodecs.list(Grave.CODEC, "grave").fieldOf("graves")
-            .xmap(GraveStore::new, store -> List.copyOf(store.graves.values())).codec();
+    private static final Codec<GraveStore> CODEC = StoreVersions.codec("grave", FORMAT, STEPS,
+                    (data, fix) -> StoreVersions.eachInList(data, "graves", grave -> StoreVersions.eachInList(grave, "items", fix)),
+                    LenientCodecs.list(Grave.CODEC, "grave").fieldOf("graves"))
+            .xmap(loaded -> new GraveStore(loaded.records(), loaded.fromNewer()),
+                    store -> new StoreVersions.Loaded<>(List.copyOf(store.graves.values()), false));
 
     // The storage runs this fixer on every load and fails on null, which would lose the graves after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -43,14 +54,18 @@ public final class GraveStore extends SavedData {
     private final Map<UUID, Grave> graves = new LinkedHashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
+    // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
+    private final boolean fromNewer;
     private boolean fileChecked;
 
     private GraveStore() {
         fromDisk = false;
+        fromNewer = false;
     }
 
-    private GraveStore(List<Grave> loaded) {
+    private GraveStore(List<Grave> loaded, boolean fromNewer) {
         fromDisk = true;
+        this.fromNewer = fromNewer;
         for (Grave grave : loaded) {
             graves.put(grave.id(), grave);
         }
@@ -63,6 +78,9 @@ public final class GraveStore extends SavedData {
         if (!store.fileChecked) {
             store.fileChecked = true;
             UnreadableFiles.keepCopy(file(server), store.fromDisk, "grave");
+            if (store.fromNewer) {
+                UnreadableFiles.keepNewerCopy(file(server), "grave");
+            }
         }
         return store;
     }
