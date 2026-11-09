@@ -40,6 +40,24 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // The test server holds one player, so with one online vanilla says "server full" first. A locked-out
+    // player should still be told they are dead.
+    @GameTest(environment = LOGIN_CHECK)
+    public void lockoutBeatsServerFull(GameTestHelper helper) {
+        UUID uuid = UUID.randomUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer holder = TestPlayers.join(helper, "Holder", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            helper.assertTrue(server.getPlayerList().getPlayers().size() >= server.getMaxPlayers(), "the server is not full");
+            DeathLockout.recordDeath(uuid, "Ghost");
+            helper.assertTrue(refusedForLockout(loginRefusal(server, new NameAndId(uuid, "Ghost"))),
+                    "a full server hid the lockout message");
+        } finally {
+            TestPlayers.leave(holder);
+        }
+        helper.succeed();
+    }
+
     @GameTest(environment = LOGIN_CHECK)
     public void revivedPlayerCanLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
