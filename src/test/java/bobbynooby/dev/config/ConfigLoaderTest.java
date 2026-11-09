@@ -124,16 +124,22 @@ class ConfigLoaderTest {
         byte[] bad = {(byte) 0xC3, 0x28};
         Files.write(file, bad);
 
-        ConfigLoader.Result reload = ConfigLoader.load(file, null, false);
+        // As Settings.reload calls it, with the live config
+        ConfigLoader.Result reload = ConfigLoader.load(file, new YoltConfig(), false);
         assertTrue(reload.unparseable());
         assertNull(reload.config());
-        assertFalse(reload.warnings().isEmpty());
+        assertEquals(1, reload.warnings().size());
+        assertTrue(reload.warnings().get(0).startsWith("config could not be read ("), reload.warnings().get(0));
         assertArrayEquals(bad, Files.readAllBytes(file));
+        assertFalse(Files.exists(dir.resolve("config.json.bak")));
 
         ConfigLoader.Result startup = ConfigLoader.load(file, null, true);
         assertTrue(startup.unparseable());
         assertEquals(10000, startup.config().worldBorder.diameter);
         assertArrayEquals(bad, Files.readAllBytes(dir.resolve("config.json.bak")));
+        assertTrue(startup.warnings().get(0).endsWith(", old file saved as config.json.bak, using defaults"), startup.warnings().get(0));
+        assertEquals(10000, JsonParser.parseString(Files.readString(file)).getAsJsonObject()
+                .getAsJsonObject("worldBorder").get("diameter").getAsInt());
     }
 
     @Test
