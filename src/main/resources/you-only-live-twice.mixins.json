@@ -37,6 +37,7 @@
     "PlayerListBodyStatsMixin",
     "PlayerListLoginMixin",
     "PlayerListVisibilityMixin",
+    "PlayerSpawnFinderInvoker",
     "RandomSpawnMixin",
     "ServerCommandSuggestionsProviderMixin",
     "SetPlayerTeamPacketInvoker",

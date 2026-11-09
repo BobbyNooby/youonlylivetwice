@@ -1,51 +1,80 @@
 package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Random;
 
-/** Picks a random spot inside the world border for new and respawning players. */
+import static bobbynooby.dev.core.Yolt.LOGGER;
+
+/**
+ * Picks a random spot inside the world border for new and respawning players. The search runs on the server thread,
+ * and a column in an ungenerated chunk is generated on the spot, so pre-generating the world keeps it quick.
+ */
 public final class RandomSpawn {
     private RandomSpawn() {}
 
+    static final int ATTEMPTS = 50;
     private static final Random RANDOM = new Random();
+    // Set while spotAt runs vanilla's column check, which is the method our hook replaces, so the hook lets it through.
+    // Spawn searches only run on the server thread.
+    private static boolean checkingColumn;
 
     record Column(int x, int z) {}
 
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
-        return Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
+        return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
     }
 
-    public static BlockPos findRandomSpawn(ServerLevel level) {
+    /** A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn always exists. */
+    public static BlockPos pick(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
-        int attempts = 0;
-        int attemptLimit = 50;
-        while (true) {
-
+        for (int attempt = 1; ; attempt++) {
             Column column = pickColumn(RANDOM, border.getCenterX(), border.getCenterZ(), border.getSize(), Settings.get().worldBorder.diameter);
-            int x = column.x();
-            int z = column.z();
-            int y = level.getChunkAt(new BlockPos(x, level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z), z)).getHeight(Heightmap.Types.WORLD_SURFACE, x, z) + 1;
-
-            // Check if it's a water block that the player spawns on
-            BlockState blockBelow = level.getBlockState(new BlockPos(x, y - 1, z));
-
-            // If it's a water block then regenerate a spawn
-            if (!blockBelow.getFluidState().isEmpty() && attempts < attemptLimit) {
-                attempts++;
-                continue;
+            BlockPos spot = spotAt(level, column.x(), column.z());
+            if (spot != null) {
+                return spot;
             }
-
-            // After exceeding the attempt limit, just return the spawn even if it's in water.
-            return new BlockPos(x, y, z);
+            if (attempt == ATTEMPTS) {
+                // This spot can be in a fluid or over the void
+                int y = level.getChunk(SectionPos.blockToSectionCoord(column.x()), SectionPos.blockToSectionCoord(column.z()))
+                        .getHeight(Heightmap.Types.WORLD_SURFACE, column.x(), column.z()) + 1;
+                BlockPos fallback = new BlockPos(column.x(), y, column.z());
+                LOGGER.warn("No safe random spawn found in {} columns, using {}", ATTEMPTS, fallback.toShortString());
+                return fallback;
+            }
         }
+    }
+
+    /**
+     * Where a player could spawn in this column, or null. Runs the check vanilla gives each spawn candidate: standing on a
+     * block with a full top face, not in a fluid, with room for a player. Powder snow is refused too, since vanilla's
+     * check sees no collision in it and a player spawned there sinks and freezes.
+     */
+    public static @Nullable BlockPos spotAt(ServerLevel level, int x, int z) {
+        BlockPos spot;
+        checkingColumn = true;
+        try {
+            spot = PlayerSpawnFinderInvoker.yoltLevelRespawnPos(level, x, z);
+        } finally {
+            checkingColumn = false;
+        }
+        if (spot == null || !PlayerSpawnFinderInvoker.yoltNoCollisionNoLiquid(level, spot)) {
+            return null;
+        }
+        if (level.getBlockState(spot).is(Blocks.POWDER_SNOW) || level.getBlockState(spot.above()).is(Blocks.POWDER_SNOW)) {
+            return null;
+        }
+        return spot;
     }
 
     /**

@@ -15,7 +15,7 @@ public abstract class RandomSpawnMixin {
     @Inject(method = "getLevelRespawnPos", at = @At("HEAD"), cancellable = true)
     private static void findOverworldSpawn(ServerLevel level, int x, int z, CallbackInfoReturnable<BlockPos> cir) {
         if (RandomSpawn.appliesTo(level)) {
-            cir.setReturnValue(RandomSpawn.findRandomSpawn(level));
+            cir.setReturnValue(RandomSpawn.pick(level));
         }
     }
 

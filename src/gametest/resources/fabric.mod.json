@@ -31,6 +31,7 @@
 			"bobbynooby.dev.gametest.PhantomGameTests",
 			"bobbynooby.dev.gametest.PlacementGameTests",
 			"bobbynooby.dev.gametest.PlayerBodyGameTests",
+			"bobbynooby.dev.gametest.RandomSpawnGameTests",
 			"bobbynooby.dev.gametest.ReviveGameTests",
 			"bobbynooby.dev.gametest.ServerListGameTests",
 			"bobbynooby.dev.gametest.SleepGameTests",
