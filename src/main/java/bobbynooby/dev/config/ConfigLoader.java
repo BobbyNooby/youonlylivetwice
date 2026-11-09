@@ -239,6 +239,10 @@ public final class ConfigLoader {
         if (!u.isNumber()) {
             return "expected a number";
         }
+        // 1e400 reads as infinity, which Gson can neither load into the config nor write back
+        if (!Double.isFinite(u.getAsDouble())) {
+            return "expected a finite number";
+        }
         // whole-number settings can't take 2.5
         if (d.getAsNumber() instanceof Integer) {
             double v = u.getAsDouble();

@@ -168,6 +168,66 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void infiniteEndScaleFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"endScale\":1e400},\"chat\":{\"radius\":30}}");
+        assertEquals(2.0, r.config().worldBorder.endScale);
+        assertEquals(30, r.config().chat.radius);
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.endScale")));
+        // the rewrite would have thrown on an infinity
+        assertTrue(Files.readString(dir.resolve("config.json")).contains("\"endScale\": 2.0"));
+    }
+
+    @Test
+    void endBorderIsCappedAtVanillaMax() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"diameter\":59999968,\"endScale\":2.0}}");
+        assertEquals(1.0, r.config().worldBorder.endScale);
+        assertEquals(59999968, r.config().worldBorder.diameter);
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.endScale") && w.contains("worldBorder.diameter")
+                && w.contains(String.valueOf(ConfigLoader.MAX_BORDER_DIAMETER))));
+    }
+
+    @Test
+    void endScaleZeroOrNegativeFallsBack() throws IOException {
+        for (String bad : List.of("0", "-1.5")) {
+            ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"endScale\":" + bad + "}}");
+            assertEquals(2.0, r.config().worldBorder.endScale, bad);
+            assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.endScale")), bad);
+        }
+    }
+
+    @Test
+    void radiusBelowOneFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":{\"radius\":0}}");
+        assertEquals(48, r.config().chat.radius);
+        assertTrue(r.warnings().stream().anyMatch(w -> w.contains("chat.radius")));
+    }
+
+    @Test
+    void diameterOutOfRangeFallsBack() throws IOException {
+        for (String bad : List.of("0", "59999969")) {
+            ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"diameter\":" + bad + "}}");
+            assertEquals(10000, r.config().worldBorder.diameter, bad);
+            assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.diameter")
+                    && w.contains(String.valueOf(ConfigLoader.MAX_BORDER_DIAMETER))), bad);
+        }
+    }
+
+    @Test
+    void unknownKeyIsWarned() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldborder\":{},\"chat\":{\"colour\":1}}");
+        assertTrue(r.warnings().contains("worldborder: unknown key, ignored"));
+        assertTrue(r.warnings().contains("chat.colour: unknown key, ignored"));
+    }
+
+    @Test
+    void nonObjectSectionFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":5,\"graves\":{\"enabled\":false}}");
+        assertEquals(48, r.config().chat.radius);
+        assertFalse(r.config().graves.enabled);
+        assertTrue(r.warnings().stream().anyMatch(w -> w.startsWith("chat: expected an object")));
+    }
+
+    @Test
     void writeReplacesFileAndLeavesNoTempFile() throws IOException {
         Path file = dir.resolve("config.json");
         Files.writeString(file, "old contents");

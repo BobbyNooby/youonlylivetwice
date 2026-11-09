@@ -12,6 +12,17 @@ final class ConfigChecks {
             c.worldBorder.diameter = fallback.worldBorder.diameter;
             warnings.add("worldBorder.diameter: must be 1 to " + ConfigLoader.MAX_BORDER_DIAMETER + ", using " + c.worldBorder.diameter);
         }
+        if (!Double.isFinite(c.worldBorder.endScale) || c.worldBorder.endScale <= 0) {
+            c.worldBorder.endScale = fallback.worldBorder.endScale;
+            warnings.add("worldBorder.endScale: must be above 0, using " + c.worldBorder.endScale);
+        }
+        // The End border is the overworld's times endScale, and vanilla's border can't be larger than its maximum
+        double maxEndScale = (double) ConfigLoader.MAX_BORDER_DIAMETER / c.worldBorder.diameter;
+        if (c.worldBorder.endScale > maxEndScale) {
+            c.worldBorder.endScale = maxEndScale;
+            warnings.add("worldBorder.endScale: worldBorder.diameter times endScale can't pass " + ConfigLoader.MAX_BORDER_DIAMETER
+                    + ", using " + maxEndScale);
+        }
         if (c.deathLockout.cooldownDays < 0) {
             c.deathLockout.cooldownDays = fallback.deathLockout.cooldownDays;
             warnings.add("deathLockout.cooldownDays: must be 0 or more, using " + c.deathLockout.cooldownDays);
