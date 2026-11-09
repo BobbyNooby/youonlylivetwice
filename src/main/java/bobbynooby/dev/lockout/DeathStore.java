@@ -91,6 +91,10 @@ public final class DeathStore {
         try (Statement statement = connection.createStatement()) {
             int found = userVersion(statement);
             refuseNewer(dbFile, found, schemaVersion);
+            if (found == 0 && isFromBeforeThePort(statement)) {
+                throw new IllegalStateException("The death database " + dbFile + " is the old format from before the "
+                        + "26.3 port (no death_time_ms column), so it is ignored and left as it is");
+            }
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS death_logs (
                         uuid TEXT,
@@ -119,6 +123,21 @@ public final class DeathStore {
             throw new IllegalStateException("The death database " + dbFile + " is schema v" + found
                     + ", newer than this version of YOLT reads (v" + schemaVersion + "), so it is left as it is");
         }
+    }
+
+    // The 1.21.5 release kept deaths in the same file and table, with other columns. Worlds start fresh after the
+    // port, so it isn't converted; stamping it v1 would only hide that.
+    private static boolean isFromBeforeThePort(Statement statement) throws SQLException {
+        boolean hasTable = false;
+        try (ResultSet columns = statement.executeQuery("PRAGMA table_info(death_logs)")) {
+            while (columns.next()) {
+                hasTable = true;
+                if ("death_time_ms".equals(columns.getString("name"))) {
+                    return false;
+                }
+            }
+        }
+        return hasTable;
     }
 
     private static int userVersion(Statement statement) throws SQLException {

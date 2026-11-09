@@ -175,4 +175,22 @@ class DeathStoreTest {
         assertEquals(1, query(copy, "SELECT COUNT(*) FROM death_logs"));
         assertEquals(DeathStore.SCHEMA_VERSION, query(copy, "PRAGMA user_version"));
     }
+
+    // The 1.21.5 release's table, which kept the death time as text
+    @Test
+    void databaseFromBeforeThePortIsIgnored() throws SQLException {
+        Path file = dir.resolve("old.db");
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE death_logs (uuid TEXT, username TEXT, deathTime TEXT, respawnCooldown INTEGER, bypass BOOLEAN)");
+            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Bob', 'Mon Jun 02 12:00:00 UTC 2025', 7, 0)");
+        }
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class, () -> DeathStore.open(file));
+        assertTrue(String.valueOf(refused.getCause()).contains("old format"), String.valueOf(refused.getCause()));
+        // What the server does with it: no store, so nobody is locked out
+        assertNull(DeathLockout.openStore(file));
+        assertEquals(0, query(file, "PRAGMA user_version"));
+        assertEquals(1, query(file, "SELECT COUNT(*) FROM death_logs"));
+    }
 }
