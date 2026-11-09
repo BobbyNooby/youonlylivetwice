@@ -56,7 +56,11 @@ public final class DeathStore {
             try {
                 upgrade(connection, dbFile, schemaVersion, steps);
             } catch (Exception e) {
-                connection.close();
+                try {
+                    connection.close();
+                } catch (SQLException closing) {
+                    e.addSuppressed(closing);
+                }
                 throw e;
             }
             return new DeathStore(connection);
@@ -111,11 +115,15 @@ public final class DeathStore {
             }
             connection.commit();
         } catch (SQLException | RuntimeException e) {
-            connection.rollback();
+            try {
+                connection.rollback();
+            } catch (SQLException rollingBack) {
+                e.addSuppressed(rollingBack);
+            }
             throw e;
-        } finally {
-            connection.setAutoCommit(true);
         }
+        // Only on success: a failed open closes the connection anyway
+        connection.setAutoCommit(true);
     }
 
     private static void refuseNewer(Path dbFile, int found, int schemaVersion) {
