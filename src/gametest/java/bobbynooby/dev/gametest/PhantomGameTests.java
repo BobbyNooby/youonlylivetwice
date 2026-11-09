@@ -15,8 +15,10 @@ import net.minecraft.world.attribute.BedRule;
 import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.ServerClockManager;
 import net.minecraft.world.clock.WorldClock;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -32,7 +34,8 @@ public class PhantomGameTests {
 
         BlockPos foot = new BlockPos(1, 1, 1);
         BlockPos head = foot.relative(Direction.SOUTH);
-        BlockState bed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
+        Block bedBlock = Blocks.BED.pick(DyeColor.RED);
+        BlockState bed = bedBlock.defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
         helper.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
         helper.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD));
 
@@ -47,7 +50,7 @@ public class PhantomGameTests {
             player.getStats().setValue(player, timeSinceRest, 80000);
             helper.assertValueEqual(player.getStats().getValue(timeSinceRest), 80000, "time since rest before sleeping");
 
-            boolean slept = player.startSleepInBed((BedBlock) Blocks.RED_BED, level.getBlockState(helper.absolutePos(head)),
+            boolean slept = player.startSleepInBed((BedBlock) bedBlock, level.getBlockState(helper.absolutePos(head)),
                     BedRule.CAN_SLEEP_WHEN_DARK, helper.absolutePos(head)).right().isPresent();
             helper.assertTrue(slept, "the player could not get into the bed");
             helper.assertTrue(player.isSleeping(), "the player is not sleeping");
