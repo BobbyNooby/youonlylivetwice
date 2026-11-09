@@ -33,7 +33,8 @@
 		"fabric-client-gametest": [
 			"bobbynooby.dev.gametest.client.GraveClientTest",
 			"bobbynooby.dev.gametest.client.JoinClientTest",
-			"bobbynooby.dev.gametest.client.SingleplayerClientTest"
+			"bobbynooby.dev.gametest.client.SingleplayerClientTest",
+			"bobbynooby.dev.gametest.client.VisibilityClientTest"
 		]
 	},
 	"depends": {
