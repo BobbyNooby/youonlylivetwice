@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.core.Migrations;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -28,8 +29,16 @@ public final class ConfigLoader {
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
 
+    /** The layout this build writes. An older file is upgraded by STEPS; a newer one is read but never rewritten. */
+    public static final int CURRENT_VERSION = 1;
+    // Each step upgrades the file's JSON from its version to the next
+    static final List<Migrations.Step<JsonObject>> STEPS = List.of();
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String DURATION_PATH = "bodies.duration";
+    private static final String VERSION_KEY = "configVersion";
+    // Every file YOLT writes has the version, so a file without one is read as the first version
+    private static final int FIRST_VERSION = 1;
 
     private ConfigLoader() {}
 
@@ -39,6 +48,11 @@ public final class ConfigLoader {
 
     /** With writeDefaultsOnError false, a file that is not valid JSON is left as it is and nothing is loaded. */
     public static Result load(Path file, boolean writeDefaultsOnError) {
+        return load(file, writeDefaultsOnError, CURRENT_VERSION, STEPS);
+    }
+
+    // The version and steps are parameters so a test can upgrade with steps of its own
+    static Result load(Path file, boolean writeDefaultsOnError, int currentVersion, List<Migrations.Step<JsonObject>> steps) {
         List<String> warnings = new ArrayList<>();
         if (!Files.exists(file)) {
             return new Result(writeDefaults(file), warnings, false);
@@ -57,11 +71,21 @@ public final class ConfigLoader {
                 warnings.add(problem);
                 return new Result(null, warnings, true);
             }
-            backup(file);
+            backup(file, file.getFileName() + ".bak");
             warnings.add(problem + ", old file saved as " + file.getFileName() + ".bak, using defaults");
             return new Result(writeDefaults(file), warnings, true);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+
+        int version = fileVersion(user);
+        if (version < currentVersion) {
+            // Copied before anything is written, so the upgraded file never replaces the only copy of the old one
+            String backup = file.getFileName() + ".v" + version + ".bak";
+            backup(file, backup);
+            user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
+            user.addProperty(VERSION_KEY, currentVersion);
+            warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
         }
 
         JsonObject defaults = GSON.toJsonTree(new YoltConfig()).getAsJsonObject();
@@ -76,8 +100,27 @@ public final class ConfigLoader {
             config = new YoltConfig();
         }
         validate(config, warnings);
+        if (version > currentVersion) {
+            // Rewriting would drop what only the newer YOLT knows. What is held is this build's layout, so a later
+            // save says so.
+            config.configVersion = currentVersion;
+            warnings.add("config is from a newer version, so it was not rewritten");
+            return new Result(config, warnings, false);
+        }
         write(file, config);
         return new Result(config, warnings, false);
+    }
+
+    // A missing or unusable version reads as the first one; merge still warns about an unusable value
+    private static int fileVersion(JsonObject user) {
+        JsonElement value = user.get(VERSION_KEY);
+        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+            double version = value.getAsDouble();
+            if (version == Math.floor(version) && version >= Integer.MIN_VALUE && version <= Integer.MAX_VALUE) {
+                return (int) version;
+            }
+        }
+        return FIRST_VERSION;
     }
 
     /** Writes a temp file first and moves it over the config, so a crash mid-write can't leave half a file. */
@@ -108,9 +151,9 @@ public final class ConfigLoader {
         return config;
     }
 
-    private static void backup(Path file) {
+    private static void backup(Path file, String name) {
         try {
-            Files.copy(file, file.resolveSibling(file.getFileName() + ".bak"), StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(file, file.resolveSibling(name), StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

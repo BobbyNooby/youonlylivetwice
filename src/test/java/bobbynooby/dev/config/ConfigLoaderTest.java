@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.core.Migrations;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -134,6 +135,41 @@ class ConfigLoaderTest {
         Path file = dir.resolve("config.json");
         ConfigLoader.load(file);
         assertTrue(Files.readString(file).contains("\"configVersion\": 1"));
+    }
+
+    // There is no real upgrade yet, so a step that renames a key stands in for one
+    @Test
+    void olderConfigIsBackedUpThenUpgraded() throws IOException {
+        Path file = dir.resolve("config.json");
+        String old = "{\"configVersion\": 0, \"spawnRandomly\": false}";
+        Files.writeString(file, old);
+        List<Migrations.Step<JsonObject>> steps = List.of(new Migrations.Step<JsonObject>(0, json -> {
+            json.add("randomSpawn", json.remove("spawnRandomly"));
+            return json;
+        }));
+
+        ConfigLoader.Result r = ConfigLoader.load(file, true, 1, steps);
+        assertEquals(old, Files.readString(dir.resolve("config.json.v0.bak")));
+        JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        assertEquals(1, written.get("configVersion").getAsInt());
+        assertFalse(written.get("randomSpawn").getAsBoolean());
+        assertFalse(written.has("spawnRandomly"));
+        assertFalse(r.config().randomSpawn);
+    }
+
+    @Test
+    void newerConfigVersionLeavesFileAlone() throws IOException {
+        Path file = dir.resolve("config.json");
+        String newer = "{\"configVersion\": 2, \"chat\": {\"radius\": 32}, \"fromTheFuture\": true}";
+        Files.writeString(file, newer);
+
+        ConfigLoader.Result r = ConfigLoader.load(file);
+        assertEquals(newer, Files.readString(file));
+        assertEquals(32, r.config().chat.radius);
+        assertTrue(r.warnings().contains("config is from a newer version, so it was not rewritten"));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList());
+        }
     }
 
     @Test

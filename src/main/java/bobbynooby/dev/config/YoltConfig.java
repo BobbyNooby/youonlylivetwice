@@ -4,7 +4,8 @@ import com.google.gson.annotations.SerializedName;
 
 /** Mod settings. Field names are the JSON keys. */
 public class YoltConfig {
-    public int configVersion = 1;
+    // A fresh file is written at the version this build reads
+    public int configVersion = ConfigLoader.CURRENT_VERSION;
     public WorldBorderSection worldBorder = new WorldBorderSection();
     public DeathLockoutSection deathLockout = new DeathLockoutSection();
     public GravesSection graves = new GravesSection();
