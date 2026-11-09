@@ -25,6 +25,7 @@
 			"bobbynooby.dev.gametest.TabHeaderGameTests"
 		],
 		"fabric-client-gametest": [
+			"bobbynooby.dev.gametest.client.GraveClientTest",
 			"bobbynooby.dev.gametest.client.JoinClientTest",
 			"bobbynooby.dev.gametest.client.SingleplayerClientTest"
 		]
