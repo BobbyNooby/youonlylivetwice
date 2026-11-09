@@ -78,7 +78,7 @@ public class MigrationGameTests {
         } finally {
             store.close();
         }
-        helper.assertValueEqual(userVersion(file), 1, "schema version after opening");
+        helper.assertValueEqual(userVersion(file), DeathStore.SCHEMA_VERSION, "schema version after opening");
         helper.succeed();
     }
 

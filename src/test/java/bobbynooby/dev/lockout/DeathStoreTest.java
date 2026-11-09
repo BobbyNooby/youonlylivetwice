@@ -1,9 +1,16 @@
 package bobbynooby.dev.lockout;
 
+import bobbynooby.dev.core.Migrations;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -86,5 +93,39 @@ class DeathStoreTest {
         } finally {
             second.close();
         }
+    }
+
+    private static int query(Path file, String sql) throws SQLException {
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : -1;
+        }
+    }
+
+    private static final String REASON_COLUMNS =
+            "SELECT COUNT(*) FROM pragma_table_info('death_logs') WHERE name = 'reason'";
+
+    @Test
+    void schemaStepsRunAndSetTheVersion() throws SQLException {
+        Path file = dir.resolve("test.db");
+        DeathStore.open(file).close();
+        DeathStore upgraded = DeathStore.open(file, 2, List.of(DeathStore.sql(1, "ALTER TABLE death_logs ADD COLUMN reason TEXT")));
+        upgraded.close();
+        assertEquals(2, query(file, "PRAGMA user_version"));
+        assertEquals(1, query(file, REASON_COLUMNS));
+    }
+
+    // The first step works and the second fails, so the rollback must undo both
+    @Test
+    void failedSchemaStepChangesNothing() throws SQLException {
+        Path file = dir.resolve("test.db");
+        DeathStore.open(file).close();
+        List<Migrations.Step<Statement>> steps = List.of(
+                DeathStore.sql(1, "ALTER TABLE death_logs ADD COLUMN reason TEXT"),
+                DeathStore.sql(2, "NOT SQL AT ALL"));
+        assertThrows(IllegalStateException.class, () -> DeathStore.open(file, 3, steps));
+        assertEquals(1, query(file, "PRAGMA user_version"));
+        assertEquals(0, query(file, REASON_COLUMNS));
     }
 }
