@@ -17,6 +17,7 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.BeaconMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.InventoryMenu;
@@ -178,6 +179,27 @@ public class GraveDeathGameTests {
             BlockPos at = helper.relativePos(player.blockPosition());
             helper.assertItemEntityNotPresent(Items.GOLD_INGOT, at, 3.0);
             helper.assertItemEntityNotPresent(Items.STICK, at, 3.0);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // The beacon payment slot is thrown out by the menu's own close code, not the cursor or crafting path
+    @GameTest
+    public void beaconMenuItemGoesInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Beacon");
+        try {
+            player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new BeaconMenu(id, inventory), Component.empty()));
+            AbstractContainerMenu menu = player.containerMenu;
+            helper.assertTrue(menu instanceof BeaconMenu, "beacon menu did not open");
+            menu.getSlot(0).set(new ItemStack(Items.IRON_INGOT));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            int ingots = grave.items().stream().filter(stack -> stack.is(Items.IRON_INGOT)).mapToInt(ItemStack::getCount).sum();
+            helper.assertValueEqual(ingots, 1, "iron ingots in the grave");
+            helper.assertItemEntityNotPresent(Items.IRON_INGOT, helper.relativePos(player.blockPosition()), 3.0);
         } finally {
             cleanUp(helper, player);
         }
