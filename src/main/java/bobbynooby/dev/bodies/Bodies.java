@@ -66,15 +66,35 @@ public final class Bodies {
                 YouOnlyLiveTwice.LOGGER.error("Could not hand the body back to {}", player.nameAndId().name(), e);
             }
         });
-        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> onBodyUnload(entity));
+        // These run for each entity of a chunk in turn, so a throw would break off the rest. The stop also unloads
+        // chunks before it saves the world, and a throw there would skip the save.
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
+            try {
+                onBodyUnload(entity);
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not save the state of the body {} as it unloaded",
+                        entity.getUUID(), e);
+            }
+        });
         ServerEntityEvents.ENTITY_LOAD.register(Bodies::onBodyLoad);
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
             if (entity instanceof Mob mob) {
-                addBodyGoal(mob);
+                try {
+                    addBodyGoal(mob);
+                } catch (RuntimeException e) {
+                    YouOnlyLiveTwice.LOGGER.error("Could not let {} hunt bodies", mob.getUUID(), e);
+                }
             }
         });
-        // Fires inside die(), after the death drops, which the body never has
-        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
+        // Fires inside die() for every death, after the death drops, which the body never has. A throw would break
+        // off that death.
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
+            try {
+                onBodyDeath(entity);
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not handle the death of {}", entity.getUUID(), e);
+            }
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(Bodies::restorePlayerBodies);
         ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotBodies);
         // Every save too, autosaves included, so after a crash a player body comes back as last saved, not as it logged out
