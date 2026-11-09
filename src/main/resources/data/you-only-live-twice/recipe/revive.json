@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_transmute",
+  "category": "misc",
+  "input": {
+    "fabric:type": "fabric:custom_data",
+    "base": "minecraft:player_head",
+    "nbt": "{yolt:{grave_head:1b}}"
+  },
+  "material": "minecraft:nether_star",
+  "result": {
+    "id": "minecraft:player_head",
+    "components": {
+      "minecraft:custom_data": { "yolt": { "revive": true } },
+      "minecraft:lore": [ "Right-click to end this player's lockout." ],
+      "minecraft:enchantment_glint_override": true,
+      "minecraft:rarity": "epic"
+    }
+  }
+}
