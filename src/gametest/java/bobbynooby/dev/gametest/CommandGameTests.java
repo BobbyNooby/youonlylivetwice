@@ -351,7 +351,7 @@ public class CommandGameTests {
         String name = uniqueName("Ended");
         UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
         withOwnDeathStore(false, store -> {
-            store.recordDeath(id, name, 1000L, 7);
+            store.recordDeath(id, name, 1000L, 7, null);
             helper.assertValueEqual(run(server, "yolt unkill " + name), List.of(name + "'s lockout had already ended."),
                     "command output");
             helper.assertTrue(!store.latest(id).orElseThrow().bypass(), "the ended death was marked revived");

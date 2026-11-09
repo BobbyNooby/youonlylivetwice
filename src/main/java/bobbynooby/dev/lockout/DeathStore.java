@@ -211,13 +211,14 @@ public final class DeathStore {
         });
     }
 
-    public synchronized void recordDeath(UUID uuid, String name, long nowMillis, int cooldownDays) {
-        String sql = "INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass) VALUES (?, ?, ?, ?, 0)";
+    public synchronized void recordDeath(UUID uuid, String name, long nowMillis, int cooldownDays, @Nullable String deathMessage) {
+        String sql = "INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass, death_message) VALUES (?, ?, ?, ?, 0, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, uuid.toString());
             statement.setString(2, name);
             statement.setLong(3, nowMillis);
             statement.setInt(4, cooldownDays);
+            statement.setString(5, deathMessage);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not record death for " + name, e);

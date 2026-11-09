@@ -78,7 +78,10 @@ public class BodyDeathGameTests {
             CompoundTag saved = save(helper, player);
             helper.assertTrue(saved.getListOrEmpty("Inventory").isEmpty(), "saved inventory still has items");
             helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
-            helper.assertTrue(DeathLockout.refusal(owner) != null, "body death did not start the lockout");
+            // A mannequin's own death message would name the mannequin, so it is told as the owner's
+            String refusal = LockoutGameTests.refusalText(owner);
+            helper.assertTrue(refusal.startsWith("You died: Killed while away (" + player.getGameProfile().name() + " was killed)\n"),
+                    "body death's lockout: " + refusal);
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
             cleanUp(helper, owner, before);

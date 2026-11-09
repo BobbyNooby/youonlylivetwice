@@ -74,7 +74,8 @@ public class OfflineGameTests {
         helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
         helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 0, "saved XP level");
         helper.assertValueEqual(saved.getIntOr("XpTotal", -1), 0, "saved total XP");
-        helper.assertTrue(DeathLockout.refusal(who.id()) != null, "offline kill did not start the lockout");
+        String refusal = LockoutGameTests.refusalText(who.id());
+        helper.assertTrue(refusal.startsWith("You died: Killed while away\nTry again in "), "offline kill's lockout: " + refusal);
         helper.succeed();
     }
 

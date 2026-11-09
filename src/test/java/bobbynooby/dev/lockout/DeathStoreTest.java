@@ -41,8 +41,9 @@ class DeathStoreTest {
     void recordThenLatestRoundTrips() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {
-            store.recordDeath(uuid, "Bob", 1000L, 7);
-            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, false, null, null, null), store.latest(uuid).orElseThrow());
+            store.recordDeath(uuid, "Bob", 1000L, 7, "Bob was slain by Zombie");
+            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, false, "Bob was slain by Zombie", null, null),
+                    store.latest(uuid).orElseThrow());
         } finally {
             store.close();
         }
@@ -52,8 +53,8 @@ class DeathStoreTest {
     void latestReturnsNewestOfTwo() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {
-            store.recordDeath(uuid, "Bob", 1000L, 7);
-            store.recordDeath(uuid, "Bob", 2000L, 7);
+            store.recordDeath(uuid, "Bob", 1000L, 7, null);
+            store.recordDeath(uuid, "Bob", 2000L, 7, null);
             assertEquals(2000L, store.latest(uuid).orElseThrow().deathTimeMillis());
         } finally {
             store.close();
@@ -64,12 +65,12 @@ class DeathStoreTest {
     void reviveSetsBypassOnLatestOnly() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {
-            store.recordDeath(uuid, "Bob", 1000L, 7);
-            store.recordDeath(uuid, "Bob", 2000L, 7);
+            store.recordDeath(uuid, "Bob", 1000L, 7, null);
+            store.recordDeath(uuid, "Bob", 2000L, 7, null);
             assertTrue(store.revive(uuid));
             assertTrue(store.latest(uuid).orElseThrow().bypass());
             // a new death after the revive is a fresh, un-bypassed row
-            store.recordDeath(uuid, "Bob", 3000L, 7);
+            store.recordDeath(uuid, "Bob", 3000L, 7, null);
             assertFalse(store.latest(uuid).orElseThrow().bypass());
         } finally {
             store.close();
@@ -90,7 +91,7 @@ class DeathStoreTest {
     void deathSurvivesReopen() {
         Path file = dir.resolve("test.db");
         DeathStore first = DeathStore.open(file);
-        first.recordDeath(uuid, "Bob", 1000L, 7);
+        first.recordDeath(uuid, "Bob", 1000L, 7, null);
         first.close();
 
         DeathStore second = DeathStore.open(file);
@@ -145,7 +146,7 @@ class DeathStoreTest {
     void hotJournalStillOpens() throws IOException, SQLException {
         Path file = dir.resolve("crashed.db");
         DeathStore before = DeathStore.open(file);
-        before.recordDeath(uuid, "Bob", 1000L, 7);
+        before.recordDeath(uuid, "Bob", 1000L, 7, null);
         before.close();
 
         Path copy = dir.resolve("copy.db");
@@ -225,7 +226,7 @@ class DeathStoreTest {
         DeathStore store = DeathStore.open(file);
         try {
             assertTrue(store.latest(uuid).isEmpty());
-            store.recordDeath(uuid, "Bob", 1000L, 7);
+            store.recordDeath(uuid, "Bob", 1000L, 7, null);
             assertEquals(1000L, store.latest(uuid).orElseThrow().deathTimeMillis());
         } finally {
             store.close();

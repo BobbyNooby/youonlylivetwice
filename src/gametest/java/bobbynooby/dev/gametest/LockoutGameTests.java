@@ -60,6 +60,17 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // The second line's wait is CooldownTest's; this pins what login shows from the death log
+    @GameTest(environment = LOGIN_CHECK)
+    public void loginRefusalShowsDeathMessage(GameTestHelper helper) {
+        UUID uuid = UUID.randomUUID();
+        DeathLockout.recordDeath(uuid, "Faller", "Faller fell from a high place");
+        Component refusal = loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Faller"));
+        String text = refusal == null ? "" : refusal.getString();
+        helper.assertTrue(text.startsWith("You died: Faller fell from a high place\nTry again in "), "login refusal: " + text);
+        helper.succeed();
+    }
+
     @GameTest(environment = LOGIN_CHECK)
     public void revivedPlayerCanLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
@@ -273,7 +284,13 @@ public class LockoutGameTests {
 
     // Our refusal, not vanilla's (server full, banned, whitelist)
     static boolean refusedForLockout(Component refusal) {
-        return refusal != null && refusal.getString().startsWith("You are dead.");
+        return refusal != null && refusal.getString().startsWith("You died");
+    }
+
+    // What a locked-out player is told, or "" when they may join
+    static String refusalText(UUID uuid) {
+        Component refusal = DeathLockout.refusal(uuid);
+        return refusal == null ? "" : refusal.getString();
     }
 
     // The switches go back first, so a player still online leaves without making a body

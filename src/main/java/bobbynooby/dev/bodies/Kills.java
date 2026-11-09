@@ -46,7 +46,7 @@ public final class Kills {
             return BodyDeath.killBody(server, body.get());
         }
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
-                Profiles.of(who));
+                Profiles.of(who), null);
         return Result.KILLED_OFFLINE;
     }
 }

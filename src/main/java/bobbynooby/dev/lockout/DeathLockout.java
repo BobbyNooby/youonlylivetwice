@@ -102,15 +102,18 @@ public final class DeathLockout {
         if (remaining <= 0) {
             return null;
         }
-        return Component.literal(Cooldown.message(remaining));
+        return Component.literal(Cooldown.refusal(log.get().deathMessage(), remaining));
     }
 
-    /** Logs the death, then kicks after the current tick so the kick isn't inside the death call. */
+    /**
+     * Logs the death with the message the player's death screen got, then kicks after the current tick so the kick
+     * isn't inside the death call.
+     */
     public static void recordDeath(ServerPlayer player) {
         if (!enabled()) {
             return;
         }
-        recordDeath(player.getUUID(), player.nameAndId().name());
+        recordDeath(player.getUUID(), player.nameAndId().name(), DeathMessages.of(player));
         kickLater(player);
     }
 
@@ -129,7 +132,12 @@ public final class DeathLockout {
         });
     }
 
+    /** A death with no message; the player is told only that they died. */
     public static void recordDeath(UUID uuid, String name) {
+        recordDeath(uuid, name, null);
+    }
+
+    public static void recordDeath(UUID uuid, String name, @Nullable String deathMessage) {
         if (!enabled()) {
             return;
         }
@@ -139,7 +147,7 @@ public final class DeathLockout {
             return;
         }
         try {
-            open.recordDeath(uuid, name, System.currentTimeMillis(), Settings.get().deathLockout.cooldownDays);
+            open.recordDeath(uuid, name, System.currentTimeMillis(), Settings.get().deathLockout.cooldownDays, deathMessage);
             Yolt.LOGGER.info("Death log added for {}", name);
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not record death of {}", name, e);

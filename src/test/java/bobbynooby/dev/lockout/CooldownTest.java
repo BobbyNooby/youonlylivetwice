@@ -45,12 +45,30 @@ class CooldownTest {
 
     @Test
     void messageFormatsUnits() {
-        assertEquals("You are dead.\nTry again in 1 day, 1 hour, 1 minute, 1 second.", Cooldown.message(90_061_000L));
+        assertEquals("Try again in 1 day, 1 hour, 1 minute, 1 second.", Cooldown.message(90_061_000L));
+    }
+
+    // Rounded up, so a player still kept out is never told 0
+    @Test
+    void messageForUnderOneSecond() {
+        assertEquals("Try again in 1 second.", Cooldown.message(500L));
+    }
+
+    // Straight after a 7-day death, a few milliseconds have gone
+    @Test
+    void messageRoundsUpToTheSecond() {
+        assertEquals("Try again in 1 week.", Cooldown.message(7 * DAY - 3));
     }
 
     @Test
-    void messageForUnderOneSecond() {
-        assertEquals("You are dead.\nTry again in 0 seconds.", Cooldown.message(500L));
+    void refusalSaysHowTheyDiedThenTheWait() {
+        assertEquals("You died: Bob fell from a high place\nTry again in 1 week.",
+                Cooldown.refusal("Bob fell from a high place", 7 * DAY));
+    }
+
+    @Test
+    void refusalWithoutMessageStillGivesTheWait() {
+        assertEquals("You died.\nTry again in 2 days.", Cooldown.refusal(null, 2 * DAY));
     }
 
     // A month is 30 days and a year 365

@@ -1,16 +1,27 @@
 package bobbynooby.dev.lockout;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /** How long a dead player stays out, and how that is told to them. */
 public final class Cooldown {
     private static final long DAY_MS = Duration.ofDays(1).toMillis();
-    private static final long MINUTE_SECONDS = Duration.ofMinutes(1).toSeconds();
-    private static final long HOUR_SECONDS = Duration.ofHours(1).toSeconds();
+    private static final long SECOND_MS = Duration.ofSeconds(1).toMillis();
     private static final long DAY_SECONDS = Duration.ofDays(1).toSeconds();
-    private static final long WEEK_SECONDS = 7 * DAY_SECONDS;
-    private static final long MONTH_SECONDS = 30 * DAY_SECONDS;
-    private static final long YEAR_SECONDS = 365 * DAY_SECONDS;
+    // Longest first. A month is 30 days and a year 365.
+    private static final List<Unit> UNITS = List.of(
+            new Unit("year", 365 * DAY_SECONDS),
+            new Unit("month", 30 * DAY_SECONDS),
+            new Unit("week", 7 * DAY_SECONDS),
+            new Unit("day", DAY_SECONDS),
+            new Unit("hour", Duration.ofHours(1).toSeconds()),
+            new Unit("minute", Duration.ofMinutes(1).toSeconds()));
+
+    private record Unit(String name, long seconds) {
+    }
 
     private Cooldown() {}
 
@@ -23,38 +34,33 @@ public final class Cooldown {
         return Math.max(0, end - nowMillis);
     }
 
+    /** What a locked-out player is told, at login and when the death kicks them: how they died, then the wait. */
+    public static String refusal(@Nullable String deathMessage, long remainingMillis) {
+        String died = deathMessage == null || deathMessage.isBlank() ? "You died." : "You died: " + deathMessage;
+        return died + "\n" + message(remainingMillis);
+    }
+
+    /**
+     * "Try again in …". Rounded up to the second, so a kick straight after a 7-day death says 1 week, and a wait
+     * under a second isn't 0.
+     */
     public static String message(long remainingMillis) {
-        long seconds = remainingMillis / 1000;
+        long seconds = Math.ceilDiv(remainingMillis, SECOND_MS);
+        List<String> parts = new ArrayList<>();
+        for (Unit unit : UNITS) {
+            long count = seconds / unit.seconds();
+            seconds %= unit.seconds();
+            if (count > 0) {
+                parts.add(withUnit(count, unit.name()));
+            }
+        }
+        if (seconds > 0 || parts.isEmpty()) {
+            parts.add(withUnit(seconds, "second"));
+        }
+        return "Try again in " + String.join(", ", parts) + ".";
+    }
 
-        long years = seconds / YEAR_SECONDS;
-        seconds %= YEAR_SECONDS;
-
-        long months = seconds / MONTH_SECONDS;
-        seconds %= MONTH_SECONDS;
-
-        long weeks = seconds / WEEK_SECONDS;
-        seconds %= WEEK_SECONDS;
-
-        long days = seconds / DAY_SECONDS;
-        seconds %= DAY_SECONDS;
-
-        long hours = seconds / HOUR_SECONDS;
-        seconds %= HOUR_SECONDS;
-
-        long minutes = seconds / MINUTE_SECONDS;
-        seconds %= MINUTE_SECONDS;
-
-        StringBuilder sb = new StringBuilder("You are dead.\nTry again in ");
-
-        if (years > 0) sb.append(years).append(" year").append(years > 1 ? "s" : "").append(", ");
-        if (months > 0) sb.append(months).append(" month").append(months > 1 ? "s" : "").append(", ");
-        if (weeks > 0) sb.append(weeks).append(" week").append(weeks > 1 ? "s" : "").append(", ");
-        if (days > 0) sb.append(days).append(" day").append(days > 1 ? "s" : "").append(", ");
-        if (hours > 0) sb.append(hours).append(" hour").append(hours > 1 ? "s" : "").append(", ");
-        if (minutes > 0) sb.append(minutes).append(" minute").append(minutes > 1 ? "s" : "").append(", ");
-        if (seconds > 0 || sb.toString().endsWith("in "))
-            sb.append(seconds).append(" second").append(seconds != 1 ? "s" : "");
-
-        return sb.toString().replaceAll(", $", "") + ".";
+    private static String withUnit(long count, String unit) {
+        return count + " " + unit + (count == 1 ? "" : "s");
     }
 }

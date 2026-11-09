@@ -3,6 +3,7 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Profiles;
+import bobbynooby.dev.lockout.DeathMessages;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.minecraft.core.BlockPos;
@@ -16,6 +17,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Optional;
@@ -66,32 +68,32 @@ final class BodyDeath {
             throw new IllegalStateException("The body of " + record.ownerName() + " died, but they could not be killed");
         }
         BodySnapshot snapshot = record.snapshot();
-        // No entity, so no skin to keep: the grave head is built from the name
+        // No entity, so no skin to keep: the grave head is built from the name. Nothing died, so no death message.
         killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
-                Profiles.of(record.who()));
+                Profiles.of(record.who()), null);
         return Kills.Result.KILLED_OFFLINE;
     }
 
-    // The body's gear as it is now, where it fell, and its skin for the grave head. A player body's own profile
-    // has the body's id, and a revive head needs the owner's.
+    // The body's gear as it is now, where it fell, its skin for the grave head, and how it died. A player body's own
+    // profile has the body's id, and a revive head needs the owner's.
     private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
         ResolvableProfile profile = body instanceof PlayerBody playerBody ? playerBody.ownerProfile()
                 : body instanceof Avatar avatar ? avatar.getProfile()
                 : Profiles.of(record.who());
         killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
-                profile);
+                profile, DeathMessages.ofBody(body, record.ownerName()));
     }
 
     // Through the one offline-death routine. The record only goes once that has worked.
     private static void killOwner(MinecraftServer server, BodyRecord record, Map<EquipmentSlot, ItemStack> bodyGear,
-                                  GlobalPos where, ResolvableProfile profile) {
+                                  GlobalPos where, ResolvableProfile profile, @Nullable String bodyDeathMessage) {
         NameAndId who = record.who();
         CompoundTag tag = OfflinePlayerData.loadOrThrow(server, who);
         // Already dead, say after a crash before the record's removal was saved: a second death would restart the lockout
         if (!OfflinePlayerData.isDead(tag)) {
             // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
             BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess());
-            OfflineDeath.applyOfflineDeath(server, who, tag, where, profile);
+            OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage);
         }
         BodyStore.get(server).remove(record.owner());
     }

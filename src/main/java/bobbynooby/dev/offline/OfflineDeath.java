@@ -6,6 +6,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathMessages;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -21,6 +22,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -34,10 +36,10 @@ public final class OfflineDeath {
      * Turns the save into a dead player's, so the next login goes through vanilla's respawn.
      * All or nothing: if any step fails, the world and the save file stay as they were and the error is rethrown.
      * The tag object passed in is left wiped either way. The profile is the grave head's, so a caller that has the
-     * player's skin can keep it.
+     * player's skin can keep it. The body's death message, when it was a body that died, goes into the death log.
      */
     public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where,
-                                         ResolvableProfile profile) {
+                                         ResolvableProfile profile, @Nullable String bodyDeathMessage) {
         // Prepare: wipe the tag and write it to a temp file before anything in the world changes
         ServerLevel level = levelFor(server, where);
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
@@ -86,7 +88,7 @@ public final class OfflineDeath {
             throw e;
         }
 
-        DeathLockout.recordDeath(who.id(), who.name());
+        DeathLockout.recordDeath(who.id(), who.name(), DeathMessages.whileAway(bodyDeathMessage));
     }
 
     /**
