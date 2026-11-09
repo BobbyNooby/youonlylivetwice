@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -65,6 +66,54 @@ public class BodyMobGameTests {
         ignoresBody(helper, "SwitchedOff", EntityTypes.ZOMBIE, FOUR_AWAY,
                 (zombie, body) -> helper.assertValueEqual(body.getHealth(), body.getMaxHealth(), "body health"),
                 () -> bodies.mobsAttack = before);
+    }
+
+    // The test above shares this batch and holds the switch off for its wait. So this waits for the hunt to start,
+    // and only reads the switch when it turns it off.
+    @GameTest(maxTicks = 400, environment = SOLO)
+    public void huntStopsWhenSwitchTurnedOff(GameTestHelper helper) {
+        YoltConfig.BodiesSection bodies = Settings.get().bodies;
+        List<Entity> spawned = new ArrayList<>();
+        UUID owner = null;
+        boolean waiting = false;
+        try {
+            ServerPlayer player = join(helper, "Spared");
+            owner = player.getUUID();
+            Mannequin body = leaveBody(helper, player);
+            Mob zombie = helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY);
+            spawned.add(zombie);
+            UUID bodyOwner = owner;
+            // Empty until the switch is turned off
+            AtomicReference<Boolean> before = new AtomicReference<>();
+            Runnable finish = () -> {
+                Boolean was = before.getAndSet(null);
+                if (was != null) {
+                    bodies.mobsAttack = was;
+                }
+                cleanUp(helper, bodyOwner, spawned);
+            };
+            helper.runBeforeTestEnd(finish);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(zombie.getTarget() == body, "the zombie has not gone for the body"))
+                    .thenExecute(() -> {
+                        before.set(bodies.mobsAttack);
+                        bodies.mobsAttack = false;
+                    })
+                    // A mob rechecks its running target goals every other tick
+                    .thenExecuteAfter(4, () -> {
+                        try {
+                            helper.assertFalse(zombie.getTarget() == body, "the zombie still goes for the body");
+                        } finally {
+                            finish.run();
+                        }
+                    })
+                    .thenSucceed();
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp(helper, owner, spawned);
+            }
+        }
     }
 
     @GameTest(maxTicks = 200)
