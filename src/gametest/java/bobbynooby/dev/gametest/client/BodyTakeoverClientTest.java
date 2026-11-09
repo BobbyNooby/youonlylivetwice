@@ -194,6 +194,9 @@ public class BodyTakeoverClientTest implements FabricClientGameTest {
     }
 
     private static void showTakeover(ClientGameTestContext ctx) {
+        // The sword in hand at login restarts the attack cooldown, whose meter would sit under the crosshair
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.getAttackStrengthScale(0.0F) >= 1.0F,
+                mc -> "the client's attack cooldown never filled up");
         // Five hearts: the body's health, not the full health the client left with
         ClientTests.screenshot(ctx, "05-login-takeover");
         ctx.getInput().pressKey(options -> options.keyInventory);
