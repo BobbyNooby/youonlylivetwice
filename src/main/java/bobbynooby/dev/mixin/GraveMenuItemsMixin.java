@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AbstractContainerMenu.class)
-public abstract class AbstractContainerMenuMixin {
+public abstract class GraveMenuItemsMixin {
     // Every menu hands its cursor and input items back to the player through here when it closes
     @Inject(method = "dropOrPlaceInInventory", at = @At("HEAD"), cancellable = true)
     private static void takeForGrave(Player player, ItemStack stack, CallbackInfo ci) {

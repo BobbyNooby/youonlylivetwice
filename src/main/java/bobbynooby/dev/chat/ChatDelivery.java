@@ -87,7 +87,7 @@ public final class ChatDelivery {
         return false;
     }
 
-    // Op and console announcements go out through vanilla's broadcast; ServerPlayerMixin turns them to text where needed
+    // Op and console announcements go out through vanilla's broadcast; ChatFallbackMixin turns them to text where needed
     private static boolean onCommandMessage(PlayerChatMessage message, CommandSourceStack source, ChatType.Bound chatType) {
         if (!Settings.active()) {
             return true;

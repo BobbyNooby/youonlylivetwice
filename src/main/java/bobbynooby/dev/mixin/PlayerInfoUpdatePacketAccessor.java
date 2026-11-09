@@ -13,5 +13,5 @@ public interface PlayerInfoUpdatePacketAccessor {
 
     @Accessor("entries")
     @Mutable
-    void setEntries(List<ClientboundPlayerInfoUpdatePacket.Entry> entries);
+    void yoltSetEntries(List<ClientboundPlayerInfoUpdatePacket.Entry> entries);
 }

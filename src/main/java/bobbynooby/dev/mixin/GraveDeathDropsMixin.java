@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 // ServerPlayer doesn't override dropEquipment. XP drops in a separate call afterwards, so it still drops.
 @Mixin(Player.class)
-public abstract class PlayerDropEquipmentMixin {
+public abstract class GraveDeathDropsMixin {
     @Inject(method = "dropEquipment", at = @At("HEAD"), cancellable = true)
     private void moveDropsIntoGrave(ServerLevel level, CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer player && Graves.onPlayerDeathDrops(player, level)) {

@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Commands.class)
-public class CommandManagerMixin {
+public abstract class CommandRestrictionMixin {
 
     @Shadow
     @Final
@@ -37,18 +37,13 @@ public class CommandManagerMixin {
             return;
         }
 
-        // Check if command is help
         if (commandRoot.equals("help")) {
-
-            // Send help message to non-op players
             player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
         }
 
-        // Just ignore the command if it is not help
         ci.cancel();
     }
 
-    // Send restricted command tree to non-op players
     @Inject(method = "sendCommands", at = @At("HEAD"), cancellable = true)
     private void sendPatchedCommandTree(ServerPlayer player, CallbackInfo ci) {
         if (Whispers.restricted(player)) {

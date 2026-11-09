@@ -8,5 +8,5 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface PlayerInvoker {
     // Lets graves destroy curse of vanishing items exactly as a vanilla death does
     @Invoker("destroyVanishingCursedItems")
-    void invokeDestroyVanishingCursedItems();
+    void yoltDestroyVanishingCursedItems();
 }

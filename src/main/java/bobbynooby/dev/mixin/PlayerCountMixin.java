@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.List;
 
 @Mixin(ServerStatus.Players.class)
-public class PlayerCountSpoofer {
+public abstract class PlayerCountMixin {
 
     @Inject(method = "max", at = @At("HEAD"), cancellable = true)
     private void getMaxPlayers(CallbackInfoReturnable<Integer> cir) {

@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerEntity.class)
-public abstract class ServerEntityMixin {
+public abstract class VisibilityPairingMixin {
     @Shadow
     @Final
     private Entity entity;

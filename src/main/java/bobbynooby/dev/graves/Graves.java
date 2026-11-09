@@ -146,7 +146,7 @@ public final class Graves {
             if (!keepInventory) {
                 // Menus close first, so a menu that hands items back into the inventory is covered by the scan
                 fromMenus = takeMenuItems(player);
-                ((PlayerInvoker) player).invokeDestroyVanishingCursedItems();
+                ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
                 addStacks(items, inventory);
                 items.addAll(fromMenus);
             }

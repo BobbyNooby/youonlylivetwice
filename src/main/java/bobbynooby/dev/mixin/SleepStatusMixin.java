@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.List;
 
 @Mixin(SleepStatus.class)
-public class SleepManagerMixin {
+public abstract class SleepStatusMixin {
 
     @Inject(method = "amountSleeping", at = @At("HEAD"), cancellable = true)
     private void getFakeSleeping(CallbackInfoReturnable<Integer> cir) {

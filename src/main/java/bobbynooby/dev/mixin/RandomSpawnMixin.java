@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PlayerSpawnFinder.class)
-public abstract class SpawnLocatingMixin {
+public abstract class RandomSpawnMixin {
 
 
     @Inject(method = "getLevelRespawnPos", at = @At("HEAD"), cancellable = true)

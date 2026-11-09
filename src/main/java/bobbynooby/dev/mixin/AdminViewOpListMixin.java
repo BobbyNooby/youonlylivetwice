@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(MinecraftOperatorListServiceImpl.class)
-public abstract class MinecraftOperatorListServiceImplMixin {
+public abstract class AdminViewOpListMixin {
     @Shadow
     @Final
     private NotificationManager notificationManager;

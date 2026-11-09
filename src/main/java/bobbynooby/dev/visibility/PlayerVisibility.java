@@ -228,7 +228,7 @@ public final class PlayerVisibility {
     private static ClientboundPlayerInfoUpdatePacket withEntries(ClientboundPlayerInfoUpdatePacket packet,
                                                                  List<ClientboundPlayerInfoUpdatePacket.Entry> entries) {
         ClientboundPlayerInfoUpdatePacket copy = new ClientboundPlayerInfoUpdatePacket(packet.actions(), List.of());
-        ((PlayerInfoUpdatePacketAccessor) copy).setEntries(entries);
+        ((PlayerInfoUpdatePacketAccessor) copy).yoltSetEntries(entries);
         return copy;
     }
 }

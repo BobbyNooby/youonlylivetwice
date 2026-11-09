@@ -12,31 +12,23 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerList.class)
-public abstract class PlayerManagerMixin {
-
-    /*
-
-        Custom Tab Headers Section
-
-     */
+public abstract class TabHeaderMixin {
 
     // Generate custom tab header each time a player joins. Done with the switch off too,
     // so turning it on mid-session also covers players who are already online.
     @Inject(method = "placeNewPlayer", at = @At("HEAD"))
-    public void sendHeader(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
+    private void headerOnJoin(Connection connection, ServerPlayer player, CommonListenerCookie cookie, CallbackInfo ci) {
         if (!Settings.active()) {
             return;
         }
         TabHeaders.onJoin(player);
     }
 
-    // Called every tick. Update the custom tab header
     @Inject(method = "tick", at = @At("HEAD"))
-    public void sendHeader(CallbackInfo ci) {
+    private void headerEveryTick(CallbackInfo ci) {
         if (!Settings.active() || !Settings.get().hide.tabHeader) {
             return;
         }
         TabHeaders.sendAll((PlayerList) (Object) this);
     }
-
 }
