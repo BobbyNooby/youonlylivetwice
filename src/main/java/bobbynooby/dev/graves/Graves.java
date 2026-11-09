@@ -10,7 +10,6 @@ import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.mixin.PlayerInvoker;
-import bobbynooby.dev.revive.Revive;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
@@ -335,19 +334,7 @@ public final class Graves {
                 return InteractionResult.CONSUME;
             }
         }
-        return useReviveHead(serverPlayer, hand);
-    }
-
-    // Right-clicking with a revive head always means trying to revive, so the clicked block never reacts. A grave
-    // head passes: the block reacts as usual, and placing it is refused in refusePlacement.
-    private static InteractionResult useReviveHead(ServerPlayer player, InteractionHand hand) {
-        ItemStack stack = player.getItemInHand(hand);
-        if (player.isSpectator() || !GraveItems.isReviveHead(stack)) {
-            return InteractionResult.PASS;
-        }
-        Revive.tryUse(player, stack);
-        resendInventory(player);
-        return InteractionResult.FAIL;
+        return InteractionResult.PASS;
     }
 
     // The client placed the head on its side and took it off the stack, so send it the real stack

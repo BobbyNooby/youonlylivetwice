@@ -44,6 +44,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         DeathLockout.init();
         Graves.init();
         Bodies.init();
+        // After Graves: its use-block hook opens a clicked grave before a revive head in hand is tried
         Revive.init();
         TabHeaders.init();
         ChatDelivery.init();

@@ -4,6 +4,7 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -18,6 +19,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -36,10 +38,11 @@ public final class Revive {
     private Revive() {
     }
 
-    // Right-click in the air. Right-click on a block goes through the grave use-block handler, which also
-    // stops the head being placed.
+    // Right-click in the air, and on a block. The block hook only runs when the grave one passes, so a click on a
+    // grave opens it instead.
     public static void init() {
         UseItemCallback.EVENT.register(Revive::onUseItem);
+        UseBlockCallback.EVENT.register(Revive::onUseBlock);
     }
 
     /** Tells the user what happened. Only a revive that went through uses up one head. */
@@ -82,6 +85,22 @@ public final class Revive {
         }
         // The client saw no use for a head, so it didn't swing; the server swings for it
         return tryUse(user, stack) == Outcome.REVIVED ? InteractionResult.SUCCESS_SERVER : InteractionResult.FAIL;
+    }
+
+    // Right-clicking with a revive head always means trying to revive, so the clicked block never reacts. A grave
+    // head passes: the block reacts as usual, and Graves.refusePlacement stops it being placed.
+    private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+        if (!Settings.active() || !(player instanceof ServerPlayer user) || user.isSpectator()) {
+            return InteractionResult.PASS;
+        }
+        ItemStack stack = user.getItemInHand(hand);
+        if (!GraveItems.isReviveHead(stack)) {
+            return InteractionResult.PASS;
+        }
+        tryUse(user, stack);
+        // The client placed the head on its side and took it off the stack, so send it the real stack
+        user.inventoryMenu.sendAllDataToRemote();
+        return InteractionResult.FAIL;
     }
 
     // A head given by id alone has no name to show
