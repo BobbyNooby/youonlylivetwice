@@ -15,6 +15,7 @@ import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
@@ -227,6 +228,29 @@ public class PlayerBodyGameTests {
             helper.assertTrue(hasSkin(restored.ownerProfile().partialProfile().properties()), "grave profile lost the skin");
             helper.assertTrue(Bodies.isBody(restored), "restored body not recognised as a body");
             helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // An autosave keeps the record current, so a crash doesn't bring the body back as it was at logout
+    @GameTest(environment = BODY_RESTART)
+    public void playerBodyRecordKeptCurrentOnSave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Autosaved", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
+            body.setHealth(13.0F);
+            // What every save runs first, without saving the whole world in a test
+            ServerLifecycleEvents.BEFORE_SAVE.invoker().onBeforeSave(helper.getLevel().getServer(), false, false);
+
+            Optional<BodyRecord> record = store(helper).byOwner(owner);
+            helper.assertTrue(record.isPresent(), "no body record");
+            helper.assertValueEqual(record.get().snapshot().pos(), body.position(), "saved position");
+            helper.assertValueEqual(record.get().snapshot().health(), 13.0F, "saved health");
         } finally {
             cleanUp(helper, owner, before);
         }

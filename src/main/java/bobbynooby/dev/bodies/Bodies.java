@@ -77,6 +77,8 @@ public final class Bodies {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
         ServerLifecycleEvents.SERVER_STARTED.register(Bodies::restorePlayerBodies);
         ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotBodies);
+        // Every save too, autosaves included, so after a crash a player body comes back as last saved, not as it logged out
+        ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> snapshotBodies(server));
         BodyExpiry.init();
     }
 
@@ -184,9 +186,9 @@ public final class Bodies {
     }
 
     /**
-     * Saves the state of every loaded body as the server stops. A player body isn't saved with its chunk, so its record
-     * is all that comes back. A mannequin's record is what a login uses while its chunk stays unloaded, and this keeps
-     * it current without depending on when the stop unloads that chunk.
+     * Saves the state of every loaded body as the server stops and before each save. A player body isn't saved with its
+     * chunk, so its record is all that comes back. A mannequin's record is what a login uses while its chunk stays
+     * unloaded, and this keeps it current without depending on when the stop unloads that chunk.
      */
     public static void snapshotBodies(MinecraftServer server) {
         if (!Settings.active()) {
@@ -194,7 +196,7 @@ public final class Bodies {
         }
         BodyStore store = BodyStore.get(server);
         for (BodyRecord record : store.all()) {
-            // This runs at the start of the stop, before the world and players are saved, which must go ahead anyway
+            // This runs at the start of the stop and of each save, which must go ahead anyway
             try {
                 // A dying body belongs to the death path, and its state is nothing to hand over
                 if (!record.pendingRemoval()
