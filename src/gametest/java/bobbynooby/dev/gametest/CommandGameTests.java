@@ -81,6 +81,24 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // Writes the config file, so it runs with the other tests that do, apart from the ones holding the config
+    @GameTest(environment = CONFIG_COMMAND)
+    public void respawnCooldownReplyNamesUnitAndScope(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        int daysBefore = Settings.get().deathLockout.cooldownDays;
+        String fileBefore = Files.readString(Settings.path());
+        try {
+            String scope = " It applies to deaths from now on; use /yolt unkill for the rest.";
+            helper.assertValueEqual(run(server, "yolt respawncooldown 7"), List.of("Respawn cooldown set to 7 days." + scope), "output for 7");
+            helper.assertValueEqual(run(server, "yolt respawncooldown 1"), List.of("Respawn cooldown set to 1 day." + scope), "output for 1");
+            helper.assertValueEqual(Settings.get().deathLockout.cooldownDays, 1, "cooldown setting");
+        } finally {
+            Settings.get().deathLockout.cooldownDays = daysBefore;
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void borderWithFeatureOffSavesAndSaysSo(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
