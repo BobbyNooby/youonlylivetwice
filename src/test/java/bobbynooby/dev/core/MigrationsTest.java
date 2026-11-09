@@ -2,6 +2,7 @@ package bobbynooby.dev.core;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +24,13 @@ class MigrationsTest {
     void stepsRunInOrderFromTheFileVersion() {
         assertEquals(List.of("1to2", "2to3"), Migrations.run("test data", 1, 3, STEPS, List.of()));
         assertEquals(List.of("2to3"), Migrations.run("test data", 2, 3, STEPS, List.of()));
+    }
+
+    // Counting up through every number from a damaged version would take billions of turns
+    @Test
+    void farOlderVersionOnlyWalksTheSteps() {
+        assertTimeout(Duration.ofMillis(500), () ->
+                assertEquals(List.of("1to2", "2to3"), Migrations.run("test data", Integer.MIN_VALUE, 3, STEPS, List.of())));
     }
 
     @Test
