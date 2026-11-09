@@ -50,6 +50,23 @@ class DeathStoreTest {
     }
 
     @Test
+    void longDeathMessageIsCappedAt256() {
+        DeathStore store = DeathStore.open(dir.resolve("test.db"));
+        try {
+            store.recordDeath(uuid, "Bob", 1000L, 7, "x".repeat(300));
+            assertEquals("x".repeat(256), store.latest(uuid).orElseThrow().deathMessage());
+            // A character outside the basic plane is two chars; its first half would be left on its own at 256
+            String split = "y".repeat(255) + "😀" + "z";
+            store.recordDeath(uuid, "Bob", 2000L, 7, split);
+            assertEquals("y".repeat(255), store.latest(uuid).orElseThrow().deathMessage());
+            store.recordDeath(uuid, "Bob", 3000L, 7, "x".repeat(256));
+            assertEquals("x".repeat(256), store.latest(uuid).orElseThrow().deathMessage());
+        } finally {
+            store.close();
+        }
+    }
+
+    @Test
     void latestReturnsNewestOfTwo() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {

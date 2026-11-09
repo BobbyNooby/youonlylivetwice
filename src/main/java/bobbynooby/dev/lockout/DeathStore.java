@@ -36,6 +36,8 @@ public final class DeathStore {
                     "CREATE INDEX IF NOT EXISTS death_logs_uuid ON death_logs (uuid)",
                     "CREATE INDEX IF NOT EXISTS death_logs_name ON death_logs (username COLLATE NOCASE)"));
     private static final String COLUMNS = "uuid, username, death_time_ms, cooldown_days, bypass, death_message, revived_at, revived_by";
+    /** The longest death message kept, in characters. */
+    static final int MAX_DEATH_MESSAGE = 256;
 
     private final Connection connection;
 
@@ -218,11 +220,21 @@ public final class DeathStore {
             statement.setString(2, name);
             statement.setLong(3, nowMillis);
             statement.setInt(4, cooldownDays);
-            statement.setString(5, deathMessage);
+            statement.setString(5, capped(deathMessage));
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not record death for " + name, e);
         }
+    }
+
+    // Cut like vanilla's fallback for an oversized death message, so a long item name can't fill every refusal
+    private static @Nullable String capped(@Nullable String deathMessage) {
+        if (deathMessage == null || deathMessage.length() <= MAX_DEATH_MESSAGE) {
+            return deathMessage;
+        }
+        // Never between the two halves of a character outside the basic plane
+        int end = Character.isHighSurrogate(deathMessage.charAt(MAX_DEATH_MESSAGE - 1)) ? MAX_DEATH_MESSAGE - 1 : MAX_DEATH_MESSAGE;
+        return deathMessage.substring(0, end);
     }
 
     public synchronized Optional<DeathLog> latest(UUID uuid) {
