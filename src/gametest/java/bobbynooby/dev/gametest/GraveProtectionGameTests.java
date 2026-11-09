@@ -4,6 +4,7 @@ import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
@@ -154,7 +155,7 @@ public class GraveProtectionGameTests {
         try {
             ServerLevel level = helper.getLevel();
             level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            Graves.restoreChunk(level, level.getChunkAt(grave.pos()));
+            GraveBlocks.restoreChunk(level, level.getChunkAt(grave.pos()));
             assertGraveIntact(helper, grave);
         } finally {
             removeGraves(helper, List.of(grave));

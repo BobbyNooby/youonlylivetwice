@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.graves.GraveDeath;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class GraveDeathDropsMixin {
     @Inject(method = "dropEquipment", at = @At("HEAD"), cancellable = true)
     private void moveDropsIntoGrave(ServerLevel level, CallbackInfo ci) {
-        if ((Object) this instanceof ServerPlayer player && Graves.onPlayerDeathDrops(player, level)) {
+        if ((Object) this instanceof ServerPlayer player && GraveDeath.onPlayerDeathDrops(player, level)) {
             ci.cancel();
         }
     }

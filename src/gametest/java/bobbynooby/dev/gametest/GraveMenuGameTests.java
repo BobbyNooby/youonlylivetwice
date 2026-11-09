@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -73,7 +74,7 @@ public class GraveMenuGameTests {
         ServerPlayer player = join(helper, "Stuffer");
         try {
             player.getInventory().setItem(0, new ItemStack(Items.STONE, 16));
-            Graves.open(player, grave);
+            GraveMenus.open(player, grave);
             AbstractContainerMenu menu = player.containerMenu;
             int hotbar0 = menu.findSlot(player.getInventory(), 0).getAsInt();
 
@@ -116,7 +117,7 @@ public class GraveMenuGameTests {
         ServerPlayer player = TestPlayers.join(helper, "Cloner", GameType.CREATIVE, new BlockPos(1, 1, 1));
         try {
             helper.assertTrue(player.hasInfiniteMaterials(), "creative player cannot clone");
-            Graves.open(player, grave);
+            GraveMenus.open(player, grave);
             AbstractContainerMenu menu = player.containerMenu;
             // Button 2 is the middle mouse button
             menu.clicked(0, 2, ContainerInput.CLONE, player);
@@ -138,7 +139,7 @@ public class GraveMenuGameTests {
         Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
         ServerPlayer player = join(helper, "Looter");
         try {
-            Graves.open(player, grave);
+            GraveMenus.open(player, grave);
             AbstractContainerMenu menu = player.containerMenu;
             for (int slot = 0; slot < 3; slot++) {
                 menu.clicked(slot, PRIMARY, ContainerInput.QUICK_MOVE, player);
@@ -148,7 +149,7 @@ public class GraveMenuGameTests {
             helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isEmpty(), "grave record still stored");
             helper.assertTrue(player.containerMenu == player.inventoryMenu, "menu still open");
             helper.assertFalse(menu.stillValid(player), "menu still valid for a removed grave");
-            helper.assertTrue(Graves.containerFor(grave) == null, "container still shared");
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "container still shared");
             helper.assertValueEqual(count(player, Items.PLAYER_HEAD), 1, "heads the player has");
             helper.assertValueEqual(count(player, Items.DIAMOND), 1, "diamonds the player has");
             helper.assertValueEqual(count(player, Items.IRON_SWORD), 1, "swords the player has");
@@ -164,13 +165,13 @@ public class GraveMenuGameTests {
         ServerPlayer a = join(helper, "ViewerA");
         ServerPlayer b = join(helper, "ViewerB");
         try {
-            Graves.open(a, grave);
-            Graves.open(b, grave);
+            GraveMenus.open(a, grave);
+            GraveMenus.open(b, grave);
             AbstractContainerMenu menuA = a.containerMenu;
             AbstractContainerMenu menuB = b.containerMenu;
             helper.assertTrue(menuA instanceof GraveMenu && menuB instanceof GraveMenu && menuA != menuB, "each viewer needs their own grave menu");
             helper.assertTrue(menuA.getSlot(0).container == menuB.getSlot(0).container
-                    && menuA.getSlot(0).container == Graves.containerFor(grave), "viewers do not share one container");
+                    && menuA.getSlot(0).container == GraveMenus.containerFor(grave), "viewers do not share one container");
 
             menuA.clicked(1, PRIMARY, ContainerInput.PICKUP, a);
             helper.assertTrue(menuA.getCarried().is(Items.DIAMOND), "A did not pick up the diamond");
@@ -194,8 +195,8 @@ public class GraveMenuGameTests {
         ServerPlayer a = join(helper, "LastA");
         ServerPlayer b = join(helper, "LastB");
         try {
-            Graves.open(a, grave);
-            Graves.open(b, grave);
+            GraveMenus.open(a, grave);
+            GraveMenus.open(b, grave);
             AbstractContainerMenu menuA = a.containerMenu;
             AbstractContainerMenu menuB = b.containerMenu;
 

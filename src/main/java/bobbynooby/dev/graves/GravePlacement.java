@@ -5,6 +5,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** Picks the block a grave head goes on: near the death spot, never on another grave, always reachable. */
 public final class GravePlacement {
     private static final int VOID_SEARCH_RADIUS = 16;
@@ -34,15 +37,9 @@ public final class GravePlacement {
         }
         for (int r = 1; r <= RING_RADIUS; r++) {
             for (int dy = 0; dy <= RING_UP && start.getY() + dy <= topY; dy++) {
-                for (int dx = -r; dx <= r; dx++) {
-                    for (int dz = -r; dz <= r; dz++) {
-                        if (Math.max(Math.abs(dx), Math.abs(dz)) != r) {
-                            continue;
-                        }
-                        BlockPos pos = start.offset(dx, dy, dz);
-                        if (usable(level, pos, store)) {
-                            return pos;
-                        }
+                for (BlockPos pos : ring(start.above(dy), r)) {
+                    if (usable(level, pos, store)) {
+                        return pos;
                     }
                 }
             }
@@ -84,17 +81,12 @@ public final class GravePlacement {
     private static BlockPos reachableSpotNear(ServerLevel level, BlockPos from) {
         int minY = level.getMinY();
         for (int r = 1; r <= VOID_SEARCH_RADIUS; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dz)) != r) {
-                        continue;
-                    }
-                    int x = from.getX() + dx;
-                    int z = from.getZ() + dz;
-                    int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
-                    if (top > minY) {
-                        return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
-                    }
+            for (BlockPos column : ring(from, r)) {
+                int x = column.getX();
+                int z = column.getZ();
+                int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
+                if (top > minY) {
+                    return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
                 }
             }
         }
@@ -104,5 +96,18 @@ public final class GravePlacement {
         level.getChunk(spawn);
         int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, spawn.getX(), spawn.getZ()), minY + 1);
         return new BlockPos(spawn.getX(), Math.min(top, level.getMaxY() - 1), spawn.getZ());
+    }
+
+    // Every block exactly r out from the centre on its layer, always in the same order
+    private static List<BlockPos> ring(BlockPos centre, int r) {
+        List<BlockPos> ring = new ArrayList<>();
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) == r) {
+                    ring.add(centre.offset(dx, 0, dz));
+                }
+            }
+        }
+        return ring;
     }
 }

@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -67,14 +68,14 @@ public class GraveCommandGameTests {
         Grave grave = makeGrave(helper);
         ServerPlayer player = TestPlayers.join(helper, "Looter", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            Graves.open(player, grave);
+            GraveMenus.open(player, grave);
             helper.assertTrue(player.containerMenu instanceof GraveMenu, "menu did not open");
             BlockPos pos = grave.pos();
             run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
 
             helper.assertFalse(player.containerMenu instanceof GraveMenu, "menu still open");
             helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isEmpty(), "record came back");
-            helper.assertTrue(Graves.containerFor(grave) == null, "shared container still registered");
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "shared container still registered");
             int diamonds = dropped(helper, grave, Items.DIAMOND) + player.getInventory().countItem(Items.DIAMOND);
             helper.assertValueEqual(diamonds, 1, "diamonds in the world");
         } finally {

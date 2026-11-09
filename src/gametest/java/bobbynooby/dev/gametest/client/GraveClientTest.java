@@ -3,8 +3,8 @@ package bobbynooby.dev.gametest.client;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
-import bobbynooby.dev.graves.Graves;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -105,7 +105,7 @@ public class GraveClientTest implements FabricClientGameTest {
 
     private static void showGraveMenu(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                       TestDedicatedServerConnection connection, Grave grave) {
-        server.runOnServer(s -> Graves.open(connection.getServerPlayer(), grave));
+        server.runOnServer(s -> GraveMenus.open(connection.getServerPlayer(), grave));
         ctx.waitForScreen(ContainerScreen.class);
         // The slot contents come in their own packet after the menu opens
         connection.waitForClientboundPackets();

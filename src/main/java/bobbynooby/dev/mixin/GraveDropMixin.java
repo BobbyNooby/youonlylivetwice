@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.graves.GraveDeath;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -16,7 +16,7 @@ public abstract class GraveDropMixin {
     @Inject(method = "drop(Lnet/minecraft/world/item/ItemStack;ZLnet/minecraft/util/Prediction;)Lnet/minecraft/world/entity/item/ItemEntity;",
             at = @At("HEAD"), cancellable = true)
     private void takeDropForGrave(ItemStack stack, boolean thrownFromHand, Prediction prediction, CallbackInfoReturnable<ItemEntity> cir) {
-        if (Graves.takeReturnedItem((ServerPlayer) (Object) this, stack)) {
+        if (GraveDeath.takeReturnedItem((ServerPlayer) (Object) this, stack)) {
             cir.setReturnValue(null);
         }
     }

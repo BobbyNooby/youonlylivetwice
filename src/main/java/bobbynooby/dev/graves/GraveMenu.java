@@ -26,7 +26,7 @@ public class GraveMenu extends AbstractContainerMenu {
         super(MenuType.GENERIC_9x6, containerId);
         this.grave = grave;
         // Fetched here and not by the caller: opening a menu first closes the old one, which can let go of the container
-        this.container = Graves.sharedContainer(inventory.player.level().getServer(), grave);
+        this.container = GraveMenus.sharedContainer(inventory.player.level().getServer(), grave);
         container.startOpen(inventory.player);
 
         // Same layout as a vanilla 6-row chest, so a vanilla client draws it as one
@@ -81,7 +81,7 @@ public class GraveMenu extends AbstractContainerMenu {
         container.setChanged();
         // Only after the click: closing the menu in the middle of one would leave the taken item on a dropped cursor
         if (container.isEmpty()) {
-            Graves.removeIfEmpty(player.level().getServer(), grave);
+            GraveMenus.removeIfEmpty(player.level().getServer(), grave);
         }
     }
 

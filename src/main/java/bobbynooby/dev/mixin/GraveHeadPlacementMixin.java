@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.graves.GraveBlocks;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -14,7 +14,7 @@ public abstract class GraveHeadPlacementMixin {
     // Every head placement passes through here, after the clicked block has had its chance to react
     @Inject(method = "place", at = @At("HEAD"), cancellable = true)
     private void refuseMarkedHeads(BlockPlaceContext context, CallbackInfoReturnable<InteractionResult> cir) {
-        if (Graves.refusePlacement(context)) {
+        if (GraveBlocks.refusePlacement(context)) {
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }
