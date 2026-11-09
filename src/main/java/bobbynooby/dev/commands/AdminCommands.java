@@ -11,7 +11,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.LOGGER;
+import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt adminview and reload. */
 final class AdminCommands {

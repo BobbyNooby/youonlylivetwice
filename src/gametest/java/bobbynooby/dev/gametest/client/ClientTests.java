@@ -1,8 +1,8 @@
 package bobbynooby.dev.gametest.client;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.TestPlayers;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
@@ -97,7 +97,7 @@ public final class ClientTests {
             try {
                 step.run();
             } catch (RuntimeException | Error e) {
-                YouOnlyLiveTwice.LOGGER.error("A client test step failed", e);
+                Yolt.LOGGER.error("A client test step failed", e);
                 if (first == null) {
                     first = e;
                 } else {

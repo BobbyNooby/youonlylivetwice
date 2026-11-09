@@ -14,7 +14,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.OptionalInt;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.LOGGER;
+import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt grave list and remove. */
 final class GraveCommands {

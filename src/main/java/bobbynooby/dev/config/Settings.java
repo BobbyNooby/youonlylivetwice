@@ -1,6 +1,6 @@
 package bobbynooby.dev.config;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.core.Yolt;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 
@@ -24,7 +24,7 @@ public final class Settings {
         ConfigLoader.Result result = ConfigLoader.load(path(), true);
         config = result.config();
         for (String warning : result.warnings()) {
-            YouOnlyLiveTwice.LOGGER.warn("Config: {}", warning);
+            Yolt.LOGGER.warn("Config: {}", warning);
         }
     }
 

@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
@@ -182,7 +182,7 @@ public class CommandGameTests {
         dumpChildren(CommandRestriction.nonOpTree(true), lines);
 
         String tree = String.join("\n", lines);
-        YouOnlyLiveTwice.LOGGER.info("Command trees:\n{}", tree);
+        Yolt.LOGGER.info("Command trees:\n{}", tree);
         helper.assertValueEqual(tree, """
                 root order: yolt, w
                 yolt | literal | level 2

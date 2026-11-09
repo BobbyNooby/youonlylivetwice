@@ -10,7 +10,7 @@ import net.minecraft.world.entity.Entity;
 
 import org.jspecify.annotations.Nullable;
 
-/** Leaves a body behind when a player logs out, hands its state back when they log in, and kills them when it dies. */
+/** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
 public final class Bodies {
     /** Marks the entities we made, so a decorative mannequin is never taken for a body. */
     public static final String TAG = "yolt_body";

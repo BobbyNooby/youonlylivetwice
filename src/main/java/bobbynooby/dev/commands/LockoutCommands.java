@@ -13,7 +13,7 @@ import net.minecraft.server.players.NameAndId;
 
 import java.util.Optional;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.LOGGER;
+import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt respawncooldown, kill and unkill. */
 final class LockoutCommands {

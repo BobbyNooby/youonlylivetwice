@@ -1,10 +1,10 @@
 package bobbynooby.dev.gametest.client;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.TestPlayers;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -159,7 +159,7 @@ public class BodyClientTest implements FabricClientGameTest {
     private static void checkHitbox(ClientGameTestContext ctx, UUID bodyId, String name, double width, double height) {
         AABB box = ctx.computeOnClient(mc -> Optional.ofNullable(mc.level.getEntity(bodyId)).map(Entity::getBoundingBox))
                 .orElseThrow(() -> new AssertionError("the client has no entity for the " + name + " body"));
-        YouOnlyLiveTwice.LOGGER.info("The client's hitbox for the {} body is {} wide, {} deep and {} tall",
+        Yolt.LOGGER.info("The client's hitbox for the {} body is {} wide, {} deep and {} tall",
                 name, box.getXsize(), box.getZsize(), box.getYsize());
         if (!near(box.getXsize(), width) || !near(box.getZsize(), width)) {
             throw new AssertionError("the client's " + name + " body is " + box.getXsize() + " by " + box.getZsize()

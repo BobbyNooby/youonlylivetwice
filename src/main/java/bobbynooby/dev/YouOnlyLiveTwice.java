@@ -5,6 +5,7 @@ import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
@@ -14,22 +15,10 @@ import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.minecraft.resources.Identifier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 // Loads in any environment so client tests can host a dedicated server in the client process;
 // every feature checks Settings.active(), so single-player stays vanilla.
-public class YouOnlyLiveTwice implements ModInitializer {
-    public static final String MOD_ID = "you-only-live-twice";
-
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
-
-    public static Identifier id(String path) {
-        return Identifier.fromNamespaceAndPath(MOD_ID, path);
-    }
-
+public final class YouOnlyLiveTwice implements ModInitializer {
     @Override
     public void onInitialize() {
         Settings.load();
@@ -47,9 +36,11 @@ public class YouOnlyLiveTwice implements ModInitializer {
         TabHeaders.init();
         ChatDelivery.init();
         Whispers.init();
+        // Last of the SERVER_STARTED hooks (they run in registration order): the death store is open and the bodies are
+        // back by then, and the name-tag team and visibility refresh see those bodies
         ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
         NameTagTeam.init();
 
-        LOGGER.info("You Only Live Twice started.");
+        Yolt.LOGGER.info("You Only Live Twice started.");
     }
 }

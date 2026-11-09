@@ -11,7 +11,7 @@ import java.sql.Statement;
 import java.util.Optional;
 import java.util.UUID;
 
-/** SQLite-backed death log. Methods are synchronized: login and death handling can run on different threads. */
+/** SQLite-backed death log. Methods are synchronized to be safe, though the login check and death handling both run on the server thread. */
 public final class DeathStore {
     private final Connection connection;
 

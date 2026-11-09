@@ -1,7 +1,7 @@
 package bobbynooby.dev.chat;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.CommandNodeAccessor;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -70,7 +70,7 @@ public final class Whispers {
                 Settings.get().chat.radius)) {
             target.sendSystemMessage(whisper(senderName + " whispers to you: " + message));
         }
-        YouOnlyLiveTwice.LOGGER.info("[whisper] {} -> {}: {}", senderName, targetName, message);
+        Yolt.LOGGER.info("[whisper] {} -> {}: {}", senderName, targetName, message);
     }
 
     private static Component whisper(String text) {

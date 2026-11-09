@@ -22,7 +22,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
-/** Decides which players each client has a player-list entry for, so a client only learns the names of players near it. */
+/**
+ * Decides which players each client has a player-list entry for, so a client only learns the names of players near it.
+ * Server thread only.
+ */
 public final class PlayerVisibility {
     // Keyed by connection: it lives exactly as long as the client, and a respawn keeps it
     private static final Map<ServerGamePacketListenerImpl, Viewer> VIEWERS = new WeakHashMap<>();
@@ -75,7 +78,7 @@ public final class PlayerVisibility {
         }
         Viewer state = state(viewer);
         state.tracked.remove(seen.getUUID());
-        // A player outside the player list (a plan 04 body) would otherwise stay on as an online name.
+        // A player outside the player list (a player body) would otherwise stay on as an online name.
         // A leaving or respawning player is still in it here, so viewers who see everyone keep them.
         boolean online = seen.level().getServer().getPlayerList().getPlayer(seen.getUUID()) != null;
         if ((!seesEveryone(viewer) || !online) && state.known.remove(seen.getUUID())) {
@@ -215,7 +218,7 @@ public final class PlayerVisibility {
         PlayerList playerList = viewer.level().getServer().getPlayerList();
         List<ClientboundPlayerInfoUpdatePacket.Entry> entries = new ArrayList<>(packet.entries().size());
         for (ClientboundPlayerInfoUpdatePacket.Entry e : packet.entries()) {
-            // Plan 04's bodies are players outside the player list, and never show in the tab list
+            // Player bodies are players outside the player list, and never show in the tab list
             boolean show = listed && playerList.getPlayer(e.profileId()) != null;
             entries.add(e.listed() == show ? e : new ClientboundPlayerInfoUpdatePacket.Entry(e.profileId(), e.profile(), show,
                     e.latency(), e.gameMode(), e.displayName(), e.showHat(), e.listOrder(), e.chatSession()));

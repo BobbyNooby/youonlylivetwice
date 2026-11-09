@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest.client;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -182,7 +182,7 @@ public class BodyTakeoverClientTest implements FabricClientGameTest {
             }
             return entities;
         });
-        YouOnlyLiveTwice.LOGGER.info("After the takeover the client at {} sees {}", away.pos(), seen);
+        Yolt.LOGGER.info("After the takeover the client at {} sees {}", away.pos(), seen);
         // Any mannequin at all would be a second body
         if (ctx.computeOnClient(mc -> {
             for (Entity entity : mc.level.entitiesForRendering()) {

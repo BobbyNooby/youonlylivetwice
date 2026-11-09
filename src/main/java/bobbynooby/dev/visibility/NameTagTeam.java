@@ -27,9 +27,11 @@ import java.util.WeakHashMap;
 
 /**
  * Hides nametags by keeping every player in one server-side team. With hide.distantPlayers on, each client is only
- * told about the members whose entry it has, since the member list is a list of names.
+ * told about the members whose entry it has, since the member list is a list of names. Server thread only.
  */
-public class NameTagTeam {
+public final class NameTagTeam {
+    private NameTagTeam() {}
+
     public static final String TEAM_NAME = "invisible_players";
 
     // ClientboundSetPlayerTeamPacket's method codes, which it keeps private
@@ -103,7 +105,7 @@ public class NameTagTeam {
             return;
         }
         String name = seen.getScoreboardName();
-        // A plan 04 body has its owner's name, so the name stays while the client still knows either of them
+        // A player body has its owner's name, so the name stays while the client still knows either of them
         if (!knownNames(viewer).contains(name) && state(viewer).remove(name)) {
             viewer.connection.send(players(LEAVE, List.of(name)));
         }
@@ -191,7 +193,7 @@ public class NameTagTeam {
         PlayerList playerList = viewer.level().getServer().getPlayerList();
         for (UUID id : PlayerVisibility.known(viewer)) {
             ServerPlayer player = playerList.getPlayer(id);
-            // Plan 04's bodies are players outside the player list, in the viewer's level when it knows them
+            // Player bodies are players outside the player list, in the viewer's level when it knows them
             if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {
                 player = body;
             }

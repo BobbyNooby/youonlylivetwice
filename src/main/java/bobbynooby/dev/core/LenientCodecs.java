@@ -1,6 +1,5 @@
 package bobbynooby.dev.core;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
 
@@ -21,7 +20,7 @@ public final class LenientCodecs {
             List<T> loaded = new ArrayList<>();
             for (Dynamic<?> entry : entries) {
                 element.parse(entry)
-                        .resultOrPartial(error -> YouOnlyLiveTwice.LOGGER.error("Skipping unreadable {} record: {}", what, error))
+                        .resultOrPartial(error -> Yolt.LOGGER.error("Skipping unreadable {} record: {}", what, error))
                         .ifPresent(loaded::add);
             }
             return loaded;

@@ -21,7 +21,7 @@ public final class CommandRestriction {
 
     public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers) {
         RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
-        // help is answered by the restriction mixin, so its body never runs
+        // help is answered in blocks(), so its body never runs
         root.addChild(Commands.literal("help").executes(c -> 1).build());
         if (allowWhispers) {
             root.addChild(Whispers.command().build());

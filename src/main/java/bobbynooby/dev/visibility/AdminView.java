@@ -1,6 +1,6 @@
 package bobbynooby.dev.visibility;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -12,7 +12,7 @@ import net.minecraft.server.players.PlayerList;
 /** Whether an op sees everyone and every hidden message. Saved with the player, so it survives relogs and restarts. */
 public final class AdminView {
     // Copied on death as well, since a respawn makes a new player object
-    public static final AttachmentType<Boolean> ATTACHMENT = AttachmentRegistry.create(YouOnlyLiveTwice.id("admin_view"),
+    public static final AttachmentType<Boolean> ATTACHMENT = AttachmentRegistry.create(Yolt.id("admin_view"),
             builder -> builder.persistent(Codec.BOOL).copyOnDeath());
 
     private AdminView() {}

@@ -6,7 +6,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /** Everything the config changes in the live world; run at startup and by /yolt reload. */
-public class LiveSettings {
+public final class LiveSettings {
+    private LiveSettings() {}
+
     public static void applyAll(MinecraftServer server) {
         // Each of these checks its own switch
         WorldBorders.apply(server);

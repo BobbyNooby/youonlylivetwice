@@ -1,10 +1,10 @@
 package bobbynooby.dev.lockout;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.core.Yolt;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -27,7 +28,7 @@ public final class DeathLockout {
             if (!Settings.active()) {
                 return;
             }
-            store = openStore(started.getWorldPath(LevelResource.ROOT).resolve("database/you-only-live-twice.db"));
+            store = openStore(started.getWorldPath(LevelResource.ROOT).resolve("database/" + Yolt.MOD_ID + ".db"));
         });
 
         // Not SERVER_STOPPING: players are still logged out after that and later code reads the store then
@@ -58,13 +59,13 @@ public final class DeathLockout {
     }
 
     /** Null if it can't be opened: the server still starts, like with a failing query, but deaths aren't recorded. */
-    static DeathStore openStore(Path file) {
+    static @Nullable DeathStore openStore(Path file) {
         try {
             DeathStore opened = DeathStore.open(file);
-            YouOnlyLiveTwice.LOGGER.info("Opened death store");
+            Yolt.LOGGER.info("Opened death store");
             return opened;
         } catch (RuntimeException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not open the death store, deaths will not be recorded", e);
+            Yolt.LOGGER.error("Could not open the death store, deaths will not be recorded", e);
             return null;
         }
     }
@@ -75,14 +76,14 @@ public final class DeathLockout {
         }
         try {
             open.close();
-            YouOnlyLiveTwice.LOGGER.info("Closed death store");
+            Yolt.LOGGER.info("Closed death store");
         } catch (RuntimeException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not close the death store", e);
+            Yolt.LOGGER.error("Could not close the death store", e);
         }
     }
 
     /** Null when the player may join. */
-    public static Component refusal(UUID uuid) {
+    public static @Nullable Component refusal(UUID uuid) {
         DeathStore open = store;
         if (open == null || !Settings.get().deathLockout.enabled) {
             return null;
@@ -92,7 +93,7 @@ public final class DeathLockout {
             log = open.latest(uuid);
         } catch (RuntimeException e) {
             // Fail open: a broken database must not lock everyone out
-            YouOnlyLiveTwice.LOGGER.error("Could not check death lockout for {}, letting them in", uuid, e);
+            Yolt.LOGGER.error("Could not check death lockout for {}, letting them in", uuid, e);
             return null;
         }
         if (log.isEmpty()) {
@@ -132,14 +133,14 @@ public final class DeathLockout {
         }
         DeathStore open = store;
         if (open == null) {
-            YouOnlyLiveTwice.LOGGER.warn("Death store is closed, not recording death of {}", name);
+            Yolt.LOGGER.warn("Death store is closed, not recording death of {}", name);
             return;
         }
         try {
             open.recordDeath(uuid, name, System.currentTimeMillis(), Settings.get().deathLockout.cooldownDays);
-            YouOnlyLiveTwice.LOGGER.info("Death log added for {}", name);
+            Yolt.LOGGER.info("Death log added for {}", name);
         } catch (RuntimeException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not record death of {}", name, e);
+            Yolt.LOGGER.error("Could not record death of {}", name, e);
         }
     }
 
@@ -156,7 +157,7 @@ public final class DeathLockout {
         try {
             return open.revive(uuid);
         } catch (RuntimeException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not revive {}", uuid, e);
+            Yolt.LOGGER.error("Could not revive {}", uuid, e);
             return false;
         }
     }

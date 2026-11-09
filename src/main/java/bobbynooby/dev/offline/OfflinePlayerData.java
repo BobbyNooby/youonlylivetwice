@@ -1,7 +1,7 @@
 package bobbynooby.dev.offline;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
@@ -140,7 +140,7 @@ public final class OfflinePlayerData {
         try {
             Files.deleteIfExists(prepared);
         } catch (IOException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not delete unused player data file {}", prepared, e);
+            Yolt.LOGGER.error("Could not delete unused player data file {}", prepared, e);
         }
     }
 

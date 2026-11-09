@@ -1,6 +1,5 @@
 package bobbynooby.dev.mixin;
 
-
 import bobbynooby.dev.world.RandomSpawn;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.PlayerSpawnFinder;
@@ -12,7 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PlayerSpawnFinder.class)
 public abstract class RandomSpawnMixin {
-
 
     @Inject(method = "getLevelRespawnPos", at = @At("HEAD"), cancellable = true)
     private static void findOverworldSpawn(ServerLevel level, int x, int z, CallbackInfoReturnable<BlockPos> cir) {

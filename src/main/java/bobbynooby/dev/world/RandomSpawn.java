@@ -1,6 +1,5 @@
 package bobbynooby.dev.world;
 
-
 import bobbynooby.dev.config.Settings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -11,8 +10,10 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.Random;
 
+/** Picks a random spot inside the world border for new and respawning players. */
+public final class RandomSpawn {
+    private RandomSpawn() {}
 
-public class RandomSpawn {
     private static final Random RANDOM = new Random();
 
     record Column(int x, int z) {}

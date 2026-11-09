@@ -12,7 +12,7 @@ import net.minecraft.commands.arguments.coordinates.Vec2Argument;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec2;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.LOGGER;
+import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt border, center and endscaling. */
 final class BorderCommands {

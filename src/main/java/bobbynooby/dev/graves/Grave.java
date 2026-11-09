@@ -1,12 +1,12 @@
 package bobbynooby.dev.graves;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.Yolt;
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.DynamicOps;
-import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -64,7 +64,7 @@ public record Grave(
             List<ItemStack> stacks = new ArrayList<>();
             for (Dynamic<?> entry : items) {
                 DataResult<ItemStack> parsed = ItemStack.CODEC.parse(entry);
-                parsed.resultOrPartial(error -> YouOnlyLiveTwice.LOGGER.error(
+                parsed.resultOrPartial(error -> Yolt.LOGGER.error(
                         "Skipping unreadable item in grave of {} at {} {}: {}", ownerName, dimension.identifier(), pos, error))
                         .ifPresent(stacks::add);
             }

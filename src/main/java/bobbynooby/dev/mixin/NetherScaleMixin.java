@@ -1,6 +1,5 @@
 package bobbynooby.dev.mixin;
 
-
 import bobbynooby.dev.world.NetherScale;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.world.level.dimension.DimensionType;
@@ -14,6 +13,5 @@ public abstract class NetherScaleMixin {
     private double syncOverWorldScale(double original) {
         return NetherScale.scale(original);
     }
-
 
 }

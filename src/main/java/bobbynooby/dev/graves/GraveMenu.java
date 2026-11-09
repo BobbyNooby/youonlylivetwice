@@ -14,7 +14,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 
 /** A grave's items in a 6-row chest menu. Anyone can take items out; nothing can be put in. */
-public class GraveMenu extends AbstractContainerMenu {
+public final class GraveMenu extends AbstractContainerMenu {
     private static final int ROWS = 6;
     static final int GRAVE_SLOTS = ROWS * 9;
     private static final double MAX_DISTANCE = 8.0;

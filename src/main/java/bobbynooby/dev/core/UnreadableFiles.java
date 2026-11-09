@@ -1,7 +1,5 @@
 package bobbynooby.dev.core;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,11 +24,11 @@ public final class UnreadableFiles {
         try {
             Files.copy(file, copy);
         } catch (IOException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not read the {} file {}, and could not copy it to {}; {} start empty "
+            Yolt.LOGGER.error("Could not read the {} file {}, and could not copy it to {}; {} start empty "
                     + "and the next save overwrites it", what, file, copy, plural, e);
             return Optional.empty();
         }
-        YouOnlyLiveTwice.LOGGER.error("Could not read the {} file {}, so {} start empty. A copy of it is kept at {}",
+        Yolt.LOGGER.error("Could not read the {} file {}, so {} start empty. A copy of it is kept at {}",
                 what, file, plural, copy);
         return Optional.of(copy);
     }

@@ -1,8 +1,8 @@
 package bobbynooby.dev.graves;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Later;
+import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
@@ -57,7 +57,7 @@ public final class GraveBlocks {
             if (!level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD)) {
                 // The record doesn't keep the facing, so a restored head faces the default way
                 placeHead(level, grave.pos(), grave.profile(), 0);
-                YouOnlyLiveTwice.LOGGER.info("Put back the missing head of {}'s grave at {} {}",
+                Yolt.LOGGER.info("Put back the missing head of {}'s grave at {} {}",
                         grave.ownerName(), level.dimension().identifier(), grave.pos());
             }
         }

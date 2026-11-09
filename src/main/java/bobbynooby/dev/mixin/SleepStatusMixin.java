@@ -22,7 +22,6 @@ public abstract class SleepStatusMixin {
         }
     }
 
-
     // Player bodies are among the level's players but can't sleep, so each one would hold the night up for everyone
     @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true)
     private List<ServerPlayer> withoutBodies(List<ServerPlayer> players) {

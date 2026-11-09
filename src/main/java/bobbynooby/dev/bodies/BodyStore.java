@@ -1,8 +1,8 @@
 package bobbynooby.dev.bodies;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.core.LenientCodecs;
 import bobbynooby.dev.core.UnreadableFiles;
+import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
@@ -27,7 +27,7 @@ public final class BodyStore extends SavedData {
     // The storage runs this fixer on every load and fails on null, which would lose the bodies after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
     public static final SavedDataType<BodyStore> TYPE = new SavedDataType<>(
-            YouOnlyLiveTwice.id("bodies"), BodyStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
+            Yolt.id("bodies"), BodyStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Map<UUID, BodyRecord> bodies = new LinkedHashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read

@@ -4,7 +4,10 @@ import bobbynooby.dev.config.Settings;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.gamerules.GameRules;
 
-public class GameRuleSwitches {
+/** The game rules the config forces on, applied at startup and by /yolt reload. */
+public final class GameRuleSwitches {
+    private GameRuleSwitches() {}
+
     // Also run by /yolt reload
     public static void applyImmediateRespawn(MinecraftServer server) {
         if (!Settings.active()) {

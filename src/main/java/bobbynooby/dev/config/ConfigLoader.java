@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,7 +23,7 @@ import java.util.Map;
 /** Reads the config key by key, so one bad value only resets that value. */
 public final class ConfigLoader {
     /** unparseable means the file was not valid JSON; config is then null if load was told not to write defaults. */
-    public record Result(YoltConfig config, List<String> warnings, boolean unparseable) {}
+    public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable) {}
 
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
@@ -157,6 +158,7 @@ public final class ConfigLoader {
         }
         JsonPrimitive u = value.getAsJsonPrimitive();
         JsonPrimitive d = def.getAsJsonPrimitive();
+        // Either a string ("offline") or a number is valid here; BodyDuration's adapter rejects the bad values
         if (path.equals(DURATION_PATH)) {
             return u.isString() || u.isNumber() ? null : "expected \"offline\" or a number";
         }

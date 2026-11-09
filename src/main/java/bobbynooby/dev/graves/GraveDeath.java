@@ -1,12 +1,12 @@
 package bobbynooby.dev.graves;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.PlayerInvoker;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -68,7 +68,7 @@ public final class GraveDeath {
             Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
             // Only the menu items have left the player; put them back so vanilla drops them with the rest
-            YouOnlyLiveTwice.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
+            Yolt.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
             handBack(player, fromMenus);
             return false;
         }
@@ -78,7 +78,7 @@ public final class GraveDeath {
         try {
             GraveStore.get(level.getServer()).saveNow(level.getServer());
         } catch (RuntimeException e) {
-            YouOnlyLiveTwice.LOGGER.error("Could not write {}'s grave to disk, it is kept in memory until the next save", name, e);
+            Yolt.LOGGER.error("Could not write {}'s grave to disk, it is kept in memory until the next save", name, e);
         }
 
         // Emptied only once the graves hold the items, so a failed grave can't lose them

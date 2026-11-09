@@ -9,7 +9,10 @@ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 
 import java.util.function.BiConsumer;
 
-public class WorldBorders {
+/** Sizes the overworld, nether and end borders from the config. */
+public final class WorldBorders {
+    private WorldBorders() {}
+
     public static void apply(MinecraftServer server) {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
             return;

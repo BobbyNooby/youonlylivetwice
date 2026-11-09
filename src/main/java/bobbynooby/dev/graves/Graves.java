@@ -1,10 +1,10 @@
 package bobbynooby.dev.graves;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Undo;
+import bobbynooby.dev.core.Yolt;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -20,13 +20,14 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RotationSegment;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.UUID;
 
-/** Makes and removes graves. Every grave hook is wired up in init. */
+/** Makes and removes graves. Its init wires the use-block, block-break and chunk hooks; the rest are mixins. */
 public final class Graves {
     // A grave opens as a 6-row chest menu
     private static final int SLOTS_PER_GRAVE = GraveMenu.GRAVE_SLOTS;
@@ -117,7 +118,7 @@ public final class Graves {
         ServerLevel level = server.getLevel(grave.dimension());
         if (level == null) {
             // Nowhere to drop the items, so the record must stay until the dimension is back
-            YouOnlyLiveTwice.LOGGER.error("Could not remove {}'s grave at {} {}: that dimension is not loaded",
+            Yolt.LOGGER.error("Could not remove {}'s grave at {} {}: that dimension is not loaded",
                     grave.ownerName(), grave.dimension().identifier(), grave.pos());
             return OptionalInt.empty();
         }
@@ -132,8 +133,9 @@ public final class Graves {
             container.closeMenus();
         }
         BlockPos pos = grave.pos();
+        Vec3 centre = Vec3.atCenterOf(pos);
         for (ItemStack stack : items) {
-            level.addFreshEntity(new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack));
+            level.addFreshEntity(new ItemEntity(level, centre.x, centre.y, centre.z, stack));
         }
         GraveBlocks.clearHead(level, pos);
         store.remove(grave.id());

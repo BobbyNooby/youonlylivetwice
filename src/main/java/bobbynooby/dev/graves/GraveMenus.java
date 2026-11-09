@@ -7,15 +7,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleMenuProvider;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Opens grave menus, and keeps the one container all viewers of a grave share. */
+/** Opens grave menus, and keeps the one container all viewers of a grave share. Server thread only. */
 public final class GraveMenus {
-    // One container per grave while anyone has it open, keyed by grave id. Server thread only.
+    // One container per grave while anyone has it open, keyed by grave id.
     static final Map<UUID, SharedGraveContainer> OPEN = new HashMap<>();
 
     private GraveMenus() {
@@ -36,7 +37,7 @@ public final class GraveMenus {
     }
 
     /** The container every open menu on this grave shares, or null when nobody has the grave open. */
-    public static Container containerFor(Grave grave) {
+    public static @Nullable Container containerFor(Grave grave) {
         return OPEN.get(grave.id());
     }
 

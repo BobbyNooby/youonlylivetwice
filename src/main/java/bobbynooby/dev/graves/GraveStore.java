@@ -1,8 +1,8 @@
 package bobbynooby.dev.graves;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.core.LenientCodecs;
 import bobbynooby.dev.core.UnreadableFiles;
+import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtAccounter;
@@ -38,7 +38,7 @@ public final class GraveStore extends SavedData {
     // The storage runs this fixer on every load and fails on null, which would lose the graves after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
     public static final SavedDataType<GraveStore> TYPE = new SavedDataType<>(
-            YouOnlyLiveTwice.id("graves"), GraveStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
+            Yolt.id("graves"), GraveStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Map<UUID, Grave> graves = new LinkedHashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read

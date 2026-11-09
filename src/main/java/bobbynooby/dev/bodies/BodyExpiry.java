@@ -1,11 +1,12 @@
 package bobbynooby.dev.bodies;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
@@ -18,7 +19,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/** Removes the bodies that have stood for bodies.duration, the way their owner's login would have taken them over. */
+/**
+ * Removes the bodies that have stood for bodies.duration, the way their owner's login would have taken them over.
+ * Server thread only.
+ */
 public final class BodyExpiry {
     private static final long MINUTE_MILLIS = 60_000L;
     // Loading an unreadable save makes vanilla log a warning and keep a copy of the file every time, so a body
@@ -39,7 +43,7 @@ public final class BodyExpiry {
     public static void init() {
         // Once a second is plenty for a time counted in minutes
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            if (server.getTickCount() % 20 == 0) {
+            if (server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
                 tick(server);
             }
         });
@@ -90,7 +94,7 @@ public final class BodyExpiry {
             } catch (RuntimeException e) {
                 // The body and record stay, and the next try starts again from a freshly loaded save
                 if (RETRY_AT.put(record.bodyEntity(), now + RETRY_MILLIS) == null) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried "
+                    Yolt.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried "
                             + "again every {} minutes", record.ownerName(), RETRY_MILLIS / MINUTE_MILLIS, e);
                 }
             }

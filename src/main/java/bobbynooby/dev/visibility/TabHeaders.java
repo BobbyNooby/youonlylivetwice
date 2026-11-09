@@ -12,22 +12,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
-/*
-
-    Some classes to look at that helped in making this include
-
-    Client :
-    PlayerTabOverlay
-    ClientPacketListener
-
-    Server:
-    ClientboundTabListPacket
-    PlayerList
-
-
- */
-public class TabHeaders {
-
+/** Gives each player a random tab-list header and footer. Server thread only. */
+public final class TabHeaders {
     private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "--------------";
 
     private static final Map<UUID, HeaderFooter> PLAYER_MAP = new HashMap<>();
@@ -48,11 +34,9 @@ public class TabHeaders {
             ChatFormatting.RESET.toString() + ChatFormatting.DARK_AQUA.toString() + "The world is filled with possibilities... and dangers."
     };
 
-
     private static String getRandomHeader() {
         return HEADER_FOOTER + "\n" + TAB_HEADERS[RANDOM.nextInt(TAB_HEADERS.length)];
     }
-
 
     // Entries are dropped on leave, otherwise every player who ever joined stays in the map
     public static void init() {

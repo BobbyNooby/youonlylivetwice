@@ -1,7 +1,7 @@
 package bobbynooby.dev.revive;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -70,7 +70,7 @@ public final class Revive {
         user.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.TOTEM_USE),
                 SoundSource.PLAYERS, user.getX(), user.getY(), user.getZ(), 1.0F, 1.0F, user.getRandom().nextLong()));
         user.sendSystemMessage(Component.literal(name + " can come back now."));
-        YouOnlyLiveTwice.LOGGER.info("{} revived {} with a revive head", user.nameAndId().name(), name);
+        Yolt.LOGGER.info("{} revived {} with a revive head", user.nameAndId().name(), name);
         return Outcome.REVIVED;
     }
 

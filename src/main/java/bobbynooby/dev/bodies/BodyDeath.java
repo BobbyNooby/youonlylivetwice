@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Kills a body's owner when the body dies, and kills a standing body for an offline /yolt kill. */
-public final class BodyDeath {
+final class BodyDeath {
     private BodyDeath() {
     }
 

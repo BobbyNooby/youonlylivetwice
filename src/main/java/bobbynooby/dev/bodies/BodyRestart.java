@@ -1,9 +1,9 @@
 package bobbynooby.dev.bodies;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Yolt;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -38,13 +38,13 @@ public final class BodyRestart {
             }
             // One that fails keeps its record, so the owner's login still takes over its last saved state
             if (server.getLevel(record.snapshot().dimension()) == null) {
-                YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: its dimension {} is gone",
+                Yolt.LOGGER.error("Could not bring back the body of {}: its dimension {} is gone",
                         record.ownerName(), record.snapshot().dimension().identifier());
                 continue;
             }
             Guard.run(() -> {
                 if (PlayerBody.fromRecord(server, record) == null) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: the world refused the entity {}",
+                    Yolt.LOGGER.error("Could not bring back the body of {}: the world refused the entity {}",
                             record.ownerName(), record.bodyEntity());
                 }
             }, "Could not bring back the body of {}", record.ownerName());
