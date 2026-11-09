@@ -29,6 +29,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -258,6 +259,40 @@ public class PlayerBodyGameTests {
                     helper.assertValueEqual(body.getFoodData().getFoodLevel(), food, "body food");
                     helper.assertValueEqual(body.getFoodData().getSaturationLevel(), saturation, "body saturation");
                 } finally {
+                    removeBody(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
+    // Only the body's worn gear goes back to its owner, so anything it picked up would be lost with it
+    @GameTest(maxTicks = 40, environment = PLAYER_BODY)
+    public void playerBodyPicksNothingUp(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "Untouched", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        boolean waiting = false;
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            Settings.get().bodies = before;
+            ItemEntity diamond = new ItemEntity(helper.getLevel(), body.getX(), body.getY(), body.getZ(), new ItemStack(Items.DIAMOND));
+            diamond.setNoPickUpDelay();
+            helper.getLevel().addFreshEntity(diamond);
+            // A vanilla player takes it on its next tick
+            helper.runAfterDelay(10, () -> {
+                try {
+                    helper.assertTrue(diamond.isAlive(), "the diamond was picked up");
+                    helper.assertValueEqual(body.getInventory().countItem(Items.DIAMOND), 0, "diamonds the body holds");
+                } finally {
+                    diamond.discard();
                     removeBody(helper, owner);
                 }
                 helper.succeed();
