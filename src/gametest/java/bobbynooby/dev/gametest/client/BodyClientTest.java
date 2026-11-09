@@ -11,8 +11,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
-import net.minecraft.client.gui.components.debug.DebugScreenEntries;
-import net.minecraft.client.gui.components.debug.DebugScreenEntryStatus;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.Direction;
 import net.minecraft.server.MinecraftServer;
@@ -48,21 +46,16 @@ public class BodyClientTest implements FabricClientGameTest {
             boolean enabledWas = server.computeOnServer(s -> Settings.get().bodies.enabled);
             YoltConfig.BodyPose poseWas = server.computeOnServer(s -> Settings.get().bodies.pose);
             YoltConfig.BodyType typeWas = server.computeOnServer(s -> Settings.get().bodies.type);
-            DebugScreenEntryStatus hitboxesWas = ctx.computeOnClient(mc -> mc.debugEntries.getStatus(DebugScreenEntries.ENTITY_HITBOXES));
             // Only touched on the server thread
             List<UUID> owners = new ArrayList<>();
             try {
                 server.runOnServer(s -> Settings.get().bodies.enabled = true);
-                // Drawn by the client from the same box the checks read, so the screenshots show it too
-                ctx.runOnClient(mc -> mc.debugEntries.setStatus(DebugScreenEntries.ENTITY_HITBOXES, DebugScreenEntryStatus.ALWAYS_ON));
-
                 // Prone and standing share a width, so only the height tells them apart
                 showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.PRONE, 0.6, 0.6);
                 showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.SLEEPING, 0.2, 0.2);
                 showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.STANDING, 0.6, 1.8);
                 showPlayerBody(ctx, server, connection, owners);
             } finally {
-                ctx.runOnClient(mc -> mc.debugEntries.setStatus(DebugScreenEntries.ENTITY_HITBOXES, hitboxesWas));
                 server.runOnServer(s -> {
                     // Switched back first, so a test player still online leaves no body
                     Settings.get().bodies.enabled = enabledWas;
