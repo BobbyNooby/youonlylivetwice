@@ -35,6 +35,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -366,6 +367,70 @@ public class SleepGameTests {
             removeGraves(server, id);
         }
         helper.succeed();
+    }
+
+    // Older builds stored an unforced point at every bed used, even with the switch on
+    @GameTest
+    public void oldBedPointIsIgnored(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        BlockPos head = placeBed(helper);
+        // A floor round the bed, so vanilla has somewhere to stand the player up when the point is used
+        for (int x = 0; x <= 2; x++) {
+            for (int z = 0; z <= 3; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
+        Vec3 bed = Vec3.atCenterOf(helper.absolutePos(head));
+        ServerPlayer switchOn = TestPlayers.join(helper, "OldBedOn", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        ServerPlayer switchOff = TestPlayers.join(helper, "OldBedOff", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        List<UUID> ids = List.of(switchOn.getUUID(), switchOff.getUUID());
+        YoltConfig config = Settings.get();
+        boolean respawnBefore = config.sleep.noBedRespawn;
+        boolean gravesBefore = config.graves.enabled;
+        try {
+            // No graves: this test is only about where the player comes back
+            config.graves.enabled = false;
+            storeOldBedPoint(helper, switchOn, head);
+            storeOldBedPoint(helper, switchOff, head);
+
+            config.sleep.noBedRespawn = true;
+            ServerPlayer back = dieAndRespawn(helper, switchOn);
+            helper.assertTrue(back.level() != helper.getLevel() || back.position().distanceTo(bed) > 8.0,
+                    "respawned at " + back.blockPosition() + ", the old bed point, with no-bed-respawn on");
+
+            config.sleep.noBedRespawn = false;
+            back = dieAndRespawn(helper, switchOff);
+            helper.assertTrue(back.level() == helper.getLevel() && back.position().distanceTo(bed) <= 3.0,
+                    "respawned at " + back.blockPosition() + ", away from the old bed point, with no-bed-respawn off");
+        } finally {
+            config.sleep.noBedRespawn = respawnBefore;
+            config.graves.enabled = gravesBefore;
+            for (UUID id : ids) {
+                ServerPlayer online = server.getPlayerList().getPlayer(id);
+                if (online != null) {
+                    TestPlayers.leave(online);
+                }
+                DeathLockout.revive(id);
+                removeGraves(server, id);
+            }
+        }
+        helper.succeed();
+    }
+
+    private static void storeOldBedPoint(GameTestHelper helper, ServerPlayer player, BlockPos head) {
+        LevelData.RespawnData data = LevelData.RespawnData.of(helper.getLevel().dimension(), helper.absolutePos(head), 0.0F, 0.0F);
+        player.setRespawnPosition(new ServerPlayer.RespawnConfig(data, false), false);
+    }
+
+    // A real death, then the respawn the client asks for from the death screen
+    private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
+        TestPlayers.markLoaded(player);
+        player.kill(player.level());
+        helper.assertTrue(player.isDeadOrDying(), player.getPlainTextName() + " did not die");
+        player.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+        ServerPlayer respawned = helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID());
+        helper.assertTrue(respawned != null && respawned != player && respawned.isAlive(), player.getPlainTextName() + " did not respawn");
+        return respawned;
     }
 
     // A red bed with its foot at (1, 1, 1), facing south; returns the head

@@ -23,8 +23,16 @@ public final class Sleep {
         return hidesSleepers() || blocksNightSkip();
     }
 
-    /** True when beds and respawn anchors set no respawn point. A point already stored, or set by /spawnpoint, still works. */
+    /** True when beds and respawn anchors set no respawn point; a point set by /spawnpoint still works. */
     public static boolean ignoresRespawnPoint() {
         return Settings.on(c -> c.sleep.noBedRespawn);
+    }
+
+    /**
+     * True when a stored point must not be used. Beds and anchors store unforced points, and older builds stored
+     * them even with the switch on; /spawnpoint's are forced and always count.
+     */
+    public static boolean ignoresStoredPoint(boolean forced) {
+        return !forced && ignoresRespawnPoint();
     }
 }
