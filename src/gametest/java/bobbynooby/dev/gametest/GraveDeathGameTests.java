@@ -9,11 +9,17 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -109,6 +115,58 @@ public class GraveDeathGameTests {
             helper.assertTrue(contains(grave, Items.DIAMOND), "diamond missing from the grave");
             helper.assertTrue(player.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "cursed helmet stayed on the player");
             helper.assertItemEntityNotPresent(Items.IRON_HELMET, helper.relativePos(player.blockPosition()), 3.0);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void cursorAndCraftingGridItemsGoInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Cursor");
+        try {
+            player.containerMenu.setCarried(new ItemStack(Items.GOLD_INGOT));
+            player.inventoryMenu.getSlot(InventoryMenu.CRAFT_SLOT_START).set(new ItemStack(Items.STICK));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertTrue(contains(grave, Items.GOLD_INGOT), "cursor item missing from the grave");
+            helper.assertTrue(contains(grave, Items.STICK), "crafting grid item missing from the grave");
+            helper.assertTrue(player.containerMenu.getCarried().isEmpty(), "cursor still holds an item");
+            assertNoItems(helper, player.inventoryMenu, InventoryMenu.CRAFT_SLOT_START, InventoryMenu.CRAFT_SLOT_END);
+            BlockPos at = helper.relativePos(player.blockPosition());
+            helper.assertItemEntityNotPresent(Items.GOLD_INGOT, at, 3.0);
+            helper.assertItemEntityNotPresent(Items.STICK, at, 3.0);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // Any open menu is closed through its own code, so a crafting table stands in for the other kinds
+    @GameTest
+    public void openCraftingTableItemsGoInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Table");
+        try {
+            BlockPos table = new BlockPos(2, 1, 1);
+            helper.setBlock(table, Blocks.CRAFTING_TABLE);
+            ContainerLevelAccess access = ContainerLevelAccess.create(helper.getLevel(), helper.absolutePos(table));
+            player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new CraftingMenu(id, inventory, access), Component.empty()));
+            AbstractContainerMenu menu = player.containerMenu;
+            helper.assertTrue(menu instanceof CraftingMenu, "crafting table menu did not open");
+            menu.setCarried(new ItemStack(Items.GOLD_INGOT));
+            menu.getSlot(1).set(new ItemStack(Items.FEATHER));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertTrue(contains(grave, Items.GOLD_INGOT), "cursor item missing from the grave");
+            helper.assertTrue(contains(grave, Items.FEATHER), "crafting table item missing from the grave");
+            helper.assertTrue(player.containerMenu == player.inventoryMenu, "crafting table menu still open");
+            helper.assertTrue(menu.getCarried().isEmpty(), "cursor still holds an item");
+            assertNoItems(helper, menu, 1, 10);
+            BlockPos at = helper.relativePos(player.blockPosition());
+            helper.assertItemEntityNotPresent(Items.GOLD_INGOT, at, 3.0);
+            helper.assertItemEntityNotPresent(Items.FEATHER, at, 3.0);
         } finally {
             cleanUp(helper, player);
         }
@@ -251,6 +309,12 @@ public class GraveDeathGameTests {
 
     private static boolean contains(Grave grave, Item item) {
         return grave.items().stream().anyMatch(stack -> stack.is(item));
+    }
+
+    private static void assertNoItems(GameTestHelper helper, AbstractContainerMenu menu, int fromSlot, int toSlot) {
+        for (int i = fromSlot; i < toSlot; i++) {
+            helper.assertFalse(menu.getSlot(i).hasItem(), "menu slot " + i + " still holds an item");
+        }
     }
 
     private static void assertHeadBlock(GameTestHelper helper, Grave grave) {

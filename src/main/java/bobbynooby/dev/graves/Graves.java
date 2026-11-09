@@ -10,6 +10,7 @@ import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -33,6 +34,10 @@ public final class Graves {
     // A grave opens as a 6-row chest menu
     private static final int SLOTS_PER_GRAVE = 54;
 
+    // Non-null only while a dying player's menus close. Server thread only.
+    private static ServerPlayer collectingFor;
+    private static final List<ItemStack> collected = new ArrayList<>();
+
     private Graves() {
     }
 
@@ -54,9 +59,12 @@ public final class Graves {
         // The head comes first and is always there: it is the revive token
         List<ItemStack> items = new ArrayList<>();
         items.add(GraveItems.graveHead(profile));
+        List<ItemStack> fromMenus = List.of();
         if (!keepInventory) {
             ((PlayerInvoker) player).invokeDestroyVanishingCursedItems();
             addStacks(items, inventory);
+            fromMenus = takeMenuItems(player);
+            items.addAll(fromMenus);
         }
         if (enderMode == YoltConfig.EnderChestMode.GRAVE) {
             addStacks(items, enderChest);
@@ -66,8 +74,9 @@ public final class Graves {
         try {
             create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
-            // Nothing has been taken from the player yet, so vanilla can still drop it all
+            // Only the menu items have left the player; put them back so vanilla drops them with the rest
             YouOnlyLiveTwice.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
+            fromMenus.forEach(stack -> inventory.placeItemBackInInventory(stack, Prediction.SERVER_ONLY));
             return false;
         }
 
@@ -120,12 +129,40 @@ public final class Graves {
         return created;
     }
 
+    /** Called by the menu and drop hooks. True when the stack was taken for a dying player's grave instead. */
+    public static boolean takeReturnedItem(Player player, ItemStack stack) {
+        if (collectingFor == null || player != collectingFor) {
+            return false;
+        }
+        if (!stack.isEmpty()) {
+            collected.add(stack);
+        }
+        return true;
+    }
+
     private static void addStacks(List<ItemStack> into, Container container) {
         for (int i = 0; i < container.getContainerSize(); i++) {
             ItemStack stack = container.getItem(i);
             if (!stack.isEmpty()) {
                 into.add(stack);
             }
+        }
+    }
+
+    // Closes the menus with their own vanilla code, so any menu hands back its cursor and input items (crafting
+    // grids, anvil, loom, trades...). The hooks catch each item on its way to the inventory or the ground.
+    private static List<ItemStack> takeMenuItems(ServerPlayer player) {
+        collectingFor = player;
+        try {
+            if (player.containerMenu != player.inventoryMenu) {
+                player.closeContainer();
+            }
+            // The inventory menu is never closed, but this returns its cursor and 2x2 grid the same way
+            player.inventoryMenu.removed(player);
+            return List.copyOf(collected);
+        } finally {
+            collectingFor = null;
+            collected.clear();
         }
     }
 
