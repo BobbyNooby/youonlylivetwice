@@ -171,6 +171,36 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // With restrictCommands off a non-op gets the full tree, so /w itself has to refuse
+    @GameTest
+    public void whisperRefusedWhenOffWithoutRestriction(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = false;
+            config.chat.allowWhispers = false;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wrefuse", BlockPos.ZERO);
+            // In range, so only the switch keeps the whisper from arriving
+            TestPlayers.Recording target = joinRecording(helper, joined, "wrefuseto", new BlockPos(10, 0, 0));
+            sender.messages.clear();
+            target.messages.clear();
+
+            run(sender, "w " + target.nameAndId().name() + " hi");
+            helper.assertValueEqual(texts(sender), List.of("Whispers are turned off."), "sender messages");
+            helper.assertValueEqual(texts(target), List.of(), "target messages");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     // A modified client can ask for suggestions on commands its tree doesn't have, like /msg and its online names
     @GameTest
     public void suggestionsComeFromNonOpTree(GameTestHelper helper) {

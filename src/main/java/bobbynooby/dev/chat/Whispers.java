@@ -65,6 +65,12 @@ public final class Whispers {
 
     private static int run(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer sender = context.getSource().getPlayerOrException();
+        // The node stays even with whispers off, so the client's tree and the server's signing tree still match.
+        // With restrictCommands off nothing else stops a non-op, so the refusal is here.
+        if (!Settings.get().chat.allowWhispers && !sender.level().getServer().getPlayerList().isOp(sender.nameAndId())) {
+            context.getSource().sendFailure(Component.literal("Whispers are turned off."));
+            return 0;
+        }
         String target = StringArgumentType.getString(context, "target");
         // Read like vanilla's /w so a signed message stays in the player's chat chain; it goes out as our own text
         MessageArgument.resolveChatMessage(context, "message", message -> send(sender, target, message.signedContent()));
