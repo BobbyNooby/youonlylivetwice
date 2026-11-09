@@ -230,11 +230,14 @@ public class GraveProtectionGameTests {
         YoltConfig.EnderChestMode mode = graves.enderChestOnDeath;
         graves.enderChestOnDeath = YoltConfig.EnderChestMode.GRAVE;
         boolean failed = false;
+        List<Grave> onDisk = List.of();
         List<Grave> left;
         try {
             OfflineKill.kill(server, who);
         } catch (RuntimeException expected) {
             failed = true;
+            // Both graves reached the file before the save swap was tried; the undo leaves it for the next save
+            onDisk = GraveStoreGameTests.onDisk(server).stream().filter(grave -> grave.owner().equals(who.id())).toList();
         } finally {
             graves.enderChestOnDeath = mode;
             Files.delete(blockerContent);
@@ -244,6 +247,7 @@ public class GraveProtectionGameTests {
         }
 
         helper.assertTrue(failed, "kill did not report the failed save");
+        helper.assertValueEqual(onDisk.size(), 2, "graves on disk when the save swap failed");
         helper.assertTrue(left.isEmpty(), "graves left after the failed kill: " + left.size());
         assertNoHeadsNear(helper, last);
         helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
