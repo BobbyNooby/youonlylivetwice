@@ -1,4 +1,4 @@
-package bobbynooby.dev.features;
+package bobbynooby.dev.visibility;
 
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.ChatFormatting;
@@ -69,7 +69,7 @@ public class TabHeaders {
             if (headerFooter == null) {
                 continue;
             }
-            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.HEADER_STRING), Component.literal(headerFooter.FOOTER_STRING)));
+            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.header()), Component.literal(headerFooter.footer())));
         }
     }
 
@@ -81,19 +81,6 @@ public class TabHeaders {
         PLAYER_MAP.remove(uuid);
     }
 
-    public static class HeaderFooter {
-        public String HEADER_STRING;
-        public String FOOTER_STRING;
-
-        public HeaderFooter(String HEADER_STRING, String FOOTER_STRING) {
-            this.HEADER_STRING = HEADER_STRING;
-            this.FOOTER_STRING = FOOTER_STRING;
-        }
-
-        public void set(String HEADER_STRING, String FOOTER_STRING) {
-            this.HEADER_STRING = HEADER_STRING;
-            this.FOOTER_STRING = FOOTER_STRING;
-        }
+    public record HeaderFooter(String header, String footer) {
     }
 }
-

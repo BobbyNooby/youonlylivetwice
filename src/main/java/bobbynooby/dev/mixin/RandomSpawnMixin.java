@@ -1,7 +1,7 @@
 package bobbynooby.dev.mixin;
 
 
-import bobbynooby.dev.features.RandomSpawn;
+import bobbynooby.dev.world.RandomSpawn;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.PlayerSpawnFinder;
 import net.minecraft.server.level.ServerLevel;

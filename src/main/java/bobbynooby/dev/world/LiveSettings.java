@@ -1,7 +1,6 @@
 package bobbynooby.dev.world;
 
-import bobbynooby.dev.features.NameTagHider;
-import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -11,7 +10,7 @@ public class LiveSettings {
     public static void applyAll(MinecraftServer server) {
         // Each of these checks its own switch
         WorldBorders.apply(server);
-        NameTagHider.apply(server);
+        NameTagTeam.apply(server);
         GameRuleSwitches.applyImmediateRespawn(server);
         GameRuleSwitches.applyLocatorBar(server);
         // Which commands a player sees depends on restrictCommands and chat.allowWhispers,

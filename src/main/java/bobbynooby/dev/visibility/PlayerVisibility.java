@@ -2,7 +2,6 @@ package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
-import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.mixin.PlayerInfoUpdatePacketAccessor;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
@@ -66,7 +65,7 @@ public final class PlayerVisibility {
             viewer.connection.send(addPacket(viewer, List.of(seen)));
         }
         // Also for viewers who already knew them, since the nametag only matters once the player is in sight
-        NameTagHider.onKnown(viewer, seen);
+        NameTagTeam.onKnown(viewer, seen);
     }
 
     /** Removes the entry once the viewer stops tracking that player's entity. */
@@ -81,7 +80,7 @@ public final class PlayerVisibility {
         boolean online = seen.level().getServer().getPlayerList().getPlayer(seen.getUUID()) != null;
         if ((!seesEveryone(viewer) || !online) && state.known.remove(seen.getUUID())) {
             viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(seen.getUUID())));
-            NameTagHider.onForgotten(viewer, seen);
+            NameTagTeam.onForgotten(viewer, seen);
         }
     }
 
@@ -134,7 +133,7 @@ public final class PlayerVisibility {
                     EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED), kept)));
         }
         // The nametag team lists names too, so it follows the entries
-        NameTagHider.refresh(viewer);
+        NameTagTeam.refresh(viewer);
     }
 
     /**

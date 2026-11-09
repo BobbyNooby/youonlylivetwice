@@ -1,9 +1,7 @@
-package bobbynooby.dev.features;
+package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.mixin.SetPlayerTeamPacketInvoker;
-import bobbynooby.dev.visibility.AdminView;
-import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.protocol.Packet;
@@ -27,13 +25,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
-
 /**
  * Hides nametags by keeping every player in one server-side team. With hide.distantPlayers on, each client is only
  * told about the members whose entry it has, since the member list is a list of names.
  */
-public class NameTagHider {
+public class NameTagTeam {
+    public static final String TEAM_NAME = "invisible_players";
+
     // ClientboundSetPlayerTeamPacket's method codes, which it keeps private
     private static final int CREATE = 0;
     private static final int CHANGE = 2;
@@ -58,7 +56,7 @@ public class NameTagHider {
         team.setNameTagVisibility(Settings.get().hide.nametags ? Team.Visibility.NEVER : Team.Visibility.ALWAYS);
     }
 
-    public static void registerAddPlayerToTeamOnJoin() {
+    public static void init() {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> addToTeam(server, handler.getPlayer()));
 
         ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> addToTeam(destination.getServer(), player));

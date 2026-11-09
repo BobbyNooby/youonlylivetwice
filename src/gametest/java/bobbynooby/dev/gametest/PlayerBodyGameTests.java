@@ -1,6 +1,5 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
@@ -15,6 +14,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import bobbynooby.dev.visibility.NameTagTeam;
 import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
@@ -106,7 +106,7 @@ public class PlayerBodyGameTests {
             helper.assertTrue(body.getItemBySlot(EquipmentSlot.MAINHAND).is(Items.IRON_SWORD), "sword not copied");
             helper.assertValueEqual(body.getHealth(), 14.0F, "health");
             helper.assertValueEqual(body.gameMode(), GameType.SURVIVAL, "game mode");
-            PlayerTeam team = helper.getLevel().getScoreboard().getPlayerTeam(YouOnlyLiveTwice.TEAM_NAME);
+            PlayerTeam team = helper.getLevel().getScoreboard().getPlayerTeam(NameTagTeam.TEAM_NAME);
             helper.assertTrue(team != null && body.getTeam() == team, "body not in the nametag team");
         } finally {
             cleanUp(helper, owner, before);

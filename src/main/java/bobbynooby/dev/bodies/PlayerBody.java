@@ -4,7 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.StandIn;
-import bobbynooby.dev.features.NameTagHider;
+import bobbynooby.dev.visibility.NameTagTeam;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.SectionPos;
@@ -103,7 +103,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
 
     // Like a player: the name goes in the nametag team before anyone can see the body
     private boolean addToWorld(ServerLevel level) {
-        NameTagHider.addToTeam(level.getServer(), this);
+        NameTagTeam.addToTeam(level.getServer(), this);
         return level.addFreshEntity(this);
     }
 

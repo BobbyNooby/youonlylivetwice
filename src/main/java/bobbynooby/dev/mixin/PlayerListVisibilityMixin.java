@@ -1,7 +1,7 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.NameTagHider;
+import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -39,8 +39,8 @@ public abstract class PlayerListVisibilityMixin {
             target = "Lnet/minecraft/network/protocol/game/ClientboundSetPlayerTeamPacket;createAddOrModifyPacket(Lnet/minecraft/world/scores/PlayerTeam;Z)Lnet/minecraft/network/protocol/game/ClientboundSetPlayerTeamPacket;"))
     private ClientboundSetPlayerTeamPacket teamForJoiner(PlayerTeam team, boolean createNew, Operation<ClientboundSetPlayerTeamPacket> original,
                                                          @Local(argsOnly = true) ServerPlayer joiner) {
-        if (Settings.active() && NameTagHider.isOurs(team)) {
-            return NameTagHider.joinPacket(joiner, team);
+        if (Settings.active() && NameTagTeam.isOurs(team)) {
+            return NameTagTeam.joinPacket(joiner, team);
         }
         return original.call(team, createNew);
     }
@@ -49,7 +49,7 @@ public abstract class PlayerListVisibilityMixin {
     @Inject(method = "broadcastAll(Lnet/minecraft/network/protocol/Packet;)V", at = @At("HEAD"), cancellable = true)
     private void broadcastPerViewer(Packet<?> packet, CallbackInfo ci) {
         List<ServerPlayer> players = ((PlayerList) (Object) this).getPlayers();
-        if (Settings.active() && (PlayerVisibility.broadcast(players, packet) || NameTagHider.broadcast(players, packet))) {
+        if (Settings.active() && (PlayerVisibility.broadcast(players, packet) || NameTagTeam.broadcast(players, packet))) {
             ci.cancel();
         }
     }

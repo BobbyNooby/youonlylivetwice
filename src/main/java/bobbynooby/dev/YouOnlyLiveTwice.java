@@ -5,12 +5,12 @@ import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.NameTagHider;
-import bobbynooby.dev.features.TabHeaders;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.NameTagTeam;
+import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -24,8 +24,6 @@ public class YouOnlyLiveTwice implements ModInitializer {
     public static final String MOD_ID = "you-only-live-twice";
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
-
-    public static final String TEAM_NAME = "invisible_players";
 
 
     public static Identifier id(String path) {
@@ -50,7 +48,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         ChatDelivery.init();
         Whispers.init();
         ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
-        NameTagHider.registerAddPlayerToTeamOnJoin();
+        NameTagTeam.init();
 
         LOGGER.info("You Only Live Twice started.");
     }

@@ -1,7 +1,7 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.TabHeaders;
+import bobbynooby.dev.visibility.TabHeaders;
 import net.minecraft.network.Connection;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;

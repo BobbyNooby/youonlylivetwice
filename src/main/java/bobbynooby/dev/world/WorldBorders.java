@@ -1,4 +1,4 @@
-package bobbynooby.dev.features;
+package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;

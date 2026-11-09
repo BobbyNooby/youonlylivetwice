@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
+import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
 
 // Other tests share the server, so these check who is in a team, never the whole team
 public class NameTagGameTests {

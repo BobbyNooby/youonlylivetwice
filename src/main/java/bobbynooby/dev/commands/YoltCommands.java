@@ -3,7 +3,7 @@ package bobbynooby.dev.commands;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.world.WorldBorders;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;

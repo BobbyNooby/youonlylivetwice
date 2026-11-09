@@ -2,7 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
-import bobbynooby.dev.features.NameTagHider;
+import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -24,7 +24,7 @@ import net.minecraft.world.scores.Team;
 import java.util.ArrayList;
 import java.util.List;
 
-import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
+import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
 
 public class AdminViewGameTests {
     @GameTest
@@ -188,7 +188,7 @@ public class AdminViewGameTests {
             hide.distantPlayers = distantBefore;
             hide.nametags = nametagsBefore;
             // The test re-applied the team's settings, so match them to the live switches again
-            NameTagHider.apply(server);
+            NameTagTeam.apply(server);
         }
         helper.succeed();
     }
@@ -218,7 +218,7 @@ public class AdminViewGameTests {
             scoreboard.addPlayerTeam(TEAM_NAME);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after the team was made again");
             // A reload puts our settings back on the new team
-            NameTagHider.apply(server);
+            NameTagTeam.apply(server);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after a reload");
             helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, "normal player's nametag rule after a reload");
 
@@ -230,7 +230,7 @@ public class AdminViewGameTests {
         } finally {
             hide.distantPlayers = distantBefore;
             hide.nametags = nametagsBefore;
-            NameTagHider.apply(server);
+            NameTagTeam.apply(server);
             // Back in the team, as joining would have put them
             PlayerTeam team = scoreboard.getPlayerTeam(TEAM_NAME);
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -258,7 +258,7 @@ public class AdminViewGameTests {
             PlayerVisibility.refresh(admin);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, mode + ": admin's nametag rule");
 
-            NameTagHider.apply(helper.getLevel().getServer());
+            NameTagTeam.apply(helper.getLevel().getServer());
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, mode + ": admin's nametag rule after a team change");
             helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, mode + ": normal player's nametag rule after a team change");
 

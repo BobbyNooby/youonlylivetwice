@@ -2,7 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
-import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.world.WorldBorders;
 import bobbynooby.dev.world.GameRuleSwitches;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;

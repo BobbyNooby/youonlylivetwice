@@ -1,4 +1,4 @@
-package bobbynooby.dev.features;
+package bobbynooby.dev.world;
 
 import org.junit.jupiter.api.Test;
 
