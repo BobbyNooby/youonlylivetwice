@@ -21,6 +21,7 @@ import net.minecraft.world.entity.player.PlayerModelPart;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -167,6 +168,15 @@ public final class PlayerBody extends ServerPlayer {
     @Override
     public boolean isEffectiveAi() {
         return movable && super.isEffectiveAi();
+    }
+
+    // Vanilla lets nothing but an ender pearl hurt a player changing dimension, until its client accepts the teleport.
+    // A body has no client, so after a /tp to another dimension it could never be hurt or killed again.
+    @Override
+    public @Nullable ServerPlayer teleport(TeleportTransition transition) {
+        ServerPlayer moved = super.teleport(transition);
+        hasChangedDimension();
+        return moved;
     }
 
     // Peaceful healing, for the same reason as the food above

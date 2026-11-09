@@ -39,6 +39,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
@@ -52,6 +53,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 // Like the other body tests: each one turns on the default body switches with the player type and puts the server's
@@ -316,6 +318,28 @@ public class PlayerBodyGameTests {
         }
     }
 
+    // Vanilla keeps a player changing dimension unhurtable until its client accepts the teleport
+    @GameTest
+    public void playerBodyHurtableAfterDimensionChange(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Traveller", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+            helper.assertTrue(nether != null, "no nether to go to");
+            // What a /tp into another dimension runs
+            body.teleportTo(nether, 0.5, 64.0, 0.5, Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(body.level() == nether, "body did not change dimension");
+            helper.assertFalse(body.isChangingDimension(), "body still changing dimension");
+            helper.assertTrue(body.hurtServer(nether, nether.damageSources().generic(), 5.0F), "body refused the damage");
+            helper.assertValueEqual(body.getHealth(), 15.0F, "body health after the hit");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // Vanilla keeps a player unhurtable until its client has loaded the world; a body has no client
     @GameTest
     public void playerBodyTakesDamageAtOnce(GameTestHelper helper) {
@@ -552,10 +576,13 @@ public class PlayerBodyGameTests {
     }
 
     // A copy: discarding a body takes it out of the level's players
+    // Every dimension, since a test can move a body to another
     private static void removeBody(GameTestHelper helper, UUID owner) {
-        for (ServerPlayer player : new ArrayList<>(helper.getLevel().players())) {
-            if (player instanceof PlayerBody body && body.owner().equals(owner)) {
-                body.discard();
+        for (ServerLevel level : helper.getLevel().getServer().getAllLevels()) {
+            for (ServerPlayer player : new ArrayList<>(level.players())) {
+                if (player instanceof PlayerBody body && body.owner().equals(owner)) {
+                    body.discard();
+                }
             }
         }
         store(helper).remove(owner);
