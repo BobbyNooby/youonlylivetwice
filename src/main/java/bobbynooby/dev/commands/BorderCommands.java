@@ -129,7 +129,7 @@ final class BorderCommands {
         }
         Settings.get().worldBorder.diameter = diameter;
         Settings.save();
-        WorldBorders.apply(source.getServer());
+        WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
         return YoltCommands.done(source, "World border diameter set to: " + diameter + borderOffNote());
     }
@@ -174,7 +174,7 @@ final class BorderCommands {
         }
         Settings.get().worldBorder.endScale = scaling;
         Settings.save();
-        WorldBorders.apply(source.getServer());
+        WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
         return YoltCommands.done(source, "End world border scaling factor set to: " + scaling + borderOffNote());
     }

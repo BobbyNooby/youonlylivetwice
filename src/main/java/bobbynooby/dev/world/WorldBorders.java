@@ -14,7 +14,13 @@ import java.util.function.BiConsumer;
 public final class WorldBorders {
     private WorldBorders() {}
 
+    /** Startup and reload: a timed vanilla /worldborder change keeps running, since setSize would stop it. */
     public static void apply(MinecraftServer server) {
+        apply(server, false);
+    }
+
+    /** force: set every border now, ending a moving one, as vanilla's /worldborder set does. For the admin commands. */
+    public static void apply(MinecraftServer server, boolean force) {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
             return;
         }
@@ -22,8 +28,7 @@ public final class WorldBorders {
 
         forEachBorder(server, (level, isEnd) -> {
             WorldBorder worldBorder = level.getWorldBorder();
-            // A timed vanilla /worldborder change keeps running through a restart or reload; setSize would stop it
-            if (worldBorder.getStatus() != BorderStatus.STATIONARY) {
+            if (!force && worldBorder.getStatus() != BorderStatus.STATIONARY) {
                 return;
             }
 

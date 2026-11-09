@@ -29,6 +29,7 @@ import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 
 import java.io.IOException;
@@ -262,6 +263,34 @@ public class CommandGameTests {
             restoreBorders(bordersBefore);
             Files.writeString(Settings.path(), fileBefore);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A startup or reload leaves a timed vanilla /worldborder change alone, but the command means "now", like /worldborder set
+    @GameTest
+    public void borderCommandEndsAMovingBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        WorldBorder overworld = server.overworld().getWorldBorder();
+
+        border.enabled = true;
+        try {
+            double size = overworld.getSize();
+            overworld.lerpSizeBetween(size, size - 1000, 1_000_000L, server.overworld().getGameTime());
+            // confirm, because the test structures sit far outside a 3000 block border
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to: 3000"), "command output");
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
+            helper.assertValueEqual(overworld.getSize(), 3000.0, "overworld border size");
+        } finally {
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            restoreBorders(bordersBefore);
+            Files.writeString(Settings.path(), fileBefore);
         }
         helper.succeed();
     }
