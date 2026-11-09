@@ -42,6 +42,7 @@ final class LockoutCommands {
     private static int kill(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         Optional<NameAndId> who = YoltCommands.lookup(server, name);
+        long start = System.currentTimeMillis();
         Kills.Result result;
         try {
             result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
@@ -59,6 +60,10 @@ final class LockoutCommands {
             return YoltCommands.fail(source, failure);
         }
         LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
+        // The player is dead either way; without the record they are not locked out, so the admin has to know
+        if (!DeathLockout.deathRecordedSince(who.get().id(), start)) {
+            return YoltCommands.fail(source, "Killed " + who.get().name() + ", but the death could not be recorded; see the server log.");
+        }
         return YoltCommands.done(source, "Killed " + who.get().name());
     }
 

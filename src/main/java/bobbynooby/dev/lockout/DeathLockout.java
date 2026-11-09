@@ -165,6 +165,27 @@ public final class DeathLockout {
         }
     }
 
+    /**
+     * Whether the player's newest death was stored at or after the given time; true with the lockout off, when
+     * nothing is stored. A kill records its death inside the death event, where no result can reach the caller, so
+     * the caller asks afterwards.
+     */
+    public static boolean deathRecordedSince(UUID uuid, long sinceMillis) {
+        if (!enabled()) {
+            return true;
+        }
+        DeathStore open = store;
+        if (open == null) {
+            return false;
+        }
+        try {
+            return open.latest(uuid).filter(log -> log.deathTimeMillis() >= sinceMillis).isPresent();
+        } catch (RuntimeException e) {
+            Yolt.LOGGER.error("Could not read back the death of {}", uuid, e);
+            return false;
+        }
+    }
+
     // Checked here instead of by each caller, so a new caller can't forget the switch
     private static boolean enabled() {
         return Settings.on(c -> c.deathLockout.enabled);
