@@ -20,9 +20,10 @@ on:
         type: boolean
         default: false
 
+# Each push's run is that commit's proof, so only superseded pull request runs are cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -61,6 +62,8 @@ jobs:
           ./gradlew build --continue "${args[@]}"
       - name: summarise failed tests
         if: always()
+        # A fork's pull request gets a read-only token; the summary must never turn a build red
+        continue-on-error: true
         uses: mikepenz/action-junit-report@v6.6.1
         with:
           report_paths: build/test-results/**/*.xml
