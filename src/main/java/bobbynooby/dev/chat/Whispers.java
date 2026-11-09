@@ -38,6 +38,12 @@ public final class Whispers {
         dispatcher.register(command());
     }
 
+    /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
+    public static boolean restricted(ServerPlayer player) {
+        return Settings.active() && Settings.get().restrictCommands
+                && !player.level().getServer().getPlayerList().isOp(player.nameAndId());
+    }
+
     public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers) {
         RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
         // help is answered by the restriction mixin, so its body never runs

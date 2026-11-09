@@ -8,9 +8,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -28,60 +26,35 @@ public class CommandManagerMixin {
     // Restrict non-op players to help, plus /w when whispers are on
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
-        if (!Settings.active() || !Settings.get().restrictCommands) {
+        ServerPlayer player = parseResults.getContext().getSource().getPlayer();
+        if (command.isEmpty() || player == null || !Whispers.restricted(player)) {
+            return;
+        }
+        String commandRoot = command.split(" ")[0];
+
+        // /w is our own command (Whispers), so it runs normally and reads the signed message
+        if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
             return;
         }
 
-        // Basic command checking
-        if (!command.isEmpty()) {
-            String commandRoot = command.split(" ")[0];
-            ServerPlayer player = parseResults.getContext().getSource().getPlayer();
-            PlayerList playerList = parseResults.getContext().getSource().getServer().getPlayerList();
+        // Check if command is help
+        if (commandRoot.equals("help")) {
 
-            // Check if player is not op
-            if (player != null && playerList != null && !playerList.isOp(player.nameAndId())) {
-
-                // /w is our own command (Whispers), so it runs normally and reads the signed message
-                if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
-                    return;
-                }
-
-                // Check if command is help
-                if (commandRoot.equals("help")) {
-
-                    // Send help message to non-op players
-                    player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
-                }
-
-                // Just ignore the command if it is not help
-                ci.cancel();
-            }
-
-            // Continue the rest of the original method if player is op
+            // Send help message to non-op players
+            player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
         }
+
+        // Just ignore the command if it is not help
+        ci.cancel();
     }
 
     // Send restricted command tree to non-op players
     @Inject(method = "sendCommands", at = @At("HEAD"), cancellable = true)
     private void sendPatchedCommandTree(ServerPlayer player, CallbackInfo ci) {
-        if (!Settings.active() || !Settings.get().restrictCommands) {
-            return;
+        if (Whispers.restricted(player)) {
+            player.connection.send(new ClientboundCommandsPacket(
+                    Whispers.nonOpTree(Settings.get().chat.allowWhispers), COMMAND_NODE_INSPECTOR));
+            ci.cancel();
         }
-        // Check if player is op
-        MinecraftServer server = player.level().getServer();
-        PlayerList playerList = server.getPlayerList();
-        if (playerList != null) {
-            boolean isOp = playerList.isOp(player.nameAndId());
-            if (!isOp) {
-                player.connection.send(new ClientboundCommandsPacket(
-                        Whispers.nonOpTree(Settings.get().chat.allowWhispers), COMMAND_NODE_INSPECTOR));
-
-                // Cancel the rest of the original method.
-                ci.cancel();
-
-            }
-        }
-
-        // If player is op just continue as usual
     }
 }

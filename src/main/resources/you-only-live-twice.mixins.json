@@ -22,6 +22,7 @@
     "PlayerListLoginMixin",
     "PlayerListVisibilityMixin",
     "PlayerManagerMixin",
+    "ServerCommandSuggestionsProviderMixin",
     "ServerEntityMixin",
     "ServerPlayerMixin",
     "SetPlayerTeamPacketInvoker",

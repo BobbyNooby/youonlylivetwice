@@ -5,6 +5,8 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.Suggestion;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
@@ -20,10 +22,12 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerCommandSuggestionsProvider;
 import net.minecraft.world.level.GameType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 // /w runs through the real dispatcher as a non-op test player, so both the restriction mixin and our /w command run.
 // Switches are restored in a finally block in the same tick.
@@ -167,6 +171,39 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // A modified client can ask for suggestions on commands its tree doesn't have, like /msg and its online names
+    @GameTest
+    public void suggestionsComeFromNonOpTree(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            ServerPlayer nonOp = joinRecording(helper, joined, "wsuggest", BlockPos.ZERO);
+            op = joinRecording(helper, joined, "wsuggestop", new BlockPos(1, 0, 0));
+            TestPlayers.op(op);
+
+            helper.assertValueEqual(suggestions(helper, nonOp, "/msg "), List.of(), "a non-op's suggestions for /msg");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help"), "a non-op's commands with whispers off");
+            config.chat.allowWhispers = true;
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "w"), "a non-op's commands with whispers on");
+            // Ops keep vanilla's suggestions, which shows /msg would name online players
+            helper.assertTrue(suggestions(helper, op, "/msg ").contains(nonOp.getGameProfile().name()),
+                    "an op's suggestions for /msg have no online names");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     private static List<String> childNames(RootCommandNode<CommandSourceStack> root) {
         List<String> names = new ArrayList<>();
         for (CommandNode<CommandSourceStack> child : root.getChildren()) {
@@ -181,6 +218,19 @@ public class WhisperGameTests {
             arguments.add(argument.name() + "=" + argument.value());
         }
         return arguments;
+    }
+
+    // What the server answers a client's suggestion request with. A real connection ticks its own provider.
+    private static List<String> suggestions(GameTestHelper helper, ServerPlayer player, String command) {
+        ServerCommandSuggestionsProvider provider = new ServerCommandSuggestionsProvider(player);
+        CompletableFuture<Suggestions> answer = provider.request(command);
+        provider.tick();
+        helper.assertTrue(answer.isDone(), "no answer for '" + command + "' after a tick");
+        List<String> texts = new ArrayList<>();
+        for (Suggestion suggestion : answer.join().getList()) {
+            texts.add(suggestion.getText());
+        }
+        return texts;
     }
 
     private static void run(ServerPlayer player, String command) {
