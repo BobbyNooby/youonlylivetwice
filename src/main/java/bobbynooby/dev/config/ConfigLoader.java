@@ -104,7 +104,7 @@ public final class ConfigLoader {
             warnings.add("config could not be read (" + e.getMessage() + "), using defaults");
             config = new YoltConfig();
         }
-        ConfigChecks.validate(config, fallback, warnings);
+        ConfigChecks.validate(config, fallback, warnings, fallbackName);
         // What is held is this build's layout, whatever the file said, so a save says so
         config.configVersion = currentVersion;
         if (version > currentVersion) {

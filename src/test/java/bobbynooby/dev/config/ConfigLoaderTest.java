@@ -139,19 +139,23 @@ class ConfigLoaderTest {
     @Test
     void badValueOnReloadKeepsLiveValue() throws IOException {
         Path file = dir.resolve("config.json");
-        Files.writeString(file, "{\"worldBorder\":{\"diameter\":\"2OOOO\"},\"chat\":{\"radius\":99}}");
+        Files.writeString(file, "{\"worldBorder\":{\"diameter\":\"2OOOO\"},\"chat\":{\"radius\":99},\"deathLockout\":{\"cooldownDays\":-1}}");
         YoltConfig base = new YoltConfig();
         base.worldBorder.diameter = 20000;
         base.chat.mode = YoltConfig.ChatMode.GLOBAL;
+        base.deathLockout.cooldownDays = 3;
 
         ConfigLoader.Result r = ConfigLoader.load(file, base, false);
         assertEquals(20000, r.config().worldBorder.diameter);
         assertEquals(99, r.config().chat.radius);
         // a key the file leaves out keeps the live value too
         assertEquals(YoltConfig.ChatMode.GLOBAL, r.config().chat.mode);
-        assertEquals(1, r.warnings().size());
+        // a value of the right type that fails its range check is kept the same way
+        assertEquals(3, r.config().deathLockout.cooldownDays);
+        assertEquals(2, r.warnings().size());
         assertTrue(r.warnings().get(0).contains("worldBorder.diameter"));
-        assertTrue(r.warnings().get(0).endsWith("using the current value"));
+        assertEquals("deathLockout.cooldownDays: must be 0 or more, using the current value", r.warnings().get(1));
+        assertTrue(r.warnings().stream().allMatch(w -> w.endsWith("using the current value")));
     }
 
     @Test
