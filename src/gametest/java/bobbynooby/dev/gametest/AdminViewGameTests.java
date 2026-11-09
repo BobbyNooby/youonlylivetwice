@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
@@ -66,8 +65,9 @@ public class AdminViewGameTests {
             // Off, so it is /yolt's own op check that refuses, not the command filter for non-ops
             config.restrictCommands = false;
             run(player, "yolt adminview");
-            helper.assertTrue(player.messages.stream().anyMatch(m -> m.getContents() instanceof TranslatableContents t
-                    && t.getKey().equals("command.unknown.command")), "a non-op's /yolt adminview was not refused");
+            // Compared as text, since a command failure arrives wrapped in another component
+            helper.assertTrue(said(player, Component.translatable("command.unknown.command").getString()),
+                    "a non-op's /yolt adminview was not refused");
             helper.assertFalse(said(player, "Admin view on"), "a non-op was told admin view is on");
             helper.assertFalse(player.hasAttached(AdminView.ATTACHMENT), "a non-op's command changed admin view");
         } finally {
