@@ -99,6 +99,8 @@ public final class DeathStore {
                 throw new IllegalStateException("The death database " + dbFile + " is the old format from before the "
                         + "26.3 port (no death_time_ms column), so it is ignored and left as it is");
             }
+            // The v1 table. Never edit it: a schema change is a new step in STEPS, so a new database goes through the
+            // same steps as an old one and both end up the same
             statement.execute("""
                     CREATE TABLE IF NOT EXISTS death_logs (
                         uuid TEXT,
