@@ -145,7 +145,7 @@ public final class DeathLockout {
 
     // Checked here instead of by each caller, so a new caller can't forget the switch
     private static boolean enabled() {
-        return Settings.active() && Settings.get().deathLockout.enabled;
+        return Settings.on(c -> c.deathLockout.enabled);
     }
 
     public static boolean revive(UUID uuid) {

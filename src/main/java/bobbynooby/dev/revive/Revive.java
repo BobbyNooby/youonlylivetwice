@@ -44,7 +44,7 @@ public final class Revive {
 
     /** Tells the user what happened. Only a revive that went through uses up one head. */
     public static Outcome tryUse(ServerPlayer user, ItemStack stack) {
-        if (!Settings.active() || !Settings.get().revive.enabled) {
+        if (!Settings.on(c -> c.revive.enabled)) {
             user.sendSystemMessage(Component.literal("Revives are turned off."));
             return Outcome.DISABLED;
         }

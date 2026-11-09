@@ -84,7 +84,7 @@ public final class OfflineKill {
         // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory, but
         // only while graves are on, since an online death with graves off never reaches it.
         boolean spectator = GameType.byId(tag.getIntOr("playerGameType", 0)) == GameType.SPECTATOR;
-        boolean graves = Settings.active() && Settings.get().graves.enabled;
+        boolean graves = Settings.on(c -> c.graves.enabled);
         boolean dropsLoot = !spectator && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
         List<ItemStack> items = new ArrayList<>();
         int experience = 0;
@@ -141,7 +141,7 @@ public final class OfflineKill {
     public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where,
                                    ResolvableProfile profile) {
         ServerLevel level = levelFor(server, where);
-        if (Settings.active() && Settings.get().graves.enabled) {
+        if (Settings.on(c -> c.graves.enabled)) {
             return depositInGraves(server, level, who, items, where, profile);
         }
         Vec3 pos = Vec3.atBottomCenterOf(where.pos());

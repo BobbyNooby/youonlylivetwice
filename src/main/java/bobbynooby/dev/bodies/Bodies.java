@@ -90,7 +90,7 @@ public final class Bodies {
     public static Optional<Entity> onLogout(ServerPlayer player) {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
-        if (!Settings.active() || !cfg.enabled || player.isDeadOrDying() || player.isSpectator()
+        if (!Settings.on(c -> c.bodies.enabled) || player.isDeadOrDying() || player.isSpectator()
                 || DeathLockout.refusal(player.getUUID()) != null) {
             return Optional.empty();
         }
@@ -332,7 +332,7 @@ public final class Bodies {
 
     /** True when hits should wear down a body's armour, as they do a player's. */
     public static boolean wearsArmour(LivingEntity entity) {
-        return Settings.active() && Settings.get().bodies.armourWears && isBody(entity);
+        return Settings.on(c -> c.bodies.armourWears) && isBody(entity);
     }
 
     /**

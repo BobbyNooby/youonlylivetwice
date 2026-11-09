@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.visibility.PlayerCount;
 import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.server.players.NameAndId;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,21 +15,21 @@ public abstract class PlayerCountMixin {
 
     @Inject(method = "max", at = @At("HEAD"), cancellable = true)
     private void getMaxPlayers(CallbackInfoReturnable<Integer> cir) {
-        if (Settings.active() && Settings.get().hide.serverPlayerCount) {
-            cir.setReturnValue(1);
+        if (PlayerCount.hides()) {
+            cir.setReturnValue(PlayerCount.SHOWN_MAX);
         }
     }
 
     @Inject(method = "online", at = @At("HEAD"), cancellable = true)
     private void getOnlinePlayers(CallbackInfoReturnable<Integer> cir) {
-        if (Settings.active() && Settings.get().hide.serverPlayerCount) {
-            cir.setReturnValue(0);
+        if (PlayerCount.hides()) {
+            cir.setReturnValue(PlayerCount.SHOWN_ONLINE);
         }
     }
 
     @Inject(method = "sample", at = @At("HEAD"), cancellable = true)
     private void getSamplePlayers(CallbackInfoReturnable<List<NameAndId>> cir) {
-        if (Settings.active() && Settings.get().hide.serverPlayerCount) {
+        if (PlayerCount.hides()) {
             cir.setReturnValue(List.of());
         }
     }

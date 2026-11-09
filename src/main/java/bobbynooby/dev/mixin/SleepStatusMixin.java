@@ -1,7 +1,7 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.bodies.PlayerBody;
-import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.world.Sleep;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,7 +17,7 @@ public abstract class SleepStatusMixin {
 
     @Inject(method = "amountSleeping", at = @At("HEAD"), cancellable = true)
     private void getFakeSleeping(CallbackInfoReturnable<Integer> cir) {
-        if (Settings.active() && Settings.get().sleep.hideSleepers) {
+        if (Sleep.hidesSleepers()) {
             cir.setReturnValue(0);
         }
     }
@@ -31,8 +31,8 @@ public abstract class SleepStatusMixin {
 
     @Inject(method = "sleepersNeeded", at = @At("HEAD"), cancellable = true)
     private void getFakeNightSkippingRequirement(CallbackInfoReturnable<Integer> cir) {
-        if (Settings.active() && Settings.get().sleep.noNightSkip) {
-            cir.setReturnValue(727);
+        if (Sleep.blocksNightSkip()) {
+            cir.setReturnValue(Sleep.SLEEPERS_NEEDED_WHEN_BLOCKED);
         }
     }
 }

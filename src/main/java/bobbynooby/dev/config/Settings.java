@@ -5,6 +5,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 
 import java.nio.file.Path;
+import java.util.function.Predicate;
 
 /** Holds the live config that every feature reads while the server runs. */
 public final class Settings {
@@ -43,6 +44,11 @@ public final class Settings {
     /** True while a server with no single-player owner runs, so single-player worlds stay vanilla. */
     public static boolean active() {
         return active;
+    }
+
+    /** True when the server is active and this switch is on; reads the live config at the moment of the call. */
+    public static boolean on(Predicate<YoltConfig> switchOn) {
+        return active && switchOn.test(config);
     }
 
     public static void onServerStarting(MinecraftServer server) {

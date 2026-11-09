@@ -84,7 +84,7 @@ public final class Graves {
 
     /** True for the head block of a grave while graves are on. Every protection hook asks this. */
     public static boolean isGrave(Level level, BlockPos pos) {
-        if (!Settings.active() || !Settings.get().graves.enabled || !(level instanceof ServerLevel serverLevel)) {
+        if (!Settings.on(c -> c.graves.enabled) || !(level instanceof ServerLevel serverLevel)) {
             return false;
         }
         // The block first: it is cheap, and the hooks run for many blocks that are never heads
@@ -131,7 +131,7 @@ public final class Graves {
             player.getInventory().clearContent();
             return true;
         }
-        if (!Settings.active() || !Settings.get().graves.enabled) {
+        if (!Settings.on(c -> c.graves.enabled)) {
             return false;
         }
         boolean keepInventory = level.getGameRules().get(GameRules.KEEP_INVENTORY);
@@ -357,7 +357,7 @@ public final class Graves {
     // The event fires while the chunk is still being loaded, and setting a block in it then would wait on that
     // same load. So the restore waits until the current tick is done.
     private static void onChunkLoad(ServerLevel level, LevelChunk chunk, boolean generated) {
-        if (!Settings.active() || !Settings.get().graves.enabled) {
+        if (!Settings.on(c -> c.graves.enabled)) {
             return;
         }
         MinecraftServer server = level.getServer();
@@ -367,7 +367,7 @@ public final class Graves {
         }
         Later.afterTick(server, () -> {
             // Graves may have been switched off meanwhile. If the chunk unloaded, its next load tries again.
-            if (Settings.active() && Settings.get().graves.enabled && level.hasChunk(pos.x(), pos.z())) {
+            if (Settings.on(c -> c.graves.enabled) && level.hasChunk(pos.x(), pos.z())) {
                 restoreChunk(level, chunk);
             }
         });

@@ -26,7 +26,7 @@ public abstract class TabHeaderMixin {
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void headerEveryTick(CallbackInfo ci) {
-        if (!Settings.active() || !Settings.get().hide.tabHeader) {
+        if (!Settings.on(c -> c.hide.tabHeader)) {
             return;
         }
         TabHeaders.sendAll((PlayerList) (Object) this);

@@ -9,7 +9,7 @@ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 
 public class WorldBorders {
     public static void apply(MinecraftServer server) {
-        if (!Settings.active() || !Settings.get().worldBorder.enabled) {
+        if (!Settings.on(c -> c.worldBorder.enabled)) {
             return;
         }
         YoltConfig.WorldBorderSection config = Settings.get().worldBorder;

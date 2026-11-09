@@ -64,7 +64,7 @@ public final class ChatDelivery {
     }
 
     private static boolean onChat(PlayerChatMessage message, ServerPlayer sender, ChatType.Bound chatType) {
-        if (!Settings.active() || Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
+        if (!Settings.on(c -> c.chat.mode != YoltConfig.ChatMode.GLOBAL)) {
             return true;
         }
         // Fabric also fires this for the /say and /me that onCommandMessage let through: op announcements, which reach everyone
@@ -76,7 +76,7 @@ public final class ChatDelivery {
     }
 
     private static boolean onGameMessage(MinecraftServer server, Component message, boolean overlay) {
-        if (!Settings.active() || overlay || !Settings.get().hide.gameMessages) {
+        if (overlay || !Settings.on(c -> c.hide.gameMessages)) {
             return true;
         }
         // The console still logs it, like vanilla's broadcast

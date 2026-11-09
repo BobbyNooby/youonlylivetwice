@@ -40,7 +40,7 @@ public final class Whispers {
 
     /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
     public static boolean restricted(ServerPlayer player) {
-        return Settings.active() && Settings.get().restrictCommands
+        return Settings.on(c -> c.restrictCommands)
                 && !player.level().getServer().getPlayerList().isOp(player.nameAndId());
     }
 

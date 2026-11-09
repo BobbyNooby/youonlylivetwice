@@ -85,6 +85,6 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
     }
 
     private static boolean switchedOn() {
-        return Settings.active() && Settings.get().bodies.mobsAttack;
+        return Settings.on(c -> c.bodies.mobsAttack);
     }
 }

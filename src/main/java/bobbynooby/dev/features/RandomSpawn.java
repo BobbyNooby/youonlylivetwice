@@ -19,7 +19,7 @@ public class RandomSpawn {
 
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
-        return Settings.active() && Settings.get().randomSpawn && level.dimension() == Level.OVERWORLD;
+        return Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
     }
 
     public static BlockPos findRandomSpawn(ServerLevel level) {

@@ -194,7 +194,7 @@ public final class PlayerBody extends ServerPlayer {
     // Read live, so turning the switch off also stops a hunt already under way
     @Override
     public boolean canBeSeenAsEnemy() {
-        return Settings.get().bodies.mobsAttack && super.canBeSeenAsEnemy();
+        return Settings.on(c -> c.bodies.mobsAttack) && super.canBeSeenAsEnemy();
     }
 
     // Player's own wear, which skips the mixin a mannequin goes through, so the switch is checked here
