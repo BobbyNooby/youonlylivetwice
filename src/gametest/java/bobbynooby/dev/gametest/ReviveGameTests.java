@@ -14,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.CraftingMenu;
@@ -33,7 +34,9 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -99,18 +102,20 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // A name alone resolves to an offline id, so only a missing profile or one with neither name nor id has no owner
+    // A name alone would get an id made up from the name, which isn't the player's id on an online-mode server
     @GameTest
     public void reviveWithoutOwnerIdRefused(GameTestHelper helper) {
+        Map<String, ItemStack> heads = new LinkedHashMap<>();
+        heads.put("no profile", reviveHead(null, 1));
+        heads.put("a name only", reviveHead(ResolvableProfile.createUnresolved("SomeName"), 1));
+        heads.put("neither name nor id", reviveHead(ResolvableProfile.Static.EMPTY, 1));
+        heads.put("the nil id", reviveHead(staticProfile(Util.NIL_UUID), 1));
         ServerPlayer user = TestPlayers.join(helper, "Nobody", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            ItemStack noProfile = reviveHead(null, 1);
-            helper.assertValueEqual(Revive.tryUse(user, noProfile), Revive.Outcome.NO_OWNER, "outcome without a profile");
-            helper.assertValueEqual(noProfile.getCount(), 1, "heads left without a profile");
-
-            ItemStack emptyProfile = reviveHead(ResolvableProfile.Static.EMPTY, 1);
-            helper.assertValueEqual(Revive.tryUse(user, emptyProfile), Revive.Outcome.NO_OWNER, "outcome with an empty profile");
-            helper.assertValueEqual(emptyProfile.getCount(), 1, "heads left with an empty profile");
+            heads.forEach((label, head) -> {
+                helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.NO_OWNER, "outcome with " + label);
+                helper.assertValueEqual(head.getCount(), 1, "heads left with " + label);
+            });
         } finally {
             TestPlayers.leave(user);
         }

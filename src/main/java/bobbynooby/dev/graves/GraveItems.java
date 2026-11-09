@@ -3,8 +3,10 @@ package bobbynooby.dev.graves;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.util.Util;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -46,9 +48,14 @@ public final class GraveItems {
         return hasMarker(stack, REVIVE);
     }
 
+    /** The id stored on the head's profile. Empty when the head has no profile, no stored id, or the nil id. */
     public static Optional<UUID> ownerId(ItemStack stack) {
         ResolvableProfile profile = stack.get(DataComponents.PROFILE);
-        return profile == null ? Optional.empty() : Optional.of(profile.partialProfile().id());
+        if (profile == null || !storesId(profile)) {
+            return Optional.empty();
+        }
+        UUID id = profile.partialProfile().id();
+        return id.equals(Util.NIL_UUID) ? Optional.empty() : Optional.of(id);
     }
 
     private static CustomData marker(String key) {
@@ -57,6 +64,15 @@ public final class GraveItems {
         CompoundTag root = new CompoundTag();
         root.put(ROOT, inner);
         return CustomData.of(root);
+    }
+
+    // partialProfile() makes an id up from the name when none is stored, and on an online-mode server that isn't
+    // the player's id. Only the saved form tells the two apart, for both a name-only lookup and a static profile.
+    // A profile that can't be encoded couldn't be saved with the item either, so it counts as having no id.
+    private static boolean storesId(ResolvableProfile profile) {
+        return ResolvableProfile.CODEC.encodeStart(NbtOps.INSTANCE, profile).result()
+                .filter(tag -> tag instanceof CompoundTag compound && compound.contains("id"))
+                .isPresent();
     }
 
     private static boolean hasMarker(ItemStack stack, String key) {

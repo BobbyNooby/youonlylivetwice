@@ -12,7 +12,6 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -49,8 +48,7 @@ public final class Revive {
             user.sendSystemMessage(Component.literal("Revives are turned off."));
             return Outcome.DISABLED;
         }
-        // A profile with neither id nor name decodes to the nil id, which belongs to nobody
-        Optional<UUID> owner = GraveItems.ownerId(stack).filter(id -> !id.equals(Util.NIL_UUID));
+        Optional<UUID> owner = GraveItems.ownerId(stack);
         if (owner.isEmpty()) {
             user.sendSystemMessage(Component.literal("This head has no owner."));
             return Outcome.NO_OWNER;
