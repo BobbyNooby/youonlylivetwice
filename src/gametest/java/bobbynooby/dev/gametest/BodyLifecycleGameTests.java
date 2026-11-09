@@ -23,6 +23,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Optional;
@@ -179,6 +180,83 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    @GameTest
+    public void loginTakesBodyStateAndRemovesIt(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Takeover", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(body.getHealth(), 20.0F, "body health at logout");
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 5.0F);
+            helper.assertValueEqual(body.getHealth(), 15.0F, "body health after the hit");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.getHealth(), 15.0F, "health after login");
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(bodiesOf(helper, owner).isEmpty(), "a body is left for the player");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void movedBodyMovesPlayer(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Moved", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.teleportTo(body.getX() + 3.0, body.getY(), body.getZ());
+            Vec3 moved = body.position();
+
+            // Joins where they logged out, 3 blocks from the body
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.position(), moved, "position after login");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void poppedTotemIsGoneAfterLogin(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Popped", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            Mannequin body = leaveBody(helper, player);
+            // What saving the body from a death does to its totem
+            body.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty(), "used totem came back");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void wornArmourKeepsDamageAfterLogin(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Worn", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            Mannequin body = leaveBody(helper, player);
+            body.getItemBySlot(EquipmentSlot.CHEST).set(DataComponents.DAMAGE, 40);
+
+            ServerPlayer back = rejoin(helper, player);
+            ItemStack chest = back.getItemBySlot(EquipmentSlot.CHEST);
+            helper.assertTrue(chest.is(Items.IRON_CHESTPLATE), "chestplate lost");
+            helper.assertValueEqual(chest.getOrDefault(DataComponents.DAMAGE, 0), 40, "chestplate damage");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
     private static ServerPlayer join(GameTestHelper helper, String name, GameType mode) {
         return TestPlayers.join(helper, name, mode, new BlockPos(1, 1, 1));
     }
@@ -195,6 +273,20 @@ public class BodyLifecycleGameTests {
         Optional<Entity> body = Bodies.onLogout(player);
         helper.assertTrue(body.isPresent() && body.get() instanceof Mannequin, "no mannequin body");
         return (Mannequin) body.get();
+    }
+
+    // A real logout: leaving fires the hook and saves the player, so joining again reads that save
+    private static Mannequin leaveBody(GameTestHelper helper, ServerPlayer player) {
+        TestPlayers.leave(player);
+        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
+        helper.assertTrue(record.isPresent(), "no body record");
+        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
+        helper.assertTrue(entity instanceof Mannequin, "no mannequin for the record");
+        return (Mannequin) entity;
+    }
+
+    private static ServerPlayer rejoin(GameTestHelper helper, ServerPlayer player) {
+        return TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
     }
 
     private static BodyStore store(GameTestHelper helper) {
@@ -221,8 +313,10 @@ public class BodyLifecycleGameTests {
     private static void cleanUp(GameTestHelper helper, ServerPlayer player, YoltConfig.BodiesSection before) {
         Settings.get().bodies = before;
         MinecraftServer server = helper.getLevel().getServer();
-        if (server.getPlayerList().getPlayer(player.getUUID()) == player) {
-            TestPlayers.leave(player);
+        // By uuid: after a relog the player online is a new object
+        ServerPlayer online = server.getPlayerList().getPlayer(player.getUUID());
+        if (online != null) {
+            TestPlayers.leave(online);
         }
         bodiesOf(helper, player.getUUID()).forEach(Entity::discard);
         store(helper).remove(player.getUUID());
