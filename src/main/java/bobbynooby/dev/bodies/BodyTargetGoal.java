@@ -51,6 +51,10 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
         if (!switchedOn() || this.mob instanceof Spider && this.mob.getLightLevelDependentMagicValue() >= 0.5F) {
             return false;
         }
+        // The phantom's own player goal doesn't claim the target, so without this the two would keep taking it off each other
+        if (this.mob instanceof Phantom && this.mob.getTarget() != null && this.mob.getTarget().isAlive()) {
+            return false;
+        }
         return super.canUse();
     }
 
