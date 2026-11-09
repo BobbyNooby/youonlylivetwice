@@ -22,6 +22,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -30,6 +31,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -37,6 +39,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 
@@ -51,6 +54,70 @@ import java.util.UUID;
 // Like BodyLifecycleGameTests: each test turns the default body switches on and puts the server's own back in
 // the same tick. Every logout is real, so the owner's save holds what they had.
 public class BodyDeathGameTests {
+    // A batch of its own: the test turns show_death_messages off, which every death in the batch would read
+    private static final String DEATH_MESSAGES = "you-only-live-twice-gametest:death_messages";
+
+    // With death messages hidden the death screen is empty, so the lockout names no killer either: not for a player,
+    // and not for a body. The first pair, with the rule on, shows the killer does come through otherwise.
+    @GameTest(environment = DEATH_MESSAGES)
+    public void hiddenDeathMessagesNameNoKiller(GameTestHelper helper) {
+        GameRules rules = helper.getLevel().getGameRules();
+        MinecraftServer server = helper.getLevel().getServer();
+        boolean ruleBefore = rules.get(GameRules.SHOW_DEATH_MESSAGES);
+        Zombie killer = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(3, 1, 3));
+        killer.setCustomName(Component.literal("Slayer"));
+        try {
+            rules.set(GameRules.SHOW_DEATH_MESSAGES, true, server);
+            String player = killedOnline(helper, "Shown", killer);
+            helper.assertTrue(player.startsWith("You died: Shown") && player.contains(" was slain by Slayer\nTry again in "),
+                    "player's lockout with the rule on: " + player);
+            String body = bodyKilled(helper, "ShownBody", killer);
+            helper.assertTrue(body.startsWith("You died: Killed while away (ShownBody")
+                    && body.contains(" was slain by Slayer)\nTry again in "), "body's lockout with the rule on: " + body);
+
+            rules.set(GameRules.SHOW_DEATH_MESSAGES, false, server);
+            player = killedOnline(helper, "Hidden", killer);
+            helper.assertTrue(player.startsWith("You died.\nTry again in ") && !player.contains("Slayer")
+                    && !player.contains("was slain"), "player's lockout with the rule off: " + player);
+            body = bodyKilled(helper, "HiddenBody", killer);
+            helper.assertTrue(body.startsWith("You died: Killed while away\nTry again in ") && !body.contains("Slayer")
+                    && !body.contains("was slain"), "body's lockout with the rule off: " + body);
+        } finally {
+            rules.set(GameRules.SHOW_DEATH_MESSAGES, ruleBefore, server);
+            killer.discard();
+        }
+        helper.succeed();
+    }
+
+    // Killed by the killer while online; returns what the lockout tells them. The dead player leaves before the kick.
+    private static String killedOnline(GameTestHelper helper, String name, Zombie killer) {
+        ServerPlayer player = join(helper, name);
+        UUID owner = player.getUUID();
+        try {
+            TestPlayers.markLoaded(player);
+            player.hurtServer(helper.getLevel(), helper.getLevel().damageSources().mobAttack(killer), Float.MAX_VALUE);
+            helper.assertTrue(player.isDeadOrDying(), name + " did not die");
+            return LockoutGameTests.refusalText(owner);
+        } finally {
+            cleanUp(helper, owner, Settings.get().bodies);
+        }
+    }
+
+    // The player leaves a mannequin body, which the killer kills; returns what the lockout tells its owner
+    private static String bodyKilled(GameTestHelper helper, String name, Zombie killer) {
+        ServerPlayer player = join(helper, name);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().mobAttack(killer), Float.MAX_VALUE);
+            helper.assertTrue(body.isDeadOrDying(), name + "'s body did not die");
+            return LockoutGameTests.refusalText(owner);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+    }
+
     @GameTest
     public void killingBodyMakesGraveAndLocksOut(GameTestHelper helper) {
         ServerPlayer player = join(helper, "BodyDeath");
