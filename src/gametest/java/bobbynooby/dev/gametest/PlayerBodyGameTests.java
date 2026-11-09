@@ -23,6 +23,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
+import net.minecraft.server.players.SleepStatus;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
@@ -332,6 +333,30 @@ public class PlayerBodyGameTests {
                 cleanUp(helper, owner, before);
             }
         }
+    }
+
+    // The level counts its awake players for the night skip, and a body is one that never sleeps
+    @GameTest
+    public void playerBodyDoesNotBlockSleep(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Awake", ON_FLOOR);
+        ServerPlayer other = join(helper, "Other", new BlockPos(3, 1, 1));
+        UUID owner = player.getUUID();
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean noSkipBefore = sleep.noNightSkip;
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            // On, it would always ask for more sleepers than there are
+            sleep.noNightSkip = false;
+            SleepStatus status = new SleepStatus();
+            status.update(List.of(other, body));
+            helper.assertValueEqual(status.sleepersNeeded(100), 1, "sleepers needed with a body awake");
+        } finally {
+            sleep.noNightSkip = noSkipBefore;
+            cleanUp(helper, owner, before);
+            TestPlayers.leave(other);
+        }
+        helper.succeed();
     }
 
     // The player list keeps stats and advancements by id until a player leaves, which a body never does, and saves them

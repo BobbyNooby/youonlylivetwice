@@ -25,6 +25,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -101,6 +102,16 @@ public final class PlayerBody extends ServerPlayer {
         body.setHealth(snapshot.health());
         body.setAbsorptionAmount(snapshot.absorption());
         return body.addToWorld(level) ? body : null;
+    }
+
+    /** The players that aren't bodies. The same list when there are none, which is nearly always. */
+    public static List<ServerPlayer> withoutBodies(List<ServerPlayer> players) {
+        for (ServerPlayer player : players) {
+            if (player instanceof PlayerBody) {
+                return players.stream().filter(p -> !(p instanceof PlayerBody)).toList();
+            }
+        }
+        return players;
     }
 
     // Like a player: the name goes in the nametag team before anyone can see the body
