@@ -66,6 +66,10 @@ public final class TestPlayers {
         return join(helper.getLevel(), uniqueProfile(name), mode, helper.absolutePos(relativePos), Recording::new);
     }
 
+    public static Recording joinRecording(MinecraftServer server, String name, GameType mode, BlockPos absolutePos) {
+        return join(server.overworld(), uniqueProfile(name), mode, absolutePos, Recording::new);
+    }
+
     // Vanilla makes a player invulnerable until their client says the world has loaded, which a test player never does
     public static void markLoaded(ServerPlayer player) {
         player.connection.handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket());
