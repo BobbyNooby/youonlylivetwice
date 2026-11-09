@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.world.WorldBorders;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
@@ -15,7 +16,9 @@ import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.synchronization.ArgumentUtils;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -24,6 +27,7 @@ import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.border.WorldBorder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -134,6 +138,85 @@ public class CommandGameTests {
                 double[] centre = centresBefore.get(level);
                 level.getWorldBorder().setCenter(centre[0], centre[1]);
             }
+        }
+        helper.succeed();
+    }
+
+    // The border is saved with the world, and its codec can't write a centre past the world's edge
+    @GameTest
+    public void centerOutsideWorldIsRefused(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        try {
+            helper.assertValueEqual(run(server, "yolt center 30000000 0"), List.of("Center must be within ±29999984."), "command output");
+            bordersBefore.forEach((level, border) -> assertCentre(helper, level, border[0], border[1]));
+            helper.assertTrue(WorldBorder.CODEC.encodeStart(NbtOps.INSTANCE, server.overworld().getWorldBorder()).isSuccess(),
+                    "the overworld border can't be saved");
+        } finally {
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void centerKeepsDecimals(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        try {
+            List<String> output = run(server, "yolt center 100.5 -20.25");
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("World border center set to: 100.5, -20.25"),
+                    "command output: " + output);
+            assertCentre(helper, server.overworld(), 100.5, -20.25);
+        } finally {
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // The centre still moves with the feature off, as vanilla keeps the border either way
+    @GameTest
+    public void centerWithBorderOffSaysSo(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+
+        border.enabled = false;
+        try {
+            List<String> output = run(server, "yolt center 10 20");
+            helper.assertTrue(output.size() == 1 && output.get(0).endsWith("(world border feature is off)"), "command output: " + output);
+        } finally {
+            border.enabled = enabledBefore;
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // With random spawn off a new player starts at the world spawn, where a border far away would kill them
+    @GameTest
+    public void centerWarnsWhenSpawnEndsOutside(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean randomSpawnBefore = config.randomSpawn;
+        boolean enabledBefore = config.worldBorder.enabled;
+        int diameterBefore = config.worldBorder.diameter;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        BlockPos spawn = server.getWorldData().overworldData().getRespawnData().pos();
+
+        config.randomSpawn = false;
+        config.worldBorder.enabled = true;
+        config.worldBorder.diameter = 100;
+        try {
+            WorldBorders.apply(server);
+            List<String> output = run(server, "yolt center " + (spawn.getX() + 10000) + " " + spawn.getZ());
+            helper.assertTrue(output.size() == 1
+                            && output.get(0).endsWith(" The world spawn is outside the new border; move it with /setworldspawn."),
+                    "command output: " + output);
+        } finally {
+            config.randomSpawn = randomSpawnBefore;
+            config.worldBorder.enabled = enabledBefore;
+            config.worldBorder.diameter = diameterBefore;
+            restoreBorders(bordersBefore);
         }
         helper.succeed();
     }
@@ -271,6 +354,23 @@ public class CommandGameTests {
     private static void assertCentre(GameTestHelper helper, ServerLevel level, double x, double z) {
         helper.assertValueEqual(level.getWorldBorder().getCenterX(), x, level.dimension().identifier() + " border centre x");
         helper.assertValueEqual(level.getWorldBorder().getCenterZ(), z, level.dimension().identifier() + " border centre z");
+    }
+
+    // Every level's border centre and size, for restoreBorders
+    private static Map<ServerLevel, double[]> saveBorders(MinecraftServer server) {
+        Map<ServerLevel, double[]> saved = new HashMap<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            WorldBorder border = level.getWorldBorder();
+            saved.put(level, new double[] {border.getCenterX(), border.getCenterZ(), border.getSize()});
+        }
+        return saved;
+    }
+
+    private static void restoreBorders(Map<ServerLevel, double[]> saved) {
+        saved.forEach((level, border) -> {
+            level.getWorldBorder().setCenter(border[0], border[1]);
+            level.getWorldBorder().setSize(border[2]);
+        });
     }
 
     private static ServerLevel level(GameTestHelper helper, ResourceKey<Level> dimension) {
