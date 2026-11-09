@@ -143,6 +143,16 @@ public class BodyStoreGameTests {
     }
 
     @GameTest
+    public void gearSyncGivesNewGearToEmptySlot(GameTestHelper helper) {
+        ItemStack helmet = new ItemStack(Items.IRON_HELMET);
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.HEAD, helmet), Map.of());
+        ItemStack head = out.get(EquipmentSlot.HEAD);
+        helper.assertTrue(head != null && head.is(Items.IRON_HELMET), "helmet not given");
+        helper.assertFalse(head == helmet, "the body's own stack was handed over");
+        helper.succeed();
+    }
+
+    @GameTest
     public void badBodyTypeOnlySkipsThatRecord(GameTestHelper helper) {
         RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
         BodyRecord good = record(Map.of());
