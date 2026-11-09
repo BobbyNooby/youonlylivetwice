@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /** Keeps a copy of a store file this version couldn't fully read, so the next save doesn't overwrite what is in it. */
 public final class UnreadableFiles {
@@ -35,10 +36,17 @@ public final class UnreadableFiles {
 
     /**
      * A file from a newer YOLT or Minecraft loads only what this version can read, and the next save would write only
-     * that. So a copy is kept next to it first. Returns the copy, if one was made.
+     * that. So a copy is kept next to it first, unless one with the same bytes is already there: a restart before the
+     * store is saved again finds the same file. Returns the copy, if one was made.
      */
     public static Optional<Path> keepNewerCopy(Path file, String what) {
-        Path copy = file.resolveSibling(file.getFileName() + ".newer-" + System.currentTimeMillis());
+        String prefix = file.getFileName() + ".newer-";
+        Optional<Path> kept = sameCopy(file, prefix);
+        if (kept.isPresent()) {
+            Yolt.LOGGER.warn("The {} file {} is from a newer version; a copy of it is already kept at {}", what, file, kept.get());
+            return Optional.empty();
+        }
+        Path copy = file.resolveSibling(prefix + System.currentTimeMillis());
         try {
             Files.copy(file, copy);
         } catch (IOException e) {
@@ -49,5 +57,19 @@ public final class UnreadableFiles {
         Yolt.LOGGER.warn("The {} file {} is from a newer version, so a copy of it is kept at {} before it is saved over",
                 what, file, copy);
         return Optional.of(copy);
+    }
+
+    // A copy that can't be compared counts as missing, since one copy too many is the safe side
+    private static Optional<Path> sameCopy(Path file, String prefix) {
+        try (Stream<Path> siblings = Files.list(file.toAbsolutePath().getParent())) {
+            for (Path sibling : siblings.toList()) {
+                if (sibling.getFileName().toString().startsWith(prefix) && Files.mismatch(file, sibling) == -1) {
+                    return Optional.of(sibling);
+                }
+            }
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+        return Optional.empty();
     }
 }

@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 public class MigrationGameTests {
     // The death table as every database before schema versions has it
@@ -247,28 +248,48 @@ public class MigrationGameTests {
         helper.succeed();
     }
 
-    // Junk in a temp file stands in for a store file saved by a newer version
+    // Only the copy helper: the live stores load at server start, so a newer file can't be handed to get() here.
+    // Junk in a temp file stands in for a store file saved by a newer version.
     @GameTest
-    public void newerStoreFileIsCopiedBeforeItIsSavedOver(GameTestHelper helper) throws IOException {
+    public void newerCopyIsKeptOncePerFileContent(GameTestHelper helper) throws IOException {
         Path dir = helper.getLevel().getServer().getWorldPath(LevelResource.DATA);
         Files.createDirectories(dir);
         Path file = Files.createTempFile(dir, "graves-test-", ".dat");
-        byte[] saved = {1, 2, 3, 4, 5};
-        Optional<Path> copy = Optional.empty();
+        byte[] first = {1, 2, 3, 4, 5};
         try {
-            Files.write(file, saved);
-            copy = UnreadableFiles.keepNewerCopy(file, "grave");
-            helper.assertTrue(copy.isPresent() && Arrays.equals(Files.readAllBytes(copy.get()), saved),
+            Files.write(file, first);
+            Optional<Path> copy = UnreadableFiles.keepNewerCopy(file, "grave");
+            helper.assertTrue(copy.isPresent() && Arrays.equals(Files.readAllBytes(copy.get()), first),
                     "no exact copy of the newer file");
             helper.assertTrue(copy.get().getFileName().toString().startsWith(file.getFileName() + ".newer-"),
                     "the copy is not named after the file: " + copy.get());
-            helper.assertTrue(Arrays.equals(Files.readAllBytes(file), saved), "the newer file changed");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(file), first), "the newer file changed");
+
+            // A restart before the store saved again: the same file, so no second copy
+            helper.assertTrue(UnreadableFiles.keepNewerCopy(file, "grave").isEmpty(), "a second copy of the same file");
+            helper.assertValueEqual(newerCopiesOf(file).size(), 1, "copies after a restart");
+
+            // A different newer file later gets its own copy. Waits for the clock so the two names differ.
+            Files.write(file, new byte[]{6, 7, 8});
+            long now = System.currentTimeMillis();
+            while (System.currentTimeMillis() == now) {
+                Thread.onSpinWait();
+            }
+            helper.assertTrue(UnreadableFiles.keepNewerCopy(file, "grave").isPresent(), "no copy of a different newer file");
+            helper.assertValueEqual(newerCopiesOf(file).size(), 2, "copies of two different newer files");
         } finally {
             Files.deleteIfExists(file);
-            if (copy.isPresent()) {
-                Files.deleteIfExists(copy.get());
+            for (Path left : newerCopiesOf(file)) {
+                Files.deleteIfExists(left);
             }
         }
         helper.succeed();
+    }
+
+    private static List<Path> newerCopiesOf(Path file) throws IOException {
+        String prefix = file.getFileName() + ".newer-";
+        try (Stream<Path> files = Files.list(file.getParent())) {
+            return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
+        }
     }
 }
