@@ -128,8 +128,7 @@ class ConfigLoaderTest {
         ConfigLoader.Result reload = ConfigLoader.load(file, new YoltConfig(), false);
         assertTrue(reload.unparseable());
         assertNull(reload.config());
-        assertEquals(1, reload.warnings().size());
-        assertTrue(reload.warnings().get(0).startsWith("config could not be read ("), reload.warnings().get(0));
+        assertEquals(List.of("config could not be read (not UTF-8 text)"), reload.warnings());
         assertArrayEquals(bad, Files.readAllBytes(file));
         assertFalse(Files.exists(dir.resolve("config.json.bak")));
 
@@ -137,7 +136,8 @@ class ConfigLoaderTest {
         assertTrue(startup.unparseable());
         assertEquals(10000, startup.config().worldBorder.diameter);
         assertArrayEquals(bad, Files.readAllBytes(dir.resolve("config.json.bak")));
-        assertTrue(startup.warnings().get(0).endsWith(", old file saved as config.json.bak, using defaults"), startup.warnings().get(0));
+        assertEquals(List.of("config could not be read (not UTF-8 text), old file saved as config.json.bak, using defaults"),
+                startup.warnings());
         assertEquals(10000, JsonParser.parseString(Files.readString(file)).getAsJsonObject()
                 .getAsJsonObject("worldBorder").get("diameter").getAsInt());
     }

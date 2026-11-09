@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -72,8 +73,11 @@ public final class ConfigLoader {
             }
             user = parsed.getAsJsonObject();
         } catch (JsonParseException | IOException e) {
-            // A file that can't be read (not UTF-8, say) is as unusable as one that isn't JSON
-            String problem = (e instanceof IOException ? "config could not be read (" : "config is not valid JSON (") + e.getMessage() + ")";
+            // A file that can't be read (not UTF-8, say) is as unusable as one that isn't JSON. The decoder only says
+            // "Input length = 1", so that case is named here
+            String problem = e instanceof CharacterCodingException
+                    ? "config could not be read (not UTF-8 text)"
+                    : (e instanceof IOException ? "config could not be read (" : "config is not valid JSON (") + e.getMessage() + ")";
             if (!writeDefaultsOnError) {
                 warnings.add(problem);
                 return new Result(null, warnings, true);
