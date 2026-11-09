@@ -129,7 +129,8 @@ public class CommandGameTests {
         }
         try {
             level(helper, Level.END).getWorldBorder().setCenter(5, 5);
-            helper.assertValueEqual(run(server, "yolt center 100 -200"), List.of("World border center set to: 100, -200"), "command output");
+            helper.assertValueEqual(run(server, "yolt center 100 -200"),
+                    List.of("World border center set to: 100, -200 (world border feature is off)"), "command output");
             assertCentre(helper, server.overworld(), 100, -200);
             assertCentre(helper, level(helper, Level.NETHER), 100, -200);
             assertCentre(helper, level(helper, Level.END), 0, 0);
