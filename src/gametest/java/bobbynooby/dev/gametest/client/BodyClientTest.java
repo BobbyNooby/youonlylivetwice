@@ -123,8 +123,13 @@ public class BodyClientTest implements FabricClientGameTest {
                     self.blockPosition().relative(facing, BODY_DISTANCE));
             owners.add(sleeper.getUUID());
             sleeper.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
-            // A lying body side-on shows its whole length; a standing one faces the camera
-            float yaw = facing.toYRot() + (pose == YoltConfig.BodyPose.STANDING ? 180.0F : 90.0F);
+            // Lying bodies side-on and a standing one from the front. Vanilla lays a sleeper a quarter turn from its facing.
+            float turn = switch (pose) {
+                case PRONE -> 90.0F;
+                case SLEEPING -> 0.0F;
+                case STANDING -> 180.0F;
+            };
+            float yaw = facing.toYRot() + turn;
             sleeper.setYRot(yaw);
             sleeper.setYHeadRot(yaw);
             sleeper.setYBodyRot(yaw);
