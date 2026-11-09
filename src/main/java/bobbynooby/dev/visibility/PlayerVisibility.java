@@ -1,7 +1,6 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.PlayerInfoUpdatePacketAccessor;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
@@ -66,7 +65,10 @@ public final class PlayerVisibility {
     public static void onPairingStop(ServerPlayer viewer, ServerPlayer seen) {
         Viewer state = state(viewer);
         state.tracked.remove(seen.getUUID());
-        if (!seesEveryone(viewer) && state.known.remove(seen.getUUID())) {
+        // A player outside the player list (a plan 04 body) would otherwise stay on as an online name.
+        // A leaving or respawning player is still in it here, so viewers who see everyone keep them.
+        boolean online = seen.level().getServer().getPlayerList().getPlayer(seen.getUUID()) != null;
+        if ((!seesEveryone(viewer) || !online) && state.known.remove(seen.getUUID())) {
             viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(seen.getUUID())));
         }
     }
@@ -195,8 +197,8 @@ public final class PlayerVisibility {
     }
 
     private static ClientboundPlayerInfoUpdatePacket withListed(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {
-        YoltConfig.HideSection hide = Settings.get().hide;
-        boolean listed = !hide.tabList || (hide.distantPlayers && AdminView.isOn(viewer));
+        // Admin view's full tab list doesn't depend on hide.distantPlayers
+        boolean listed = !Settings.get().hide.tabList || AdminView.isOn(viewer);
         PlayerList playerList = viewer.level().getServer().getPlayerList();
         List<ClientboundPlayerInfoUpdatePacket.Entry> entries = new ArrayList<>(packet.entries().size());
         for (ClientboundPlayerInfoUpdatePacket.Entry e : packet.entries()) {

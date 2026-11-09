@@ -293,6 +293,89 @@ public class VisibilityGameTests {
         helper.succeed();
     }
 
+    @GameTest
+    public void adminSeesListedWithSwitchOff(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean tabListBefore = hide.tabList;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer admin = null;
+        try {
+            hide.distantPlayers = false;
+            hide.tabList = true;
+            admin = join(helper, joined, "visoffadmin", BlockPos.ZERO);
+            ServerPlayer other = join(helper, joined, "visoffother", new BlockPos(1, 0, 0));
+            helper.assertFalse(listedFor(admin, other), "other is listed before admin view");
+
+            AdminView.set(admin, true);
+            PlayerVisibility.refresh(admin);
+            helper.assertTrue(listedFor(admin, other), "admin view did not list a known player with the switch off");
+            ServerPlayer late = join(helper, joined, "visofflate", new BlockPos(2, 0, 0));
+            helper.assertTrue(listedFor(admin, late), "admin view did not list a later joiner with the switch off");
+            helper.assertFalse(listedFor(other, late), "a normal player got the later joiner listed");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.tabList = tabListBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Plan 04's bodies are players outside the player list, and pairing with them runs the same way.
+    // A player who has left stands in for one, with the pairing calls made directly.
+    @GameTest
+    public void unlistedPlayerIsDroppedEvenForAdmins(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean tabListBefore = hide.tabList;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer admin = null;
+        try {
+            hide.distantPlayers = true;
+            hide.tabList = true;
+            admin = join(helper, joined, "visbodyadmin", BlockPos.ZERO);
+            ServerPlayer body = TestPlayers.join(helper, "visbody", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            TestPlayers.leave(body);
+            AdminView.set(admin, true);
+
+            PlayerVisibility.onPairingStart(admin, body);
+            helper.assertTrue(PlayerVisibility.known(admin).contains(body.getUUID()), "admin did not get the body's entry");
+            ClientboundPlayerInfoUpdatePacket.Entry entry = addedEntry(admin, body);
+            helper.assertTrue(entry != null && !entry.listed(), "the body's entry is missing or listed");
+
+            PlayerVisibility.onPairingStop(admin, body);
+            helper.assertFalse(PlayerVisibility.known(admin).contains(body.getUUID()), "admin view kept the body's entry");
+            helper.assertTrue(gotRemove(admin, body), "admin's client was not told to drop the body");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.tabList = tabListBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // The last listed flag this viewer's client was sent for seen
+    private static boolean listedFor(ServerPlayer viewer, ServerPlayer seen) {
+        boolean listed = false;
+        for (Packet<?> packet : TestPlayers.sentPackets(viewer)) {
+            if (packet instanceof ClientboundPlayerInfoUpdatePacket info
+                    && info.actions().contains(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LISTED)) {
+                for (ClientboundPlayerInfoUpdatePacket.Entry entry : info.entries()) {
+                    if (entry.profileId().equals(seen.getUUID())) {
+                        listed = entry.listed();
+                    }
+                }
+            }
+        }
+        return listed;
+    }
+
     // The client drops a player spawn it has no entry for, so the entry has to come first
     private static void assertEntryBeforeSpawn(GameTestHelper helper, ServerPlayer viewer, ServerPlayer seen) {
         List<Packet<?>> packets = TestPlayers.sentPackets(viewer);
