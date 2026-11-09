@@ -1,10 +1,13 @@
 package bobbynooby.dev.lockout;
 
 import bobbynooby.dev.core.Migrations;
+import bobbynooby.dev.core.Yolt;
+import org.jspecify.annotations.Nullable;
 import org.sqlite.SQLiteConfig;
 import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -46,7 +49,8 @@ public final class DeathStore {
 
     /**
      * Opens the database and brings its schema up to date. A database from a newer YOLT is only ever opened read-only
-     * and is refused, so the caller fails open as for any database error, and nothing is written to it.
+     * and is refused, so the caller fails open as for any database error, and nothing is written to it. One from the
+     * 1.21.5 build is moved aside and a new one started.
      */
     static DeathStore open(Path dbFile, int schemaVersion, List<Migrations.Step<Statement>> steps) {
         try {
@@ -61,21 +65,49 @@ public final class DeathStore {
                     refuseNewer(dbFile, found.getAsInt(), schemaVersion);
                 }
             }
-            Connection connection = DriverManager.getConnection(url);
-            try {
-                upgrade(connection, dbFile, schemaVersion, steps);
-            } catch (Exception e) {
-                try {
-                    connection.close();
-                } catch (SQLException closing) {
-                    e.addSuppressed(closing);
+            Connection connection = connect(url, dbFile, schemaVersion, steps);
+            if (connection == null) {
+                moveAside(dbFile);
+                connection = connect(url, dbFile, schemaVersion, steps);
+                if (connection == null) {
+                    throw new IllegalStateException("The new death database " + dbFile + " reads as the 1.21.5 format");
                 }
-                throw e;
             }
             return new DeathStore(connection);
         } catch (Exception e) {
             throw new IllegalStateException("Could not open death store at " + dbFile, e);
         }
+    }
+
+    // Null, with the connection closed again, when the file is the 1.21.5 build's
+    private static @Nullable Connection connect(String url, Path dbFile, int schemaVersion,
+                                                List<Migrations.Step<Statement>> steps) throws SQLException {
+        Connection connection = DriverManager.getConnection(url);
+        boolean upgraded;
+        try {
+            upgraded = upgrade(connection, dbFile, schemaVersion, steps);
+        } catch (SQLException | RuntimeException e) {
+            try {
+                connection.close();
+            } catch (SQLException closing) {
+                e.addSuppressed(closing);
+            }
+            throw e;
+        }
+        if (upgraded) {
+            return connection;
+        }
+        connection.close();
+        return null;
+    }
+
+    // The 1.21.5 release kept deaths in the same file and table, with other columns. Worlds start fresh after the
+    // port, so it isn't converted. It is kept beside the new one, and its deaths no longer lock anyone out.
+    private static void moveAside(Path dbFile) throws IOException {
+        Path kept = dbFile.resolveSibling(dbFile.getFileName() + ".1.21.5-" + System.currentTimeMillis() + ".bak");
+        Files.move(dbFile, kept);
+        Yolt.LOGGER.warn("The death database {} is from the 1.21.5 build, so it was moved to {} and a new one started. "
+                + "Lockouts from before the move have ended.", dbFile, kept);
     }
 
     /**
@@ -97,16 +129,16 @@ public final class DeathStore {
         }
     }
 
-    // All or nothing: a step that fails leaves the file as it was
-    private static void upgrade(Connection connection, Path dbFile, int schemaVersion,
-                                List<Migrations.Step<Statement>> steps) throws SQLException {
+    // All or nothing: a step that fails leaves the file as it was. False, with nothing written, for the 1.21.5 build's.
+    private static boolean upgrade(Connection connection, Path dbFile, int schemaVersion,
+                                   List<Migrations.Step<Statement>> steps) throws SQLException {
         connection.setAutoCommit(false);
         try (Statement statement = connection.createStatement()) {
             int found = userVersion(statement);
             refuseNewer(dbFile, found, schemaVersion);
             if (found == 0 && isFromBeforeThePort(statement)) {
-                throw new IllegalStateException("The death database " + dbFile + " is the old format from before the "
-                        + "26.3 port (no death_time_ms column), so it is ignored and left as it is");
+                connection.rollback();
+                return false;
             }
             // The v1 table. Never edit it: a schema change is a new step in STEPS, so a new database goes through the
             // same steps as an old one and both end up the same
@@ -135,6 +167,7 @@ public final class DeathStore {
         }
         // Only on success: a failed open closes the connection anyway
         connection.setAutoCommit(true);
+        return true;
     }
 
     private static void refuseNewer(Path dbFile, int found, int schemaVersion) {
@@ -144,8 +177,7 @@ public final class DeathStore {
         }
     }
 
-    // The 1.21.5 release kept deaths in the same file and table, with other columns. Worlds start fresh after the
-    // port, so it isn't converted; stamping it v1 would only hide that.
+    // The 1.21.5 table has no death_time_ms column; stamping it v1 would only hide that it can't be read
     private static boolean isFromBeforeThePort(Statement statement) throws SQLException {
         boolean hasTable = false;
         try (ResultSet columns = statement.executeQuery("PRAGMA table_info(death_logs)")) {
