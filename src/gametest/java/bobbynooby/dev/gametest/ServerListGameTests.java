@@ -22,6 +22,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -147,7 +148,7 @@ public class ServerListGameTests {
     // enable-query lists every online name and the real counts. The reply is built by reflection with a stand-in
     // server, since the query thread itself needs a socket.
     @GameTest
-    public void queryHidesNames(GameTestHelper helper) throws ReflectiveOperationException {
+    public void queryHidesNames(GameTestHelper helper) throws ReflectiveOperationException, SocketException {
         ServerPlayer player = TestPlayers.join(helper, "Queried", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         String name = player.getName().getString();
         boolean before = Settings.get().hide.serverPlayerCount;
@@ -216,7 +217,7 @@ public class ServerListGameTests {
 
     // The basic stat reply is written straight from processPacket to the socket, so a socket that keeps what it is
     // sent stands in for the real one
-    private static String queryBasicStat(MinecraftServer server) throws ReflectiveOperationException {
+    private static String queryBasicStat(MinecraftServer server) throws ReflectiveOperationException, SocketException {
         Query query = newQuery(server);
         Class<?> challengeType = Class.forName(QueryThreadGs4.class.getName() + "$RequestChallenge");
         Field challengeField = challengeType.getDeclaredField("challenge");
