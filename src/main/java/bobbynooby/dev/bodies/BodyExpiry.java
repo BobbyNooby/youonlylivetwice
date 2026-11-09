@@ -4,6 +4,7 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -11,16 +12,22 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
-import java.util.HashSet;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Removes the bodies that have stood for bodies.duration, the way their owner's login would have taken them over. */
 public final class BodyExpiry {
     private static final long MINUTE_MILLIS = 60_000L;
+    // Loading an unreadable save makes vanilla log a warning and keep a copy of the file every time, so a body
+    // whose expiry failed waits this long before the next try
+    private static final long RETRY_MILLIS = 5 * MINUTE_MILLIS;
 
-    // Bodies whose expiry failed, so each failure is logged once instead of on every pass
-    private static final Set<UUID> FAILED = new HashSet<>();
+    // Body entity id to when it may be tried again, for bodies whose expiry failed. Our error is logged once per body.
+    private static final Map<UUID, Long> RETRY_AT = new HashMap<>();
 
     private BodyExpiry() {
     }
@@ -32,6 +39,8 @@ public final class BodyExpiry {
                 tick(server);
             }
         });
+        // Static, so it would outlive the server in a JVM that starts another one
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> RETRY_AT.clear());
     }
 
     /**
@@ -39,14 +48,23 @@ public final class BodyExpiry {
      * runs, like the login does.
      */
     public static void tick(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        Collection<BodyRecord> records = BodyStore.get(server).all();
+        // A body taken over, killed or replaced by a new logout since it failed is done with
+        Set<UUID> standing = records.stream().filter(record -> !record.pendingRemoval())
+                .map(BodyRecord::bodyEntity).collect(Collectors.toSet());
+        RETRY_AT.keySet().retainAll(standing);
         BodyDuration duration = Settings.get().bodies.duration;
-        if (!Settings.active() || duration.isOffline()) {
+        if (duration.isOffline()) {
             return;
         }
         long now = System.currentTimeMillis();
-        for (BodyRecord record : BodyStore.get(server).all()) {
-            // A pending record was taken over already
-            if (record.pendingRemoval() || now - record.loggedOutAt() < duration.minutes() * MINUTE_MILLIS) {
+        for (BodyRecord record : records) {
+            // A pending record was taken over already, and a body that failed waits for its next try
+            if (record.pendingRemoval() || now - record.loggedOutAt() < duration.minutes() * MINUTE_MILLIS
+                    || now < RETRY_AT.getOrDefault(record.bodyEntity(), Long.MIN_VALUE)) {
                 continue;
             }
             // The death path owns a dying body. An owner who is online isn't away, and saves over their file anyway.
@@ -57,12 +75,12 @@ public final class BodyExpiry {
             }
             try {
                 expire(server, record, entity);
-                FAILED.remove(record.bodyEntity());
+                RETRY_AT.remove(record.bodyEntity());
             } catch (RuntimeException e) {
-                // The body and record stay, and the next pass starts again from a freshly loaded save
-                if (FAILED.add(record.bodyEntity())) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not remove the expired body of {}; it stays until this works",
-                            record.ownerName(), e);
+                // The body and record stay, and the next try starts again from a freshly loaded save
+                if (RETRY_AT.put(record.bodyEntity(), now + RETRY_MILLIS) == null) {
+                    YouOnlyLiveTwice.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried "
+                            + "again every {} minutes", record.ownerName(), RETRY_MILLIS / MINUTE_MILLIS, e);
                 }
             }
         }

@@ -31,8 +31,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -137,10 +141,7 @@ public class BodyBehaviourGameTests {
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             Vec3 at = body.position();
             BodyStore store = store(helper);
-            BodyRecord record = store.byOwner(owner).orElseThrow();
-            // Logged out 61 seconds ago, so one minute has passed
-            store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
-                    System.currentTimeMillis() - 61_000L, false, record.snapshot()));
+            expiredLogout(helper, owner);
 
             BodyExpiry.tick(server);
             helper.assertTrue(body.isRemoved(), "body still in the world");
@@ -157,6 +158,40 @@ public class BodyBehaviourGameTests {
             helper.assertFalse(saved.contains("active_effects"), "worn-off effect still saved");
             // Loading doesn't take an effect's modifier off again, so a stale one would stay for good
             helper.assertTrue(speedModifiers(helper, saved).isEmpty(), "worn-off speed's modifier still saved");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Each failed try reloads the save, and vanilla warns and copies an unreadable one every time, so the next try waits
+    @GameTest
+    public void failedExpiryWaitsBeforeRetrying(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "Retry", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            expiredLogout(helper, owner);
+            // With no save to load, the expiry fails
+            Path file = saveFile(helper, owner);
+            byte[] save = Files.readAllBytes(file);
+            Files.delete(file);
+            Files.deleteIfExists(file.resolveSibling(owner + ".dat_old"));
+            try {
+                BodyExpiry.tick(server);
+            } finally {
+                Files.write(file, save);
+            }
+            helper.assertFalse(body.isRemoved(), "body removed although the expiry failed");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record dropped although the expiry failed");
+
+            // The save is back, but the next try isn't due yet
+            BodyExpiry.tick(server);
+            helper.assertFalse(body.isRemoved(), "failed body was tried again straight away");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "failed body's record was tried again straight away");
         } finally {
             cleanUp(helper, owner, before);
         }
@@ -230,6 +265,18 @@ public class BodyBehaviourGameTests {
     // Never added to the world: a mob attack only needs someone to come from
     private static Zombie attacker(GameTestHelper helper) {
         return new Zombie(helper.getLevel());
+    }
+
+    // As if the owner logged out 61 seconds ago, so a one-minute body is due
+    private static void expiredLogout(GameTestHelper helper, UUID owner) {
+        BodyStore store = store(helper);
+        BodyRecord record = store.byOwner(owner).orElseThrow();
+        store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
+                System.currentTimeMillis() - 61_000L, false, record.snapshot()));
+    }
+
+    private static Path saveFile(GameTestHelper helper, UUID owner) {
+        return helper.getLevel().getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(owner + ".dat");
     }
 
     private static BodyStore store(GameTestHelper helper) {
