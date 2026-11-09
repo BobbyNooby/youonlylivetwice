@@ -6,6 +6,7 @@
     "AbstractContainerMenuMixin",
     "CommandManagerMixin",
     "DimensionTypeMixin",
+    "GraveProtectionBucketMixin",
     "GraveProtectionDragonMixin",
     "GraveProtectionExplosionMixin",
     "GraveProtectionFluidMixin",
