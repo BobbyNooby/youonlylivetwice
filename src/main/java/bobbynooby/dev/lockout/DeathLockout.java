@@ -19,6 +19,16 @@ import java.util.Optional;
 import java.util.UUID;
 
 public final class DeathLockout {
+    /** What a revive did. */
+    public enum ReviveResult {
+        REVIVED,
+        // Past its days, or revived before; nothing was changed
+        ALREADY_ENDED,
+        NO_DEATH,
+        // The store is closed or failing
+        FAILED
+    }
+
     private static volatile DeathStore store;
 
     private DeathLockout() {}
@@ -159,17 +169,29 @@ public final class DeathLockout {
         return Settings.on(c -> c.deathLockout.enabled);
     }
 
-    /** Ends the newest death's lockout, keeping the death and who revived it: a player's name, or "console". */
-    public static boolean revive(UUID uuid, String by) {
+    /**
+     * Ends the newest death's lockout, keeping the death and who revived it: a player's name, or "console". A lockout
+     * that is already over is left as it is.
+     */
+    public static ReviveResult revive(UUID uuid, String by) {
         DeathStore open = store;
         if (open == null) {
-            return false;
+            Yolt.LOGGER.error("Death store is closed, could not revive {}", uuid);
+            return ReviveResult.FAILED;
         }
         try {
-            return open.revive(uuid, System.currentTimeMillis(), by);
+            Optional<DeathLog> log = open.latest(uuid);
+            if (log.isEmpty()) {
+                return ReviveResult.NO_DEATH;
+            }
+            long now = System.currentTimeMillis();
+            if (Cooldown.remainingMillis(log.get(), now) <= 0) {
+                return ReviveResult.ALREADY_ENDED;
+            }
+            return open.revive(uuid, now, by) ? ReviveResult.REVIVED : ReviveResult.NO_DEATH;
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not revive {}", uuid, e);
-            return false;
+            return ReviveResult.FAILED;
         }
     }
 

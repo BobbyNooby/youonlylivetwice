@@ -67,11 +67,16 @@ final class LockoutCommands {
         if (who.isEmpty()) {
             return YoltCommands.fail(source, "Player " + name + " not found.");
         }
-        if (!DeathLockout.revive(who.get().id(), reviver(source))) {
-            return YoltCommands.fail(source, who.get().name() + " has no death to undo.");
-        }
-        LOGGER.info("{} revived {}", source.getTextName(), who.get().name());
-        return YoltCommands.done(source, "Revived " + who.get().name());
+        String found = who.get().name();
+        return switch (DeathLockout.revive(who.get().id(), reviver(source))) {
+            case REVIVED -> {
+                LOGGER.info("{} revived {}", source.getTextName(), found);
+                yield YoltCommands.done(source, "Revived " + found);
+            }
+            case ALREADY_ENDED -> YoltCommands.fail(source, found + "'s lockout had already ended.");
+            case NO_DEATH -> YoltCommands.fail(source, found + " has no death to undo.");
+            case FAILED -> YoltCommands.fail(source, "Could not revive " + found + ", see the server log.");
+        };
     }
 
     // Kept with the death. Anything that isn't a player, a command block too, counts as the console.

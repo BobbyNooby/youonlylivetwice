@@ -61,9 +61,15 @@ public final class Revive {
             user.sendSystemMessage(Component.literal(name + " is not dead"));
             return Outcome.NOT_DEAD;
         }
-        if (!DeathLockout.revive(owner.get(), user.nameAndId().name())) {
+        DeathLockout.ReviveResult result = DeathLockout.revive(owner.get(), user.nameAndId().name());
+        if (result == DeathLockout.ReviveResult.FAILED) {
             user.sendSystemMessage(Component.literal("Could not revive " + name + ". Try again later."));
             return Outcome.FAILED;
+        }
+        if (result != DeathLockout.ReviveResult.REVIVED) {
+            // The lockout ran out between the check above and now
+            user.sendSystemMessage(Component.literal(name + " is not dead"));
+            return Outcome.NOT_DEAD;
         }
         stack.shrink(1);
         // Sent straight to the user: Player.playSound skips the player it is played for

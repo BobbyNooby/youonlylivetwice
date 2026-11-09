@@ -75,7 +75,7 @@ public class LockoutGameTests {
     public void revivedPlayerCanLogin(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
-        helper.assertTrue(DeathLockout.revive(uuid, "console"), "revive found no death");
+        helper.assertValueEqual(DeathLockout.revive(uuid, "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
         helper.assertTrue(canLogin(helper, uuid), "revived player was refused");
         helper.succeed();
     }
@@ -120,7 +120,7 @@ public class LockoutGameTests {
         try {
             helper.assertTrue(DeathLockout.refusal(uuid) == null, "player refused while the store is failing");
             DeathLockout.recordDeath(uuid, "Ghost");
-            helper.assertTrue(!DeathLockout.revive(uuid, "console"), "revive succeeded on a failing store");
+            helper.assertValueEqual(DeathLockout.revive(uuid, "console"), DeathLockout.ReviveResult.FAILED, "revive result on a failing store");
         } finally {
             DeathLockout.swapStoreForTesting(real);
         }
@@ -168,7 +168,7 @@ public class LockoutGameTests {
         boolean waiting = false;
         try {
             killWithoutGrave(helper, player);
-            DeathLockout.revive(player.getUUID(), "console");
+            helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
             assertStillOnlineLater(helper, player);
             waiting = true;
         } finally {

@@ -146,7 +146,7 @@ public class OfflineGameTests {
             // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
             helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
             helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
-            helper.assertTrue(DeathLockout.revive(who.id(), "console"), "first kill recorded no death");
+            helper.assertValueEqual(DeathLockout.revive(who.id(), "console"), DeathLockout.ReviveResult.REVIVED, "revive after the first kill");
             byte[][] filesBefore = saveFiles(server, who);
             int gravesBefore = gravesOf(helper, who.id()).size();
 
