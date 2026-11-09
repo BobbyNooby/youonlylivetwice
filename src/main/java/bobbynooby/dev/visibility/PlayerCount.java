@@ -10,6 +10,21 @@ public final class PlayerCount {
 
     private PlayerCount() {}
 
+    /** The online count a server list, ping or query shows. */
+    public static int online(int real) {
+        return hides() ? SHOWN_ONLINE : real;
+    }
+
+    /** The slot count a server list, ping or query shows. */
+    public static int max(int real) {
+        return hides() ? SHOWN_MAX : real;
+    }
+
+    /** The player names the query port lists. */
+    public static String[] names(String[] real) {
+        return hides() ? new String[0] : real;
+    }
+
     /** True when the server list must show the fake counts and no names. */
     public static boolean hides() {
         return Settings.on(c -> c.hide.serverPlayerCount);

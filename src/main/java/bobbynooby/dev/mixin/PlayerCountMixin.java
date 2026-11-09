@@ -1,6 +1,7 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.visibility.PlayerCount;
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.server.players.NameAndId;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,18 +14,14 @@ import java.util.List;
 @Mixin(ServerStatus.Players.class)
 public abstract class PlayerCountMixin {
 
-    @Inject(method = "max", at = @At("HEAD"), cancellable = true)
-    private void getMaxPlayers(CallbackInfoReturnable<Integer> cir) {
-        if (PlayerCount.hides()) {
-            cir.setReturnValue(PlayerCount.SHOWN_MAX);
-        }
+    @ModifyReturnValue(method = "max", at = @At("RETURN"))
+    private int shownMax(int real) {
+        return PlayerCount.max(real);
     }
 
-    @Inject(method = "online", at = @At("HEAD"), cancellable = true)
-    private void getOnlinePlayers(CallbackInfoReturnable<Integer> cir) {
-        if (PlayerCount.hides()) {
-            cir.setReturnValue(PlayerCount.SHOWN_ONLINE);
-        }
+    @ModifyReturnValue(method = "online", at = @At("RETURN"))
+    private int shownOnline(int real) {
+        return PlayerCount.online(real);
     }
 
     @Inject(method = "sample", at = @At("HEAD"), cancellable = true)
