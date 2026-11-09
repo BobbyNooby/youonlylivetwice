@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.features.WorldBorders;
@@ -10,6 +11,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.SleepStatus;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -92,6 +94,31 @@ public class SwitchGameTests {
             border.enabled = enabledBefore;
             border.diameter = diameterBefore;
             sizesBefore.forEach((level, size) -> level.getWorldBorder().setSize(size));
+        }
+        helper.succeed();
+    }
+
+    // Each case starts with the rule on, as in a new world
+    @GameTest
+    public void locatorBarOffOnlyWithSwitch(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GameRules rules = server.getGameRules();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean switchBefore = hide.locatorBar;
+        boolean ruleBefore = rules.get(GameRules.LOCATOR_BAR);
+        try {
+            rules.set(GameRules.LOCATOR_BAR, true, server);
+            hide.locatorBar = true;
+            YouOnlyLiveTwice.applyLocatorBar(server);
+            helper.assertFalse(rules.get(GameRules.LOCATOR_BAR), "switch on: the locator bar rule is still on");
+
+            rules.set(GameRules.LOCATOR_BAR, true, server);
+            hide.locatorBar = false;
+            YouOnlyLiveTwice.applyLocatorBar(server);
+            helper.assertTrue(rules.get(GameRules.LOCATOR_BAR), "switch off: the locator bar rule was changed");
+        } finally {
+            hide.locatorBar = switchBefore;
+            rules.set(GameRules.LOCATOR_BAR, ruleBefore, server);
         }
         helper.succeed();
     }

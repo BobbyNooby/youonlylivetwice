@@ -51,6 +51,7 @@ public class YoltConfig {
         public boolean gameMessages = true;
         public boolean tabHeader = true;
         public boolean distantPlayers = true;
+        public boolean locatorBar = true;
     }
 
     public static class SleepSection {

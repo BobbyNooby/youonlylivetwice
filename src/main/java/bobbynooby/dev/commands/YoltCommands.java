@@ -224,6 +224,7 @@ public final class YoltCommands {
         WorldBorders.apply(server);
         NameTagHider.apply(server);
         YouOnlyLiveTwice.applyImmediateRespawn(server);
+        YouOnlyLiveTwice.applyLocatorBar(server);
         // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
         // and which players their client knows about depends on the hide switches
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
