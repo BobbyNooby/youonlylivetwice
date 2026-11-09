@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.world.LiveSettings;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -10,6 +11,10 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.border.WorldBorder;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
@@ -34,17 +39,28 @@ final class AdminCommands {
 
     private static int reload(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
+        YoltConfig.WorldBorderSection liveBorder = Settings.get().worldBorder;
         ConfigLoader.Result result = Settings.reload();
         if (result.unparseable()) {
             String problem = String.join(", ", result.warnings());
             LOGGER.warn("{} tried to reload the config: {}", source.getTextName(), problem);
             return YoltCommands.fail(source, "Config not reloaded, nothing changed: " + problem);
         }
+        List<String> warnings = new ArrayList<>(result.warnings());
+        // A reload can't be confirmed, so a border that would leave someone outside waits for /yolt border and the others
+        YoltConfig.WorldBorderSection reloaded = Settings.get().worldBorder;
+        WorldBorder overworld = server.overworld().getWorldBorder();
+        List<String> outside = BorderCommands.stranded(server, reloaded.diameter, reloaded.endScale,
+                overworld.getCenterX(), overworld.getCenterZ());
+        if (!outside.isEmpty()) {
+            Settings.get().worldBorder = liveBorder;
+            warnings.add("World border kept as it was, since the new one would leave outside it: " + String.join(", ", outside) + ".");
+        }
         LiveSettings.applyAll(server);
 
         LOGGER.info("{} reloaded the config", source.getTextName());
         YoltCommands.reply(source, "Config reloaded");
-        for (String warning : result.warnings()) {
+        for (String warning : warnings) {
             LOGGER.warn("Config: {}", warning);
             YoltCommands.reply(source, warning);
         }

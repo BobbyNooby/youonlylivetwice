@@ -23,9 +23,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.WorldBorder;
 
@@ -40,7 +42,11 @@ import java.util.UUID;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
 public class CommandGameTests {
-    // The test server keeps YOLT's border off, so this turns it on just for the command
+    // A batch of its own: a reload swaps the whole config object, which a test holding the old one across ticks would miss
+    static final String CONFIG_COMMAND = "you-only-live-twice-gametest:config_command";
+
+    // The test server keeps YOLT's border off, so this turns it on just for the command. confirm, because the test
+    // structures and anything in them sit millions of blocks out, far outside a 3000 block border.
     @GameTest
     public void borderFromConsoleSucceeds(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -55,7 +61,7 @@ public class CommandGameTests {
 
         border.enabled = true;
         try {
-            helper.assertValueEqual(run(server, "yolt border 3000"), List.of("World border diameter set to: 3000"), "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to: 3000"), "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 3000, "diameter setting");
             helper.assertTrue(Files.readString(Settings.path()).contains("\"diameter\": 3000"), "diameter not saved to the config file");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 3000.0, "overworld border size");
@@ -209,7 +215,8 @@ public class CommandGameTests {
         config.worldBorder.diameter = 100;
         try {
             WorldBorders.apply(server);
-            List<String> output = run(server, "yolt center " + (spawn.getX() + 10000) + " " + spawn.getZ());
+            // confirm, because the test structures and anything in them sit far outside a 100 block border
+            List<String> output = run(server, "yolt center " + (spawn.getX() + 10000) + " " + spawn.getZ() + " confirm");
             helper.assertTrue(output.size() == 1
                             && output.get(0).endsWith(" The world spawn is outside the new border; move it with /setworldspawn."),
                     "command output: " + output);
@@ -218,6 +225,43 @@ public class CommandGameTests {
             config.worldBorder.enabled = enabledBefore;
             config.worldBorder.diameter = diameterBefore;
             restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // The overworld centre is put 1100 blocks west of the player, so a 2000 block border ends 100 blocks short of them
+    @GameTest
+    public void borderShrinkWithPlayerOutsideNeedsConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Outside", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+
+        border.enabled = true;
+        try {
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setCenter(player.getX() - 1100, player.getZ());
+            double sizeBefore = overworld.getSize();
+
+            List<String> refused = run(server, "yolt border 2000");
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave outside the world border: ")
+                    && refused.get(0).contains(name), "refusal: " + refused);
+            helper.assertValueEqual(overworld.getSize(), sizeBefore, "overworld border size after the refusal");
+            helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
+
+            helper.assertValueEqual(run(server, "yolt border 2000 confirm"), List.of("World border diameter set to: 2000"), "output with confirm");
+            helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size with confirm");
+            helper.assertTrue(DeathLockout.refusal(player.getUUID()) == null, "a death was recorded for " + name);
+        } finally {
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            restoreBorders(bordersBefore);
+            Files.writeString(Settings.path(), fileBefore);
+            TestPlayers.leave(player);
         }
         helper.succeed();
     }
@@ -272,10 +316,13 @@ public class CommandGameTests {
                 yolt | literal | level 2
                 yolt border | literal | level 0
                 yolt border <diameter> | brigadier:integer {"min":1,"max":59999968} | level 0 | runs
+                yolt border <diameter> confirm | literal | level 0 | runs
                 yolt center | literal | level 0
                 yolt center <pos> | minecraft:vec2 | level 0 | runs
+                yolt center <pos> confirm | literal | level 0 | runs
                 yolt endscaling | literal | level 0
                 yolt endscaling <scaling> | brigadier:double | level 0 | runs
+                yolt endscaling <scaling> confirm | literal | level 0 | runs
                 yolt respawncooldown | literal | level 0
                 yolt respawncooldown <days> | brigadier:integer {"min":0} | level 0 | runs
                 yolt kill | literal | level 0
@@ -348,6 +395,39 @@ public class CommandGameTests {
                 Settings.reload();
                 TestServerSetup.applyTestSettings();
             }
+        }
+        helper.succeed();
+    }
+
+    // A reload can't be confirmed, so it keeps the live border. The settings are put back before the player leaves,
+    // since the reloaded file turns bodies on.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadThatStrandsKeepsBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        YoltConfig.WorldBorderSection borderBefore = Settings.get().worldBorder;
+        boolean enabledBefore = borderBefore.enabled;
+        int diameterBefore = borderBefore.diameter;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        double sizeBefore = server.overworld().getWorldBorder().getSize();
+        ServerPlayer player = TestPlayers.join(helper, "Stranded", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        try {
+            // The test structures sit millions of blocks out, far outside a 1000 block border
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000}}");
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("Config reloaded") && output.stream().anyMatch(line -> line.contains(name)),
+                    "command output: " + output);
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
+            helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), sizeBefore, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
         }
         helper.succeed();
     }
