@@ -24,8 +24,12 @@ import java.util.Map;
 
 /** Reads the config key by key, so one bad value only resets that value. */
 public final class ConfigLoader {
-    /** unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to write defaults. */
-    public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable) {}
+    /**
+     * unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to
+     * write defaults. borderProblem, when not null, says why the worldBorder values are fallbacks rather than the file's
+     * own: the whole file, or a worldBorder key that was refused.
+     */
+    public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem) {}
 
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
@@ -38,6 +42,7 @@ public final class ConfigLoader {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String DURATION_PATH = "bodies.duration";
     private static final String VERSION_KEY = "configVersion";
+    private static final String BORDER_SECTION = "worldBorder";
     // Every file YOLT writes has the version, so a file without one is read as the first version
     private static final int FIRST_VERSION = 1;
 
@@ -61,9 +66,9 @@ public final class ConfigLoader {
                 // A moved file must not reset a running server, so nothing is written either. The base itself comes
                 // back, which is how /yolt reload tells that nothing was read
                 warnings.add("config file is missing, nothing changed");
-                return new Result(base, warnings, false);
+                return new Result(base, warnings, false, null);
             }
-            return new Result(writeDefaults(file), warnings, false);
+            return new Result(writeDefaults(file), warnings, false, null);
         }
 
         JsonObject user;
@@ -81,11 +86,11 @@ public final class ConfigLoader {
                     : (e instanceof IOException ? "config could not be read (" : "config is not valid JSON (") + e.getMessage() + ")";
             if (!writeDefaultsOnError) {
                 warnings.add(problem);
-                return new Result(null, warnings, true);
+                return new Result(null, warnings, true, null);
             }
             backup(file, file.getFileName() + ".bak");
             warnings.add(problem + ", old file saved as " + file.getFileName() + ".bak, using defaults");
-            return new Result(writeDefaults(file), warnings, true);
+            return new Result(writeDefaults(file), warnings, true, problem);
         }
 
         int version = fileVersion(user);
@@ -99,26 +104,41 @@ public final class ConfigLoader {
 
         YoltConfig fallback = base != null ? base : new YoltConfig();
         String fallbackName = base != null ? "the current value" : "default";
-        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName);
+        // The keys that fell back, so a startup can tell whether the border values are the file's own
+        List<String> fellBack = new ArrayList<>();
+        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, fellBack);
 
         YoltConfig config;
+        String borderProblem = null;
         try {
             config = GSON.fromJson(merged, YoltConfig.class);
         } catch (JsonParseException e) {
             // merge already checked the types, so this should not happen
-            warnings.add("config could not be read (" + e.getMessage() + "), using defaults");
+            borderProblem = "config could not be read (" + e.getMessage() + ")";
+            warnings.add(borderProblem + ", using defaults");
             config = new YoltConfig();
         }
-        ConfigChecks.validate(config, fallback, warnings, fallbackName);
+        fellBack.addAll(ConfigChecks.validate(config, fallback, warnings, fallbackName));
+        if (borderProblem == null) {
+            borderProblem = borderProblem(fellBack);
+        }
         // What is held is this build's layout, whatever the file said, so a save says so
         config.configVersion = currentVersion;
         if (version > currentVersion) {
             // Rewriting would drop what only the newer YOLT knows
             warnings.add("config is from a newer version, so it was not rewritten");
-            return new Result(config, warnings, false);
+            return new Result(config, warnings, false, borderProblem);
         }
         write(file, config);
-        return new Result(config, warnings, false);
+        return new Result(config, warnings, false, borderProblem);
+    }
+
+    // Null when every worldBorder value is the file's own
+    private static @Nullable String borderProblem(List<String> fellBack) {
+        List<String> border = fellBack.stream()
+                .filter(path -> path.equals(BORDER_SECTION) || path.startsWith(BORDER_SECTION + "."))
+                .toList();
+        return border.isEmpty() ? null : "the config has a bad " + String.join(" and ", border);
     }
 
     // A missing or unusable version reads as the first one; merge still warns about one that isn't a number. Zero or
@@ -170,7 +190,8 @@ public final class ConfigLoader {
         }
     }
 
-    private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName) {
+    private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName,
+                                    List<String> fellBack) {
         JsonObject result = new JsonObject();
         for (Map.Entry<String, JsonElement> entry : defaults.entrySet()) {
             String key = entry.getKey();
@@ -182,9 +203,10 @@ public final class ConfigLoader {
                 result.add(key, def);
             } else if (def.isJsonObject()) {
                 if (value.isJsonObject()) {
-                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName));
+                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, fellBack));
                 } else {
                     result.add(key, def);
+                    fellBack.add(path);
                     warnings.add(path + ": expected an object, using " + fallbackName);
                 }
             } else if (def.isJsonArray()) {
@@ -192,6 +214,7 @@ public final class ConfigLoader {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
+                    fellBack.add(path);
                     warnings.add(path + ": expected a list of strings, using " + fallbackName);
                 }
             } else {
@@ -200,6 +223,7 @@ public final class ConfigLoader {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
+                    fellBack.add(path);
                     warnings.add(path + ": " + problem + ", using " + fallbackName);
                 }
             }

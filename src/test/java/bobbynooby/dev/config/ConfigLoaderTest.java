@@ -203,6 +203,28 @@ class ConfigLoaderTest {
         assertTrue(odd.diameter * odd.endScale > ConfigLoader.MAX_BORDER_DIAMETER - 1, "end border " + odd.diameter * odd.endScale);
     }
 
+    // A startup leaves the world's own border alone when its border values aren't what the admin wrote
+    @Test
+    void borderProblemOnlyWhenBorderValuesFellBack() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.write(file, new byte[] {(byte) 0xC3, 0x28});
+        assertEquals("config could not be read (not UTF-8 text)", ConfigLoader.load(file, null, true).borderProblem());
+        assertTrue(loadJson("{not json").borderProblem().startsWith("config is not valid JSON ("));
+
+        assertEquals("the config has a bad worldBorder.diameter", loadJson("{\"worldBorder\":{\"diameter\":\"2OOOO\"}}").borderProblem());
+        assertEquals("the config has a bad worldBorder.endScale", loadJson("{\"worldBorder\":{\"endScale\":0}}").borderProblem());
+        assertEquals("the config has a bad worldBorder.diameter and worldBorder.endScale",
+                loadJson("{\"worldBorder\":{\"diameter\":\"x\",\"endScale\":-1}}").borderProblem());
+        assertEquals("the config has a bad worldBorder", loadJson("{\"worldBorder\":5}").borderProblem());
+
+        // A bad key elsewhere, the End cap, a missing key and a first start with no file all keep the file's own border
+        assertNull(loadJson("{\"chat\":{\"radius\":\"x\"}}").borderProblem());
+        assertNull(loadJson("{\"worldBorder\":{\"diameter\":59999968,\"endScale\":2.0}}").borderProblem());
+        assertNull(loadJson("{\"randomSpawn\":false}").borderProblem());
+        Files.delete(file);
+        assertNull(ConfigLoader.load(file, null, true).borderProblem());
+    }
+
     @Test
     void endScaleZeroOrNegativeFallsBack() throws IOException {
         for (String bad : List.of("0", "-1.5")) {
