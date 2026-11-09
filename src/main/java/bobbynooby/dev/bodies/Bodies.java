@@ -3,22 +3,37 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.offline.OfflineKill;
+import bobbynooby.dev.offline.OfflinePlayerData;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Leaves a body behind when a player logs out, and hands its state back when they log in. */
+/** Leaves a body behind when a player logs out, hands its state back when they log in, and kills them when it dies. */
 public final class Bodies {
     /** Marks the entities we made, so a decorative mannequin is never taken for a body. */
     public static final String TAG = "yolt_body";
@@ -47,6 +62,8 @@ public final class Bodies {
         });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> onBodyUnload(entity));
         ServerEntityEvents.ENTITY_LOAD.register(Bodies::onBodyLoad);
+        // Fires inside die(), after the death drops, which the body never has
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
     }
 
     /** The new body, or empty when this logout gets none. */
@@ -143,6 +160,61 @@ public final class Bodies {
         }));
     }
 
+    /**
+     * A body's death is its owner's: their saved items go into a grave where the body fell, and the lockout starts.
+     * With bodies switched off this still runs, since a body left from before still stands for its owner.
+     */
+    public static void onBodyDeath(LivingEntity body) {
+        if (!Settings.active() || !body.entityTags().contains(TAG) || !(body.level() instanceof ServerLevel level)) {
+            return;
+        }
+        MinecraftServer server = level.getServer();
+        Optional<BodyRecord> found = BodyStore.get(server).byEntity(body.getUUID());
+        // A pending record was taken over already, so its body is a stale copy. An owner who is online isn't away.
+        if (found.isEmpty() || found.get().pendingRemoval() || server.getPlayerList().getPlayer(found.get().owner()) != null) {
+            return;
+        }
+        BodyRecord record = found.get();
+        try {
+            killOwner(server, record, body);
+        } catch (RuntimeException e) {
+            // No retry: a failed death leaves the save as it was, so nothing is lost, and the owner's next login
+            // takes over the body's last saved state instead. A retry would also start from the wiped tag.
+            YouOnlyLiveTwice.LOGGER.error("The body of {} died, but they could not be killed", record.ownerName(), e);
+        }
+    }
+
+    /**
+     * Offline /yolt kill of a player whose body still stands. A loaded body is killed and its death does the rest;
+     * one in an unloaded chunk dies at its last saved spot, and goes when its chunk next loads.
+     * Throws if the owner could not be killed.
+     */
+    public static OfflineKill.KillResult killBody(MinecraftServer server, BodyRecord record) {
+        // A body still dying from a death that failed to kill its owner counts as gone
+        if (server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
+                && !body.isDeadOrDying() && body.level() instanceof ServerLevel level) {
+            body.kill(level);
+            if (BodyStore.get(server).byOwner(record.owner()).isEmpty()) {
+                return OfflineKill.KillResult.KILLED_OFFLINE;
+            }
+            if (!body.isDeadOrDying()) {
+                // Another mod stopped the death
+                return OfflineKill.KillResult.NOT_KILLED;
+            }
+            throw new IllegalStateException("The body of " + record.ownerName() + " died, but they could not be killed");
+        }
+        BodySnapshot snapshot = record.snapshot();
+        // No entity, so no skin to keep: the grave head is built from the name
+        killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
+                GraveItems.profileOf(new NameAndId(record.owner(), record.ownerName())));
+        return OfflineKill.KillResult.KILLED_OFFLINE;
+    }
+
+    /** True for anything we spawned as a body: it wears copies of its owner's saved gear, so its death drops nothing. */
+    public static boolean dropsNothing(LivingEntity entity) {
+        return Settings.active() && entity.entityTags().contains(TAG);
+    }
+
     /** True when the entity carries our tag and a record still points at it. */
     public static boolean isBody(Entity entity) {
         return entity.entityTags().contains(TAG) && entity.level() instanceof ServerLevel level
@@ -156,6 +228,34 @@ public final class Bodies {
         if (entity != null) {
             entity.discard();
         }
+    }
+
+    // The body's gear as it is now, where it fell, and its skin for the grave head
+    private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
+        ResolvableProfile profile = body instanceof Avatar avatar
+                ? avatar.getProfile()
+                : GraveItems.profileOf(new NameAndId(record.owner(), record.ownerName()));
+        killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
+                profile);
+    }
+
+    // Through the one offline-death routine. The record only goes once that has worked.
+    private static void killOwner(MinecraftServer server, BodyRecord record, Map<EquipmentSlot, ItemStack> bodyGear,
+                                  GlobalPos where, ResolvableProfile profile) {
+        NameAndId who = new NameAndId(record.owner(), record.ownerName());
+        CompoundTag tag = OfflinePlayerData.load(server, who)
+                .orElseThrow(() -> new IllegalStateException("No save file for " + who.name()));
+        // Already dead, say after a crash before the record's removal was saved: a second death would restart the lockout
+        if (tag.getFloatOr("Health", 1.0F) > 0.0F) {
+            // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
+            HolderLookup.Provider registries = server.registryAccess();
+            Map<EquipmentSlot, ItemStack> saved = OfflinePlayerData.readGear(tag, registries);
+            Map<EquipmentSlot, ItemStack> changed = new EnumMap<>(EquipmentSlot.class);
+            GearSync.applyBodyGear(bodyGear, slot -> saved.getOrDefault(slot, ItemStack.EMPTY), changed::put);
+            OfflinePlayerData.writeGear(tag, changed, registries);
+            OfflineKill.applyOfflineDeath(server, who, tag, where, profile);
+        }
+        BodyStore.get(server).remove(record.owner());
     }
 
     private static void takeOver(ServerPlayer player, BodySnapshot snapshot, boolean copyEffects) {

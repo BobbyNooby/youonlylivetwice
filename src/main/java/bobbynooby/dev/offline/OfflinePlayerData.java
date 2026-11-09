@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
@@ -26,7 +27,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +37,7 @@ import java.util.UUID;
 public final class OfflinePlayerData {
     private static final String INVENTORY = "Inventory";
     private static final String EQUIPMENT = "equipment";
+    private static final String SELECTED_SLOT = "SelectedItemSlot";
     private static final String ENDER_ITEMS = "EnderItems";
 
     private OfflinePlayerData() {}
@@ -105,6 +109,57 @@ public final class OfflinePlayerData {
         return items;
     }
 
+    /**
+     * Every worn or held item in the save. The main hand is the selected hotbar slot of the inventory list; the
+     * other slots sit under equipment. Empty slots are left out.
+     */
+    public static Map<EquipmentSlot, ItemStack> readGear(CompoundTag tag, HolderLookup.Provider registries) {
+        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        Map<EquipmentSlot, ItemStack> gear = new EnumMap<>(EquipmentSlot.class);
+        CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            Optional<ItemStack> stack = slot == EquipmentSlot.MAINHAND
+                    ? tag.getListOrEmpty(INVENTORY).stream()
+                            .filter(entry -> isSlot(entry, selectedSlot(tag)))
+                            .findFirst()
+                            .flatMap(entry -> ItemStackWithSlot.CODEC.parse(ops, entry).result())
+                            .map(ItemStackWithSlot::stack)
+                    : equipment.read(slot.getSerializedName(), ItemStack.CODEC, ops);
+            stack.filter(item -> !item.isEmpty()).ifPresent(item -> gear.put(slot, item));
+        }
+        return gear;
+    }
+
+    /**
+     * Writes the given slots into the save; an empty stack clears its slot. Slots not in the map, and every other
+     * inventory entry, stay exactly as saved, so an entry that doesn't read back is never rewritten or lost.
+     */
+    public static void writeGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> gear, HolderLookup.Provider registries) {
+        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
+        ListTag inventory = tag.getListOrEmpty(INVENTORY);
+        int selected = selectedSlot(tag);
+        gear.forEach((slot, stack) -> {
+            if (slot == EquipmentSlot.MAINHAND) {
+                inventory.removeIf(entry -> isSlot(entry, selected));
+                if (!stack.isEmpty()) {
+                    inventory.add(ItemStackWithSlot.CODEC.encodeStart(ops, new ItemStackWithSlot(selected, stack)).getOrThrow());
+                }
+            } else if (stack.isEmpty()) {
+                equipment.remove(slot.getSerializedName());
+            } else {
+                equipment.store(slot.getSerializedName(), ItemStack.CODEC, ops, stack);
+            }
+        });
+        tag.put(INVENTORY, inventory);
+        // Vanilla leaves the key out when nothing is worn
+        if (equipment.isEmpty()) {
+            tag.remove(EQUIPMENT);
+        } else {
+            tag.put(EQUIPMENT, equipment);
+        }
+    }
+
     public static List<ItemStack> takeEnderChest(CompoundTag tag, HolderLookup.Provider registries) {
         return takeSlots(tag, ENDER_ITEMS, registries.createSerializationContext(NbtOps.INSTANCE));
     }
@@ -115,6 +170,15 @@ public final class OfflinePlayerData {
         return GlobalPos.of(
                 saved.dimension().orElse(Level.OVERWORLD),
                 saved.position().map(BlockPos::containing).orElse(BlockPos.ZERO));
+    }
+
+    private static int selectedSlot(CompoundTag tag) {
+        return tag.getIntOr(SELECTED_SLOT, 0);
+    }
+
+    // A missing Slot reads as 0, the same as vanilla's codec
+    private static boolean isSlot(Tag entry, int slot) {
+        return entry instanceof CompoundTag item && Byte.toUnsignedInt(item.getByteOr("Slot", (byte) 0)) == slot;
     }
 
     private static List<ItemStack> takeSlots(CompoundTag tag, String key, RegistryOps<Tag> ops) {

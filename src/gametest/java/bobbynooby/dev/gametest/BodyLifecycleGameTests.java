@@ -7,14 +7,17 @@ import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
@@ -27,10 +30,14 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -264,8 +271,10 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // A body whose death could not kill its owner: a non-empty folder where the old save gets moved makes the
+    // save swap fail, so the death is taken back and the save stays as it was
     @GameTest
-    public void deadBodyIsNotTakenOver(GameTestHelper helper) {
+    public void deadBodyIsNotTakenOver(GameTestHelper helper) throws IOException {
         ServerPlayer player = join(helper, "DeadBody", GameType.SURVIVAL);
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = useDefaultBodies();
@@ -273,8 +282,19 @@ public class BodyLifecycleGameTests {
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             Mannequin body = leaveBody(helper, player);
-            body.kill(helper.getLevel());
+            Path blocker = helper.getLevel().getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(owner + ".dat_old");
+            Path blockerContent = blocker.resolve("blocker");
+            Files.createDirectories(blocker);
+            Files.writeString(blockerContent, "");
+            try {
+                body.kill(helper.getLevel());
+            } finally {
+                Files.delete(blockerContent);
+                Files.delete(blocker);
+            }
             helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertTrue(gravesOf(helper, owner).isEmpty(), "failed death left a grave");
+            helper.assertTrue(DeathLockout.refusal(owner) == null, "failed death started the lockout");
             // What the removal at the end of the death animation runs
             Bodies.onBodyUnload(body);
             helper.assertValueEqual(store(helper).byOwner(owner).map(record -> record.snapshot().health()), Optional.of(20.0F),
@@ -294,7 +314,8 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
-    // Killed offline while the body stood: the grave has the real gear, the body only copies of it
+    // Killed offline while the body stood, without going through it (as after a crash before the record's removal
+    // was saved): the grave has the real gear, the body only copies of it
     @GameTest
     public void deadJoinerGetsNoBodyGear(GameTestHelper helper) {
         ServerPlayer player = join(helper, "DeadJoin", GameType.SURVIVAL);
@@ -304,8 +325,10 @@ public class BodyLifecycleGameTests {
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
             Mannequin body = leaveBody(helper, player);
-            helper.assertValueEqual(OfflineKill.kill(helper.getLevel().getServer(), player.nameAndId()),
-                    OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            MinecraftServer server = helper.getLevel().getServer();
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            OfflineKill.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
+                    GraveItems.profileOf(player.nameAndId()));
             helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.items().stream()
                     .anyMatch(item -> item.is(Items.IRON_CHESTPLATE))), "no grave holds the chestplate");
 

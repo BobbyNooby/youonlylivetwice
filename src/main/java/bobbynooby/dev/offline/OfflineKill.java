@@ -1,6 +1,9 @@
 package bobbynooby.dev.offline;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
@@ -34,7 +37,10 @@ public final class OfflineKill {
 
     private OfflineKill() {}
 
-    /** A player who is already dead is left exactly as they are, so a second kill can't restart their lockout. */
+    /**
+     * A player who is already dead is left exactly as they are, so a second kill can't restart their lockout.
+     * An offline player whose body still stands dies through that body.
+     */
     public static KillResult kill(MinecraftServer server, NameAndId who) {
         ServerPlayer online = server.getPlayerList().getPlayer(who.id());
         if (online != null) {
@@ -55,16 +61,23 @@ public final class OfflineKill {
         if (tag.get().getFloatOr("Health", 1.0F) <= 0.0F) {
             return KillResult.ALREADY_DEAD;
         }
-        applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()));
+        // A pending record was taken over already, so the save is the player's real state
+        Optional<BodyRecord> body = BodyStore.get(server).byOwner(who.id()).filter(record -> !record.pendingRemoval());
+        if (body.isPresent()) {
+            return Bodies.killBody(server, body.get());
+        }
+        applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()), GraveItems.profileOf(who));
         return KillResult.KILLED_OFFLINE;
     }
 
     /**
      * Turns the save into a dead player's, so the next login goes through vanilla's respawn.
      * All or nothing: if any step fails, the world and the save file stay as they were and the error is rethrown.
-     * The tag object passed in is left wiped either way.
+     * The tag object passed in is left wiped either way. The profile is the grave head's, so a caller that has the
+     * player's skin can keep it.
      */
-    public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where) {
+    public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where,
+                                         ResolvableProfile profile) {
         // Prepare: wipe the tag and write it to a temp file before anything in the world changes
         ServerLevel level = levelFor(server, where);
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
@@ -107,7 +120,7 @@ public final class OfflineKill {
         try {
             // An online spectator's death never reaches the grave hook either
             if (!spectator) {
-                undo.add(deposit(server, who, items, where));
+                undo.add(deposit(server, who, items, where, profile));
             }
             undo.add(dropExperience(level, where, experience));
             OfflinePlayerData.commitSave(server, who.id(), prepared);
@@ -131,10 +144,11 @@ public final class OfflineKill {
      * Puts the items in the world at where, and returns how to take them back out. With graves on they go into
      * graves with a grave head first, as in an online death, and the graves are on disk before this returns.
      */
-    public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where) {
+    public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where,
+                                   ResolvableProfile profile) {
         ServerLevel level = levelFor(server, where);
         if (Settings.active() && Settings.get().graves.enabled) {
-            return depositInGraves(server, level, who, items, where);
+            return depositInGraves(server, level, who, items, where, profile);
         }
         Vec3 pos = Vec3.atBottomCenterOf(where.pos());
         List<Entity> drops = new ArrayList<>();
@@ -146,8 +160,7 @@ public final class OfflineKill {
 
     // The undo takes back every grave, including the extra ones past 54 stacks
     private static Runnable depositInGraves(MinecraftServer server, ServerLevel level, NameAndId who, List<ItemStack> items,
-                                            GlobalPos where) {
-        ResolvableProfile profile = GraveItems.profileOf(who);
+                                            GlobalPos where, ResolvableProfile profile) {
         List<ItemStack> stacks = new ArrayList<>();
         stacks.add(GraveItems.graveHead(profile));
         stacks.addAll(items);
