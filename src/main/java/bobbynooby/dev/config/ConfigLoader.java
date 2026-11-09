@@ -243,10 +243,17 @@ public final class ConfigLoader {
         if (!Double.isFinite(u.getAsDouble())) {
             return "expected a finite number";
         }
-        // whole-number settings can't take 2.5
-        if (d.getAsNumber() instanceof Integer) {
+        // whole-number settings can't take 2.5. Gson's tree holds an int default as a Long; YoltConfig has no long keys
+        Number defaultNumber = d.getAsNumber();
+        if (defaultNumber instanceof Integer || defaultNumber instanceof Long) {
             double v = u.getAsDouble();
             if (v != Math.floor(v) || v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
+                return "expected a whole number that fits in an int";
+            }
+            // Gson can't make an int of some numbers that read fine as a double (1e-99999), and that resets the whole config
+            try {
+                u.getAsInt();
+            } catch (NumberFormatException e) {
                 return "expected a whole number that fits in an int";
             }
         }

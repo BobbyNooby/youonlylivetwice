@@ -310,6 +310,25 @@ class ConfigLoaderTest {
         assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.diameter")));
     }
 
+    // Gson's own int reading turned 2.5 into 2 without a word, and threw on 1e-99999, which reset the whole config
+    @Test
+    void wholeNumberKeysRefuseFractionsAndNumbersGsonCantRead() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"chat\":{\"radius\":1e-99999},\"deathLockout\":{\"cooldownDays\":2.5},\"randomSpawn\":false}");
+        YoltConfig base = new YoltConfig();
+        base.chat.radius = 32;
+        base.deathLockout.cooldownDays = 3;
+        base.worldBorder.diameter = 20000;
+
+        ConfigLoader.Result r = ConfigLoader.load(file, base, false);
+        assertEquals(32, r.config().chat.radius);
+        assertEquals(3, r.config().deathLockout.cooldownDays);
+        assertFalse(r.config().randomSpawn);
+        assertEquals(20000, r.config().worldBorder.diameter);
+        assertEquals(List.of("deathLockout.cooldownDays: expected a whole number that fits in an int, using the current value",
+                "chat.radius: expected a whole number that fits in an int, using the current value"), r.warnings());
+    }
+
     @Test
     void hoverLinesReadAsAList() throws IOException {
         ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":[\"one\",\"two\"]}}");
