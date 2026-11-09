@@ -11,6 +11,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.SleepStatus;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.border.BorderStatus;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.HashMap;
@@ -93,6 +95,34 @@ public class SwitchGameTests {
         } finally {
             border.enabled = enabledBefore;
             border.diameter = diameterBefore;
+            sizesBefore.forEach((level, size) -> level.getWorldBorder().setSize(size));
+        }
+        helper.succeed();
+    }
+
+    // A timed /worldborder shrink must survive a restart or reload. The border is turned on for the call, since apply
+    // does nothing while it's off.
+    @GameTest
+    public void movingBorderLeftAlone(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        Map<ServerLevel, Double> sizesBefore = new HashMap<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            sizesBefore.put(level, level.getWorldBorder().getSize());
+        }
+        WorldBorder overworld = server.overworld().getWorldBorder();
+
+        border.enabled = true;
+        try {
+            double size = overworld.getSize();
+            overworld.lerpSizeBetween(size, size - 1000, 1_000_000L, server.overworld().getGameTime());
+            WorldBorders.apply(server);
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.SHRINKING, "overworld border status");
+            helper.assertValueEqual(overworld.getLerpTarget(), size - 1000, "overworld border target");
+        } finally {
+            border.enabled = enabledBefore;
+            // setSize also ends the lerp
             sizesBefore.forEach((level, size) -> level.getWorldBorder().setSize(size));
         }
         helper.succeed();

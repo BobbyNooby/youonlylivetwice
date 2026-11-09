@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 
@@ -21,6 +22,10 @@ public final class WorldBorders {
 
         forEachBorder(server, (level, isEnd) -> {
             WorldBorder worldBorder = level.getWorldBorder();
+            // A timed vanilla /worldborder change keeps running through a restart or reload; setSize would stop it
+            if (worldBorder.getStatus() != BorderStatus.STATIONARY) {
+                return;
+            }
 
             if (isEnd) {
                 worldBorder.setSize(config.diameter * config.endScale);
