@@ -364,8 +364,8 @@ public final class Graves {
         }
         // execute() would run it straight away on the server thread; schedule() always queues it
         server.schedule(server.wrapRunnable(() -> {
-            // If the chunk unloaded meanwhile, its next load tries again
-            if (level.hasChunk(pos.x(), pos.z())) {
+            // Graves may have been switched off meanwhile. If the chunk unloaded, its next load tries again.
+            if (Settings.active() && Settings.get().graves.enabled && level.hasChunk(pos.x(), pos.z())) {
                 restoreChunk(level, chunk);
             }
         }));
