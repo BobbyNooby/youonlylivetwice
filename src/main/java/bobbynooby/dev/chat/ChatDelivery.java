@@ -67,25 +67,14 @@ public final class ChatDelivery {
     }
 
     private static boolean onChat(PlayerChatMessage message, ServerPlayer sender, ChatType.Bound chatType) {
-        if (!Settings.active()) {
+        if (!Settings.active() || Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
             return true;
         }
         // Fabric fires this for a player's /say and /me too; those are announcements that reach everyone
         if (!chatType.chatType().is(ChatType.CHAT)) {
             return true;
         }
-        MinecraftServer server = sender.level().getServer();
-        Set<ServerPlayer> recipients;
-        if (Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
-            // Global chat still has to reach clients that don't know the sender
-            if (!Settings.get().hide.distantPlayers) {
-                return true;
-            }
-            recipients = new LinkedHashSet<>(server.getPlayerList().getPlayers());
-        } else {
-            recipients = chatRecipients(sender);
-        }
-        deliver(server, message, sender::shouldFilterMessageTo, sender, chatType, recipients);
+        deliver(sender.level().getServer(), message, sender::shouldFilterMessageTo, sender, chatType, chatRecipients(sender));
         return false;
     }
 
@@ -119,11 +108,7 @@ public final class ChatDelivery {
         boolean fullyFiltered = false;
         for (ServerPlayer recipient : recipients) {
             boolean filtered = isFiltered.test(recipient);
-            if (message.isSystem() || PlayerVisibility.known(recipient).contains(message.sender())) {
-                recipient.sendChatMessage(outgoing, filtered, chatType);
-            } else {
-                sendAsText(recipient, message.filter(filtered), chatType);
-            }
+            recipient.sendChatMessage(outgoing, filtered, chatType);
             fullyFiltered |= filtered && message.isFullyFiltered();
         }
         if (fullyFiltered && sender != null) {
@@ -131,14 +116,26 @@ public final class ChatDelivery {
         }
     }
 
-    // A client with no entry for the sender throws its player chat away, so it gets the same line as plain text
-    private static void sendAsText(ServerPlayer recipient, PlayerChatMessage message, ChatType.Bound chatType) {
+    /**
+     * A client with no entry for the sender throws its player chat away, so it gets the same line as plain text.
+     * Returns false, sending nothing, when the normal send can go ahead.
+     */
+    public static boolean sendAsTextIfSenderUnknown(ServerPlayer recipient, OutgoingChatMessage message, boolean filtered,
+                                                    ChatType.Bound chatType) {
+        // A disguised message has no sender for the client to check
+        if (!(message instanceof OutgoingChatMessage.Player player)
+                || PlayerVisibility.known(recipient).contains(player.message().sender())) {
+            return false;
+        }
+        PlayerChatMessage shown = player.message().filter(filtered);
         // Filtered words are blanked the way the client would have shown them
-        Component content = message.filterMask().isEmpty()
-                ? message.decoratedContent() : message.filterMask().applyWithFormatting(message.signedContent());
+        Component content = shown.filterMask().isEmpty()
+                ? shown.decoratedContent() : shown.filterMask().applyWithFormatting(shown.signedContent());
+        // sendChatMessage would check the same setting; sendSystemMessage doesn't
         if (recipient.getChatVisibility() == ChatVisiblity.FULL && content != null) {
             recipient.sendSystemMessage(chatType.decorate(content));
         }
+        return true;
     }
 
     static ChatRules.Listener listener(ServerPlayer player) {

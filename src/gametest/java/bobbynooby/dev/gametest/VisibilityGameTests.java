@@ -5,6 +5,8 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.CommandSigningContext;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.ChatType;
@@ -22,6 +24,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Crypt;
 import net.minecraft.util.CryptException;
+import net.minecraft.util.TaskChainer;
 import net.minecraft.world.entity.player.ProfilePublicKey;
 import net.minecraft.world.level.GameType;
 import org.jspecify.annotations.Nullable;
@@ -31,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -235,14 +239,55 @@ public class VisibilityGameTests {
                     sender, ChatType.bind(ChatType.CHAT, sender));
 
             String name = sender.getDisplayName().getString();
-            helper.assertTrue(far.messages.stream().anyMatch(m -> isChatLine(m, name, "hello there")), "far player did not get the chat as text");
+            helper.assertTrue(far.messages.stream().anyMatch(m -> isChatLine(m, "chat.type.text", name, "hello there")), "far player did not get the chat as text");
             helper.assertFalse(chatFrom(far, sender), "far player got player chat from a sender it doesn't know");
             // The sender always knows itself, so it takes the normal signed path
             helper.assertTrue(chatFrom(sender, sender), "sender did not get its own chat as player chat");
-            helper.assertFalse(sender.messages.stream().anyMatch(m -> isChatLine(m, name, "hello there")), "sender got its own chat as text");
+            helper.assertFalse(sender.messages.stream().anyMatch(m -> isChatLine(m, "chat.type.text", name, "hello there")), "sender got its own chat as text");
         } finally {
             chat.mode = modeBefore;
             hide.distantPlayers = distantBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla's /msg sends to the target directly, outside ChatDelivery
+    @GameTest
+    public void opMsgToUnknownRecipientFallsBack(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        TestPlayers.Recording op = null;
+        try {
+            hide.distantPlayers = true;
+            op = TestPlayers.joinRecording(helper, "visop", GameType.SURVIVAL, BlockPos.ZERO);
+            joined.add(op);
+            TestPlayers.Recording far = TestPlayers.joinRecording(helper, "visopfar", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            joined.add(far);
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            helper.assertFalse(PlayerVisibility.known(far).contains(op.getUUID()), "far player knows the op");
+            // An op, so restrictCommands lets vanilla /msg run
+            server.getPlayerList().op(op.nameAndId());
+
+            // A real client signs the message argument; this puts the command on that same signed path
+            PlayerChatMessage signed = PlayerChatMessage.unsigned(op.getUUID(), "psst");
+            CommandSourceStack source = op.createCommandSourceStack().withSigningContext(
+                    new CommandSigningContext.SignedArguments(Map.of("message", signed)), TaskChainer.immediate(Runnable::run));
+            server.getCommands().performPrefixedCommand(source, "msg " + far.getGameProfile().name() + " psst");
+
+            String name = op.getDisplayName().getString();
+            helper.assertTrue(far.messages.stream().anyMatch(m -> isChatLine(m, "commands.message.display.incoming", name, "psst")),
+                    "far player did not get the message as text");
+            helper.assertFalse(chatFrom(far, op), "far player got player chat from an op it doesn't know");
+            // The op's own copy takes the normal signed path
+            helper.assertTrue(chatFrom(op, op), "op did not get its own message as player chat");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            if (op != null) {
+                server.getPlayerList().deop(op.nameAndId());
+            }
             leaveAll(joined);
         }
         helper.succeed();
@@ -311,9 +356,9 @@ public class VisibilityGameTests {
                 .anyMatch(p -> p instanceof ClientboundPlayerChatPacket chat && chat.sender().equals(sender.getUUID()));
     }
 
-    private static boolean isChatLine(Component message, String name, String text) {
+    private static boolean isChatLine(Component message, String key, String name, String text) {
         return message.getContents() instanceof TranslatableContents line
-                && line.getKey().equals("chat.type.text")
+                && line.getKey().equals(key)
                 && line.getArgs().length == 2
                 && line.getArgs()[0] instanceof Component sender && sender.getString().equals(name)
                 && line.getArgs()[1] instanceof Component content && content.getString().equals(text);
