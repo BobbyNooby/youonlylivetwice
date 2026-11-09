@@ -63,15 +63,11 @@ public final class ChatDelivery {
         return recipients;
     }
 
-    public static Set<ServerPlayer> commandRecipients(MinecraftServer server) {
-        return new LinkedHashSet<>(server.getPlayerList().getPlayers());
-    }
-
     private static boolean onChat(PlayerChatMessage message, ServerPlayer sender, ChatType.Bound chatType) {
         if (!Settings.active() || Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
             return true;
         }
-        // Fabric fires this for a player's /say and /me too; those are announcements that reach everyone
+        // Fabric also fires this for the /say and /me that onCommandMessage let through: op announcements, which reach everyone
         if (!chatType.chatType().is(ChatType.CHAT)) {
             return true;
         }
@@ -91,6 +87,7 @@ public final class ChatDelivery {
         return false;
     }
 
+    // Op and console announcements go out through vanilla's broadcast; ServerPlayerMixin turns them to text where needed
     private static boolean onCommandMessage(PlayerChatMessage message, CommandSourceStack source, ChatType.Bound chatType) {
         if (!Settings.active()) {
             return true;
@@ -98,18 +95,11 @@ public final class ChatDelivery {
         ServerPlayer player = source.getPlayer();
         // Only a gamemaster's /me is an announcement; anyone else's is chat, heard like their chat.
         // The source's permissions, so an op's "execute as" stays an announcement.
-        if (player != null && !Commands.LEVEL_GAMEMASTERS.check(source.permissions())) {
-            if (Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
-                return true;
-            }
-            deliver(source.getServer(), message, source::shouldFilterMessageTo, player, chatType, chatRecipients(player));
-            return false;
-        }
-        if (!Settings.get().hide.distantPlayers) {
+        if (player == null || Commands.LEVEL_GAMEMASTERS.check(source.permissions())
+                || Settings.get().chat.mode == YoltConfig.ChatMode.GLOBAL) {
             return true;
         }
-        MinecraftServer server = source.getServer();
-        deliver(server, message, source::shouldFilterMessageTo, source.getPlayer(), chatType, commandRecipients(server));
+        deliver(source.getServer(), message, source::shouldFilterMessageTo, player, chatType, chatRecipients(player));
         return false;
     }
 

@@ -110,26 +110,6 @@ public class ChatGameTests {
         helper.succeed();
     }
 
-    @GameTest
-    public void commandMessagesReachEveryone(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
-        List<ServerPlayer> joined = new ArrayList<>();
-        try {
-            ServerPlayer a = join(helper, joined, "cmda", BlockPos.ZERO);
-            ServerPlayer b = join(helper, joined, "cmdb", new BlockPos(10, 0, 0));
-            ServerPlayer c = join(helper, joined, "cmdc", BlockPos.ZERO);
-            c.teleportTo(c.getX() + 200, c.getY(), c.getZ());
-
-            Set<ServerPlayer> heard = ChatDelivery.commandRecipients(server);
-            helper.assertTrue(heard.contains(a), "a misses command messages");
-            helper.assertTrue(heard.contains(b), "b misses command messages");
-            helper.assertTrue(heard.contains(c), "far player misses command messages");
-        } finally {
-            leaveAll(joined);
-        }
-        helper.succeed();
-    }
-
     // With restrictCommands off anyone may /me, and only a gamemaster's is an announcement
     @GameTest
     public void nonOpEmoteIsChat(GameTestHelper helper) {
@@ -186,6 +166,9 @@ public class ChatGameTests {
             // execute as runs with the op's permissions
             broadcast(helper, PlayerChatMessage.unsigned(nonOp.getUUID(), "waves for the op"), opSource.withEntity(nonOp), ChatType.EMOTE_COMMAND);
             helper.assertTrue(heard(far, "waves for the op"), "a far player missed an op's execute as /me");
+            broadcast(helper, PlayerChatMessage.unsigned(op.getUUID(), "op says"), opSource, ChatType.SAY_COMMAND);
+            // The far client has no entry for the op, so it would drop the signed message
+            helper.assertTrue(asText(far, "op says"), "a far player did not get an op's /say as text");
             CommandSourceStack console = helper.getLevel().getServer().createCommandSourceStack();
             broadcast(helper, PlayerChatMessage.system("console says"), console, ChatType.SAY_COMMAND);
             helper.assertTrue(heard(far, "console says"), "a far player missed the console's /say");
@@ -207,6 +190,20 @@ public class ChatGameTests {
 
     // Player chat from a sender the client knows, or the same line as text, or a console line with no sender
     private static boolean heard(TestPlayers.Recording player, String text) {
+        if (asText(player, text)) {
+            return true;
+        }
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundPlayerChatPacket signed && signed.body().content().equals(text)
+                    || packet instanceof ClientboundDisguisedChatPacket disguised && disguised.message().getString().equals(text)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The line a client gets as text in place of player chat from a sender it doesn't know
+    private static boolean asText(TestPlayers.Recording player, String text) {
         for (Component message : player.messages) {
             if (message.getContents() instanceof TranslatableContents line) {
                 for (Object arg : line.getArgs()) {
@@ -214,12 +211,6 @@ public class ChatGameTests {
                         return true;
                     }
                 }
-            }
-        }
-        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
-            if (packet instanceof ClientboundPlayerChatPacket signed && signed.body().content().equals(text)
-                    || packet instanceof ClientboundDisguisedChatPacket disguised && disguised.message().getString().equals(text)) {
-                return true;
             }
         }
         return false;
