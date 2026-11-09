@@ -11,7 +11,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.border.WorldBorder;
 
 import java.util.List;
 import java.util.UUID;
@@ -60,6 +62,35 @@ public class PlacementGameTests {
         BlockPos death = helper.absolutePos(new BlockPos(1, 1, 1)).atY(level.getMaxY() + 10);
         BlockPos result = GravePlacement.find(level, death, store(helper));
         helper.assertTrue(result.getY() <= level.getMaxY() - 1, "grave above the build limit: " + result);
+        helper.succeed();
+    }
+
+    // Nobody can reach a grave past the border. The death block is the border's corner and its column is full,
+    // so the search has to look around it, where most spots are outside.
+    @GameTest
+    public void placementStaysInsideWorldBorder(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos death = helper.absolutePos(new BlockPos(1, 1, 1));
+        try {
+            border.setCenter(death.getX() + 8, death.getZ() + 8);
+            border.setSize(16);
+            for (int dy = 0; dy <= 8; dy++) {
+                level.setBlock(death.above(dy), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            helper.assertTrue(border.isWithinBounds(death), "death spot outside the border");
+            BlockPos result = GravePlacement.find(level, death, store(helper));
+            helper.assertTrue(border.isWithinBounds(result), "grave outside the world border: " + result);
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            for (int dy = 0; dy <= 8; dy++) {
+                level.setBlock(death.above(dy), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        }
         helper.succeed();
     }
 
