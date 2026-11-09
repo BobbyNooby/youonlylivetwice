@@ -345,7 +345,7 @@ public class SleepGameTests {
 
             // A real logout saves the dead player, and a revive lets them back in
             TestPlayers.leave(player);
-            helper.assertTrue(DeathLockout.revive(id), "revive found no death");
+            helper.assertTrue(DeathLockout.revive(id, "console"), "revive found no death");
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(4, 1, 4));
             helper.assertTrue(back.isDeadOrDying(), "the player did not join dead");
 
@@ -363,7 +363,7 @@ public class SleepGameTests {
             if (online != null) {
                 TestPlayers.leave(online);
             }
-            DeathLockout.revive(id);
+            DeathLockout.revive(id, "console");
             removeGraves(server, id);
         }
         helper.succeed();
@@ -410,7 +410,7 @@ public class SleepGameTests {
                 if (online != null) {
                     TestPlayers.leave(online);
                 }
-                DeathLockout.revive(id);
+                DeathLockout.revive(id, "console");
                 removeGraves(server, id);
             }
         }

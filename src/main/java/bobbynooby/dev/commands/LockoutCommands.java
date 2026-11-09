@@ -9,6 +9,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 
 import java.util.Optional;
@@ -66,10 +67,16 @@ final class LockoutCommands {
         if (who.isEmpty()) {
             return YoltCommands.fail(source, "Player " + name + " not found.");
         }
-        if (!DeathLockout.revive(who.get().id())) {
+        if (!DeathLockout.revive(who.get().id(), reviver(source))) {
             return YoltCommands.fail(source, who.get().name() + " has no death to undo.");
         }
         LOGGER.info("{} revived {}", source.getTextName(), who.get().name());
         return YoltCommands.done(source, "Revived " + who.get().name());
+    }
+
+    // Kept with the death. Anything that isn't a player, a command block too, counts as the console.
+    private static String reviver(CommandSourceStack source) {
+        ServerPlayer player = source.getPlayer();
+        return player != null ? player.nameAndId().name() : "console";
     }
 }

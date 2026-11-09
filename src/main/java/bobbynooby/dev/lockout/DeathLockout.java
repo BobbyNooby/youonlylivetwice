@@ -159,13 +159,14 @@ public final class DeathLockout {
         return Settings.on(c -> c.deathLockout.enabled);
     }
 
-    public static boolean revive(UUID uuid) {
+    /** Ends the newest death's lockout, keeping the death and who revived it: a player's name, or "console". */
+    public static boolean revive(UUID uuid, String by) {
         DeathStore open = store;
         if (open == null) {
             return false;
         }
         try {
-            return open.revive(uuid);
+            return open.revive(uuid, System.currentTimeMillis(), by);
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not revive {}", uuid, e);
             return false;

@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.world.WorldBorders;
 import com.google.gson.JsonObject;
@@ -315,7 +316,7 @@ public class CommandGameTests {
             helper.assertValueEqual(run(server, "yolt unkill Ghost"), List.of("Revived Ghost"), "command output");
             helper.assertTrue(DeathLockout.refusal(id) == null, "Ghost is still locked out");
         } finally {
-            DeathLockout.revive(id);
+            DeathLockout.revive(id, "console");
         }
         helper.succeed();
     }
@@ -339,8 +340,30 @@ public class CommandGameTests {
                     "command output");
             helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
         } finally {
-            DeathLockout.revive(id);
+            DeathLockout.revive(id, "console");
         }
+        helper.succeed();
+    }
+
+    // The console's revive is kept with the death, which stays as history
+    @GameTest
+    public void reviveRecordsWhoAndWhen(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Revived");
+        UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
+        withOwnDeathStore(false, store -> {
+            DeathLockout.recordDeath(id, name, name + " drowned");
+            long before = System.currentTimeMillis();
+            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name), "command output");
+            long after = System.currentTimeMillis();
+
+            DeathLog log = store.latest(id).orElseThrow();
+            helper.assertValueEqual(log.revivedBy(), "console", "who revived");
+            helper.assertTrue(log.revivedAt() != null && log.revivedAt() >= before && log.revivedAt() <= after,
+                    "revived at " + log.revivedAt() + ", not between " + before + " and " + after);
+            helper.assertValueEqual(log.deathMessage(), name + " drowned", "the death kept");
+            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
+        });
         helper.succeed();
     }
 

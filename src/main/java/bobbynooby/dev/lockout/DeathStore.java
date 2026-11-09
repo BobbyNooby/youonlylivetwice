@@ -246,11 +246,14 @@ public final class DeathStore {
                 rs.getString("revived_by"));
     }
 
-    /** Sets bypass on the newest row; false when the player has no deaths. */
-    public synchronized boolean revive(UUID uuid) {
-        String sql = "UPDATE death_logs SET bypass = 1 WHERE ROWID = (SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?)";
+    /** Marks the newest row revived, by whom and when, and keeps it; false when the player has no deaths. */
+    public synchronized boolean revive(UUID uuid, long nowMillis, String by) {
+        String sql = "UPDATE death_logs SET bypass = 1, revived_at = ?, revived_by = ? "
+                + "WHERE ROWID = (SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, uuid.toString());
+            statement.setLong(1, nowMillis);
+            statement.setString(2, by);
+            statement.setString(3, uuid.toString());
             return statement.executeUpdate() > 0;
         } catch (SQLException e) {
             throw new IllegalStateException("Could not revive " + uuid, e);

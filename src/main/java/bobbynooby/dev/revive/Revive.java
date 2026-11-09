@@ -61,7 +61,7 @@ public final class Revive {
             user.sendSystemMessage(Component.literal(name + " is not dead"));
             return Outcome.NOT_DEAD;
         }
-        if (!DeathLockout.revive(owner.get())) {
+        if (!DeathLockout.revive(owner.get(), user.nameAndId().name())) {
             user.sendSystemMessage(Component.literal("Could not revive " + name + ". Try again later."));
             return Outcome.FAILED;
         }

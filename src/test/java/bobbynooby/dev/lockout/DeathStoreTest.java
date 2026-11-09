@@ -67,7 +67,7 @@ class DeathStoreTest {
         try {
             store.recordDeath(uuid, "Bob", 1000L, 7, null);
             store.recordDeath(uuid, "Bob", 2000L, 7, null);
-            assertTrue(store.revive(uuid));
+            assertTrue(store.revive(uuid, 2500L, "Alex"));
             assertTrue(store.latest(uuid).orElseThrow().bypass());
             // a new death after the revive is a fresh, un-bypassed row
             store.recordDeath(uuid, "Bob", 3000L, 7, null);
@@ -77,11 +77,26 @@ class DeathStoreTest {
         }
     }
 
+    // The death stays as history, with who revived it and when
+    @Test
+    void reviveKeepsTheDeathAndWhoRevivedIt() throws SQLException {
+        Path file = dir.resolve("test.db");
+        DeathStore store = DeathStore.open(file);
+        try {
+            store.recordDeath(uuid, "Bob", 1000L, 7, "Bob drowned");
+            assertTrue(store.revive(uuid, 2500L, "Alex"));
+            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, true, "Bob drowned", 2500L, "Alex"), store.latest(uuid).orElseThrow());
+        } finally {
+            store.close();
+        }
+        assertEquals(1, query(file, "SELECT COUNT(*) FROM death_logs"));
+    }
+
     @Test
     void reviveWithNoDeathsReturnsFalse() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
         try {
-            assertFalse(store.revive(uuid));
+            assertFalse(store.revive(uuid, 1000L, "Alex"));
         } finally {
             store.close();
         }
