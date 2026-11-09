@@ -68,8 +68,10 @@ public final class OfflineKill {
         // Prepare: wipe the tag and write it to a temp file before anything in the world changes
         ServerLevel level = levelFor(server, where);
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
-        // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory.
+        // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory, but
+        // only while graves are on, since an online death with graves off never reaches it.
         boolean spectator = GameType.byId(tag.getIntOr("playerGameType", 0)) == GameType.SPECTATOR;
+        boolean graves = Settings.active() && Settings.get().graves.enabled;
         boolean dropsLoot = !spectator && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
         List<ItemStack> items = new ArrayList<>();
         int experience = 0;
@@ -86,7 +88,7 @@ public final class OfflineKill {
             tag.putInt("XpTotal", 0);
             tag.putFloat("XpP", 0.0F);
         }
-        if (!spectator) {
+        if (!spectator && graves) {
             switch (Settings.get().graves.enderChestOnDeath) {
                 case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess()));
                 case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess());
