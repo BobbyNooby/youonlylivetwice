@@ -461,6 +461,58 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // The live section is set to what the file holds, so the reload changes no border value and the player, far outside
+    // a 1000 block border, is no reason to warn
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadWithUnchangedBorderSaysNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Unchanged", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.WorldBorderSection live = Settings.get().worldBorder;
+        try {
+            live.enabled = true;
+            live.diameter = 1000;
+            live.endScale = 2.0;
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000, \"endScale\": 2.0}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded"), "command output");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The player is already outside the live 1000 block border, so growing it to 2000 strands nobody new
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadToBiggerBorderSkipsThoseAlreadyOutside(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "AlreadyOut", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.WorldBorderSection live = Settings.get().worldBorder;
+        try {
+            live.enabled = true;
+            live.diameter = 1000;
+            WorldBorders.apply(server);
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded"), "command output");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 2000, "live diameter");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     private static void assertCentre(GameTestHelper helper, ServerLevel level, double x, double z) {
         helper.assertValueEqual(level.getWorldBorder().getCenterX(), x, level.dimension().identifier() + " border centre x");
         helper.assertValueEqual(level.getWorldBorder().getCenterZ(), z, level.dimension().identifier() + " border centre z");

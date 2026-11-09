@@ -66,46 +66,63 @@ final class BorderCommands {
      * so a change to it is made before asking.
      */
     static List<String> stranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ) {
+        return stranded(server, diameter, endScale, centerX, centerZ, false);
+    }
+
+    /** Like stranded, but leaves out what is already outside the live border, so a bigger border is never refused for it. */
+    static List<String> newlyStranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ) {
+        return stranded(server, diameter, endScale, centerX, centerZ, true);
+    }
+
+    private static List<String> stranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ,
+                                         boolean newlyOnly) {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
             return List.of();
         }
         // Vanilla's own border answers "inside", so the edge is the one border damage and block use go by
-        Map<ResourceKey<Level>, WorldBorder> proposed = new HashMap<>();
+        Map<ResourceKey<Level>, Edges> borders = new HashMap<>();
         WorldBorders.forEachBorder(server, (level, isEnd) -> {
-            WorldBorder border = new WorldBorder();
+            WorldBorder proposed = new WorldBorder();
             if (isEnd) {
-                border.setSize(diameter * endScale);
+                proposed.setSize(diameter * endScale);
             } else {
-                border.setCenter(centerX, centerZ);
-                border.setSize(diameter);
+                proposed.setCenter(centerX, centerZ);
+                proposed.setSize(diameter);
             }
-            proposed.put(level.dimension(), border);
+            borders.put(level.dimension(), new Edges(level.getWorldBorder(), proposed, newlyOnly));
         });
 
         // A set, since one player can have several graves
         Set<String> names = new LinkedHashSet<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (outside(proposed, player.level().dimension(), player.getX(), player.getZ())) {
+            if (strands(borders, player.level().dimension(), player.getX(), player.getZ())) {
                 names.add(player.nameAndId().name());
             }
         }
         for (BodyRecord body : BodyStore.get(server).all()) {
             BodySnapshot snapshot = body.snapshot();
-            if (outside(proposed, snapshot.dimension(), snapshot.pos().x, snapshot.pos().z)) {
+            if (strands(borders, snapshot.dimension(), snapshot.pos().x, snapshot.pos().z)) {
                 names.add(body.ownerName() + "'s body");
             }
         }
         for (Grave grave : GraveStore.get(server).all()) {
-            if (outside(proposed, grave.dimension(), grave.pos().getX(), grave.pos().getZ())) {
+            if (strands(borders, grave.dimension(), grave.pos().getX(), grave.pos().getZ())) {
                 names.add(grave.ownerName() + "'s grave");
             }
         }
         return List.copyOf(names);
     }
 
-    private static boolean outside(Map<ResourceKey<Level>, WorldBorder> proposed, ResourceKey<Level> dimension, double x, double z) {
-        WorldBorder border = proposed.get(dimension);
-        return border != null && !border.isWithinBounds(x, z);
+    // One dimension's border as it is and as it would be
+    private record Edges(WorldBorder live, WorldBorder proposed, boolean newlyOnly) {
+        boolean strands(double x, double z) {
+            return !proposed.isWithinBounds(x, z) && (!newlyOnly || live.isWithinBounds(x, z));
+        }
+    }
+
+    private static boolean strands(Map<ResourceKey<Level>, Edges> borders, ResourceKey<Level> dimension, double x, double z) {
+        Edges edges = borders.get(dimension);
+        return edges != null && edges.strands(x, z);
     }
 
     // Null when the change may go ahead

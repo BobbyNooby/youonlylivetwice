@@ -47,11 +47,15 @@ final class AdminCommands {
             return YoltCommands.fail(source, "Config not reloaded, nothing changed: " + problem);
         }
         List<String> warnings = new ArrayList<>(result.warnings());
-        // A reload can't be confirmed, so a border that would leave someone outside waits for /yolt border and the others
+        // A reload can't be confirmed, so a border that would leave someone outside waits for /yolt border and the others.
+        // An unchanged border strands nobody new, so it isn't checked.
         YoltConfig.WorldBorderSection reloaded = Settings.get().worldBorder;
+        boolean borderChanged = reloaded.enabled != liveBorder.enabled || reloaded.diameter != liveBorder.diameter
+                || Double.compare(reloaded.endScale, liveBorder.endScale) != 0;
         WorldBorder overworld = server.overworld().getWorldBorder();
-        List<String> outside = BorderCommands.stranded(server, reloaded.diameter, reloaded.endScale,
-                overworld.getCenterX(), overworld.getCenterZ());
+        List<String> outside = borderChanged
+                ? BorderCommands.newlyStranded(server, reloaded.diameter, reloaded.endScale, overworld.getCenterX(), overworld.getCenterZ())
+                : List.of();
         if (!outside.isEmpty()) {
             Settings.get().worldBorder = liveBorder;
             warnings.add("World border kept as it was, since the new one would leave outside it: " + String.join(", ", outside) + ".");
