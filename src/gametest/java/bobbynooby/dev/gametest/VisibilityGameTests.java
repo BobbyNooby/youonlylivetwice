@@ -406,7 +406,7 @@ public class VisibilityGameTests {
         return null;
     }
 
-    private static ClientboundPlayerInfoUpdatePacket.@Nullable Entry addedEntry(Packet<?> packet, ServerPlayer seen) {
+    static ClientboundPlayerInfoUpdatePacket.@Nullable Entry addedEntry(Packet<?> packet, ServerPlayer seen) {
         if (packet instanceof ClientboundPlayerInfoUpdatePacket info
                 && info.actions().equals(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of()).actions())) {
             for (ClientboundPlayerInfoUpdatePacket.Entry entry : info.entries()) {
@@ -418,7 +418,7 @@ public class VisibilityGameTests {
         return null;
     }
 
-    private static boolean spawns(Packet<?> packet, ServerPlayer seen) {
+    static boolean spawns(Packet<?> packet, ServerPlayer seen) {
         if (packet instanceof ClientboundBundlePacket bundle) {
             for (Packet<?> part : bundle.subPackets()) {
                 if (part instanceof ClientboundAddEntityPacket add && add.getUUID().equals(seen.getUUID())) {

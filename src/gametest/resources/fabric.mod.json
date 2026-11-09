@@ -18,6 +18,7 @@
 			"bobbynooby.dev.gametest.GraveProtectionGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
 			"bobbynooby.dev.gametest.LockoutGameTests",
+			"bobbynooby.dev.gametest.NameTagGameTests",
 			"bobbynooby.dev.gametest.OfflineGameTests",
 			"bobbynooby.dev.gametest.PlacementGameTests",
 			"bobbynooby.dev.gametest.ReviveGameTests",
