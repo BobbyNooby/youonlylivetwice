@@ -614,6 +614,69 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // A border value that fell back at startup is a default (10,000) that could strand players, so the world keeps its own
+    // border. Settings.load and WorldBorders.apply are what the mod runs at start and on SERVER_STARTED.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void startupWithBadBorderValueKeepsSavedBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        try {
+            // A size YOLT's defaults give no dimension (10,000, or 20,000 for the end)
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(30000));
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}");
+            Settings.load();
+            WorldBorders.apply(server);
+            helper.assertTrue(Settings.borderHeld(), "border not held");
+            for (ServerLevel level : server.getAllLevels()) {
+                helper.assertValueEqual(level.getWorldBorder().getSize(), 30000.0, level.dimension().identifier() + " border size");
+            }
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // A held border waits through a reload that still has a bad border value, then goes through the reload's stranding
+    // check and is applied once the value is good
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadAppliesHeldBorderOnceItIsGood(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        String typo = "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}";
+        try {
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(30000));
+            Files.writeString(path, typo);
+            Settings.load();
+
+            // The startup load wrote the default over the typo, so it goes back in
+            Files.writeString(path, typo);
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("World border still not applied, since the config has a bad worldBorder.diameter."
+                    + " Fix it, then reload again."), "command output: " + output);
+            helper.assertTrue(Settings.borderHeld(), "border no longer held after a bad value");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 30000.0, "overworld border size after the bad value");
+
+            // Bigger than the world's border, so it leaves nobody new outside
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 40000, \"endScale\": 1.0}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
+            helper.assertFalse(Settings.borderHeld(), "border still held");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 40000.0, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
     // A reload can't be confirmed, so it keeps the live border. The settings are put back before the player leaves,
     // since the reloaded file turns bodies on.
     @GameTest(environment = CONFIG_COMMAND)

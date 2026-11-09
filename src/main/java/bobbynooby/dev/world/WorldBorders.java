@@ -24,6 +24,12 @@ public final class WorldBorders {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
             return;
         }
+        // A border command has checked who its border strands; a held startup border waits for that or a reload
+        if (force) {
+            Settings.releaseBorder();
+        } else if (Settings.borderHeld()) {
+            return;
+        }
         YoltConfig.WorldBorderSection config = Settings.get().worldBorder;
 
         forEachBorder(server, (level, isEnd) -> {

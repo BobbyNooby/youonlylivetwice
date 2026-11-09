@@ -12,6 +12,9 @@ public final class Settings {
     // volatile because the status ping reads these from network threads
     private static volatile YoltConfig config = new YoltConfig();
     private static volatile boolean active;
+    // Set when the startup's border values fell back to defaults, which could strand players: the world then keeps the
+    // border it saved until a reload or a border command applies one checked for who it leaves outside
+    private static volatile boolean borderHeld;
 
     private Settings() {}
 
@@ -19,12 +22,20 @@ public final class Settings {
         return config;
     }
 
-    /** Reads the file at mod start and logs anything that fell back to a default. A broken file is replaced with defaults. */
+    /**
+     * Reads the file at mod start and logs anything that fell back to a default. A broken file is replaced with
+     * defaults, and border values that fell back are held rather than applied.
+     */
     public static void load() {
         ConfigLoader.Result result = ConfigLoader.load(path(), null, true);
         config = result.config();
         for (String warning : result.warnings()) {
             Yolt.LOGGER.warn("Config: {}", warning);
+        }
+        borderHeld = result.borderProblem() != null;
+        if (borderHeld) {
+            Yolt.LOGGER.warn("Config: {}, so YOLT left the world border as the world saved it. Fix the config, then run /yolt reload.",
+                    result.borderProblem());
         }
     }
 
@@ -35,6 +46,15 @@ public final class Settings {
             config = result.config();
         }
         return result;
+    }
+
+    /** True while the border values in the config are startup fallbacks, so YOLT leaves the world's own border alone. */
+    public static boolean borderHeld() {
+        return borderHeld;
+    }
+
+    public static void releaseBorder() {
+        borderHeld = false;
     }
 
     public static void save() {
