@@ -4,6 +4,7 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -38,6 +39,21 @@ public final class DeathLockout {
             // A player body's death records its owner's, through the offline death
             if (entity instanceof ServerPlayer player && !(player instanceof PlayerBody)) {
                 recordDeath(player);
+            }
+        });
+
+        // A death can land after the login check, before the save is read (a body killed while its owner's spawn
+        // area loads). They join dead, and would respawn and play through the lockout.
+        // Runs before the body handover, so a throw here must not escape and skip it.
+        ServerPlayerEvents.JOIN.register(player -> {
+            try {
+                Component refusal = enabled() ? refusal(player.getUUID()) : null;
+                if (refusal != null) {
+                    kickLater(player, refusal);
+                }
+            } catch (RuntimeException e) {
+                YouOnlyLiveTwice.LOGGER.error("Could not check death lockout for {} as they joined",
+                        player.nameAndId().name(), e);
             }
         });
     }
@@ -95,15 +111,19 @@ public final class DeathLockout {
         if (!enabled()) {
             return;
         }
+        recordDeath(player.getUUID(), player.nameAndId().name());
+        kickLater(player, Component.literal("You have died."));
+    }
+
+    private static void kickLater(ServerPlayer player, Component reason) {
         UUID uuid = player.getUUID();
-        recordDeath(uuid, player.nameAndId().name());
         MinecraftServer server = player.level().getServer();
         // execute() would run it straight away on the server thread; schedule() always queues it
         server.schedule(server.wrapRunnable(() -> {
             // By uuid: they may have left already, or respawned as a new player object
             ServerPlayer current = server.getPlayerList().getPlayer(uuid);
             if (current != null) {
-                current.connection.disconnect(Component.literal("You have died."));
+                current.connection.disconnect(reason);
             }
         }));
     }

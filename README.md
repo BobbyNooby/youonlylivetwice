@@ -133,8 +133,9 @@ While you're offline the body is you:
   body ended up. They **can't use portals yet**; portal travel for bodies is on the list below.
 - **Riding:** if you logged out on a boat or minecart, vanilla puts you back on the vehicle, so you land where the
   vehicle is, not where the body ended up. Your health, effects and gear still come from the body.
-- **Race at login:** if a body dies or expires just as its owner is logging in, the owner arrives at their logout
-  spot with the body's state. Nothing is lost or duplicated.
+- **Race at login:** if a body dies just as its owner is logging in, the owner is kicked with the lockout message
+  and their lockout stands. If it expires just then, they arrive at their logout spot with the body's state. Nothing
+  is lost or duplicated.
 
 ### The two body types
 

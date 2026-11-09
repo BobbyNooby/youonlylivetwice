@@ -1,19 +1,31 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.level.GameType;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.UUID;
 
-// Uses fresh random uuids, so no test player is needed and tests never collide
+// Uses fresh random uuids, so tests never collide
 public class LockoutGameTests {
     private static final SocketAddress ADDRESS = new InetSocketAddress("127.0.0.1", 25565);
+    // A batch of its own: the join test keeps bodies on across ticks, so another test's logout would leave a body
+    private static final String LOCKED_OUT_JOIN = "you-only-live-twice-gametest:locked_out_join";
 
     @GameTest
     public void lockedOutPlayerIsRefusedAtLogin(GameTestHelper helper) {
@@ -79,7 +91,54 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // A death recorded after the login check, as when a body dies while its owner's spawn area loads. A test player
+    // joins without the login check, like a player who passed it before the death.
+    @GameTest(maxTicks = 20, environment = LOCKED_OUT_JOIN)
+    public void lockedOutJoinerIsKicked(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID uuid = UUID.randomUUID();
+        GameProfile profile = new GameProfile(uuid, "Late" + uuid.toString().substring(0, 8));
+        YoltConfig.BodiesSection before = Settings.get().bodies;
+        // On until the kick's logout, so a body that logout wrongly left would show
+        Settings.get().bodies = new YoltConfig.BodiesSection();
+        boolean waiting = false;
+        try {
+            DeathLockout.recordDeath(uuid, profile.name());
+            ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            // The kick waits for the end of the tick, so the rest of the join still runs
+            helper.assertTrue(server.getPlayerList().getPlayer(uuid) == player, "kicked inside the join");
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(uuid) == null, "locked-out joiner was not kicked");
+                    helper.assertTrue(BodyStore.get(server).byOwner(uuid).isEmpty(), "the kick left a body");
+                } finally {
+                    cleanUpJoiner(helper, uuid, before);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUpJoiner(helper, uuid, before);
+            }
+        }
+    }
+
     private static boolean canLogin(GameTestHelper helper, UUID uuid) {
         return helper.getLevel().getServer().getPlayerList().canPlayerLogin(ADDRESS, new NameAndId(uuid, "Ghost")) == null;
+    }
+
+    // The switches go back first, so a player still online leaves without making a body
+    private static void cleanUpJoiner(GameTestHelper helper, UUID uuid, YoltConfig.BodiesSection before) {
+        Settings.get().bodies = before;
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer online = server.getPlayerList().getPlayer(uuid);
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+        helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> body.entityTags().contains(Bodies.TAG)
+                && uuid.equals(body.getProfile().partialProfile().id())).forEach(Entity::discard);
+        BodyStore.get(server).remove(uuid);
     }
 }
