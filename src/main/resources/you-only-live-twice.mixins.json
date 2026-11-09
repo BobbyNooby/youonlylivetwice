@@ -12,6 +12,7 @@
     "GraveProtectionPistonFrontMixin",
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
+    "MarkedHeadPlacementMixin",
     "PlayerCountSpoofer",
     "PlayerDropEquipmentMixin",
     "PlayerInvoker",

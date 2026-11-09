@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.Rarity;
@@ -136,15 +137,19 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // The plain head first shows this spot takes a head at all, so the marked heads can't pass by accident
+    // The plain head first shows this spot takes a head at all, so the marked heads can't pass by accident.
+    // Sneaking skips the crafting table's own use, so that click goes straight to placing.
     @GameTest
     public void markedHeadsCannotBePlaced(GameTestHelper helper) {
         BlockPos plainStone = new BlockPos(3, 1, 3);
         BlockPos markedStone = new BlockPos(5, 1, 3);
+        BlockPos table = new BlockPos(5, 1, 5);
         helper.setBlock(plainStone, Blocks.STONE);
         helper.setBlock(markedStone, Blocks.STONE);
-        helper.setBlock(plainStone.above(), Blocks.AIR);
-        helper.setBlock(markedStone.above(), Blocks.AIR);
+        helper.setBlock(table, Blocks.CRAFTING_TABLE);
+        for (BlockPos below : List.of(plainStone, markedStone, table)) {
+            helper.setBlock(below.above(), Blocks.AIR);
+        }
         ServerPlayer player = TestPlayers.join(helper, "Placer", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
             useOnTop(helper, player, new ItemStack(Items.PLAYER_HEAD), plainStone);
@@ -156,7 +161,39 @@ public class ReviveGameTests {
                 helper.assertTrue(result instanceof InteractionResult.Fail, "using a marked head did not fail: " + result);
                 helper.assertBlockPresent(Blocks.AIR, markedStone.above());
                 helper.assertValueEqual(player.getMainHandItem().getCount(), 1, "marked heads in hand");
+
+                player.setShiftKeyDown(true);
+                try {
+                    result = useOnTop(helper, player, marked, table);
+                } finally {
+                    player.setShiftKeyDown(false);
+                }
+                helper.assertTrue(result instanceof InteractionResult.Fail, "sneak-using a marked head did not fail: " + result);
+                helper.assertBlockPresent(Blocks.AIR, table.above());
+                helper.assertFalse(player.containerMenu instanceof CraftingMenu, "sneaking opened the crafting table");
+                helper.assertValueEqual(player.getMainHandItem().getCount(), 1, "marked heads in hand after sneaking");
             }
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Only placing is refused; the head in hand must not stop the table it is crafted on from opening
+    @GameTest
+    public void graveHeadStillOpensCraftingTable(GameTestHelper helper) {
+        BlockPos table = new BlockPos(3, 1, 3);
+        helper.setBlock(table, Blocks.CRAFTING_TABLE);
+        helper.setBlock(table.above(), Blocks.AIR);
+        ServerPlayer player = TestPlayers.join(helper, "Crafter", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            ItemStack head = GraveItems.graveHead(staticProfile(UUID.randomUUID()));
+            InteractionResult result = useOnTop(helper, player, head, table);
+            helper.assertTrue(result instanceof InteractionResult.Success, "using the crafting table did not succeed: " + result);
+            helper.assertTrue(player.containerMenu instanceof CraftingMenu, "crafting table did not open");
+            helper.assertBlockPresent(Blocks.AIR, table.above());
+            helper.assertValueEqual(player.getMainHandItem().getCount(), 1, "grave heads in hand");
+            player.closeContainer();
         } finally {
             TestPlayers.leave(player);
         }

@@ -30,6 +30,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -83,6 +84,25 @@ public final class Graves {
         // The block first: it is cheap, and the hooks run for many blocks that are never heads
         return level.getBlockState(pos).is(Blocks.PLAYER_HEAD)
                 && GraveStore.get(serverLevel.getServer()).at(level.dimension(), pos).isPresent();
+    }
+
+    /**
+     * True when the item about to be placed is a grave or revive head, which must stay an item. A placed head
+     * drops back with only its profile, name and note sound, so its marker would be lost for good.
+     */
+    public static boolean refusePlacement(BlockPlaceContext context) {
+        // The client's own prediction is left alone; the server's answer undoes it
+        if (!Settings.active() || context.getLevel().isClientSide()) {
+            return false;
+        }
+        ItemStack stack = context.getItemInHand();
+        if (!GraveItems.isGraveHead(stack) && !GraveItems.isReviveHead(stack)) {
+            return false;
+        }
+        if (context.getPlayer() instanceof ServerPlayer player) {
+            resendInventory(player);
+        }
+        return true;
     }
 
     /** Puts back the head of every grave in the chunk whose block went missing, for example to /setblock. */
@@ -287,23 +307,24 @@ public final class Graves {
                 return InteractionResult.CONSUME;
             }
         }
-        return refuseMarkedHead(serverPlayer, hand);
+        return useReviveHead(serverPlayer, hand);
     }
 
-    // A placed head drops back with only its profile, name and note sound, so a marked head would lose its
-    // marker for good. A revive head tries to revive instead.
-    private static InteractionResult refuseMarkedHead(ServerPlayer player, InteractionHand hand) {
+    // Right-clicking with a revive head always means trying to revive, so the clicked block never reacts. A grave
+    // head passes: the block reacts as usual, and placing it is refused in refusePlacement.
+    private static InteractionResult useReviveHead(ServerPlayer player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-        boolean revive = GraveItems.isReviveHead(stack);
-        if (player.isSpectator() || (!revive && !GraveItems.isGraveHead(stack))) {
+        if (player.isSpectator() || !GraveItems.isReviveHead(stack)) {
             return InteractionResult.PASS;
         }
-        if (revive) {
-            Revive.tryUse(player, stack);
-        }
-        // The client placed the head on its side and took it off the stack, so send it the real stack
-        player.inventoryMenu.sendAllDataToRemote();
+        Revive.tryUse(player, stack);
+        resendInventory(player);
         return InteractionResult.FAIL;
+    }
+
+    // The client placed the head on its side and took it off the stack, so send it the real stack
+    private static void resendInventory(ServerPlayer player) {
+        player.inventoryMenu.sendAllDataToRemote();
     }
 
     // The event fires while the chunk is still being loaded, and setting a block in it then would wait on that
