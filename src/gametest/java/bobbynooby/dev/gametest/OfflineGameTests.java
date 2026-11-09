@@ -194,6 +194,35 @@ public class OfflineGameTests {
         helper.succeed();
     }
 
+    // An online death with graves off never reaches the ender chest setting, so an offline one mustn't either
+    @GameTest
+    public void offlineKillWithGravesOffKeepsEnderChest(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "EnderOff", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        BlockPos last = helper.relativePos(player.blockPosition());
+        try {
+            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
+        } finally {
+            TestPlayers.leave(player);
+        }
+
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean enabledBefore = graves.enabled;
+        YoltConfig.EnderChestMode modeBefore = graves.enderChestOnDeath;
+        graves.enabled = false;
+        graves.enderChestOnDeath = YoltConfig.EnderChestMode.WIPE;
+        try {
+            helper.assertValueEqual(OfflineKill.kill(server, who), OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+        } finally {
+            graves.enabled = enabledBefore;
+            graves.enderChestOnDeath = modeBefore;
+        }
+        helper.assertTrue(enderChest(server, who).stream().anyMatch(item -> item.is(Items.EMERALD)), "ender chest lost the emerald");
+        helper.assertItemEntityNotPresent(Items.EMERALD, last, 2.0);
+        helper.succeed();
+    }
+
     @GameTest(maxTicks = 20)
     public void onlineKillRunsNormalDeath(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
