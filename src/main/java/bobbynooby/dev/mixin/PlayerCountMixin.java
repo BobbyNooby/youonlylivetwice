@@ -6,8 +6,6 @@ import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.server.players.NameAndId;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
@@ -24,10 +22,8 @@ public abstract class PlayerCountMixin {
         return PlayerCount.online(real);
     }
 
-    @Inject(method = "sample", at = @At("HEAD"), cancellable = true)
-    private void getSamplePlayers(CallbackInfoReturnable<List<NameAndId>> cir) {
-        if (PlayerCount.hides()) {
-            cir.setReturnValue(List.of());
-        }
+    @ModifyReturnValue(method = "sample", at = @At("RETURN"))
+    private List<NameAndId> shownSample(List<NameAndId> real) {
+        return PlayerCount.sample(real);
     }
 }

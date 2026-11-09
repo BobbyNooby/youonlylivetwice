@@ -1,6 +1,10 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
+import net.minecraft.server.players.NameAndId;
+
+import java.util.List;
+import java.util.UUID;
 
 /** The player counts the server list shows. */
 public final class PlayerCount {
@@ -23,6 +27,16 @@ public final class PlayerCount {
     /** The player names the query port lists. */
     public static String[] names(String[] real) {
         return hides() ? new String[0] : real;
+    }
+
+    /** The names the server list's hover shows: the configured lines if there are any, otherwise vanilla's rule. */
+    public static List<NameAndId> sample(List<NameAndId> real) {
+        List<String> lines = Settings.get().serverList.hoverLines;
+        if (Settings.active() && !lines.isEmpty()) {
+            // The client shows each entry's name as plain text, so a line is a fake player with a random id
+            return lines.stream().map(line -> new NameAndId(UUID.randomUUID(), line)).toList();
+        }
+        return hides() ? List.of() : real;
     }
 
     /** True when the server list must show the fake counts and no names. */

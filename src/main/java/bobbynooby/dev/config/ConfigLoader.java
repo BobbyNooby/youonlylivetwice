@@ -176,6 +176,13 @@ public final class ConfigLoader {
                     result.add(key, def);
                     warnings.add(path + ": expected an object, using default");
                 }
+            } else if (def.isJsonArray()) {
+                if (isStringArray(value)) {
+                    result.add(key, value);
+                } else {
+                    result.add(key, def);
+                    warnings.add(path + ": expected a list of strings, using default");
+                }
             } else {
                 String problem = primitiveProblem(path, def, value);
                 if (problem == null) {
@@ -192,6 +199,18 @@ public final class ConfigLoader {
             }
         }
         return result;
+    }
+
+    private static boolean isStringArray(JsonElement value) {
+        if (!value.isJsonArray()) {
+            return false;
+        }
+        for (JsonElement item : value.getAsJsonArray()) {
+            if (!item.isJsonPrimitive() || !item.getAsJsonPrimitive().isString()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Returns why the user's value can't replace the default, or null if it can. */

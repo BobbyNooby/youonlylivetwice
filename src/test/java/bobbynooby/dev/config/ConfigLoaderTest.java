@@ -195,4 +195,20 @@ class ConfigLoaderTest {
         assertEquals(3.0, r.config().worldBorder.endScale);
         assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.diameter")));
     }
+
+    @Test
+    void hoverLinesReadAsAList() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":[\"one\",\"two\"]}}");
+        assertEquals(List.of("one", "two"), r.config().serverList.hoverLines);
+        assertEquals(List.of(), loadJson("{\"serverList\":{\"hoverLines\":[]}}").config().serverList.hoverLines);
+    }
+
+    @Test
+    void badHoverLinesFallBackToDefault() throws IOException {
+        for (String bad : List.of("\"text\"", "[1, 2]", "[\"ok\", null]")) {
+            ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":" + bad + "}}");
+            assertEquals(new YoltConfig().serverList.hoverLines, r.config().serverList.hoverLines, bad);
+            assertTrue(r.warnings().stream().anyMatch(w -> w.contains("serverList.hoverLines")), bad);
+        }
+    }
 }

@@ -233,13 +233,25 @@ still works on them.
 | `radius` | `48` | Blocks, for proximity chat and whispers. | No |
 | `allowWhispers` | `false` | Non-ops can use `/w`. | No |
 
+## `serverList`
+
+| Key | Default | What it does | Restart? |
+|---|---|---|---|
+| `hoverLines` | `["You scream out for help, but no one answers."]` | One line per entry in the tooltip when you hover the player count in the multiplayer screen. `[]` keeps vanilla's behaviour. | No |
+
+Notes:
+
+- The lines replace the player sample whatever `hide.serverPlayerCount` is, so real names never show there.
+- `§` colour codes work (the client draws them), for example `"§cNo one is coming."`. Names have no length limit.
+- The ping bars' hover shows the client's own measured ping, and the server can't change that. The version text can't be faked without marking the server incompatible. The MOTD stays in `server.properties`.
+
 ## `hide`
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
 | `tabList` | `true` | Nobody is listed in the tab list. | No |
 | `nametags` | `true` | Hides nametags with a scoreboard team. | No |
-| `serverPlayerCount` | `true` | Server list shows 0/1 players. | No |
+| `serverPlayerCount` | `true` | Server list, old pings and the query port show 0/1 players and no names. | No |
 | `gameMessages` | `true` | Hides death, join, leave and advancement messages. | No |
 | `tabHeader` | `true` | Shows a random flavour header in the tab list. | No (shown on join) |
 | `distantPlayers` | `true` | Each player's game only learns about players near them. | No |

@@ -2,6 +2,9 @@ package bobbynooby.dev.config;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** Mod settings. Field names are the JSON keys. */
 public class YoltConfig {
     // A fresh file is written at the version this build reads
@@ -18,6 +21,7 @@ public class YoltConfig {
     public SleepSection sleep = new SleepSection();
     public boolean immediateRespawn = true;
     public BodiesSection bodies = new BodiesSection();
+    public ServerListSection serverList = new ServerListSection();
 
     public static class WorldBorderSection {
         public boolean enabled = true;
@@ -71,6 +75,11 @@ public class YoltConfig {
         public boolean totems = true;
         public boolean armourWears = true;
         public boolean copyEffects = true;
+    }
+
+    public static class ServerListSection {
+        // One line per hover entry; § colour codes work. An empty list keeps vanilla's sample
+        public List<String> hoverLines = new ArrayList<>(List.of("You scream out for help, but no one answers."));
     }
 
     public enum EnderChestMode {
