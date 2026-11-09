@@ -3,6 +3,8 @@ package bobbynooby.dev.lockout;
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Later;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -46,15 +48,12 @@ public final class DeathLockout {
         // area loads). They join dead, and would respawn and play through the lockout.
         // Runs before the body handover, so a throw here must not escape and skip it.
         ServerPlayerEvents.JOIN.register(player -> {
-            try {
+            Guard.run(() -> {
                 Component refusal = enabled() ? refusal(player.getUUID()) : null;
                 if (refusal != null) {
                     kickLater(player, refusal);
                 }
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not check death lockout for {} as they joined",
-                        player.nameAndId().name(), e);
-            }
+            }, "Could not check death lockout for {} as they joined", player.nameAndId().name());
         });
     }
 
@@ -118,14 +117,13 @@ public final class DeathLockout {
     private static void kickLater(ServerPlayer player, Component reason) {
         UUID uuid = player.getUUID();
         MinecraftServer server = player.level().getServer();
-        // execute() would run it straight away on the server thread; schedule() always queues it
-        server.schedule(server.wrapRunnable(() -> {
+        Later.afterTick(server, () -> {
             // By uuid: they may have left already, or respawned as a new player object
             ServerPlayer current = server.getPlayerList().getPlayer(uuid);
             if (current != null) {
                 current.connection.disconnect(reason);
             }
-        }));
+        });
     }
 
     public static void recordDeath(UUID uuid, String name) {

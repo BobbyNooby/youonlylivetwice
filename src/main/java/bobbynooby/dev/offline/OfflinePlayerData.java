@@ -3,6 +3,7 @@ package bobbynooby.dev.offline;
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.GearSync;
+import bobbynooby.dev.core.Stacks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
@@ -62,6 +63,16 @@ public final class OfflinePlayerData {
         return server.getPlayerList().loadPlayerData(who);
     }
 
+    /** Like load, but a player with no save file is an error. */
+    public static CompoundTag loadOrThrow(MinecraftServer server, NameAndId who) {
+        return load(server, who).orElseThrow(() -> new IllegalStateException("No save file for " + who.name()));
+    }
+
+    /** True for a save that holds a dead player. A save with no health loads at full health, so it isn't dead. */
+    public static boolean isDead(CompoundTag tag) {
+        return tag.getFloatOr("Health", 1.0F) <= 0.0F;
+    }
+
     /** Writes the save the way vanilla does: a temp file, then a swap that keeps the previous save as .dat_old. */
     public static void save(MinecraftServer server, UUID uuid, CompoundTag tag) {
         Path prepared = prepareSave(server, uuid, tag);
@@ -113,12 +124,11 @@ public final class OfflinePlayerData {
         RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
         List<ItemStack> items = takeSlots(tag, INVENTORY, ops);
         tag.read(EQUIPMENT, EntityEquipment.CODEC, ops).ifPresent(equipment -> {
+            List<ItemStack> worn = new ArrayList<>();
             for (EquipmentSlot slot : EquipmentSlot.values()) {
-                ItemStack item = equipment.get(slot);
-                if (!item.isEmpty()) {
-                    items.add(item);
-                }
+                worn.add(equipment.get(slot));
             }
+            items.addAll(Stacks.nonEmpty(worn));
         });
         tag.remove(EQUIPMENT);
         return items;
@@ -282,13 +292,8 @@ public final class OfflinePlayerData {
 
     private static List<ItemStack> takeSlots(CompoundTag tag, String key, RegistryOps<Tag> ops) {
         List<ItemStack> items = new ArrayList<>();
-        tag.read(key, ItemStackWithSlot.CODEC.listOf(), ops).ifPresent(slots -> {
-            for (ItemStackWithSlot slot : slots) {
-                if (!slot.stack().isEmpty()) {
-                    items.add(slot.stack());
-                }
-            }
-        });
+        tag.read(key, ItemStackWithSlot.CODEC.listOf(), ops).ifPresent(slots ->
+                items.addAll(Stacks.nonEmpty(slots.stream().map(ItemStackWithSlot::stack).toList())));
         tag.remove(key);
         return items;
     }

@@ -6,6 +6,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ExtraCodecs;
 
 import java.util.Locale;
@@ -47,6 +48,10 @@ public record BodyRecord(
     public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
                       boolean pendingRemoval, BodySnapshot snapshot) {
         this(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, PropertyMap.EMPTY);
+    }
+
+    public NameAndId who() {
+        return new NameAndId(owner, ownerName);
     }
 
     public BodyRecord withSnapshot(BodySnapshot snapshot) {

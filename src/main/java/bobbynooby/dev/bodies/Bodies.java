@@ -3,6 +3,8 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Later;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.mixin.MobAccessor;
@@ -35,6 +37,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.phys.Vec3;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -51,49 +55,29 @@ public final class Bodies {
         // LEAVE runs on the server thread before vanilla saves the player; DISCONNECT runs on the network thread
         ServerPlayerEvents.LEAVE.register(player -> {
             // A failure here must not stop the logout save that follows
-            try {
-                onLogout(player);
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not leave a body for {}", player.nameAndId().name(), e);
-            }
+            Guard.run(() -> onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
         });
         // JOIN runs on the server thread once the player is in the world
         ServerPlayerEvents.JOIN.register(player -> {
             // Thrown out of here, it would leave the player half joined
-            try {
-                onLogin(player);
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not hand the body back to {}", player.nameAndId().name(), e);
-            }
+            Guard.run(() -> onLogin(player), "Could not hand the body back to {}", player.nameAndId().name());
         });
         // These run for each entity of a chunk in turn, so a throw would break off the rest. The stop also unloads
         // chunks before it saves the world, and a throw there would skip the save.
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
-            try {
-                onBodyUnload(entity);
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not save the state of the body {} as it unloaded",
-                        entity.getUUID(), e);
-            }
+            Guard.run(() -> onBodyUnload(entity), "Could not save the state of the body {} as it unloaded",
+                    entity.getUUID());
         });
         ServerEntityEvents.ENTITY_LOAD.register(Bodies::onBodyLoad);
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
             if (entity instanceof Mob mob) {
-                try {
-                    addBodyGoal(mob);
-                } catch (RuntimeException e) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not let {} hunt bodies", mob.getUUID(), e);
-                }
+                Guard.run(() -> addBodyGoal(mob), "Could not let {} hunt bodies", mob.getUUID());
             }
         });
         // Fires inside die() for every death, after the death drops, which the body never has. A throw would break
         // off that death.
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            try {
-                onBodyDeath(entity);
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not handle the death of {}", entity.getUUID(), e);
-            }
+            Guard.run(() -> onBodyDeath(entity), "Could not handle the death of {}", entity.getUUID());
         });
         ServerLifecycleEvents.SERVER_STARTED.register(Bodies::restorePlayerBodies);
         ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotBodies);
@@ -145,7 +129,7 @@ public final class Bodies {
         BodyRecord record = found.get();
         BodySnapshot snapshot;
         boolean bodyAlive;
-        if (server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body) {
+        if (entityOf(server, record) instanceof LivingEntity body) {
             snapshot = BodySnapshot.of(body);
             bodyAlive = !body.isDeadOrDying();
             // The record goes first, so the discard's unload no longer counts this as a body
@@ -181,7 +165,7 @@ public final class Bodies {
         long now = System.currentTimeMillis();
         for (BodyRecord record : store.all()) {
             if (record.type() != YoltConfig.BodyType.PLAYER
-                    || server.overworld().getEntityInAnyDimension(record.bodyEntity()) != null) {
+                    || entityOf(server, record) != null) {
                 continue;
             }
             // Taken over already, so there is no body to bring back
@@ -199,14 +183,12 @@ public final class Bodies {
                         record.ownerName(), record.snapshot().dimension().identifier());
                 continue;
             }
-            try {
+            Guard.run(() -> {
                 if (PlayerBody.fromRecord(server, record) == null) {
                     YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}: the world refused the entity {}",
                             record.ownerName(), record.bodyEntity());
                 }
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not bring back the body of {}", record.ownerName(), e);
-            }
+            }, "Could not bring back the body of {}", record.ownerName());
         }
     }
 
@@ -222,16 +204,13 @@ public final class Bodies {
         BodyStore store = BodyStore.get(server);
         for (BodyRecord record : store.all()) {
             // This runs at the start of the stop and of each save, which must go ahead anyway
-            try {
+            Guard.run(() -> {
                 // A dying body belongs to the death path, and its state is nothing to hand over
-                if (!record.pendingRemoval()
-                        && server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
+                if (!record.pendingRemoval() && entityOf(server, record) instanceof LivingEntity body
                         && !body.isDeadOrDying()) {
                     store.put(record.withSnapshot(BodySnapshot.of(body)));
                 }
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not save the state of the body of {}", record.ownerName(), e);
-            }
+            }, "Could not save the state of the body of {}", record.ownerName());
         }
     }
 
@@ -257,9 +236,9 @@ public final class Bodies {
             return;
         }
         MinecraftServer server = level.getServer();
-        // Changing the entity list during a load can throw, so this waits. execute() would run it straight away
-        // on the server thread; schedule() always queues it. The check waits too: a new body loads before its record.
-        server.schedule(server.wrapRunnable(() -> {
+        // Changing the entity list during a load can throw, so this waits. The check waits too: a new body loads
+        // before its record.
+        Later.afterTick(server, () -> {
             if (!Settings.active() || entity.isRemoved()) {
                 return;
             }
@@ -270,7 +249,7 @@ public final class Bodies {
             }
             record.ifPresent(r -> store.remove(r.owner()));
             entity.discard();
-        }));
+        });
     }
 
     /**
@@ -314,13 +293,10 @@ public final class Bodies {
             return;
         }
         BodyRecord record = found.get();
-        try {
-            killOwner(server, record, body);
-        } catch (RuntimeException e) {
-            // No retry: a failed death leaves the save as it was, so nothing is lost, and the owner's next login
-            // takes over the body's last saved state instead. A retry would also start from the wiped tag.
-            YouOnlyLiveTwice.LOGGER.error("The body of {} died, but they could not be killed", record.ownerName(), e);
-        }
+        // No retry: a failed death leaves the save as it was, so nothing is lost, and the owner's next login
+        // takes over the body's last saved state instead. A retry would also start from the wiped tag.
+        Guard.run(() -> killOwner(server, record, body), "The body of {} died, but they could not be killed",
+                record.ownerName());
     }
 
     /**
@@ -330,7 +306,7 @@ public final class Bodies {
      */
     public static OfflineKill.KillResult killBody(MinecraftServer server, BodyRecord record) {
         // A body still dying from a death that failed to kill its owner counts as gone
-        if (server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
+        if (entityOf(server, record) instanceof LivingEntity body
                 && !body.isDeadOrDying() && body.level() instanceof ServerLevel level) {
             body.kill(level);
             if (BodyStore.get(server).byOwner(record.owner()).isEmpty()) {
@@ -345,7 +321,7 @@ public final class Bodies {
         BodySnapshot snapshot = record.snapshot();
         // No entity, so no skin to keep: the grave head is built from the name
         killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
-                GraveItems.profileOf(new NameAndId(record.owner(), record.ownerName())));
+                GraveItems.profileOf(record.who()));
         return OfflineKill.KillResult.KILLED_OFFLINE;
     }
 
@@ -392,10 +368,15 @@ public final class Bodies {
                 && player.level().getServer().getPlayerList().getPlayer(player.getUUID()) == player);
     }
 
+    /** The record's body in any dimension, or null when it isn't loaded. */
+    public static @Nullable Entity entityOf(MinecraftServer server, BodyRecord record) {
+        return server.overworld().getEntityInAnyDimension(record.bodyEntity());
+    }
+
     // Any dimension, in case an admin moved it. One in an unloaded chunk isn't found, but once the record
     // is replaced it no longer counts as a body.
     private static void discard(MinecraftServer server, BodyRecord old) {
-        Entity entity = server.overworld().getEntityInAnyDimension(old.bodyEntity());
+        Entity entity = entityOf(server, old);
         if (entity != null) {
             entity.discard();
         }
@@ -406,7 +387,7 @@ public final class Bodies {
     private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
         ResolvableProfile profile = body instanceof PlayerBody playerBody ? playerBody.ownerProfile()
                 : body instanceof Avatar avatar ? avatar.getProfile()
-                : GraveItems.profileOf(new NameAndId(record.owner(), record.ownerName()));
+                : GraveItems.profileOf(record.who());
         killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
                 profile);
     }
@@ -414,11 +395,10 @@ public final class Bodies {
     // Through the one offline-death routine. The record only goes once that has worked.
     private static void killOwner(MinecraftServer server, BodyRecord record, Map<EquipmentSlot, ItemStack> bodyGear,
                                   GlobalPos where, ResolvableProfile profile) {
-        NameAndId who = new NameAndId(record.owner(), record.ownerName());
-        CompoundTag tag = OfflinePlayerData.load(server, who)
-                .orElseThrow(() -> new IllegalStateException("No save file for " + who.name()));
+        NameAndId who = record.who();
+        CompoundTag tag = OfflinePlayerData.loadOrThrow(server, who);
         // Already dead, say after a crash before the record's removal was saved: a second death would restart the lockout
-        if (tag.getFloatOr("Health", 1.0F) > 0.0F) {
+        if (!OfflinePlayerData.isDead(tag)) {
             // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
             OfflinePlayerData.applyBodyGear(tag, bodyGear, server.registryAccess());
             OfflineKill.applyOfflineDeath(server, who, tag, where, profile);

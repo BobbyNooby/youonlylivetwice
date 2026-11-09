@@ -4,6 +4,10 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Later;
+import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.mixin.PlayerInvoker;
 import bobbynooby.dev.revive.Revive;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
@@ -196,22 +200,14 @@ public final class Graves {
     public static Created createUndoable(ServerLevel level, BlockPos near, ResolvableProfile profile, UUID owner,
                                          String ownerName, List<ItemStack> items) {
         GraveStore store = GraveStore.get(level.getServer());
-        List<ItemStack> stacks = items.stream().filter(stack -> !stack.isEmpty()).toList();
+        List<ItemStack> stacks = Stacks.nonEmpty(items);
         int rotation = RotationSegment.convertToSegment(ownerYaw(level, owner));
         long now = System.currentTimeMillis();
 
         List<Grave> created = new ArrayList<>();
         List<Runnable> undo = new ArrayList<>();
         // Each step on its own, so one that fails can't leave the other graves standing
-        Runnable undoAll = () -> {
-            for (Runnable step : undo) {
-                try {
-                    step.run();
-                } catch (RuntimeException e) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not take back one of {}'s graves", ownerName, e);
-                }
-            }
-        };
+        Runnable undoAll = () -> Undo.runAll(undo, "Could not take back one of {}'s graves", ownerName);
         try {
             BlockPos from = near;
             int start = 0;
@@ -223,12 +219,9 @@ public final class Graves {
                 undo.add(() -> {
                     // The record goes first, so a block that can't be put back still leaves no grave holding items
                     store.remove(grave.id());
-                    try {
-                        level.setBlock(pos, previous, Block.UPDATE_ALL);
-                    } catch (RuntimeException e) {
-                        YouOnlyLiveTwice.LOGGER.error("Could not put back the block {}'s taken-back grave replaced at {} {}",
-                                ownerName, level.dimension().identifier(), pos, e);
-                    }
+                    Guard.run(() -> level.setBlock(pos, previous, Block.UPDATE_ALL),
+                            "Could not put back the block {}'s taken-back grave replaced at {} {}",
+                            ownerName, level.dimension().identifier(), pos);
                 });
                 placeHead(level, pos, profile, rotation);
                 // Stored before the next search, so the next grave can't land on this one
@@ -307,14 +300,9 @@ public final class Graves {
         }
         GraveStore store = GraveStore.get(server);
         SharedContainer container = OPEN.remove(grave.id());
-        List<ItemStack> items = new ArrayList<>();
         // The live container is newer than the record while anyone has the grave open
         List<ItemStack> source = container != null ? container.getItems() : store.byId(grave.id()).map(Grave::items).orElse(grave.items());
-        for (ItemStack stack : source) {
-            if (!stack.isEmpty()) {
-                items.add(stack.copy());
-            }
-        }
+        List<ItemStack> items = Stacks.nonEmptyCopies(source);
         if (container != null) {
             // It already left OPEN, so emptying it can't write back; a menu still open on it now has nothing to give
             container.clearContent();
@@ -377,22 +365,20 @@ public final class Graves {
         if (GraveStore.get(server).inChunk(level.dimension(), pos).isEmpty()) {
             return;
         }
-        // execute() would run it straight away on the server thread; schedule() always queues it
-        server.schedule(server.wrapRunnable(() -> {
+        Later.afterTick(server, () -> {
             // Graves may have been switched off meanwhile. If the chunk unloaded, its next load tries again.
             if (Settings.active() && Settings.get().graves.enabled && level.hasChunk(pos.x(), pos.z())) {
                 restoreChunk(level, chunk);
             }
-        }));
+        });
     }
 
     private static void addStacks(List<ItemStack> into, Container container) {
+        List<ItemStack> all = new ArrayList<>();
         for (int i = 0; i < container.getContainerSize(); i++) {
-            ItemStack stack = container.getItem(i);
-            if (!stack.isEmpty()) {
-                into.add(stack);
-            }
+            all.add(container.getItem(i));
         }
+        into.addAll(Stacks.nonEmpty(all));
     }
 
     // Closes the menus with their own vanilla code, so any menu hands back its cursor and input items (crafting
@@ -433,11 +419,8 @@ public final class Graves {
     // Each stack on its own, so one that can't go back doesn't keep the rest from being dropped
     private static void handBack(ServerPlayer player, List<ItemStack> stacks) {
         for (ItemStack stack : stacks) {
-            try {
-                player.getInventory().placeItemBackInInventory(stack, Prediction.SERVER_ONLY);
-            } catch (RuntimeException e) {
-                YouOnlyLiveTwice.LOGGER.error("Could not hand {} back to {}", stack, player.nameAndId().name(), e);
-            }
+            Guard.run(() -> player.getInventory().placeItemBackInInventory(stack, Prediction.SERVER_ONLY),
+                    "Could not hand {} back to {}", stack, player.nameAndId().name());
         }
     }
 
@@ -468,12 +451,10 @@ public final class Graves {
             this.server = server;
             this.graveId = graveId;
             int slot = 0;
-            for (ItemStack stack : items) {
-                if (!stack.isEmpty()) {
-                    // A copy, so taking from the menu never changes the record behind its back. Put in the list
-                    // directly because setItem would cut an oversized stack down to the slot limit.
-                    getItems().set(slot++, stack.copy());
-                }
+            // Copies, so taking from the menu never changes the record behind its back. Put in the list
+            // directly because setItem would cut an oversized stack down to the slot limit.
+            for (ItemStack stack : Stacks.nonEmptyCopies(items)) {
+                getItems().set(slot++, stack);
             }
         }
 
@@ -486,13 +467,7 @@ public final class Graves {
             }
             GraveStore store = GraveStore.get(server);
             store.byId(graveId).ifPresent(grave -> {
-                List<ItemStack> left = new ArrayList<>();
-                for (ItemStack stack : getItems()) {
-                    if (!stack.isEmpty()) {
-                        left.add(stack.copy());
-                    }
-                }
-                store.put(grave.withItems(left));
+                store.put(grave.withItems(Stacks.nonEmptyCopies(getItems())));
             });
         }
 

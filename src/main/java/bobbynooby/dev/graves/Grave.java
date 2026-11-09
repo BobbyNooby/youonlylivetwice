@@ -1,6 +1,7 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.core.Stacks;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.Dynamic;
@@ -31,7 +32,7 @@ public record Grave(
 ) {
     // Compact constructor: an empty stack can't be encoded and would crash the world save
     public Grave {
-        items = items.stream().filter(stack -> !stack.isEmpty()).toList();
+        items = List.copyOf(Stacks.nonEmpty(items));
     }
 
     private static final Codec<Grave> STRICT_CODEC = RecordCodecBuilder.create(i -> i.group(

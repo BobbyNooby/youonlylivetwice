@@ -8,7 +8,6 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -78,7 +77,7 @@ public final class BodyExpiry {
                 continue;
             }
             // The death path owns a dying body. An owner who is online isn't away, and saves over their file anyway.
-            Entity entity = server.overworld().getEntityInAnyDimension(record.bodyEntity());
+            Entity entity = Bodies.entityOf(server, record);
             if ((entity instanceof LivingEntity body && body.isDeadOrDying())
                     || server.getPlayerList().getPlayer(record.owner()) != null) {
                 continue;
@@ -105,14 +104,12 @@ public final class BodyExpiry {
 
     // The save is written before anything goes, so a failure leaves the body standing and nothing lost
     private static void expire(MinecraftServer server, BodyRecord record, Entity entity) {
-        NameAndId who = new NameAndId(record.owner(), record.ownerName());
-        CompoundTag tag = OfflinePlayerData.load(server, who)
-                .orElseThrow(() -> new IllegalStateException("No save file for " + who.name()));
+        CompoundTag tag = OfflinePlayerData.loadOrThrow(server, record.who());
         // A loaded body as it is now; one in an unloaded chunk as it was last saved
         BodySnapshot snapshot = entity instanceof LivingEntity body ? BodySnapshot.of(body) : record.snapshot();
         // An owner already dead (say killed offline after a crash lost this record's removal) keeps the save they
         // have. Health 0 without a death would respawn them and drop their inventory.
-        if (tag.getFloatOr("Health", 1.0F) > 0.0F && snapshot.health() > 0.0F) {
+        if (!OfflinePlayerData.isDead(tag) && snapshot.health() > 0.0F) {
             OfflinePlayerData.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects, server.registryAccess());
             OfflinePlayerData.save(server, record.owner(), tag);
         }

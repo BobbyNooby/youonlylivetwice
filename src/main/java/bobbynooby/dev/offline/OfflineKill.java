@@ -1,10 +1,10 @@
 package bobbynooby.dev.offline;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
@@ -58,7 +58,7 @@ public final class OfflineKill {
             return KillResult.NOT_FOUND;
         }
         // Logged out dead, or killed offline before. A save with no health loads at full health.
-        if (tag.get().getFloatOr("Health", 1.0F) <= 0.0F) {
+        if (OfflinePlayerData.isDead(tag.get())) {
             return KillResult.ALREADY_DEAD;
         }
         // A pending record was taken over already, so the save is the player's real state
@@ -126,13 +126,7 @@ public final class OfflineKill {
             OfflinePlayerData.commitSave(server, who.id(), prepared);
         } catch (RuntimeException e) {
             // Every step is tried, since one failing must not leave another's items in the world
-            for (Runnable step : undo) {
-                try {
-                    step.run();
-                } catch (RuntimeException undoError) {
-                    YouOnlyLiveTwice.LOGGER.error("Could not take back part of {}'s offline death", who.name(), undoError);
-                }
-            }
+            Undo.runAll(undo, "Could not take back part of {}'s offline death", who.name());
             OfflinePlayerData.discardSave(prepared);
             throw e;
         }
