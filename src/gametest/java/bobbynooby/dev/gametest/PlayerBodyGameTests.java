@@ -196,7 +196,11 @@ public class PlayerBodyGameTests {
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, Entity::isAlive).isEmpty(), "items dropped");
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, around, Entity::isAlive).isEmpty(),
                     "XP dropped");
-            helper.assertTrue(DeathLockout.refusal(owner) != null, "owner not locked out");
+            // A player body dies like a player, which clears its combat tracker before the death event, so this message
+            // can only come from the one kept as it started to die
+            String refusal = LockoutGameTests.refusalText(owner);
+            helper.assertTrue(refusal.startsWith("You died: Killed while away (" + player.getGameProfile().name() + " was killed)\n"),
+                    "owner's lockout: " + refusal);
             helper.assertTrue(DeathLockout.refusal(body.getUUID()) == null, "a death was recorded for the body itself");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
