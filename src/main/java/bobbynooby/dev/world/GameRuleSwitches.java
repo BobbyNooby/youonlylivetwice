@@ -1,0 +1,30 @@
+package bobbynooby.dev.world;
+
+import bobbynooby.dev.config.Settings;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.gamerules.GameRules;
+
+public class GameRuleSwitches {
+    // Also run by /yolt reload
+    public static void applyImmediateRespawn(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        // The rule is saved with the world, so with the switch off we leave whatever the admin set
+        if (Settings.get().immediateRespawn) {
+            server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
+        }
+    }
+
+    // Also run by /yolt reload. The locator bar points at players far beyond sight, so it tells who is online.
+    public static void applyLocatorBar(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        // Saved with the world too, so with the switch off we leave whatever the admin set
+        if (Settings.get().hide.locatorBar) {
+            // Passing the server drops the waypoints clients already have
+            server.getGameRules().set(GameRules.LOCATOR_BAR, false, server);
+        }
+    }
+}

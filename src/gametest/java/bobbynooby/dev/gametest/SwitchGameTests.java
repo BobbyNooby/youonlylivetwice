@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.world.GameRuleSwitches;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
@@ -109,12 +109,12 @@ public class SwitchGameTests {
         try {
             rules.set(GameRules.LOCATOR_BAR, true, server);
             hide.locatorBar = true;
-            YouOnlyLiveTwice.applyLocatorBar(server);
+            GameRuleSwitches.applyLocatorBar(server);
             helper.assertFalse(rules.get(GameRules.LOCATOR_BAR), "switch on: the locator bar rule is still on");
 
             rules.set(GameRules.LOCATOR_BAR, true, server);
             hide.locatorBar = false;
-            YouOnlyLiveTwice.applyLocatorBar(server);
+            GameRuleSwitches.applyLocatorBar(server);
             helper.assertTrue(rules.get(GameRules.LOCATOR_BAR), "switch off: the locator bar rule was changed");
         } finally {
             hide.locatorBar = switchBefore;

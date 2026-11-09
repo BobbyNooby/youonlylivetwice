@@ -5,7 +5,6 @@ import bobbynooby.dev.mixin.SetPlayerTeamPacketInvoker;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
@@ -44,10 +43,6 @@ public class NameTagHider {
     // The names each client has in our team, keyed by connection like PlayerVisibility.
     // The client drops the connection when told to remove a name it doesn't have, so this must stay exact.
     private static final Map<ServerGamePacketListenerImpl, Set<String>> MEMBERS = new WeakHashMap<>();
-
-    public static void registerInitTeams() {
-        ServerLifecycleEvents.SERVER_STARTED.register(NameTagHider::apply);
-    }
 
     // Players stay in the team either way, so a reload can flip the rule for everyone at once
     public static void apply(MinecraftServer server) {

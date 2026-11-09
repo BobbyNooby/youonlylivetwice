@@ -9,14 +9,12 @@ import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.TabHeaders;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.features.WorldBorders;
 import bobbynooby.dev.revive.Revive;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.gamerules.GameRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,10 +39,6 @@ public class YouOnlyLiveTwice implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTING.register(Settings::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPED.register(Settings::onServerStopped);
 
-        ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::applyImmediateRespawn);
-        ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::applyLocatorBar);
-        ServerLifecycleEvents.SERVER_STARTED.register(WorldBorders::apply);
-
         AdminView.init();
         YoltCommands.register();
         DeathLockout.init();
@@ -54,33 +48,9 @@ public class YouOnlyLiveTwice implements ModInitializer {
         TabHeaders.init();
         ChatDelivery.init();
         Whispers.init();
-        NameTagHider.registerInitTeams();
+        ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
         NameTagHider.registerAddPlayerToTeamOnJoin();
 
         LOGGER.info("You Only Live Twice started.");
     }
-
-    // Also run by /yolt reload
-    public static void applyImmediateRespawn(MinecraftServer server) {
-        if (!Settings.active()) {
-            return;
-        }
-        // The rule is saved with the world, so with the switch off we leave whatever the admin set
-        if (Settings.get().immediateRespawn) {
-            server.getGameRules().set(GameRules.IMMEDIATE_RESPAWN, true, server);
-        }
-    }
-
-    // Also run by /yolt reload. The locator bar points at players far beyond sight, so it tells who is online.
-    public static void applyLocatorBar(MinecraftServer server) {
-        if (!Settings.active()) {
-            return;
-        }
-        // Saved with the world too, so with the switch off we leave whatever the admin set
-        if (Settings.get().hide.locatorBar) {
-            // Passing the server drops the waypoints clients already have
-            server.getGameRules().set(GameRules.LOCATOR_BAR, false, server);
-        }
-    }
-
 }

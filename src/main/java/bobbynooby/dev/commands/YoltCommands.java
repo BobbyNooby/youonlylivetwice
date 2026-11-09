@@ -1,9 +1,7 @@
 package bobbynooby.dev.commands;
 
-import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.features.NameTagHider;
 import bobbynooby.dev.features.WorldBorders;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
@@ -11,7 +9,7 @@ import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.visibility.AdminView;
-import bobbynooby.dev.visibility.PlayerVisibility;
+import bobbynooby.dev.world.LiveSettings;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -220,17 +218,7 @@ public final class YoltCommands {
             source.sendFailure(Component.literal("Config not reloaded, nothing changed: " + problem));
             return 0;
         }
-        // What startup applied; each of these checks its own switch
-        WorldBorders.apply(server);
-        NameTagHider.apply(server);
-        YouOnlyLiveTwice.applyImmediateRespawn(server);
-        YouOnlyLiveTwice.applyLocatorBar(server);
-        // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
-        // and which players their client knows about depends on the hide switches
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            server.getCommands().sendCommands(player);
-            PlayerVisibility.refresh(player);
-        }
+        LiveSettings.applyAll(server);
 
         LOGGER.info("{} reloaded the config", source.getTextName());
         reply(source, "Config reloaded");
