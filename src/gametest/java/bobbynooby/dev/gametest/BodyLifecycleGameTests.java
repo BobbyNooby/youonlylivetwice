@@ -3,9 +3,13 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.offline.OfflineKill;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -21,6 +25,8 @@ import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.Vec3;
@@ -258,6 +264,65 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    @GameTest
+    public void deadBodyIsNotTakenOver(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "DeadBody", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            Mannequin body = leaveBody(helper, player);
+            body.kill(helper.getLevel());
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            // What the removal at the end of the death animation runs
+            Bodies.onBodyUnload(body);
+            helper.assertValueEqual(store(helper).byOwner(owner).map(record -> record.snapshot().health()), Optional.of(20.0F),
+                    "saved health after the body died");
+
+            // Still in its death animation, so the login finds it
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertFalse(back.isDeadOrDying(), "player joined dead");
+            helper.assertValueEqual(back.getHealth(), 20.0F, "health after login");
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.CHEST).is(Items.IRON_CHESTPLATE), "chestplate lost");
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 1, "diamonds after login");
+            helper.assertTrue(body.isRemoved(), "dead body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    // Killed offline while the body stood: the grave has the real gear, the body only copies of it
+    @GameTest
+    public void deadJoinerGetsNoBodyGear(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "DeadJoin", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(OfflineKill.kill(helper.getLevel().getServer(), player.nameAndId()),
+                    OfflineKill.KillResult.KILLED_OFFLINE, "kill result");
+            helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.items().stream()
+                    .anyMatch(item -> item.is(Items.IRON_CHESTPLATE))), "no grave holds the chestplate");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.isDeadOrDying(), "dead player came back alive");
+            for (EquipmentSlot slot : GearSync.SLOTS) {
+                helper.assertTrue(back.getItemBySlot(slot).isEmpty(), "got the body's " + slot.getName());
+            }
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, player, before);
+            removeGraves(helper, owner);
+        }
+        helper.succeed();
+    }
+
     @GameTest(maxTicks = 20)
     public void loginWithUnloadedBodyUsesSnapshot(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Unloaded", GameType.SURVIVAL);
@@ -392,6 +457,21 @@ public class BodyLifecycleGameTests {
     private static void assertNoBody(GameTestHelper helper, ServerPlayer player) {
         helper.assertTrue(store(helper).byOwner(player.getUUID()).isEmpty(), "body record made");
         helper.assertTrue(bodiesOf(helper, player.getUUID()).isEmpty(), "body in the world");
+    }
+
+    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
+        return GraveStore.get(helper.getLevel().getServer()).all().stream()
+                .filter(grave -> grave.owner().equals(owner))
+                .toList();
+    }
+
+    // A grave left behind would sit in another test's way
+    private static void removeGraves(GameTestHelper helper, UUID owner) {
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        for (Grave grave : gravesOf(helper, owner)) {
+            store.remove(grave.id());
+            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
     }
 
     private static CompoundTag save(GameTestHelper helper, Entity entity) {

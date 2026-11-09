@@ -85,23 +85,36 @@ public final class Bodies {
         }
         BodyRecord record = found.get();
         BodySnapshot snapshot;
+        boolean bodyAlive;
         if (server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body) {
             snapshot = BodySnapshot.of(body);
+            bodyAlive = !body.isDeadOrDying();
             // The record goes first, so the discard's unload no longer counts this as a body
             store.remove(record.owner());
             body.discard();
         } else {
             // Its chunk isn't loaded: the last saved state is used, and the body goes when it next loads
             snapshot = record.snapshot();
+            bodyAlive = snapshot.health() > 0.0F;
             store.put(record.withPendingRemoval(true));
         }
-        takeOver(player, snapshot, Settings.get().bodies.copyEffects);
+        // Health 0 without a death would respawn the player and drop their inventory. A player who joins dead
+        // stays dead: their gear may be in a grave already, and the body only holds copies of it.
+        if (bodyAlive && !player.isDeadOrDying()) {
+            takeOver(player, snapshot, Settings.get().bodies.copyEffects);
+        }
     }
 
     /** Saves a body's state as its chunk unloads, for a login while it stays unloaded. */
     public static void onBodyUnload(Entity entity) {
         if (!Settings.active() || !(entity instanceof LivingEntity body) || !entity.entityTags().contains(TAG)
                 || !(entity.level() instanceof ServerLevel level)) {
+            return;
+        }
+        // The event fires for every removal. A chunk unload ends tracking before any removal reason is set, so
+        // only killed or discarded bodies are skipped here, and dying ones: their state is nothing to hand over.
+        Entity.RemovalReason reason = entity.getRemovalReason();
+        if ((reason != null && reason.shouldDestroy()) || body.isDeadOrDying()) {
             return;
         }
         BodyStore store = BodyStore.get(level.getServer());
