@@ -97,7 +97,7 @@ public class GraveProtectionGameTests {
     }
 
     // A piston pops a head that sits right in front of it, so this is the case that must be blocked
-    @GameTest
+    @GameTest(maxTicks = 20)
     public void pistonCannotPushGrave(GameTestHelper helper) {
         Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
         boolean waiting = false;
