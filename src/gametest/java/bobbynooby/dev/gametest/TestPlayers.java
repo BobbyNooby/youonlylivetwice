@@ -6,7 +6,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -16,7 +18,9 @@ import net.minecraft.world.level.GameType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 
@@ -24,6 +28,8 @@ import java.util.function.BiFunction;
 public final class TestPlayers {
     // Tests share one server, so names get a suffix to stay unique
     private static final AtomicInteger COUNTER = new AtomicInteger();
+    // The fake client end of each test player's connection, which keeps every packet the server sent
+    private static final Map<UUID, EmbeddedChannel> CHANNELS = new ConcurrentHashMap<>();
 
     private TestPlayers() {
     }
@@ -51,6 +57,28 @@ public final class TestPlayers {
 
     public static void leave(ServerPlayer player) {
         player.level().getServer().getPlayerList().remove(player);
+        CHANNELS.remove(player.getUUID());
+    }
+
+    // Every packet the server has sent this player so far, oldest first
+    public static List<Packet<?>> sentPackets(ServerPlayer player) {
+        EmbeddedChannel channel = CHANNELS.get(player.getUUID());
+        // Sends during a tick wait in the channel until the end of the tick
+        channel.flushOutbound();
+        List<Packet<?>> packets = new ArrayList<>();
+        for (Object message : channel.outboundMessages()) {
+            if (message instanceof Packet<?> packet) {
+                packets.add(packet);
+            }
+        }
+        return packets;
+    }
+
+    // What a real client does every tick that makes players start tracking each other:
+    // it confirms chunk batches, so more chunks get sent, and its movement packets re-check who it can see
+    public static void driveTracking(ServerPlayer player) {
+        player.connection.handleChunkBatchReceived(new ServerboundChunkBatchReceivedPacket(64.0F));
+        player.level().getChunkSource().move(player);
     }
 
     private static GameProfile uniqueProfile(String name) {
@@ -71,7 +99,7 @@ public final class TestPlayers {
         player.snapTo(pos, 0.0F, 0.0F);
 
         Connection connection = new Connection(PacketFlow.SERVERBOUND);
-        new EmbeddedChannel(connection);
+        CHANNELS.put(profile.id(), new EmbeddedChannel(connection));
         server.getPlayerList().placeNewPlayer(connection, player, cookie);
 
         // setGameMode sends a packet, so it has to wait for the connection placeNewPlayer sets up

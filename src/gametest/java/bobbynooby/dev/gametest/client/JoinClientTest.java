@@ -16,6 +16,10 @@ public class JoinClientTest implements FabricClientGameTest {
             if (!ctx.computeOnClient(mc -> mc.getConnection().getListedOnlinePlayers().isEmpty())) {
                 throw new AssertionError("the client lists players in the tab list");
             }
+            // It still needs its own entry, which is all it gets with nobody else nearby
+            if (!ctx.computeOnClient(mc -> mc.getConnection().getPlayerInfo(mc.player.getUUID()) != null)) {
+                throw new AssertionError("the client has no entry for itself");
+            }
 
             // No counter prefix, so the CI artifact keeps the plain file names
             ctx.getInput().holdKey(options -> options.keyPlayerList);

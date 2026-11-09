@@ -7,12 +7,11 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.List;
 
+// Lets PlayerVisibility send each viewer its own copy of the entries
 @Mixin(ClientboundPlayerInfoUpdatePacket.class)
-public interface PlayerListS2CPacketAccessor {
+public interface PlayerInfoUpdatePacketAccessor {
 
     @Accessor("entries")
     @Mutable
     void setEntries(List<ClientboundPlayerInfoUpdatePacket.Entry> entries);
-
-
 }
