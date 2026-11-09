@@ -1,18 +1,49 @@
 package bobbynooby.dev.features;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.mixin.SetPlayerTeamPacketInvoker;
+import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
+import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.WeakHashMap;
 
 import static bobbynooby.dev.YouOnlyLiveTwice.TEAM_NAME;
 
+/**
+ * Hides nametags by keeping every player in one server-side team. With hide.distantPlayers on, each client is only
+ * told about the members whose entry it has, since the member list is a list of names.
+ */
 public class NameTagHider {
+    // ClientboundSetPlayerTeamPacket's method codes, which it keeps private
+    private static final int CREATE = 0;
+    private static final int CHANGE = 2;
+    private static final int JOIN = 3;
+    private static final int LEAVE = 4;
 
+    // The names each client has in our team, keyed by connection like PlayerVisibility.
+    // The client drops the connection when told to remove a name it doesn't have, so this must stay exact.
+    private static final Map<ServerGamePacketListenerImpl, Set<String>> MEMBERS = new WeakHashMap<>();
 
     public static void registerInitTeams() {
         ServerLifecycleEvents.SERVER_STARTED.register(NameTagHider::apply);
@@ -46,5 +77,173 @@ public class NameTagHider {
         if (team != null && player.getTeam() != team) {
             server.getScoreboard().addPlayerToTeam(player.getScoreboardName(), team);
         }
+    }
+
+    public static boolean isOurs(PlayerTeam team) {
+        return team.getName().equals(TEAM_NAME);
+    }
+
+    /** Our team as a joining client first gets it. Fabric's join event has already put the joiner in it. */
+    public static ClientboundSetPlayerTeamPacket joinPacket(ServerPlayer joiner, PlayerTeam team) {
+        Set<String> members = members(joiner, team);
+        reset(joiner, members);
+        return create(joiner, new ClientboundSetPlayerTeamPacket.Parameters(team), members);
+    }
+
+    /** Adds a player the viewer's client just got the entry for. Works for players outside the player list too. */
+    public static void onKnown(ServerPlayer viewer, ServerPlayer seen) {
+        if (!Settings.active() || !perViewer()) {
+            return;
+        }
+        PlayerTeam team = team(viewer);
+        String name = seen.getScoreboardName();
+        // Only the server's members, so this client's teams never disagree with the server's broadcasts
+        if (team != null && team.getPlayers().contains(name) && state(viewer).add(name)) {
+            viewer.connection.send(players(JOIN, List.of(name)));
+        }
+    }
+
+    /** Removes a player whose entry the viewer's client just dropped. */
+    public static void onForgotten(ServerPlayer viewer, ServerPlayer seen) {
+        if (!Settings.active() || !perViewer()) {
+            return;
+        }
+        String name = seen.getScoreboardName();
+        if (state(viewer).remove(name)) {
+            viewer.connection.send(players(LEAVE, List.of(name)));
+        }
+    }
+
+    /** Sends the viewer our whole team again, after admin view or the switches change. */
+    public static void refresh(ServerPlayer viewer) {
+        if (!Settings.active()) {
+            return;
+        }
+        PlayerTeam team = team(viewer);
+        if (team == null) {
+            return;
+        }
+        Set<String> members = members(viewer, team);
+        reset(viewer, members);
+        // Starting over drops whatever names this client had before
+        viewer.connection.send(ClientboundSetPlayerTeamPacket.createRemovePacket(team));
+        viewer.connection.send(create(viewer, new ClientboundSetPlayerTeamPacket.Parameters(team), members));
+    }
+
+    /**
+     * Sends a broadcast packet about our team to each player, cut down to the names that player's client knows.
+     * Returns false, sending nothing, for any other packet or when everyone shares the team.
+     */
+    public static boolean broadcast(List<ServerPlayer> players, Packet<?> packet) {
+        if (!(packet instanceof ClientboundSetPlayerTeamPacket team) || !team.getName().equals(TEAM_NAME) || !perViewer()) {
+            return false;
+        }
+        for (ServerPlayer viewer : players) {
+            send(viewer, team);
+        }
+        return true;
+    }
+
+    private static void send(ServerPlayer viewer, ClientboundSetPlayerTeamPacket packet) {
+        Set<String> state = state(viewer);
+        if (packet.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
+            state.clear();
+            viewer.connection.send(packet);
+            return;
+        }
+        if (packet.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
+            Set<String> members = new LinkedHashSet<>();
+            for (String name : packet.getPlayers()) {
+                if (knows(viewer, name)) {
+                    members.add(name);
+                }
+            }
+            reset(viewer, members);
+            viewer.connection.send(create(viewer, packet.getParameters().orElseThrow(), members));
+            return;
+        }
+        if (packet.getParameters().isPresent()) {
+            viewer.connection.send(SetPlayerTeamPacketInvoker.create(TEAM_NAME, CHANGE,
+                    Optional.of(forViewer(viewer, packet.getParameters().get())), List.of()));
+            return;
+        }
+        boolean joining = packet.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD;
+        List<String> names = new ArrayList<>();
+        for (String name : packet.getPlayers()) {
+            if (joining ? knows(viewer, name) && state.add(name) : state.remove(name)) {
+                names.add(name);
+            }
+        }
+        if (!names.isEmpty()) {
+            viewer.connection.send(players(joining ? JOIN : LEAVE, names));
+        }
+    }
+
+    // With the switch off every client knows everyone, so the team stays vanilla's shared one
+    private static boolean perViewer() {
+        return Settings.get().hide.distantPlayers;
+    }
+
+    // The members this viewer's client may have: every member when shared, otherwise itself and the players it knows
+    private static Set<String> members(ServerPlayer viewer, PlayerTeam team) {
+        if (!perViewer()) {
+            return new LinkedHashSet<>(team.getPlayers());
+        }
+        Set<String> members = new LinkedHashSet<>();
+        if (team.getPlayers().contains(viewer.getScoreboardName())) {
+            members.add(viewer.getScoreboardName());
+        }
+        PlayerList playerList = viewer.level().getServer().getPlayerList();
+        for (UUID id : PlayerVisibility.known(viewer)) {
+            ServerPlayer player = playerList.getPlayer(id);
+            // Plan 04's bodies are players outside the player list, in the viewer's level when it knows them
+            if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {
+                player = body;
+            }
+            if (player != null && team.getPlayers().contains(player.getScoreboardName())) {
+                members.add(player.getScoreboardName());
+            }
+        }
+        return members;
+    }
+
+    // Whether the viewer may hear this name: its own, or an online player whose entry its client has
+    private static boolean knows(ServerPlayer viewer, String name) {
+        if (name.equals(viewer.getScoreboardName())) {
+            return true;
+        }
+        ServerPlayer player = viewer.level().getServer().getPlayerList().getPlayerByName(name);
+        // The lookup ignores case and team names don't
+        return player != null && player.getScoreboardName().equals(name) && PlayerVisibility.known(viewer).contains(player.getUUID());
+    }
+
+    // Admin view shows every nametag
+    private static ClientboundSetPlayerTeamPacket.Parameters forViewer(ServerPlayer viewer, ClientboundSetPlayerTeamPacket.Parameters server) {
+        Team.Visibility rule = AdminView.isOn(viewer) ? Team.Visibility.ALWAYS : server.nameTagVisibility();
+        return new ClientboundSetPlayerTeamPacket.Parameters(server.displayName(), server.playerPrefix(), server.playerSuffix(), rule,
+                server.collisionRule(), server.color(), server.options());
+    }
+
+    private static ClientboundSetPlayerTeamPacket create(ServerPlayer viewer, ClientboundSetPlayerTeamPacket.Parameters server,
+                                                         Collection<String> members) {
+        return SetPlayerTeamPacketInvoker.create(TEAM_NAME, CREATE, Optional.of(forViewer(viewer, server)), members);
+    }
+
+    private static ClientboundSetPlayerTeamPacket players(int method, Collection<String> names) {
+        return SetPlayerTeamPacketInvoker.create(TEAM_NAME, method, Optional.empty(), names);
+    }
+
+    private static @Nullable PlayerTeam team(ServerPlayer viewer) {
+        return viewer.level().getServer().getScoreboard().getPlayerTeam(TEAM_NAME);
+    }
+
+    private static Set<String> state(ServerPlayer viewer) {
+        return MEMBERS.computeIfAbsent(viewer.connection, connection -> new HashSet<>());
+    }
+
+    private static void reset(ServerPlayer viewer, Set<String> members) {
+        Set<String> state = state(viewer);
+        state.clear();
+        state.addAll(members);
     }
 }
