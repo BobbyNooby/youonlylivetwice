@@ -36,11 +36,11 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         TabHeaders.init();
         ChatDelivery.init();
         Whispers.init();
-        // Last of the SERVER_STARTED hooks (they run in registration order): the death store is open and the bodies are
-        // back by then, and the name-tag team and visibility refresh see those bodies
+        // Last of the SERVER_STARTED hooks (they run in registration order): the bodies are back by then, so the
+        // name-tag team and visibility refresh see them
         ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
         NameTagTeam.init();
 
-        Yolt.LOGGER.info("You Only Live Twice started.");
+        Yolt.LOGGER.info("You Only Live Twice started");
     }
 }

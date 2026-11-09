@@ -22,7 +22,7 @@ public abstract class PlayerListLoginMixin {
         if (!Settings.active() || (cir.getReturnValue() != null && !isServerFull(cir.getReturnValue()))) {
             return;
         }
-        Component refusal = DeathLockout.refusal(nameAndId.id());
+        Component refusal = DeathLockout.refusal(nameAndId.id(), nameAndId.name());
         if (refusal != null) {
             cir.setReturnValue(refusal);
         }

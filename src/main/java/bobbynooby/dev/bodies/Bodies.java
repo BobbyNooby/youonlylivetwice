@@ -40,7 +40,7 @@ public final class Bodies {
         // Fires inside die() for every death, after the death drops, which the body never has. A throw would break
         // off that death.
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            Guard.run(() -> BodyDeath.onBodyDeath(entity), "Could not handle the death of {}", entity.getUUID());
+            Guard.run(() -> BodyDeath.onBodyDeath(entity), "Could not handle the death of {}", entity.getPlainTextName());
         });
         ServerLifecycleEvents.SERVER_STARTED.register(BodyRestart::restorePlayerBodies);
         ServerLifecycleEvents.SERVER_STOPPING.register(BodyRestart::snapshotBodies);

@@ -14,6 +14,13 @@ import java.util.Optional;
 public final class Kills {
     public enum Result { KILLED_ONLINE, KILLED_OFFLINE, NOT_FOUND, ALREADY_DEAD, NOT_KILLED }
 
+    /** A failure the body's death path has logged already, so the caller only reports it. */
+    public static final class LoggedFailure extends IllegalStateException {
+        LoggedFailure(String message) {
+            super(message);
+        }
+    }
+
     private Kills() {}
 
     /**

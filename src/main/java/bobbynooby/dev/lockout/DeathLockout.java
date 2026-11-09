@@ -61,7 +61,7 @@ public final class DeathLockout {
         // Runs before the body handover, so a throw here must not escape and skip it.
         ServerPlayerEvents.JOIN.register(player -> {
             Guard.run(() -> {
-                if (enabled() && refusal(player.getUUID()) != null) {
+                if (enabled() && refusal(player.getUUID(), player.nameAndId().name()) != null) {
                     kickLater(player);
                 }
             }, "Could not check death lockout for {} as they joined", player.nameAndId().name());
@@ -94,6 +94,11 @@ public final class DeathLockout {
 
     /** Null when the player may join. */
     public static @Nullable Component refusal(UUID uuid) {
+        return refusal(uuid, uuid.toString());
+    }
+
+    /** Like the above, with the name the logs use for the player. */
+    public static @Nullable Component refusal(UUID uuid, String name) {
         DeathStore open = store;
         if (open == null || !Settings.get().deathLockout.enabled) {
             return null;
@@ -103,7 +108,7 @@ public final class DeathLockout {
             log = open.latest(uuid);
         } catch (RuntimeException e) {
             // Fail open: a broken database must not lock everyone out
-            Yolt.LOGGER.error("Could not check death lockout for {}, letting them in", uuid, e);
+            Yolt.LOGGER.error("Could not check death lockout for {}, letting them in", name, e);
             return null;
         }
         if (log.isEmpty()) {
@@ -136,7 +141,7 @@ public final class DeathLockout {
         Later.afterTick(server, () -> {
             // By uuid: they may have left already, or respawned as a new player object
             ServerPlayer current = server.getPlayerList().getPlayer(uuid);
-            Component reason = current == null ? null : refusal(uuid);
+            Component reason = current == null ? null : refusal(uuid, current.nameAndId().name());
             if (reason != null) {
                 current.connection.disconnect(reason);
             }
@@ -186,7 +191,7 @@ public final class DeathLockout {
      * it and isn't revived. True with the lockout off, when nothing is stored. A kill records its death inside the
      * death event, where no result can reach the caller, so the caller asks afterwards.
      */
-    public static boolean deathRecordedAfter(UUID uuid, @Nullable DeathLog before) {
+    public static boolean deathRecordedAfter(UUID uuid, String name, @Nullable DeathLog before) {
         if (!enabled()) {
             return true;
         }
@@ -198,7 +203,7 @@ public final class DeathLockout {
             Optional<DeathLog> now = open.latest(uuid);
             return now.isPresent() && !now.get().revived() && !now.get().equals(before);
         } catch (RuntimeException e) {
-            Yolt.LOGGER.error("Could not read back the death of {}", uuid, e);
+            Yolt.LOGGER.error("Could not read back the death of {}", name, e);
             return false;
         }
     }
@@ -213,9 +218,14 @@ public final class DeathLockout {
      * that is already over is left as it is.
      */
     public static ReviveResult revive(UUID uuid, String by) {
+        return revive(uuid, uuid.toString(), by);
+    }
+
+    /** Like the above, with the name the logs use for the player. */
+    public static ReviveResult revive(UUID uuid, String name, String by) {
         DeathStore open = store;
         if (open == null) {
-            Yolt.LOGGER.error("Death store is closed, could not revive {}", uuid);
+            Yolt.LOGGER.error("Death store is closed, could not revive {}", name);
             return ReviveResult.FAILED;
         }
         try {
@@ -229,7 +239,7 @@ public final class DeathLockout {
             }
             return open.revive(uuid, now, by) ? ReviveResult.REVIVED : ReviveResult.NO_DEATH;
         } catch (RuntimeException e) {
-            Yolt.LOGGER.error("Could not revive {}", uuid, e);
+            Yolt.LOGGER.error("Could not revive {}", name, e);
             return ReviveResult.FAILED;
         }
     }

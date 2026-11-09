@@ -21,7 +21,7 @@ public final class BodyLogout {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
         if (!Settings.on(c -> c.bodies.enabled) || player.isDeadOrDying() || player.isSpectator()
-                || DeathLockout.refusal(player.getUUID()) != null) {
+                || DeathLockout.refusal(player.getUUID(), player.nameAndId().name()) != null) {
             return Optional.empty();
         }
         MinecraftServer server = player.level().getServer();

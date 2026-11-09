@@ -57,11 +57,11 @@ public final class Revive {
             return Outcome.NO_OWNER;
         }
         String name = ownerName(stack, owner.get());
-        if (DeathLockout.refusal(owner.get()) == null) {
+        if (DeathLockout.refusal(owner.get(), name) == null) {
             user.sendSystemMessage(Component.literal(name + " is not dead"));
             return Outcome.NOT_DEAD;
         }
-        DeathLockout.ReviveResult result = DeathLockout.revive(owner.get(), user.nameAndId().name());
+        DeathLockout.ReviveResult result = DeathLockout.revive(owner.get(), name, user.nameAndId().name());
         if (result == DeathLockout.ReviveResult.FAILED) {
             user.sendSystemMessage(Component.literal("Could not revive " + name + ". Try again later."));
             return Outcome.FAILED;

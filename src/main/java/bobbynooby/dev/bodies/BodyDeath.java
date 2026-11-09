@@ -65,7 +65,7 @@ final class BodyDeath {
                 // Another mod stopped the death
                 return Kills.Result.NOT_KILLED;
             }
-            throw new IllegalStateException("The body of " + record.ownerName() + " died, but they could not be killed");
+            throw new Kills.LoggedFailure("The body of " + record.ownerName() + " died, but they could not be killed");
         }
         BodySnapshot snapshot = record.snapshot();
         // No entity, so no skin to keep: the grave head is built from the name. Nothing died, so no death message.

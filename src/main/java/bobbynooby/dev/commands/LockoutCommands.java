@@ -48,6 +48,9 @@ final class LockoutCommands {
         Kills.Result result;
         try {
             result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
+        } catch (Kills.LoggedFailure e) {
+            // The body death logged it already
+            return YoltCommands.fail(source, "Could not kill " + name + ", see the server log.");
         } catch (RuntimeException e) {
             LOGGER.error("{} could not kill {}", source.getTextName(), name, e);
             return YoltCommands.fail(source, "Could not kill " + name + ", see the server log.");
@@ -63,7 +66,7 @@ final class LockoutCommands {
         }
         LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
         // The player is dead either way; without the record they are not locked out, so the admin has to know
-        if (!DeathLockout.deathRecordedAfter(who.get().id(), before)) {
+        if (!DeathLockout.deathRecordedAfter(who.get().id(), who.get().name(), before)) {
             return YoltCommands.fail(source, "Killed " + who.get().name() + ", but the death could not be recorded; see the server log.");
         }
         return YoltCommands.done(source, "Killed " + who.get().name());
@@ -75,7 +78,7 @@ final class LockoutCommands {
             return YoltCommands.fail(source, "Player " + name + " not found.");
         }
         String found = who.get().name();
-        return switch (DeathLockout.revive(who.get().id(), reviver(source))) {
+        return switch (DeathLockout.revive(who.get().id(), found, reviver(source))) {
             case REVIVED -> {
                 LOGGER.info("{} revived {}", source.getTextName(), found);
                 yield YoltCommands.done(source, "Revived " + found);
