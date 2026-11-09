@@ -16,6 +16,8 @@ import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -285,6 +287,53 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // A mannequin's death says nothing, and a player body's message would name its offline owner to everyone. Its
+    // death also has to leave the level's players, where a dead body would go on counting for spawning.
+    @GameTest(maxTicks = 60, environment = PLAYER_BODY)
+    public void playerBodyDeathSaysNothingAndLeaves(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "Silent", ON_FLOOR);
+        UUID owner = player.getUUID();
+        TestPlayers.Recording listener = TestPlayers.joinRecording(helper, "Listener", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean messagesHidden = hide.gameMessages;
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        boolean waiting = false;
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            // Off, so a death message would reach every player rather than only admins
+            hide.gameMessages = false;
+            body.kill(helper.getLevel());
+            hide.gameMessages = messagesHidden;
+
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertTrue(listener.messages.stream().noneMatch(PlayerBodyGameTests::isDeathMessage), "death message sent");
+            helper.assertValueEqual(gravesOf(helper, owner).size(), 1, "graves for the owner");
+            Settings.get().bodies = before;
+            TestPlayers.leave(listener);
+            // Vanilla removes a dead player 20 ticks into its death
+            helper.runAfterDelay(30, () -> {
+                try {
+                    helper.assertTrue(body.isRemoved(), "dead body still in the world");
+                    helper.assertFalse(helper.getLevel().players().contains(body), "dead body still among the level's players");
+                } finally {
+                    cleanUp(helper, owner, before);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            hide.gameMessages = messagesHidden;
+            Settings.get().bodies = before;
+            if (helper.getLevel().getServer().getPlayerList().getPlayer(listener.getUUID()) != null) {
+                TestPlayers.leave(listener);
+            }
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
     // The player list keeps stats and advancements by id until a player leaves, which a body never does, and saves them
     @GameTest
     public void playerBodyLeavesNoStats(GameTestHelper helper) throws ReflectiveOperationException {
@@ -377,6 +426,10 @@ public class PlayerBodyGameTests {
         Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
         helper.assertTrue(entity instanceof PlayerBody, "no player body for the record");
         return (PlayerBody) entity;
+    }
+
+    private static boolean isDeathMessage(Component message) {
+        return message.getContents() instanceof TranslatableContents text && text.getKey().startsWith("death.");
     }
 
     // Private and only read here; the names are Mojang's, the same at runtime

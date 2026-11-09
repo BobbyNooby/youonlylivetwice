@@ -6,6 +6,7 @@
     "AbstractContainerMenuMixin",
     "BodyArmourWearMixin",
     "BodyDeathLootMixin",
+    "BodyDeathMessageMixin",
     "BodyPortalMixin",
     "CommandManagerMixin",
     "CommandNodeAccessor",
