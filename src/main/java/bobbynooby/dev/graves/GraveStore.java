@@ -19,6 +19,7 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,11 +42,16 @@ public final class GraveStore extends SavedData {
             YouOnlyLiveTwice.id("graves"), GraveStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Map<UUID, Grave> graves = new LinkedHashMap<>();
+    // False when the storage started this store empty, because there was no file or it couldn't be read
+    private final boolean fromDisk;
+    private boolean fileChecked;
 
     private GraveStore() {
+        fromDisk = false;
     }
 
     private GraveStore(List<Grave> loaded) {
+        fromDisk = true;
         for (Grave grave : loaded) {
             graves.put(grave.id(), grave);
         }
@@ -62,7 +68,40 @@ public final class GraveStore extends SavedData {
     }
 
     public static GraveStore get(MinecraftServer server) {
-        return server.getDataStorage().computeIfAbsent(TYPE);
+        GraveStore store = server.getDataStorage().computeIfAbsent(TYPE);
+        // Checked on first use, before anything can save: a dedicated server saves once before its start event,
+        // and chunk loads can fetch the graves before that
+        if (!store.fileChecked) {
+            store.fileChecked = true;
+            keepUnreadableCopy(file(server), store.fromDisk);
+        }
+        return store;
+    }
+
+    /** Where the storage keeps the graves. */
+    public static Path file(MinecraftServer server) {
+        return TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+    }
+
+    /**
+     * A store that wasn't read from its file while the file is there means the file couldn't be read, and the next
+     * save would overwrite it with no graves. So a copy is kept next to it. Returns the copy, if one was made.
+     */
+    public static Optional<Path> keepUnreadableCopy(Path file, boolean fromDisk) {
+        if (fromDisk || !Files.exists(file)) {
+            return Optional.empty();
+        }
+        Path copy = file.resolveSibling(file.getFileName() + ".unreadable-" + System.currentTimeMillis());
+        try {
+            Files.copy(file, copy);
+        } catch (IOException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not read the grave file {}, and could not copy it to {}; graves start empty "
+                    + "and the next save overwrites it", file, copy, e);
+            return Optional.empty();
+        }
+        YouOnlyLiveTwice.LOGGER.error("Could not read the grave file {}, so graves start empty. A copy of it is kept at {}",
+                file, copy);
+        return Optional.of(copy);
     }
 
     /**
@@ -73,7 +112,7 @@ public final class GraveStore extends SavedData {
     public void saveNow(MinecraftServer server) {
         setDirty();
         server.getDataStorage().saveAndJoin();
-        Path file = TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        Path file = file(server);
         Tag expected = CODEC.encodeStart(server.registryAccess().createSerializationContext(NbtOps.INSTANCE), this).getOrThrow();
         try {
             if (!expected.equals(NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).get("data"))) {

@@ -28,8 +28,11 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 public class GraveStoreGameTests {
     private static Grave grave(BlockPos pos, List<ItemStack> items) {
@@ -138,6 +141,40 @@ public class GraveStoreGameTests {
         helper.assertValueEqual(grave.withItems(List.of(ItemStack.EMPTY)).items().size(), 0, "items after withItems");
         roundTrip(helper, grave);
         helper.succeed();
+    }
+
+    // Junk in a temp file stands in for a grave file the storage couldn't read
+    @GameTest
+    public void unreadableGraveFileIsCopied(GameTestHelper helper) throws IOException {
+        Path dir = helper.getLevel().getServer().getWorldPath(LevelResource.DATA);
+        Files.createDirectories(dir);
+        Path file = Files.createTempFile(dir, "graves-test-", ".dat");
+        byte[] junk = {1, 2, 3, 4, 5};
+        try {
+            Files.write(file, junk);
+            helper.assertTrue(GraveStore.keepUnreadableCopy(file, true).isEmpty(), "copied a file the store was read from");
+            helper.assertTrue(copiesOf(file).isEmpty(), "a copy appeared for a file the store was read from");
+            helper.assertTrue(GraveStore.keepUnreadableCopy(dir.resolve(file.getFileName() + ".missing"), false).isEmpty(),
+                    "copied a file that isn't there");
+
+            Optional<Path> copy = GraveStore.keepUnreadableCopy(file, false);
+            helper.assertTrue(copy.isPresent() && Files.exists(copy.get()), "no copy of the unreadable file");
+            helper.assertValueEqual(copiesOf(file).size(), 1, "copies next to the file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copy.get()), junk), "the copy differs from the file");
+        } finally {
+            Files.deleteIfExists(file);
+            for (Path left : copiesOf(file)) {
+                Files.deleteIfExists(left);
+            }
+        }
+        helper.succeed();
+    }
+
+    private static List<Path> copiesOf(Path file) throws IOException {
+        String prefix = file.getFileName() + ".unreadable-";
+        try (Stream<Path> files = Files.list(file.getParent())) {
+            return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
+        }
     }
 
     // The graves in the grave file right now, whatever the store holds in memory
