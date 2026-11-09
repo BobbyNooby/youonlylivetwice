@@ -232,6 +232,56 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // The totem the body used up is gone from the save too, so the grave can't hold it
+    @GameTest
+    public void poppedTotemNotInGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "PoppedGrave");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(2.0F);
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 10.0F);
+            helper.assertFalse(body.isDeadOrDying(), "totem did not save the body");
+            helper.assertTrue(body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty(), "totem not used up");
+            body.kill(helper.getLevel());
+
+            List<Grave> graves = gravesOf(helper, owner);
+            helper.assertFalse(graves.isEmpty(), "body death made no grave");
+            helper.assertValueEqual(countInGraves(graves, Items.TOTEM_OF_UNDYING), 0, "totems in the graves");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // An owner who is online isn't away, so a body left standing for them dies alone
+    @GameTest
+    public void bodyDeathWithOwnerOnlineKillsNoOne(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "OnlineOwner");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            // The logout hook on its own, so the owner stays online with a body and a record
+            Optional<Entity> made = Bodies.onLogout(player);
+            helper.assertTrue(made.isPresent() && made.get() instanceof Mannequin, "no mannequin body");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "no body record");
+            Mannequin body = (Mannequin) made.get();
+            body.kill(helper.getLevel());
+
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertTrue(gravesOf(helper, owner).isEmpty(), "body death made a grave");
+            helper.assertTrue(DeathLockout.refusal(owner) == null, "body death started the lockout");
+            helper.assertFalse(player.isDeadOrDying(), "owner died");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 1, "owner's diamonds");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     private static ServerPlayer join(GameTestHelper helper, String name) {
         // Something solid under the body, so its grave goes on the body's own block
         helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
