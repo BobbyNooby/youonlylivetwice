@@ -1,8 +1,11 @@
 package bobbynooby.dev.offline;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.bodies.BodySnapshot;
+import bobbynooby.dev.bodies.GearSync;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -16,11 +19,16 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.Util;
 import net.minecraft.world.ItemStackWithSlot;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityEquipment;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.Vec2;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -28,6 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +48,8 @@ public final class OfflinePlayerData {
     private static final String EQUIPMENT = "equipment";
     private static final String SELECTED_SLOT = "SelectedItemSlot";
     private static final String ENDER_ITEMS = "EnderItems";
+    private static final String EFFECTS = "active_effects";
+    private static final String ATTRIBUTES = "attributes";
 
     private OfflinePlayerData() {}
 
@@ -160,6 +171,47 @@ public final class OfflinePlayerData {
         }
     }
 
+    /**
+     * Carries what happened to a body's gear over to the gear in the save, by GearSync's rules. Only for a body
+     * that is being removed, or its copies would exist twice.
+     */
+    public static void applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear, HolderLookup.Provider registries) {
+        Map<EquipmentSlot, ItemStack> saved = readGear(tag, registries);
+        Map<EquipmentSlot, ItemStack> changed = new EnumMap<>(EquipmentSlot.class);
+        GearSync.applyBodyGear(bodyGear, slot -> saved.getOrDefault(slot, ItemStack.EMPTY), changed::put);
+        writeGear(tag, changed, registries);
+    }
+
+    /**
+     * Writes a body's state into its owner's save, as a login would have taken it over: where it stands, its
+     * health, fall, fire and air, its effects when copyEffects is on, and its gear. Only for a body being removed.
+     */
+    public static void applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects, HolderLookup.Provider registries) {
+        RegistryOps<Tag> ops = registries.createSerializationContext(NbtOps.INSTANCE);
+        ServerPlayer.SavedPosition saved = tag.read(ServerPlayer.SavedPosition.MAP_CODEC).orElse(ServerPlayer.SavedPosition.EMPTY);
+        // The body only keeps which way it faces, so the saved pitch stays
+        float xRot = saved.rotation().map(rotation -> rotation.y).orElse(0.0F);
+        tag.store(ServerPlayer.SavedPosition.MAP_CODEC, new ServerPlayer.SavedPosition(Optional.of(snapshot.dimension()),
+                Optional.of(snapshot.pos()), Optional.of(new Vec2(snapshot.yRot(), xRot))));
+        tag.putFloat("Health", snapshot.health());
+        tag.putFloat("AbsorptionAmount", snapshot.absorption());
+        tag.putDouble("fall_distance", snapshot.fallDistance());
+        tag.putShort("Fire", (short) snapshot.fireTicks());
+        tag.putShort("Air", (short) snapshot.air());
+        if (copyEffects) {
+            List<MobEffectInstance> before = tag.read(EFFECTS, MobEffectInstance.CODEC.listOf(), ops).orElse(List.of());
+            tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops).ifPresent(attributes -> tag.store(ATTRIBUTES,
+                    AttributeInstance.Packed.LIST_CODEC, ops, swapEffectModifiers(attributes, before, snapshot.effects())));
+            // Vanilla leaves the key out when there are no effects
+            if (snapshot.effects().isEmpty()) {
+                tag.remove(EFFECTS);
+            } else {
+                tag.store(EFFECTS, MobEffectInstance.CODEC.listOf(), ops, snapshot.effects());
+            }
+        }
+        applyBodyGear(tag, snapshot.gear(), registries);
+    }
+
     public static List<ItemStack> takeEnderChest(CompoundTag tag, HolderLookup.Provider registries) {
         return takeSlots(tag, ENDER_ITEMS, registries.createSerializationContext(NbtOps.INSTANCE));
     }
@@ -170,6 +222,40 @@ public final class OfflinePlayerData {
         return GlobalPos.of(
                 saved.dimension().orElse(Level.OVERWORLD),
                 saved.position().map(BlockPos::containing).orElse(BlockPos.ZERO));
+    }
+
+    // An effect's attribute modifiers are saved with the attributes and loading doesn't add them again, so the old
+    // effects' come off and the new ones' go on, as removing and adding the effects on a live player would. An
+    // attribute the save doesn't list is left out: there is no base value to keep for it.
+    private static List<AttributeInstance.Packed> swapEffectModifiers(List<AttributeInstance.Packed> attributes,
+                                                                      List<MobEffectInstance> before,
+                                                                      List<MobEffectInstance> after) {
+        Map<Holder<Attribute>, List<AttributeModifier>> modifiers = new HashMap<>();
+        for (AttributeInstance.Packed packed : attributes) {
+            modifiers.put(packed.attribute(), new ArrayList<>(packed.modifiers()));
+        }
+        for (MobEffectInstance effect : before) {
+            effect.getEffect().value().createModifiers(effect.getAmplifier(), (attribute, modifier) -> {
+                List<AttributeModifier> list = modifiers.get(attribute);
+                if (list != null) {
+                    list.removeIf(existing -> existing.id().equals(modifier.id()));
+                }
+            });
+        }
+        for (MobEffectInstance effect : after) {
+            effect.getEffect().value().createModifiers(effect.getAmplifier(), (attribute, modifier) -> {
+                List<AttributeModifier> list = modifiers.get(attribute);
+                if (list != null) {
+                    list.removeIf(existing -> existing.id().equals(modifier.id()));
+                    list.add(modifier);
+                }
+            });
+        }
+        List<AttributeInstance.Packed> swapped = new ArrayList<>();
+        for (AttributeInstance.Packed packed : attributes) {
+            swapped.add(new AttributeInstance.Packed(packed.attribute(), packed.baseValue(), modifiers.get(packed.attribute())));
+        }
+        return swapped;
     }
 
     private static int selectedSlot(CompoundTag tag) {
