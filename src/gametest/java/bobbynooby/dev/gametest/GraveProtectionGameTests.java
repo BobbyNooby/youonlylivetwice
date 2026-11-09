@@ -24,6 +24,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
+import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -70,6 +71,24 @@ public class GraveProtectionGameTests {
         try {
             Vec3 above = Vec3.atBottomCenterOf(grave.pos().above());
             helper.getLevel().explode(null, above.x, above.y, above.z, 4.0F, Level.ExplosionInteraction.TNT);
+            assertGraveIntact(helper, grave);
+        } finally {
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    // Player buckets, dispensers and fish buckets all empty through this one method, and a head gives way to any fluid
+    @GameTest
+    public void bucketCannotReplaceGrave(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        try {
+            ServerLevel level = helper.getLevel();
+            helper.assertFalse(((BucketItem) Items.WATER_BUCKET).emptyContents(null, level, grave.pos(), null),
+                    "water bucket emptied into the grave");
+            assertGraveIntact(helper, grave);
+            helper.assertFalse(((BucketItem) Items.LAVA_BUCKET).emptyContents(null, level, grave.pos(), null),
+                    "lava bucket emptied into the grave");
             assertGraveIntact(helper, grave);
         } finally {
             removeGraves(helper, List.of(grave));
