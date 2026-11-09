@@ -9,13 +9,9 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.MobAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
-import net.minecraft.world.clock.ServerClockManager;
-import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityProcessor;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -42,9 +38,10 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 // The scenes stand on the structure's barrier floor. Bodies are only switched on while the body spawns, and
-// mobsAttack is on by default, so only the switch test changes a live switch for longer.
+// mobsAttack is on by default. A test that holds a switch or the world clock across ticks runs in a batch of its own.
 public class BodyMobGameTests {
     private static final String SOLO = "you-only-live-twice-gametest:solo";
+    private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
     private static final BlockPos NEXT_TO_BODY = new BlockPos(3, 0, 1);
     private static final BlockPos FOUR_AWAY = new BlockPos(5, 0, 1);
@@ -82,22 +79,14 @@ public class BodyMobGameTests {
         ignoresBody(helper, "Calm", EntityTypes.ZOMBIFIED_PIGLIN, NEXT_TO_BODY, NO_EXTRA_CHECK, NOTHING_TO_RESTORE);
     }
 
-    @GameTest(maxTicks = 200, skyAccess = true)
+    // Its own batch, which sets the clock to noon and puts it back afterwards. Noon in a shared batch would set undead
+    // in other tests on fire, since barriers let skylight through. Not solo: a solo test holds mobsAttack off meanwhile.
+    @GameTest(maxTicks = 200, skyAccess = true, environment = DAYLIGHT)
     public void spiderIgnoresBodyInDaylight(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        ServerClockManager clocks = level.getServer().clockManager();
-        Holder<WorldClock> clock = level.dimensionType().defaultClock().orElseThrow();
-        long savedTicks = clocks.getInstance(clock).totalTicks();
-        clocks.setTotalTicks(clock, 6000L);
-        // The sky brightness is cached until the next level tick
-        level.updateSkyBrightness();
         ignoresBody(helper, "Daylight", EntityTypes.SPIDER, NEXT_TO_BODY,
                 // Proves the scene: spiders hunt below this
                 (spider, body) -> helper.assertTrue(spider.getLightLevelDependentMagicValue() >= 0.5F, "no daylight at the spider"),
-                () -> {
-                    clocks.setTotalTicks(clock, savedTicks);
-                    level.updateSkyBrightness();
-                });
+                NOTHING_TO_RESTORE);
     }
 
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
