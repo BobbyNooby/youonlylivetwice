@@ -9,6 +9,7 @@
 			"bobbynooby.dev.gametest.TestServerSetup"
 		],
 		"fabric-gametest": [
+			"bobbynooby.dev.gametest.AdminViewGameTests",
 			"bobbynooby.dev.gametest.ChatGameTests",
 			"bobbynooby.dev.gametest.CommandGameTests",
 			"bobbynooby.dev.gametest.GraveCommandGameTests",
