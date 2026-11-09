@@ -3,8 +3,10 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.mixin.MobAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -23,6 +25,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.item.ItemStack;
@@ -134,6 +137,42 @@ public class BodyMobGameTests {
             cleanUp(helper, owner, List.of());
         }
         helper.succeed();
+    }
+
+    // A mob loads again each time its chunk starts ticking again. Priorities are those of each mob's player goal in 26.3.
+    @GameTest
+    public void huntersGetOneBodyGoal(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Mob zombie = spawnInRow(helper, spawned, EntityTypes.ZOMBIE);
+            Bodies.addBodyGoal(zombie);
+            Bodies.addBodyGoal(zombie);
+            helper.assertValueEqual(bodyGoalPriorities(zombie), List.of(2), "zombie's body goals");
+            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.SPIDER)), List.of(2), "spider's body goals");
+            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.CREEPER)), List.of(1), "creeper's body goals");
+            // No player goal of the usual kind
+            helper.assertValueEqual(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.PHANTOM)), List.of(1), "phantom's body goals");
+            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.ENDERMAN)).isEmpty(), "enderman got a body goal");
+            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.ZOMBIFIED_PIGLIN)).isEmpty(),
+                    "zombified piglin got a body goal");
+            helper.assertTrue(bodyGoalPriorities(spawnInRow(helper, spawned, EntityTypes.IRON_GOLEM)).isEmpty(), "iron golem got a body goal");
+        } finally {
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    private static Mob spawnInRow(GameTestHelper helper, List<Entity> spawned, EntityType<? extends Mob> type) {
+        Mob mob = helper.spawn(type, new BlockPos(spawned.size(), 0, 1));
+        spawned.add(mob);
+        return mob;
+    }
+
+    private static List<Integer> bodyGoalPriorities(Mob mob) {
+        return ((MobAccessor) mob).yoltTargetSelector().getAvailableGoals().stream()
+                .filter(goal -> goal.getGoal() instanceof BodyTargetGoal)
+                .map(WrappedGoal::getPriority)
+                .toList();
     }
 
     // Succeeds once the body has lost health. Cleans up then, or just before a timeout.

@@ -5,6 +5,8 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.mixin.MobAccessor;
+import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
 import bobbynooby.dev.offline.OfflineKill;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -22,7 +24,13 @@ import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.GoalSelector;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.phys.Vec3;
@@ -60,6 +68,11 @@ public final class Bodies {
         });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> onBodyUnload(entity));
         ServerEntityEvents.ENTITY_LOAD.register(Bodies::onBodyLoad);
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof Mob mob) {
+                addBodyGoal(mob);
+            }
+        });
         // Fires inside die(), after the death drops, which the body never has
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
         BodyExpiry.init();
@@ -157,6 +170,32 @@ public final class Bodies {
             record.ifPresent(r -> store.remove(r.owner()));
             entity.discard();
         }));
+    }
+
+    /**
+     * Lets a hostile mob hunt bodies, at the priority of its own player goal. The goal only touches the mob's own
+     * target list, not the entity list, so this is safe during a load. A mob loads again each time its chunk starts
+     * ticking again, so it never gets a second goal.
+     */
+    public static void addBodyGoal(Mob mob) {
+        if (!Settings.active() || !BodyTargetGoal.HUNTERS.contains(mob.getType())) {
+            return;
+        }
+        GoalSelector targets = ((MobAccessor) mob).yoltTargetSelector();
+        // Phantoms and guardians have no such goal, and pick players with a goal of their own at 1
+        int priority = 1;
+        TargetingConditions playerConditions = null;
+        for (WrappedGoal wrapped : targets.getAvailableGoals()) {
+            if (wrapped.getGoal() instanceof BodyTargetGoal) {
+                return;
+            }
+            if (playerConditions == null && wrapped.getGoal() instanceof NearestAttackableTargetGoal<?> goal
+                    && ((NearestAttackableTargetGoalAccessor) goal).yoltTargetType() == Player.class) {
+                priority = wrapped.getPriority();
+                playerConditions = ((NearestAttackableTargetGoalAccessor) goal).yoltTargetConditions();
+            }
+        }
+        targets.addGoal(priority, new BodyTargetGoal(mob, playerConditions));
     }
 
     /**

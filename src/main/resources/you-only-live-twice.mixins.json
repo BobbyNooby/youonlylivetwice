@@ -19,6 +19,8 @@
     "GraveProtectionWitherMixin",
     "MarkedHeadPlacementMixin",
     "MinecraftOperatorListServiceImplMixin",
+    "MobAccessor",
+    "NearestAttackableTargetGoalAccessor",
     "PlayerCountSpoofer",
     "PlayerDropEquipmentMixin",
     "PlayerInfoUpdatePacketAccessor",
