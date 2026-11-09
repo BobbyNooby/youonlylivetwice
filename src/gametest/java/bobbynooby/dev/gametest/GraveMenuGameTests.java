@@ -111,6 +111,29 @@ public class GraveMenuGameTests {
     }
 
     @GameTest
+    public void creativeCloneCopiesNothing(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND));
+        ServerPlayer player = TestPlayers.join(helper, "Cloner", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        try {
+            helper.assertTrue(player.hasInfiniteMaterials(), "creative player cannot clone");
+            Graves.open(player, grave);
+            AbstractContainerMenu menu = player.containerMenu;
+            // Button 2 is the middle mouse button
+            menu.clicked(0, 2, ContainerInput.CLONE, player);
+            helper.assertTrue(menu.getCarried().isEmpty(), "middle-click copied the grave head: " + menu.getCarried());
+            menu.clicked(1, 2, ContainerInput.CLONE, player);
+            helper.assertTrue(menu.getCarried().isEmpty(), "middle-click copied the diamond: " + menu.getCarried());
+
+            assertItems(helper, stored(helper, grave).items(), "grave record", GraveItems::isGraveHead, stack -> stack.is(Items.DIAMOND));
+            helper.assertTrue(GraveItems.isGraveHead(menu.getSlot(0).getItem()), "grave head left the menu");
+            helper.assertTrue(menu.getSlot(1).getItem().is(Items.DIAMOND), "diamond left the menu");
+        } finally {
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
     public void takingLastItemRemovesHead(GameTestHelper helper) {
         Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
         ServerPlayer player = join(helper, "Looter");

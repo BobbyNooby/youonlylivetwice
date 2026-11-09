@@ -101,5 +101,11 @@ public class GraveMenu extends AbstractContainerMenu {
         public boolean mayPlace(ItemStack stack) {
             return false;
         }
+
+        // Creative middle-click would put a full copy of the stack on the cursor and leave the original here
+        @Override
+        public ItemStack safeClone(Player player) {
+            return ItemStack.EMPTY;
+        }
     }
 }
