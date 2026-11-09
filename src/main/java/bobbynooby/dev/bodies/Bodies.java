@@ -76,7 +76,7 @@ public final class Bodies {
         // Fires inside die(), after the death drops, which the body never has
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> onBodyDeath(entity));
         ServerLifecycleEvents.SERVER_STARTED.register(Bodies::restorePlayerBodies);
-        ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotPlayerBodies);
+        ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::snapshotBodies);
         BodyExpiry.init();
     }
 
@@ -174,15 +174,19 @@ public final class Bodies {
         }
     }
 
-    /** Saves each player body's state as the server stops, since the body itself isn't saved with its chunk. */
-    public static void snapshotPlayerBodies(MinecraftServer server) {
+    /**
+     * Saves the state of every loaded body as the server stops. A player body isn't saved with its chunk, so its record
+     * is all that comes back. A mannequin's record is what a login uses while its chunk stays unloaded, and this keeps
+     * it current without depending on when the stop unloads that chunk.
+     */
+    public static void snapshotBodies(MinecraftServer server) {
         if (!Settings.active()) {
             return;
         }
         BodyStore store = BodyStore.get(server);
         for (BodyRecord record : store.all()) {
             // A dying body belongs to the death path, and its state is nothing to hand over
-            if (record.type() == YoltConfig.BodyType.PLAYER && !record.pendingRemoval()
+            if (!record.pendingRemoval()
                     && server.overworld().getEntityInAnyDimension(record.bodyEntity()) instanceof LivingEntity body
                     && !body.isDeadOrDying()) {
                 store.put(record.withSnapshot(BodySnapshot.of(body)));

@@ -195,7 +195,7 @@ public class PlayerBodyGameTests {
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             body.setHealth(12.0F);
             Vec3 moved = body.position();
-            Bodies.snapshotPlayerBodies(server);
+            Bodies.snapshotBodies(server);
             body.discard();
             helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record went with the body");
 

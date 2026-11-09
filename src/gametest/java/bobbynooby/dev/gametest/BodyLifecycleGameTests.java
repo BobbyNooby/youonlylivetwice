@@ -374,6 +374,28 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // The record is what a login uses while the chunk stays unloaded, so the stop brings it up to date
+    @GameTest
+    public void stopSavesMannequinState(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Stopping", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
+            body.setHealth(11.0F);
+            Bodies.snapshotBodies(helper.getLevel().getServer());
+
+            Optional<BodyRecord> record = store(helper).byOwner(owner);
+            helper.assertTrue(record.isPresent(), "no body record");
+            helper.assertValueEqual(record.get().snapshot().pos(), body.position(), "saved position");
+            helper.assertValueEqual(record.get().snapshot().health(), 11.0F, "saved health");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
     @GameTest(maxTicks = 20)
     public void loginWithUnloadedBodyUsesSnapshot(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Unloaded", GameType.SURVIVAL);
