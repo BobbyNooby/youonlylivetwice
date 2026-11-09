@@ -3,6 +3,7 @@ package bobbynooby.dev.commands;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathLog;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -42,7 +43,8 @@ final class LockoutCommands {
     private static int kill(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         Optional<NameAndId> who = YoltCommands.lookup(server, name);
-        long start = System.currentTimeMillis();
+        // The kill's own death row is a new one, so the newest row now is what it must differ from
+        DeathLog before = who.map(found -> DeathLockout.newestDeath(found.id())).orElse(null);
         Kills.Result result;
         try {
             result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
@@ -61,7 +63,7 @@ final class LockoutCommands {
         }
         LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
         // The player is dead either way; without the record they are not locked out, so the admin has to know
-        if (!DeathLockout.deathRecordedSince(who.get().id(), start)) {
+        if (!DeathLockout.deathRecordedAfter(who.get().id(), before)) {
             return YoltCommands.fail(source, "Killed " + who.get().name() + ", but the death could not be recorded; see the server log.");
         }
         return YoltCommands.done(source, "Killed " + who.get().name());

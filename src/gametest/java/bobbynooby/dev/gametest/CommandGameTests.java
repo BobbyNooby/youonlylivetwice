@@ -407,6 +407,30 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // The check after a kill looks for a new row that locks out; an older death, revived, is not one
+    @GameTest
+    public void killReplyComesFromTheNewDeath(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Recorded", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        // Leaving saves the player, so the kill is an offline one
+        TestPlayers.leave(player);
+        DeathLockout.recordDeath(who.id(), who.name(), "an older death");
+        helper.assertValueEqual(DeathLockout.revive(who.id(), "console"), DeathLockout.ReviveResult.REVIVED, "revive of the older death");
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        // No grave to clean up: the player carries nothing, and this test is about the lockout
+        graves.enabled = false;
+        try {
+            helper.assertValueEqual(run(server, "yolt kill " + who.name()), List.of("Killed " + who.name()), "command output");
+            helper.assertTrue(DeathLockout.refusal(who.id()) != null, "the kill did not lock " + who.name() + " out");
+        } finally {
+            graves.enabled = gravesBefore;
+            DeathLockout.revive(who.id(), "console");
+        }
+        helper.succeed();
+    }
+
     // Name lookups go through the death log, so a name another test also records could find that test's player
     private static String uniqueName(String prefix) {
         return prefix + UUID.randomUUID().toString().substring(0, 6);

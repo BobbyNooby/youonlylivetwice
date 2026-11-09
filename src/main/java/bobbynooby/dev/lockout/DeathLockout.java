@@ -166,11 +166,27 @@ public final class DeathLockout {
     }
 
     /**
-     * Whether the player's newest death was stored at or after the given time; true with the lockout off, when
-     * nothing is stored. A kill records its death inside the death event, where no result can reach the caller, so
-     * the caller asks afterwards.
+     * The player's newest death, read before a kill so the kill's own row can be told apart afterwards. Null when
+     * there is none, or the store can't be read; the check after the kill reports a store that can't.
      */
-    public static boolean deathRecordedSince(UUID uuid, long sinceMillis) {
+    public static @Nullable DeathLog newestDeath(UUID uuid) {
+        DeathStore open = store;
+        if (open == null) {
+            return null;
+        }
+        try {
+            return open.latest(uuid).orElse(null);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether a death that locks the player out was stored since {@code before} was read: the newest row differs from
+     * it and isn't revived. True with the lockout off, when nothing is stored. A kill records its death inside the
+     * death event, where no result can reach the caller, so the caller asks afterwards.
+     */
+    public static boolean deathRecordedAfter(UUID uuid, @Nullable DeathLog before) {
         if (!enabled()) {
             return true;
         }
@@ -179,7 +195,8 @@ public final class DeathLockout {
             return false;
         }
         try {
-            return open.latest(uuid).filter(log -> log.deathTimeMillis() >= sinceMillis).isPresent();
+            Optional<DeathLog> now = open.latest(uuid);
+            return now.isPresent() && !now.get().revived() && !now.get().equals(before);
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not read back the death of {}", uuid, e);
             return false;
