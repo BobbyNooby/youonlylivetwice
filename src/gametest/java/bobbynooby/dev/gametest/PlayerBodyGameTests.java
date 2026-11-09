@@ -2,15 +2,18 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.Bodies;
+import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
@@ -21,6 +24,7 @@ import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
@@ -31,6 +35,7 @@ import net.minecraft.server.players.PlayerList;
 import net.minecraft.server.players.SleepStatus;
 import net.minecraft.server.waypoints.ServerWaypointManager;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -251,6 +256,76 @@ public class PlayerBodyGameTests {
             helper.assertTrue(record.isPresent(), "no body record");
             helper.assertValueEqual(record.get().snapshot().pos(), body.position(), "saved position");
             helper.assertValueEqual(record.get().snapshot().health(), 13.0F, "saved health");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A player's own armour wear skips the mixin a mannequin goes through, so the body checks the switch itself
+    @GameTest
+    public void playerBodyArmourWearsSwitch(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "PlayerArmour", ON_FLOOR);
+        UUID owner = player.getUUID();
+        ServerLevel level = helper.getLevel();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            PlayerBody body = leaveBody(helper, player);
+            // Never added to the world: a mob attack only needs someone to come from
+            DamageSource attack = level.damageSources().mobAttack(new Zombie(level));
+
+            body.hurtServer(level, attack, 6.0F);
+            int chest = body.getItemBySlot(EquipmentSlot.CHEST).getDamageValue();
+            helper.assertTrue(chest > 0, "chestplate did not wear with the switch on");
+            int helmet = body.getItemBySlot(EquipmentSlot.HEAD).getDamageValue();
+            // What a falling block or stalactite does on top of the armour wear
+            body.hurtHelmet(attack, 8.0F);
+            helper.assertTrue(body.getItemBySlot(EquipmentSlot.HEAD).getDamageValue() > helmet,
+                    "helmet did not wear with the switch on");
+
+            Settings.get().bodies.armourWears = false;
+            helmet = body.getItemBySlot(EquipmentSlot.HEAD).getDamageValue();
+            // Past the hurt cooldown, so the second hit lands in full
+            body.damageCooldownTime = 0;
+            helper.assertTrue(body.hurtServer(level, attack, 6.0F), "second hit didn't land");
+            body.hurtHelmet(attack, 8.0F);
+            helper.assertValueEqual(body.getItemBySlot(EquipmentSlot.CHEST).getDamageValue(), chest,
+                    "chestplate damage with the switch off");
+            helper.assertValueEqual(body.getItemBySlot(EquipmentSlot.HEAD).getDamageValue(), helmet,
+                    "helmet damage with the switch off");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void playerBodyExpires(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "PlayerExpires", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            PlayerBody body = leaveBody(helper, player);
+            body.setHealth(9.0F);
+            body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
+            Vec3 at = body.position();
+            // As if the owner logged out 61 seconds ago, so a one-minute body is due
+            BodyRecord record = store(helper).byOwner(owner).orElseThrow();
+            store(helper).put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
+                    System.currentTimeMillis() - 61_000L, false, record.snapshot(), record.skin()));
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertFalse(helper.getLevel().players().contains(body), "body still among the level's players");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 9.0F, "saved health");
+            helper.assertValueEqual(saved.read(ServerPlayer.SavedPosition.MAP_CODEC).flatMap(ServerPlayer.SavedPosition::position),
+                    Optional.of(at), "saved position");
         } finally {
             cleanUp(helper, owner, before);
         }
