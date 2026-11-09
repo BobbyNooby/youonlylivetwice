@@ -2,7 +2,7 @@ package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
 
-/** What the sleep switches mean; SleepStatusMixin and NoBedRespawnMixin only ask these. */
+/** What the sleep switches mean; the sleep and bed-respawn mixins only ask these. */
 public final class Sleep {
     /** More sleepers than any server holds, so the night never skips. */
     public static final int SLEEPERS_NEEDED_WHEN_BLOCKED = 727;
@@ -16,6 +16,11 @@ public final class Sleep {
 
     public static boolean blocksNightSkip() {
         return Settings.on(c -> c.sleep.noNightSkip);
+    }
+
+    /** True when nobody gets the "players sleeping" line; with the night blocked its count could never be reached. */
+    public static boolean hidesSleepStatus() {
+        return hidesSleepers() || blocksNightSkip();
     }
 
     public static boolean ignoresRespawnPoint() {

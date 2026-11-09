@@ -37,6 +37,7 @@
     "RandomSpawnMixin",
     "ServerCommandSuggestionsProviderMixin",
     "SetPlayerTeamPacketInvoker",
+    "SleepAnnounceMixin",
     "SleepStatusMixin",
     "TabHeaderMixin",
     "VisibilityPairingMixin"
