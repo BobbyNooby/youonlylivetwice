@@ -58,7 +58,9 @@ final class AdminCommands {
                 : List.of();
         if (!outside.isEmpty()) {
             Settings.get().worldBorder = liveBorder;
-            warnings.add("World border kept as it was, since the new one would leave outside it: " + String.join(", ", outside) + ".");
+            warnings.add("World border kept as it was, since the new one would leave outside it: " + String.join(", ", outside)
+                    + ". The file still holds the new border and a restart will apply it: use /yolt border or endscaling with confirm"
+                    + " to apply it now, or change the file back.");
         }
         LiveSettings.applyAll(server);
 

@@ -446,8 +446,8 @@ public class CommandGameTests {
             // The test structures sit millions of blocks out, far outside a 1000 block border
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000}}");
             List<String> output = run(server, "yolt reload");
-            helper.assertTrue(output.contains("Config reloaded") && output.stream().anyMatch(line -> line.contains(name)),
-                    "command output: " + output);
+            helper.assertTrue(output.contains("Config reloaded") && output.stream().anyMatch(line -> line.contains(name)
+                    && line.contains("a restart will apply it") && line.contains("change the file back")), "command output: " + output);
             helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
             helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), sizeBefore, "overworld border size");
