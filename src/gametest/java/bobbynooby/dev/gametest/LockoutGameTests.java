@@ -245,12 +245,15 @@ public class LockoutGameTests {
         helper.assertTrue(player.isDeadOrDying(), "the player did not die");
     }
 
-    // A server running behind still runs queued tasks within 4 ticks
+    // A server running behind still runs queued tasks within 4 ticks. The death row must be there with no time left,
+    // so the player stayed because of it, not because nothing was recorded.
     private static void assertStillOnlineLater(GameTestHelper helper, ServerPlayer player) {
         MinecraftServer server = helper.getLevel().getServer();
         helper.runAfterDelay(5, () -> {
             try {
                 helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, "the dead player was kicked");
+                helper.assertValueEqual(DeathLockout.revive(player.getUUID(), "console"), DeathLockout.ReviveResult.ALREADY_ENDED,
+                        "revive of the death row");
             } finally {
                 leaveIfOnline(player);
             }
