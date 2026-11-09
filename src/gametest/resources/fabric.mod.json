@@ -19,6 +19,7 @@
 			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.OfflineGameTests",
 			"bobbynooby.dev.gametest.PlacementGameTests",
+			"bobbynooby.dev.gametest.ReviveGameTests",
 			"bobbynooby.dev.gametest.SmokeGameTests",
 			"bobbynooby.dev.gametest.SwitchGameTests",
 			"bobbynooby.dev.gametest.TabHeaderGameTests"

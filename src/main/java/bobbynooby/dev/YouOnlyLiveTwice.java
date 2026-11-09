@@ -7,6 +7,7 @@ import bobbynooby.dev.features.TabHeaders;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.features.WorldBorders;
+import bobbynooby.dev.revive.Revive;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.resources.Identifier;
@@ -42,6 +43,7 @@ public class YouOnlyLiveTwice implements ModInitializer {
         YoltCommands.register();
         DeathLockout.init();
         Graves.init();
+        Revive.init();
         TabHeaders.init();
         NameTagHider.registerInitTeams();
         NameTagHider.registerAddPlayerToTeamOnJoin();

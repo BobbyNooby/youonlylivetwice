@@ -4,6 +4,7 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.PlayerInvoker;
+import bobbynooby.dev.revive.Revive;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
@@ -272,22 +273,37 @@ public final class Graves {
     }
 
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
-        if (!Settings.active() || !Settings.get().graves.enabled) {
+        if (!Settings.active() || !(player instanceof ServerPlayer serverPlayer)) {
             return InteractionResult.PASS;
         }
-        if (!(player instanceof ServerPlayer serverPlayer) || !level.getBlockState(hit.getBlockPos()).is(Blocks.PLAYER_HEAD)) {
+        if (Settings.get().graves.enabled && level.getBlockState(hit.getBlockPos()).is(Blocks.PLAYER_HEAD)) {
+            Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), hit.getBlockPos());
+            if (grave.isPresent()) {
+                // A vanilla client sees no use for a head, so it tries the off hand straight after; that must not reopen it
+                if (hand == InteractionHand.MAIN_HAND) {
+                    open(serverPlayer, grave.get());
+                    return InteractionResult.SUCCESS;
+                }
+                return InteractionResult.CONSUME;
+            }
+        }
+        return refuseMarkedHead(serverPlayer, hand);
+    }
+
+    // A placed head drops back with only its profile, name and note sound, so a marked head would lose its
+    // marker for good. A revive head tries to revive instead.
+    private static InteractionResult refuseMarkedHead(ServerPlayer player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        boolean revive = GraveItems.isReviveHead(stack);
+        if (player.isSpectator() || (!revive && !GraveItems.isGraveHead(stack))) {
             return InteractionResult.PASS;
         }
-        Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), hit.getBlockPos());
-        if (grave.isEmpty()) {
-            return InteractionResult.PASS;
+        if (revive) {
+            Revive.tryUse(player, stack);
         }
-        // A vanilla client sees no use for a head, so it tries the off hand straight after; that must not reopen it
-        if (hand == InteractionHand.MAIN_HAND) {
-            open(serverPlayer, grave.get());
-            return InteractionResult.SUCCESS;
-        }
-        return InteractionResult.CONSUME;
+        // The client placed the head on its side and took it off the stack, so send it the real stack
+        player.inventoryMenu.sendAllDataToRemote();
+        return InteractionResult.FAIL;
     }
 
     // The event fires while the chunk is still being loaded, and setting a block in it then would wait on that
