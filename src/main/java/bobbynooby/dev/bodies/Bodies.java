@@ -158,6 +158,7 @@ public final class Bodies {
             return;
         }
         BodyStore store = BodyStore.get(server);
+        long now = System.currentTimeMillis();
         for (BodyRecord record : store.all()) {
             if (record.type() != YoltConfig.BodyType.PLAYER
                     || server.overworld().getEntityInAnyDimension(record.bodyEntity()) != null) {
@@ -166,6 +167,10 @@ public final class Bodies {
             // Taken over already, so there is no body to bring back
             if (record.pendingRemoval()) {
                 store.remove(record.owner());
+                continue;
+            }
+            // Its time is up already, say after downtime: the expiry removes it from its record, a few at a time
+            if (BodyExpiry.isDue(record, Settings.get().bodies.duration, now)) {
                 continue;
             }
             // One that fails keeps its record, so the owner's login still takes over its last saved state

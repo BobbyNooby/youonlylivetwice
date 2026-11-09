@@ -4,6 +4,7 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.BodyDuration;
@@ -59,6 +60,7 @@ import net.minecraft.world.scores.PlayerTeam;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,6 +74,8 @@ public class PlayerBodyGameTests {
     private static final String PLAYER_BODY = "you-only-live-twice-gametest:player_body";
     // For tests that save or bring back every body on the server, which would rewrite the records of other tests
     static final String BODY_RESTART = "you-only-live-twice-gametest:body_restart";
+    // For the test that brings back and expires every body at once, where another test's record would take a turn
+    private static final String BODY_EXPIRY = "you-only-live-twice-gametest:body_expiry";
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
 
     @GameTest
@@ -328,6 +332,61 @@ public class PlayerBodyGameTests {
                     Optional.of(at), "saved position");
         } finally {
             cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // After downtime everyone who was online at the stop is due at once. The start leaves those bodies to the expiry,
+    // which removes them from their records a few at a time.
+    @GameTest(environment = BODY_EXPIRY)
+    public void expiryIsCappedPerPass(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        BodyStore store = store(helper);
+        List<ServerPlayer> owners = new ArrayList<>();
+        Map<UUID, Vec3> movedTo = new HashMap<>();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            // The stop gives everyone one logout time
+            long stoppedAt = System.currentTimeMillis() - 61_000L;
+            for (int i = 0; i < BodyExpiry.MAX_PER_PASS + 2; i++) {
+                ServerPlayer player = join(helper, "Crowd", ON_FLOOR);
+                owners.add(player);
+                PlayerBody body = leaveBody(helper, player);
+                // Moved, so the save can only get this spot from the record
+                body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
+                movedTo.put(player.getUUID(), body.position());
+                BodyRecord record = store.byOwner(player.getUUID()).orElseThrow();
+                store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
+                        stoppedAt, false, BodySnapshot.of(body), record.skin()));
+                // A player body isn't saved with its chunk, so after the stop only the record is left
+                body.discard();
+            }
+
+            Bodies.restorePlayerBodies(server);
+            for (ServerPlayer owner : owners) {
+                UUID bodyId = store.byOwner(owner.getUUID()).orElseThrow().bodyEntity();
+                helper.assertTrue(helper.getLevel().getEntity(bodyId) == null, "a body already due was brought back");
+            }
+
+            BodyExpiry.tick(server);
+            int first = expiredOf(store, owners);
+            helper.assertTrue(first <= BodyExpiry.MAX_PER_PASS, "one pass removed " + first + " bodies");
+            BodyExpiry.tick(server);
+            helper.assertTrue(expiredOf(store, owners) > first, "the next pass removed no more");
+            for (ServerPlayer owner : owners) {
+                if (store.byOwner(owner.getUUID()).isEmpty()) {
+                    CompoundTag saved = OfflinePlayerData.load(server, owner.nameAndId()).orElseThrow();
+                    helper.assertValueEqual(saved.read(ServerPlayer.SavedPosition.MAP_CODEC)
+                            .flatMap(ServerPlayer.SavedPosition::position), Optional.of(movedTo.get(owner.getUUID())),
+                            "saved position");
+                }
+            }
+        } finally {
+            Settings.get().bodies = before;
+            for (ServerPlayer owner : owners) {
+                removeBody(helper, owner.getUUID());
+            }
         }
         helper.succeed();
     }
@@ -664,6 +723,10 @@ public class PlayerBodyGameTests {
 
     private static BodyStore store(GameTestHelper helper) {
         return BodyStore.get(helper.getLevel().getServer());
+    }
+
+    private static int expiredOf(BodyStore store, List<ServerPlayer> owners) {
+        return (int) owners.stream().filter(owner -> store.byOwner(owner.getUUID()).isEmpty()).count();
     }
 
     private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {

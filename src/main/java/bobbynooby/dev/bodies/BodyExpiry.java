@@ -25,6 +25,11 @@ public final class BodyExpiry {
     // Loading an unreadable save makes vanilla log a warning and keep a copy of the file every time, so a body
     // whose expiry failed waits this long before the next try
     private static final long RETRY_MILLIS = 5 * MINUTE_MILLIS;
+    /**
+     * How many bodies one pass tries to remove. Each loads and writes a save on the server thread, and after downtime
+     * everyone who was online at the stop shares one logout time, so they all come due in the same tick.
+     */
+    public static final int MAX_PER_PASS = 4;
 
     // Body entity id to when it may be tried again, for bodies whose expiry failed. Our error is logged once per body.
     private static final Map<UUID, Long> RETRY_AT = new HashMap<>();
@@ -61,9 +66,14 @@ public final class BodyExpiry {
             return;
         }
         long now = System.currentTimeMillis();
+        int tried = 0;
         for (BodyRecord record : records) {
+            // The rest wait for the next pass
+            if (tried >= MAX_PER_PASS) {
+                break;
+            }
             // A pending record was taken over already, and a body that failed waits for its next try
-            if (record.pendingRemoval() || now - record.loggedOutAt() < duration.minutes() * MINUTE_MILLIS
+            if (record.pendingRemoval() || !isDue(record, duration, now)
                     || now < RETRY_AT.getOrDefault(record.bodyEntity(), Long.MIN_VALUE)) {
                 continue;
             }
@@ -73,6 +83,8 @@ public final class BodyExpiry {
                     || server.getPlayerList().getPlayer(record.owner()) != null) {
                 continue;
             }
+            // A failed try counts too: it loads the save all the same
+            tried++;
             try {
                 expire(server, record, entity);
                 RETRY_AT.remove(record.bodyEntity());
@@ -84,6 +96,11 @@ public final class BodyExpiry {
                 }
             }
         }
+    }
+
+    /** True when a body has stood for the duration. Never with the duration "offline". */
+    static boolean isDue(BodyRecord record, BodyDuration duration, long now) {
+        return !duration.isOffline() && now - record.loggedOutAt() >= duration.minutes() * MINUTE_MILLIS;
     }
 
     // The save is written before anything goes, so a failure leaves the body standing and nothing lost
