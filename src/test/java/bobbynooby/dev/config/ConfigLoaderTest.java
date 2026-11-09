@@ -188,6 +188,11 @@ class ConfigLoaderTest {
         assertEquals(59999968, r.config().worldBorder.diameter);
         assertTrue(r.warnings().stream().anyMatch(w -> w.contains("worldBorder.endScale") && w.contains("worldBorder.diameter")
                 && w.contains(String.valueOf(ConfigLoader.MAX_BORDER_DIAMETER))));
+
+        // 59999968 / 11 rounds up, so the plain quotient times 11 lands just past the maximum
+        YoltConfig.WorldBorderSection odd = loadJson("{\"worldBorder\":{\"diameter\":11,\"endScale\":1e7}}").config().worldBorder;
+        assertTrue(odd.diameter * odd.endScale <= ConfigLoader.MAX_BORDER_DIAMETER, "end border " + odd.diameter * odd.endScale);
+        assertTrue(odd.diameter * odd.endScale > ConfigLoader.MAX_BORDER_DIAMETER - 1, "end border " + odd.diameter * odd.endScale);
     }
 
     @Test

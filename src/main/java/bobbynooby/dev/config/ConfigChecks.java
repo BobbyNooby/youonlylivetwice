@@ -19,6 +19,10 @@ final class ConfigChecks {
         }
         // The End border is the overworld's times endScale, and vanilla's border can't be larger than its maximum
         double maxEndScale = (double) ConfigLoader.MAX_BORDER_DIAMETER / c.worldBorder.diameter;
+        // The division can round up, which would put the End border a hair past the maximum
+        if (c.worldBorder.diameter * maxEndScale > ConfigLoader.MAX_BORDER_DIAMETER) {
+            maxEndScale = Math.nextDown(maxEndScale);
+        }
         if (c.worldBorder.endScale > maxEndScale) {
             c.worldBorder.endScale = maxEndScale;
             warnings.add("worldBorder.endScale: worldBorder.diameter times endScale can't pass " + ConfigLoader.MAX_BORDER_DIAMETER
