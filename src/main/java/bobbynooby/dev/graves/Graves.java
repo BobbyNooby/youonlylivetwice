@@ -153,6 +153,14 @@ public final class Graves {
             return false;
         }
 
+        // The lockout kick right after a death saves the emptied player at once, so the graves must reach the
+        // disk first. This runs inside the death, so a failed write only logs; the next save tries again.
+        try {
+            GraveStore.get(level.getServer()).saveNow(level.getServer());
+        } catch (RuntimeException e) {
+            YouOnlyLiveTwice.LOGGER.error("Could not write {}'s grave to disk, it is kept in memory until the next save", name, e);
+        }
+
         // Emptied only once the graves hold the items, so a failed grave can't lose them
         if (!keepInventory) {
             inventory.clearContent();
