@@ -42,19 +42,25 @@ public final class ConfigLoader {
 
     private ConfigLoader() {}
 
-    public static Result load(Path file) {
-        return load(file, true);
-    }
-
-    /** With writeDefaultsOnError false, a file that is not valid JSON is left as it is and nothing is loaded. */
-    public static Result load(Path file, boolean writeDefaultsOnError) {
-        return load(file, writeDefaultsOnError, CURRENT_VERSION, STEPS);
+    /**
+     * With a base (a reload), a bad or missing key keeps the base's value and a missing file changes nothing. Without
+     * one (startup), they fall back to the defaults. With writeDefaultsOnError false, a file that can't be read is left
+     * as it is and nothing is loaded.
+     */
+    public static Result load(Path file, @Nullable YoltConfig base, boolean writeDefaultsOnError) {
+        return load(file, base, writeDefaultsOnError, CURRENT_VERSION, STEPS);
     }
 
     // The version and steps are parameters so a test can upgrade with steps of its own
-    static Result load(Path file, boolean writeDefaultsOnError, int currentVersion, List<Migrations.Step<JsonObject>> steps) {
+    static Result load(Path file, @Nullable YoltConfig base, boolean writeDefaultsOnError, int currentVersion,
+                       List<Migrations.Step<JsonObject>> steps) {
         List<String> warnings = new ArrayList<>();
         if (!Files.exists(file)) {
+            if (base != null) {
+                // A moved file must not reset a running server, so nothing is written either
+                warnings.add("config file is missing, nothing changed");
+                return new Result(base, warnings, false);
+            }
             return new Result(writeDefaults(file), warnings, false);
         }
 
@@ -86,8 +92,9 @@ public final class ConfigLoader {
             warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
         }
 
-        JsonObject defaults = GSON.toJsonTree(new YoltConfig()).getAsJsonObject();
-        JsonObject merged = merge(defaults, user, "", warnings);
+        YoltConfig fallback = base != null ? base : new YoltConfig();
+        String fallbackName = base != null ? "the current value" : "default";
+        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName);
 
         YoltConfig config;
         try {
@@ -97,7 +104,7 @@ public final class ConfigLoader {
             warnings.add("config could not be read (" + e.getMessage() + "), using defaults");
             config = new YoltConfig();
         }
-        validate(config, warnings);
+        ConfigChecks.validate(config, fallback, warnings);
         // What is held is this build's layout, whatever the file said, so a save says so
         config.configVersion = currentVersion;
         if (version > currentVersion) {
@@ -158,7 +165,7 @@ public final class ConfigLoader {
         }
     }
 
-    private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings) {
+    private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName) {
         JsonObject result = new JsonObject();
         for (Map.Entry<String, JsonElement> entry : defaults.entrySet()) {
             String key = entry.getKey();
@@ -170,17 +177,17 @@ public final class ConfigLoader {
                 result.add(key, def);
             } else if (def.isJsonObject()) {
                 if (value.isJsonObject()) {
-                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings));
+                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName));
                 } else {
                     result.add(key, def);
-                    warnings.add(path + ": expected an object, using default");
+                    warnings.add(path + ": expected an object, using " + fallbackName);
                 }
             } else if (def.isJsonArray()) {
                 if (isStringArray(value)) {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
-                    warnings.add(path + ": expected a list of strings, using default");
+                    warnings.add(path + ": expected a list of strings, using " + fallbackName);
                 }
             } else {
                 String problem = primitiveProblem(path, def, value);
@@ -188,7 +195,7 @@ public final class ConfigLoader {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
-                    warnings.add(path + ": " + problem + ", using default");
+                    warnings.add(path + ": " + problem + ", using " + fallbackName);
                 }
             }
         }
@@ -240,46 +247,5 @@ public final class ConfigLoader {
             }
         }
         return null;
-    }
-
-    private static void validate(YoltConfig c, List<String> warnings) {
-        YoltConfig def = new YoltConfig();
-
-        if (c.worldBorder.diameter < 1 || c.worldBorder.diameter > MAX_BORDER_DIAMETER) {
-            c.worldBorder.diameter = def.worldBorder.diameter;
-            warnings.add("worldBorder.diameter: must be 1 to 59999968, using default");
-        }
-        if (!(c.worldBorder.endScale > 0)) {
-            c.worldBorder.endScale = def.worldBorder.endScale;
-            warnings.add("worldBorder.endScale: must be above 0, using default");
-        }
-        if (c.deathLockout.cooldownDays < 0) {
-            c.deathLockout.cooldownDays = def.deathLockout.cooldownDays;
-            warnings.add("deathLockout.cooldownDays: must be 0 or more, using default");
-        }
-        if (c.chat.radius < 1) {
-            c.chat.radius = def.chat.radius;
-            warnings.add("chat.radius: must be 1 or more, using default");
-        }
-        if (c.graves.enderChestOnDeath == null) {
-            c.graves.enderChestOnDeath = def.graves.enderChestOnDeath;
-            warnings.add("graves.enderChestOnDeath: unknown value, using default");
-        }
-        if (c.chat.mode == null) {
-            c.chat.mode = def.chat.mode;
-            warnings.add("chat.mode: unknown value, using default");
-        }
-        if (c.bodies.type == null) {
-            c.bodies.type = def.bodies.type;
-            warnings.add("bodies.type: unknown value, using default");
-        }
-        if (c.bodies.pose == null) {
-            c.bodies.pose = def.bodies.pose;
-            warnings.add("bodies.pose: unknown value, using default");
-        }
-        if (c.bodies.duration == null) {
-            c.bodies.duration = def.bodies.duration;
-            warnings.add("bodies.duration: expected \"offline\" or minutes of 1 or more, using default");
-        }
     }
 }

@@ -21,13 +21,13 @@ class ConfigLoaderTest {
     private ConfigLoader.Result loadJson(String json) throws IOException {
         Path file = dir.resolve("config.json");
         Files.writeString(file, json);
-        return ConfigLoader.load(file);
+        return ConfigLoader.load(file, null, true);
     }
 
     @Test
     void missingFileWritesDefaults() throws IOException {
         Path file = dir.resolve("config.json");
-        ConfigLoader.Result result = ConfigLoader.load(file);
+        ConfigLoader.Result result = ConfigLoader.load(file, null, true);
         assertEquals(10000, result.config().worldBorder.diameter);
         assertTrue(Files.exists(file));
         assertTrue(Files.readString(file).contains("\"cooldownDays\": 7"));
@@ -109,7 +109,7 @@ class ConfigLoaderTest {
     void unparseableFileLeftAloneWithoutDefaults() throws IOException {
         Path file = dir.resolve("config.json");
         Files.writeString(file, "{not json");
-        ConfigLoader.Result r = ConfigLoader.load(file, false);
+        ConfigLoader.Result r = ConfigLoader.load(file, null, false);
         assertTrue(r.unparseable());
         assertNull(r.config());
         assertFalse(r.warnings().isEmpty());
@@ -124,16 +124,47 @@ class ConfigLoaderTest {
         byte[] bad = {(byte) 0xC3, 0x28};
         Files.write(file, bad);
 
-        ConfigLoader.Result reload = ConfigLoader.load(file, false);
+        ConfigLoader.Result reload = ConfigLoader.load(file, null, false);
         assertTrue(reload.unparseable());
         assertNull(reload.config());
         assertFalse(reload.warnings().isEmpty());
         assertArrayEquals(bad, Files.readAllBytes(file));
 
-        ConfigLoader.Result startup = ConfigLoader.load(file);
+        ConfigLoader.Result startup = ConfigLoader.load(file, null, true);
         assertTrue(startup.unparseable());
         assertEquals(10000, startup.config().worldBorder.diameter);
         assertArrayEquals(bad, Files.readAllBytes(dir.resolve("config.json.bak")));
+    }
+
+    @Test
+    void badValueOnReloadKeepsLiveValue() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"worldBorder\":{\"diameter\":\"2OOOO\"},\"chat\":{\"radius\":99}}");
+        YoltConfig base = new YoltConfig();
+        base.worldBorder.diameter = 20000;
+        base.chat.mode = YoltConfig.ChatMode.GLOBAL;
+
+        ConfigLoader.Result r = ConfigLoader.load(file, base, false);
+        assertEquals(20000, r.config().worldBorder.diameter);
+        assertEquals(99, r.config().chat.radius);
+        // a key the file leaves out keeps the live value too
+        assertEquals(YoltConfig.ChatMode.GLOBAL, r.config().chat.mode);
+        assertEquals(1, r.warnings().size());
+        assertTrue(r.warnings().get(0).contains("worldBorder.diameter"));
+        assertTrue(r.warnings().get(0).endsWith("using the current value"));
+    }
+
+    @Test
+    void missingFileOnReloadKeepsLiveConfig() {
+        Path file = dir.resolve("config.json");
+        YoltConfig base = new YoltConfig();
+        base.chat.radius = 32;
+
+        ConfigLoader.Result r = ConfigLoader.load(file, base, false);
+        assertEquals(32, r.config().chat.radius);
+        assertEquals(List.of("config file is missing, nothing changed"), r.warnings());
+        assertFalse(r.unparseable());
+        assertFalse(Files.exists(file));
     }
 
     @Test
@@ -152,7 +183,7 @@ class ConfigLoaderTest {
     @Test
     void fileHasConfigVersion() throws IOException {
         Path file = dir.resolve("config.json");
-        ConfigLoader.load(file);
+        ConfigLoader.load(file, null, true);
         assertTrue(Files.readString(file).contains("\"configVersion\": 1"));
     }
 
@@ -167,7 +198,7 @@ class ConfigLoaderTest {
             return json;
         }));
 
-        ConfigLoader.Result r = ConfigLoader.load(file, true, 2, steps);
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true, 2, steps);
         assertEquals(old, Files.readString(dir.resolve("config.json.v1.bak")));
         JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
         assertEquals(2, written.get("configVersion").getAsInt());
@@ -182,7 +213,7 @@ class ConfigLoaderTest {
         Path file = dir.resolve("config.json");
         for (String version : List.of("0", "-1", "-2147483648")) {
             Files.writeString(file, "{\"configVersion\": " + version + ", \"randomSpawn\": false}");
-            ConfigLoader.Result r = ConfigLoader.load(file);
+            ConfigLoader.Result r = ConfigLoader.load(file, null, true);
             assertFalse(r.config().randomSpawn);
             JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             assertEquals(ConfigLoader.CURRENT_VERSION, written.get("configVersion").getAsInt(), "written for " + version);
@@ -198,7 +229,7 @@ class ConfigLoaderTest {
         String newer = "{\"configVersion\": 2, \"chat\": {\"radius\": 32}, \"fromTheFuture\": true}";
         Files.writeString(file, newer);
 
-        ConfigLoader.Result r = ConfigLoader.load(file);
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true);
         assertEquals(newer, Files.readString(file));
         assertEquals(32, r.config().chat.radius);
         assertTrue(r.warnings().contains("config is from a newer version, so it was not rewritten"));

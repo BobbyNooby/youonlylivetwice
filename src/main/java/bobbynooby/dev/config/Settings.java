@@ -21,16 +21,16 @@ public final class Settings {
 
     /** Reads the file at mod start and logs anything that fell back to a default. A broken file is replaced with defaults. */
     public static void load() {
-        ConfigLoader.Result result = ConfigLoader.load(path(), true);
+        ConfigLoader.Result result = ConfigLoader.load(path(), null, true);
         config = result.config();
         for (String warning : result.warnings()) {
             Yolt.LOGGER.warn("Config: {}", warning);
         }
     }
 
-    /** Re-reads the file. A file that isn't valid JSON changes nothing, so one typo can't reset a running server. */
+    /** Re-reads the file. A bad value keeps the live one, and a file that isn't valid JSON changes nothing, so one typo can't reset a running server. */
     public static ConfigLoader.Result reload() {
-        ConfigLoader.Result result = ConfigLoader.load(path(), false);
+        ConfigLoader.Result result = ConfigLoader.load(path(), config, false);
         if (!result.unparseable()) {
             config = result.config();
         }
