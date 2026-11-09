@@ -132,6 +132,7 @@ public class GraveClientTest implements FabricClientGameTest {
                                        TestDedicatedServerConnection connection, Grave grave) {
         server.runOnServer(s -> connection.getServerPlayer().setItemInHand(InteractionHand.MAIN_HAND, craftReviveHead(s, grave)));
         ctx.waitFor(mc -> GraveItems.isReviveHead(mc.player.getMainHandItem()));
+        // Vanilla never draws a glint on a player head, so only this check shows the glint reached the client
         ctx.runOnClient(mc -> {
             ItemStack held = mc.player.getMainHandItem();
             if (!held.hasFoil() || held.getRarity() != Rarity.EPIC) {
@@ -139,7 +140,7 @@ public class GraveClientTest implements FabricClientGameTest {
             }
         });
 
-        // The hand needs a few ticks to rise; the item name stays above the hotbar for two seconds
+        // The hand needs a few ticks to rise; the name above the hotbar, in the rarity colour, stays for two seconds
         ctx.waitTicks(10);
         screenshot(ctx, "02-revive-head");
     }
