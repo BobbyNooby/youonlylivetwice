@@ -37,6 +37,7 @@ import net.minecraft.world.phys.Vec3;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -158,6 +159,34 @@ public class BodyBehaviourGameTests {
             helper.assertFalse(saved.contains("active_effects"), "worn-off effect still saved");
             // Loading doesn't take an effect's modifier off again, so a stale one would stay for good
             helper.assertTrue(speedModifiers(helper, saved).isEmpty(), "worn-off speed's modifier still saved");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Only the offline-death routine edits a dead player's save, so the expiry leaves it exactly as it is
+    @GameTest
+    public void expiryOfDeadSaveOnlyDropsRecord(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "DeadSave", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            CompoundTag dead = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            dead.putFloat("Health", 0.0F);
+            OfflinePlayerData.save(server, owner, dead);
+            byte[] saveBefore = Files.readAllBytes(saveFile(helper, owner));
+            // A snapshot written by mistake would bring this back
+            body.setHealth(9.0F);
+            expiredLogout(helper, owner);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "dead owner's save changed");
         } finally {
             cleanUp(helper, owner, before);
         }
