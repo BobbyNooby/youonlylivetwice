@@ -44,6 +44,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,59 +75,78 @@ public class MigrationGameTests {
         }
     }
 
+    private static void deleteFolder(Path dir) throws IOException {
+        try (Stream<Path> files = Files.walk(dir)) {
+            for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
     @GameTest
     public void deathStoreFromBeforeVersioningIsV1(GameTestHelper helper) throws IOException, SQLException {
-        Path file = Files.createTempDirectory("yolt-migration").resolve("before.db");
-        UUID uuid = UUID.randomUUID();
-        try (Connection connection = DriverManager.getConnection(url(file));
-             Statement statement = connection.createStatement()) {
-            statement.execute(TODAY_TABLE);
-            statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Before', 1000, 7, 0)");
-        }
-        helper.assertValueEqual(userVersion(file), 0, "schema version before opening");
-
-        DeathStore store = DeathStore.open(file);
+        Path dir = Files.createTempDirectory("yolt-migration");
         try {
-            helper.assertValueEqual(store.latest(uuid).orElse(null), new DeathLog(uuid, "Before", 1000L, 7, false), "kept row");
+            Path file = dir.resolve("before.db");
+            UUID uuid = UUID.randomUUID();
+            try (Connection connection = DriverManager.getConnection(url(file));
+                 Statement statement = connection.createStatement()) {
+                statement.execute(TODAY_TABLE);
+                statement.execute("INSERT INTO death_logs VALUES ('" + uuid + "', 'Before', 1000, 7, 0)");
+            }
+            helper.assertValueEqual(userVersion(file), 0, "schema version before opening");
+
+            DeathStore store = DeathStore.open(file);
+            try {
+                helper.assertValueEqual(store.latest(uuid).orElse(null), new DeathLog(uuid, "Before", 1000L, 7, false), "kept row");
+            } finally {
+                store.close();
+            }
+            helper.assertValueEqual(userVersion(file), DeathStore.SCHEMA_VERSION, "schema version after opening");
         } finally {
-            store.close();
+            deleteFolder(dir);
         }
-        helper.assertValueEqual(userVersion(file), DeathStore.SCHEMA_VERSION, "schema version after opening");
         helper.succeed();
     }
 
     // The server opens its store this way at start; a refused open leaves it with none, which lets everyone in
     @GameTest
     public void newerDeathStoreIsNotWritten(GameTestHelper helper) throws IOException, SQLException {
-        Path file = Files.createTempDirectory("yolt-migration").resolve("newer.db");
-        try (Connection connection = DriverManager.getConnection(url(file));
-             Statement statement = connection.createStatement()) {
-            statement.execute(TODAY_TABLE);
-            statement.execute("PRAGMA user_version = 99");
-        }
-        byte[] before = Files.readAllBytes(file);
-        UUID uuid = UUID.randomUUID();
-
-        DeathStore opened = null;
-        RuntimeException refused = null;
+        Path dir = Files.createTempDirectory("yolt-migration");
         try {
-            opened = DeathStore.open(file);
-        } catch (IllegalStateException e) {
-            refused = e;
-        }
-        DeathStore real = DeathLockout.swapStoreForTesting(opened);
-        try {
-            DeathLockout.recordDeath(uuid, "Newer");
-            helper.assertTrue(DeathLockout.refusal(uuid) == null, "a player was refused with a newer database");
-        } finally {
-            DeathLockout.swapStoreForTesting(real);
-            if (opened != null) {
-                opened.close();
+            Path file = dir.resolve("ahead.db");
+            try (Connection connection = DriverManager.getConnection(url(file));
+                 Statement statement = connection.createStatement()) {
+                statement.execute(TODAY_TABLE);
+                statement.execute("PRAGMA user_version = 99");
             }
+            byte[] before = Files.readAllBytes(file);
+            UUID uuid = UUID.randomUUID();
+
+            DeathStore opened = null;
+            RuntimeException refused = null;
+            try {
+                opened = DeathStore.open(file);
+            } catch (IllegalStateException e) {
+                refused = e;
+            }
+            DeathStore real = DeathLockout.swapStoreForTesting(opened);
+            try {
+                DeathLockout.recordDeath(uuid, "Newer");
+                helper.assertTrue(DeathLockout.refusal(uuid) == null, "a player was refused with a newer database");
+            } finally {
+                DeathLockout.swapStoreForTesting(real);
+                if (opened != null) {
+                    opened.close();
+                }
+            }
+            helper.assertTrue(opened == null, "a newer database was opened for writing");
+            helper.assertTrue(refused != null && String.valueOf(refused.getCause()).contains("schema v99"),
+                    "not refused for its version: " + refused);
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(file), before), "the newer database changed");
+        } finally {
+            deleteFolder(dir);
         }
-        helper.assertTrue(opened == null, "a newer database was opened for writing");
-        helper.assertTrue(refused != null && String.valueOf(refused.getCause()).contains("newer"), "no reason given: " + refused);
-        helper.assertTrue(Arrays.equals(Files.readAllBytes(file), before), "the newer database changed");
         helper.succeed();
     }
 
@@ -172,6 +192,11 @@ public class MigrationGameTests {
         helper.succeed();
     }
 
+    // The format and data version pairs both fixer tests load: older Minecraft, current, newer Minecraft, newer format
+    private static int[][] versionCases(int format, int current) {
+        return new int[][]{{format, current - 1}, {format, current}, {format, current + 1}, {format + 1, current}};
+    }
+
     // An older Minecraft's real item format can't be made here. This shows the fixer runs for an older file, is
     // skipped for a current or newer one, and that the item comes through whole either way.
     @GameTest
@@ -180,15 +205,16 @@ public class MigrationGameTests {
         int current = StoreVersions.currentDataVersion();
         Grave grave = grave(List.of(new ItemStack(Items.DIAMOND, 5)));
         Tag graveTag = Grave.CODEC.encodeStart(ops, grave).getOrThrow();
-        for (int saved : new int[]{current - 1, current, current + 1}) {
+        for (int[] saved : versionCases(GraveStore.FORMAT, current)) {
+            String label = "format " + saved[0] + ", data version " + saved[1];
             long before = StoreVersions.itemsFixed();
             GraveStore loaded = GraveStore.TYPE.codec()
-                    .parse(ops, storeData("graves", graveTag, GraveStore.FORMAT, saved)).getOrThrow();
-            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved < current ? 1L : 0L,
-                    "items fixed from data version " + saved);
+                    .parse(ops, storeData("graves", graveTag, saved[0], saved[1])).getOrThrow();
+            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved[1] < current ? 1L : 0L, "items fixed at " + label);
+            helper.assertValueEqual(loaded.fromNewer(), saved[0] > GraveStore.FORMAT || saved[1] > current, "newer at " + label);
             List<ItemStack> items = loaded.byId(grave.id()).orElseThrow().items();
             helper.assertTrue(items.size() == 1 && items.get(0).is(Items.DIAMOND) && items.get(0).getCount() == 5,
-                    "the diamonds changed from data version " + saved + ": " + items);
+                    "the diamonds changed at " + label + ": " + items);
         }
         helper.succeed();
     }
@@ -205,21 +231,22 @@ public class MigrationGameTests {
         BodyRecord record = new BodyRecord(UUID.randomUUID(), "Alex", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN,
                 1234L, false, snapshot);
         Tag recordTag = BodyRecord.CODEC.encodeStart(ops, record).getOrThrow();
-        for (int saved : new int[]{current - 1, current, current + 1}) {
+        for (int[] saved : versionCases(BodyStore.FORMAT, current)) {
+            String label = "format " + saved[0] + ", data version " + saved[1];
             long before = StoreVersions.itemsFixed();
             BodyStore loaded = BodyStore.TYPE.codec()
-                    .parse(ops, storeData("bodies", recordTag, BodyStore.FORMAT, saved)).getOrThrow();
-            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved < current ? 2L : 0L,
-                    "gear fixed from data version " + saved);
+                    .parse(ops, storeData("bodies", recordTag, saved[0], saved[1])).getOrThrow();
+            helper.assertValueEqual(StoreVersions.itemsFixed() - before, saved[1] < current ? 2L : 0L, "gear fixed at " + label);
+            helper.assertValueEqual(loaded.fromNewer(), saved[0] > BodyStore.FORMAT || saved[1] > current, "newer at " + label);
             BodySnapshot kept = loaded.byOwner(record.owner()).orElseThrow().snapshot();
             ItemStack keptChest = kept.gear().get(EquipmentSlot.CHEST);
             ItemStack keptArrows = kept.gear().get(EquipmentSlot.OFFHAND);
             helper.assertTrue(keptChest != null && keptChest.is(Items.IRON_CHESTPLATE) && keptChest.getCount() == 1
-                    && keptChest.getOrDefault(DataComponents.DAMAGE, 0) == 10, "the chestplate changed from data version " + saved);
+                    && keptChest.getOrDefault(DataComponents.DAMAGE, 0) == 10, "the chestplate changed at " + label);
             helper.assertTrue(keptArrows != null && keptArrows.is(Items.ARROW) && keptArrows.getCount() == 3,
-                    "the arrows changed from data version " + saved);
+                    "the arrows changed at " + label);
             helper.assertTrue(kept.effects().size() == 1 && kept.effects().get(0).is(MobEffects.SPEED),
-                    "the effect changed from data version " + saved);
+                    "the effect changed at " + label);
         }
         helper.succeed();
     }

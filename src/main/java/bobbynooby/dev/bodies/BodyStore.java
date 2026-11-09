@@ -80,6 +80,11 @@ public final class BodyStore extends SavedData {
         return TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
     }
 
+    /** True when the file came from a newer YOLT or Minecraft than this one. */
+    public boolean fromNewer() {
+        return fromNewer;
+    }
+
     public void put(BodyRecord record) {
         bodies.put(record.owner(), record);
         setDirty();

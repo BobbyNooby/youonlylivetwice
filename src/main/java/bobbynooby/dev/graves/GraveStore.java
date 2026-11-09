@@ -109,6 +109,11 @@ public final class GraveStore extends SavedData {
         }
     }
 
+    /** True when the file came from a newer YOLT or Minecraft than this one. */
+    public boolean fromNewer() {
+        return fromNewer;
+    }
+
     public void put(Grave grave) {
         graves.put(grave.id(), grave);
         setDirty();
