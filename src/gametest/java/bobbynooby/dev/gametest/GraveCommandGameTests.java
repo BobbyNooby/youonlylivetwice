@@ -64,6 +64,21 @@ public class GraveCommandGameTests {
     }
 
     @GameTest
+    public void removeOneStackSaysStack(GameTestHelper helper) {
+        // Only the grave head, so the reply has one stack to count
+        Grave grave = makeGrave(helper, GraveItems.graveHead(ResolvableProfile.createUnresolved("Ghost")));
+        try {
+            BlockPos pos = grave.pos();
+            List<String> out = run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+            helper.assertValueEqual(out, List.of("Removed Ghost's grave and dropped 1 stack."), "command output");
+        } finally {
+            cleanUp(helper, grave);
+            discardDrops(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
     public void removeWhileOpenDoesNotDuplicate(GameTestHelper helper) {
         Grave grave = makeGrave(helper);
         ServerPlayer player = TestPlayers.join(helper, "Looter", GameType.SURVIVAL, new BlockPos(1, 1, 1));
@@ -87,7 +102,12 @@ public class GraveCommandGameTests {
 
     private static Grave makeGrave(GameTestHelper helper) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
-        List<ItemStack> stacks = List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
+        return makeGrave(helper, GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
+    }
+
+    private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
+        ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
+        List<ItemStack> stacks = List.of(items);
         List<Grave> made = Graves.create(helper.getLevel(), helper.absolutePos(new BlockPos(2, 1, 2)), profile,
                 UUID.randomUUID(), "Ghost", stacks);
         helper.assertValueEqual(made.size(), 1, "graves made");
