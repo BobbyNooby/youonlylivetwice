@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /** Moves a dead player's items into graves and lets players loot them. */
@@ -285,10 +286,18 @@ public final class Graves {
     }
 
     /**
-     * Admin removal: drops everything at the grave, clears the head and deletes the record. Returns the stacks dropped.
+     * Admin removal: drops everything at the grave, clears the head and deletes the record. Returns the stacks dropped,
+     * or nothing when the grave's dimension isn't loaded, in which case the grave is left as it was.
      * The container leaves OPEN before any menu closes, so nothing can save the grave back or drop an item twice.
      */
-    public static int removeAndDrop(MinecraftServer server, Grave grave) {
+    public static OptionalInt removeAndDrop(MinecraftServer server, Grave grave) {
+        ServerLevel level = server.getLevel(grave.dimension());
+        if (level == null) {
+            // Nowhere to drop the items, so the record must stay until the dimension is back
+            YouOnlyLiveTwice.LOGGER.error("Could not remove {}'s grave at {} {}: that dimension is not loaded",
+                    grave.ownerName(), grave.dimension().identifier(), grave.pos());
+            return OptionalInt.empty();
+        }
         GraveStore store = GraveStore.get(server);
         SharedContainer container = OPEN.remove(grave.id());
         List<ItemStack> items = new ArrayList<>();
@@ -302,18 +311,15 @@ public final class Graves {
         if (container != null) {
             container.closeMenus();
         }
-        ServerLevel level = server.getLevel(grave.dimension());
-        if (level != null) {
-            BlockPos pos = grave.pos();
-            for (ItemStack stack : items) {
-                level.addFreshEntity(new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack));
-            }
-            if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            }
+        BlockPos pos = grave.pos();
+        for (ItemStack stack : items) {
+            level.addFreshEntity(new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, stack));
+        }
+        if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
+            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }
         store.remove(grave.id());
-        return items.size();
+        return OptionalInt.of(items.size());
     }
 
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {

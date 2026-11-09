@@ -30,6 +30,7 @@ import net.minecraft.world.phys.Vec2;
 
 import java.util.Collection;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Predicate;
 
 import static bobbynooby.dev.YouOnlyLiveTwice.LOGGER;
@@ -183,7 +184,12 @@ public final class YoltCommands {
             source.sendFailure(Component.literal("No grave at " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + "."));
             return 0;
         }
-        int stacks = Graves.removeAndDrop(server, grave.get());
+        OptionalInt dropped = Graves.removeAndDrop(server, grave.get());
+        if (dropped.isEmpty()) {
+            source.sendFailure(Component.literal("Could not remove " + grave.get().ownerName() + "'s grave: its dimension is not loaded."));
+            return 0;
+        }
+        int stacks = dropped.getAsInt();
         LOGGER.info("{} removed {}'s grave at {} {} and dropped {} stacks", source.getTextName(), grave.get().ownerName(),
                 source.getLevel().dimension().identifier(), pos, stacks);
         reply(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + " stacks.");
