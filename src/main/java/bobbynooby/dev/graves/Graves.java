@@ -146,6 +146,16 @@ public final class Graves {
      */
     public static List<Grave> create(ServerLevel level, BlockPos near, ResolvableProfile profile, UUID owner,
                                      String ownerName, List<ItemStack> items) {
+        return createUndoable(level, near, profile, owner, ownerName, items).graves();
+    }
+
+    /** The graves one create call made, and how to take them all back: records gone, replaced blocks put back. */
+    public record Created(List<Grave> graves, Runnable undo) {
+    }
+
+    /** Same as create, for callers that can still fail after the graves exist and must then take them back. */
+    public static Created createUndoable(ServerLevel level, BlockPos near, ResolvableProfile profile, UUID owner,
+                                         String ownerName, List<ItemStack> items) {
         GraveStore store = GraveStore.get(level.getServer());
         List<ItemStack> stacks = items.stream().filter(stack -> !stack.isEmpty()).toList();
         int rotation = RotationSegment.convertToSegment(ownerYaw(level, owner));
@@ -153,6 +163,7 @@ public final class Graves {
 
         List<Grave> created = new ArrayList<>();
         List<Runnable> undo = new ArrayList<>();
+        Runnable undoAll = () -> undo.forEach(Runnable::run);
         try {
             BlockPos from = near;
             int start = 0;
@@ -173,10 +184,10 @@ public final class Graves {
                 start += SLOTS_PER_GRAVE;
             } while (start < stacks.size());
         } catch (RuntimeException e) {
-            undo.forEach(Runnable::run);
+            undoAll.run();
             throw e;
         }
-        return created;
+        return new Created(List.copyOf(created), undoAll);
     }
 
     /** Called by the menu and drop hooks. True when the stack was taken for a dying player's grave instead. */

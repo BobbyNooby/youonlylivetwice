@@ -4,6 +4,10 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.datafix.DataFixTypes;
@@ -11,7 +15,11 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -55,6 +63,25 @@ public final class GraveStore extends SavedData {
 
     public static GraveStore get(MinecraftServer server) {
         return server.getDataStorage().computeIfAbsent(TYPE);
+    }
+
+    /**
+     * Writes the store to disk before returning, and throws unless the file then matches it.
+     * 26.3 can't save one entry on its own, so this saves every changed entry of the data storage. That save only
+     * logs a failed write, which is why the file is read back.
+     */
+    public void saveNow(MinecraftServer server) {
+        setDirty();
+        server.getDataStorage().saveAndJoin();
+        Path file = TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        Tag expected = CODEC.encodeStart(server.registryAccess().createSerializationContext(NbtOps.INSTANCE), this).getOrThrow();
+        try {
+            if (!expected.equals(NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).get("data"))) {
+                throw new IllegalStateException("The grave file " + file + " does not hold the graves just saved");
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not read back the grave file " + file, e);
+        }
     }
 
     public void put(Grave grave) {

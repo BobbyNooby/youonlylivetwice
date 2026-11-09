@@ -1,6 +1,9 @@
 package bobbynooby.dev.offline;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
@@ -12,6 +15,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
@@ -60,26 +66,46 @@ public final class OfflineKill {
     public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where) {
         // Prepare: wipe the tag and write it to a temp file before anything in the world changes
         ServerLevel level = levelFor(server, where);
-        List<ItemStack> items = new ArrayList<>(OfflinePlayerData.takeInventory(tag, server.registryAccess()));
-        switch (Settings.get().graves.enderChestOnDeath) {
-            case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess()));
-            case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess());
-            case KEEP -> {
+        // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
+        // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory.
+        boolean spectator = GameType.byId(tag.getIntOr("playerGameType", 0)) == GameType.SPECTATOR;
+        boolean dropsLoot = !spectator && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
+        List<ItemStack> items = new ArrayList<>();
+        int experience = 0;
+        if (dropsLoot) {
+            // Vanilla destroys curse of vanishing items on death, but only those in the inventory
+            for (ItemStack item : OfflinePlayerData.takeInventory(tag, server.registryAccess())) {
+                if (!EnchantmentHelper.has(item, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP)) {
+                    items.add(item);
+                }
+            }
+            // Vanilla's Player.getBaseExperienceReward, read from the save instead of a live player
+            experience = Math.min(tag.getIntOr("XpLevel", 0) * 7, 100);
+            tag.putInt("XpLevel", 0);
+            tag.putInt("XpTotal", 0);
+            tag.putFloat("XpP", 0.0F);
+        }
+        if (!spectator) {
+            switch (Settings.get().graves.enderChestOnDeath) {
+                case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess()));
+                case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess());
+                case KEEP -> {
+                }
             }
         }
-        int experience = experienceReward(level, tag);
-        tag.putInt("XpLevel", 0);
-        tag.putInt("XpTotal", 0);
-        tag.putFloat("XpP", 0.0F);
         tag.remove("active_effects");
         tag.putFloat("Health", 0.0F);
         tag.store("LastDeathLocation", GlobalPos.CODEC, where);
         Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 
-        // Deposit, then commit. A failed commit takes the drops back, so the items never exist twice.
+        // Deposit, then commit. A failed commit takes the deposit back, so the items never exist twice.
+        // Graves are already on disk when deposit returns, so a crash before the commit can duplicate, never lose.
         List<Runnable> undo = new ArrayList<>();
         try {
-            undo.add(deposit(server, who, items, where));
+            // An online spectator's death never reaches the grave hook either
+            if (!spectator) {
+                undo.add(deposit(server, who, items, where));
+            }
             undo.add(dropExperience(level, where, experience));
             OfflinePlayerData.commitSave(server, who.id(), prepared);
         } catch (RuntimeException e) {
@@ -91,15 +117,39 @@ public final class OfflineKill {
         DeathLockout.recordDeath(who.id(), who.name());
     }
 
-    /** Puts the items in the world at where, and returns how to take them back out. */
+    /**
+     * Puts the items in the world at where, and returns how to take them back out. With graves on they go into
+     * graves with a grave head first, as in an online death, and the graves are on disk before this returns.
+     */
     public static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where) {
         ServerLevel level = levelFor(server, where);
+        if (Settings.active() && Settings.get().graves.enabled) {
+            return depositInGraves(server, level, who, items, where);
+        }
         Vec3 pos = Vec3.atBottomCenterOf(where.pos());
         List<Entity> drops = new ArrayList<>();
         for (ItemStack item : items) {
             drops.add(new ItemEntity(level, pos.x, pos.y, pos.z, item));
         }
         return spawnAll(level, where, drops);
+    }
+
+    // The undo takes back every grave, including the extra ones past 54 stacks
+    private static Runnable depositInGraves(MinecraftServer server, ServerLevel level, NameAndId who, List<ItemStack> items,
+                                            GlobalPos where) {
+        ResolvableProfile profile = GraveItems.profileOf(who);
+        List<ItemStack> stacks = new ArrayList<>();
+        stacks.add(GraveItems.graveHead(profile));
+        stacks.addAll(items);
+        Graves.Created created = Graves.createUndoable(level, where.pos(), profile, who.id(), who.name(), stacks);
+        try {
+            // The wiped save is only committed after this, so a crash in between can't lose the items
+            GraveStore.get(server).saveNow(server);
+        } catch (RuntimeException e) {
+            created.undo().run();
+            throw e;
+        }
+        return created.undo();
     }
 
     // Split like ExperienceOrb.award, but never merged into orbs already there, so undo removes exactly these
@@ -131,15 +181,6 @@ public final class OfflineKill {
             throw e;
         }
         return undo;
-    }
-
-    // Vanilla's Player.getBaseExperienceReward, read from the save instead of a live player
-    private static int experienceReward(ServerLevel level, CompoundTag tag) {
-        boolean spectator = GameType.byId(tag.getIntOr("playerGameType", 0)) == GameType.SPECTATOR;
-        if (level.getGameRules().get(GameRules.KEEP_INVENTORY) || spectator) {
-            return 0;
-        }
-        return Math.min(tag.getIntOr("XpLevel", 0) * 7, 100);
     }
 
     private static ServerLevel levelFor(MinecraftServer server, GlobalPos where) {
