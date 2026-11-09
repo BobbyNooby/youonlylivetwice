@@ -6,6 +6,8 @@
     "CommandManagerMixin",
     "DimensionTypeMixin",
     "PlayerCountSpoofer",
+    "PlayerDropEquipmentMixin",
+    "PlayerInvoker",
     "PlayerListLoginMixin",
     "PlayerListS2CPacketAccessor",
     "PlayerListS2CPacketMixin",
