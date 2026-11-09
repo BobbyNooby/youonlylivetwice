@@ -36,7 +36,7 @@ public class SmokeGameTests {
 
     @GameTest
     public void modLoadsAndImmediateRespawnIsOn(GameTestHelper helper) {
-        helper.assertTrue(FabricLoader.getInstance().isModLoaded("you-only-live-twice"), "mod not loaded");
+        helper.assertTrue(false, "red on purpose");
         helper.assertTrue(helper.getLevel().getGameRules().get(GameRules.IMMEDIATE_RESPAWN), "immediate respawn is off");
         helper.succeed();
     }

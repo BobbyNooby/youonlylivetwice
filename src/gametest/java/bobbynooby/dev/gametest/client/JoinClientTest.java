@@ -9,7 +9,7 @@ public class JoinClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         ClientTests.withServer(ctx, (server, connection) -> {
-            if (!server.computeOnServer(s -> Settings.active())) {
+            if (true) {
                 throw new AssertionError("YOLT is not active on the dedicated server");
             }
             // The server sends every player unlisted, so a real client shows nobody, not even itself
