@@ -27,7 +27,8 @@ GitHub (the jar is the file in `build/libs`). Put it in the server's `mods` fold
 
 The mod is server-side. It loads in single-player but does nothing there.
 
-Start the server once. It writes `config/you-only-live-twice.json` and sets the world border to 10,000 blocks across.
+Start the server once. It writes `config/you-only-live-twice.json` and, with the world border feature on (the default),
+sets the border to 10,000 blocks across.
 
 ## Recommended server setting
 
@@ -113,8 +114,8 @@ players' whispers, since those are private.
 When you log out, a body appears where you stood. It wears your skin, armour and held items and has no nametag.
 While you're offline the body is you:
 
-- **What carries over:** health, max health, absorption hearts, potion effects, armour and items in hand, and fall,
-  fire and air state. Hunger and XP stay as they were. Nobody can take items off a body.
+- **What carries over:** health, absorption hearts, potion effects, armour and items in hand, and fall, fire and air
+  state. The body also starts with your max health. Hunger and XP stay as they were. Nobody can take items off a body.
 - **Killing a body kills you.** A grave appears at the body with your saved inventory, your save is cleared, and
   your lockout starts. `/yolt kill` on an offline player does the same.
 - **Logging back in:** you take over the body as it is now. You appear where it is, with its health, effects and
@@ -249,8 +250,8 @@ Notes:
 
 ## `bodies`
 
-Settings that describe how a body is built (`type`, `pose`, `movable`, `totems`, `copyEffects`) apply to bodies made
-after the change. The rest apply at once.
+Settings that describe how a body is built (`type`, `pose`, `movable`, `totems`) apply to bodies made after the
+change. The rest apply at once.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
@@ -262,7 +263,7 @@ after the change. The rest apply at once.
 | `movable` | `true` | Bodies can be pushed, fall and drift. Off pins them in place. | No |
 | `totems` | `true` | A held totem can save a body. The totem is used up in your save too. | No |
 | `armourWears` | `true` | A body's armour wears down when hit, and the wear carries back to you. | No |
-| `copyEffects` | `true` | The body copies your potion effects. Off means health only. | No |
+| `copyEffects` | `true` | A new body copies your potion effects and max health. When you log back in or the body expires, its effects replace yours. Off: the body gets no effects, and yours stay as they were. | No |
 
 # Commands
 
