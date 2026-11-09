@@ -104,6 +104,25 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
+    // The reply depends on the lockout switch, which is flipped and put back inside this test
+    @GameTest
+    public void notDeadReplyFollowsLockoutSwitch(GameTestHelper helper) {
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Asker", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        boolean before = Settings.get().deathLockout.enabled;
+        try {
+            ItemStack head = reviveHead(staticProfile(UUID.randomUUID()), 1);
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.NOT_DEAD, "outcome with the lockout on");
+            helper.assertValueEqual(user.messages.get(user.messages.size() - 1).getString(), "Ghost is not dead.", "reply with the lockout on");
+            Settings.get().deathLockout.enabled = false;
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.NOT_DEAD, "outcome with the lockout off");
+            helper.assertValueEqual(user.messages.get(user.messages.size() - 1).getString(), "Ghost is not locked out.", "reply with the lockout off");
+        } finally {
+            Settings.get().deathLockout.enabled = before;
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
     // A name alone would get an id made up from the name, which isn't the player's id on an online-mode server
     @GameTest
     public void reviveWithoutOwnerIdRefused(GameTestHelper helper) {
