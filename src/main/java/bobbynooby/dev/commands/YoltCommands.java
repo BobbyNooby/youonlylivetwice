@@ -69,7 +69,7 @@ public final class YoltCommands {
                                         .executes(c -> graveList(c.getSource())))
                                 .then(Commands.literal("remove")
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
-                                                .executes(c -> graveRemove(c.getSource(), BlockPosArgument.getBlockPos(c, "pos"))))))
+                                                .executes(c -> graveRemove(c.getSource(), BlockPosArgument.getLoadedBlockPos(c, "pos"))))))
                         .then(Commands.literal("reload")
                                 .executes(c -> reload(c.getSource())))));
     }
