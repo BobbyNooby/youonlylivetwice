@@ -32,6 +32,7 @@ import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 // Each kill runs inside one tick, so settings and game rules are restored before any other test runs
@@ -72,6 +73,26 @@ public class GraveDeathGameTests {
                     .toList();
             helper.assertValueEqual(onDisk.size(), 1, "copies of the grave on disk");
             helper.assertTrue(contains(onDisk.get(0), Items.DIAMOND), "grave on disk lacks the diamond");
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void armourAndOffhandGoInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Armour");
+        Map<EquipmentSlot, Item> worn = Map.of(EquipmentSlot.HEAD, Items.IRON_HELMET, EquipmentSlot.CHEST, Items.IRON_CHESTPLATE,
+                EquipmentSlot.LEGS, Items.IRON_LEGGINGS, EquipmentSlot.FEET, Items.IRON_BOOTS, EquipmentSlot.OFFHAND, Items.SHIELD);
+        try {
+            worn.forEach((slot, item) -> player.setItemSlot(slot, new ItemStack(item)));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            worn.forEach((slot, item) -> {
+                helper.assertTrue(contains(grave, item), item + " from the " + slot + " slot missing from the grave");
+                helper.assertTrue(player.getItemBySlot(slot).isEmpty(), slot + " slot still holds an item");
+            });
         } finally {
             cleanUp(helper, player);
         }
