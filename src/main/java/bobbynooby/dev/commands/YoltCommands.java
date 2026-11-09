@@ -10,6 +10,7 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineKill;
+import bobbynooby.dev.visibility.PlayerVisibility;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -210,9 +211,11 @@ public final class YoltCommands {
         WorldBorders.apply(server);
         NameTagHider.apply(server);
         YouOnlyLiveTwice.applyImmediateRespawn(server);
-        // Which commands a player sees depends on restrictCommands and chat.allowWhispers
+        // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
+        // and which players their client knows about depends on the hide switches
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             server.getCommands().sendCommands(player);
+            PlayerVisibility.refresh(player);
         }
 
         LOGGER.info("{} reloaded the config", source.getTextName());
