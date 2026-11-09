@@ -41,16 +41,19 @@ public class CommandManagerMixin {
             // Check if player is not op
             if (player != null && playerList != null && !playerList.isOp(player.nameAndId())) {
 
+                // /w is our own command (Whispers), so it runs normally and reads the signed message
+                if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
+                    return;
+                }
+
                 // Check if command is help
                 if (commandRoot.equals("help")) {
 
                     // Send help message to non-op players
                     player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
-                } else if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
-                    Whispers.runCommand(player, command);
                 }
 
-                // Vanilla never runs a non-op's command
+                // Just ignore the command if it is not help
                 ci.cancel();
             }
 

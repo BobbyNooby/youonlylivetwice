@@ -25,7 +25,7 @@ import net.minecraft.world.level.GameType;
 import java.util.ArrayList;
 import java.util.List;
 
-// /w runs through the real dispatcher as a non-op test player, so the restriction mixin handles it.
+// /w runs through the real dispatcher as a non-op test player, so both the restriction mixin and our /w command run.
 // Switches are restored in a finally block in the same tick.
 public class WhisperGameTests {
     @GameTest
@@ -68,13 +68,38 @@ public class WhisperGameTests {
                 "message is not a message argument");
         helper.assertTrue(message.getCommand() != null, "w <target> <message> is not executable");
 
-        // The client signs what our tree marks as signable, the server checks what vanilla's /w marks
+        // The client signs what this tree marks as signable, the server checks what its own dispatcher marks
         CommandSourceStack source = helper.getLevel().getServer().createCommandSourceStack();
         String command = "w Somebody hi there";
-        List<String> ours = signable(new CommandDispatcher<>(root), command, source);
-        List<String> vanilla = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
-        helper.assertValueEqual(ours, List.of("message=hi there"), "signed arguments in our tree");
-        helper.assertValueEqual(ours, vanilla, "signed arguments, ours vs vanilla");
+        List<String> client = signable(new CommandDispatcher<>(root), command, source);
+        List<String> server = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
+        helper.assertValueEqual(client, List.of("message=hi there"), "signed arguments in the non-op tree");
+        helper.assertValueEqual(server, client, "signed arguments, server vs non-op tree");
+        helper.succeed();
+    }
+
+    @GameTest
+    public void serverWhisperNodeIsOurs(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+        CommandNode<CommandSourceStack> w = dispatcher.getRoot().getChild("w");
+        helper.assertTrue(w != null && w.getRedirect() == null, "server /w is missing or still redirects to /msg");
+        CommandNode<CommandSourceStack> target = w.getChild("target");
+        helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType,
+                "server /w target is not a string argument");
+        CommandNode<CommandSourceStack> message = target.getChild("message");
+        helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
+                "server /w message is not a message argument");
+        helper.assertTrue(dispatcher.getRoot().getChild("msg") != null && dispatcher.getRoot().getChild("tell") != null,
+                "vanilla /msg or /tell is gone");
+
+        // Vanilla's /w refused these names after the client had signed them, which broke the sender's chat
+        CommandSourceStack source = server.createCommandSourceStack();
+        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(Whispers.nonOpTree(true));
+        for (String command : List.of("w  hi", "w NameLongerThan16Chars hi")) {
+            helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
+            helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");
+        }
         helper.succeed();
     }
 

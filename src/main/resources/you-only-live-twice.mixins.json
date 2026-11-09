@@ -5,6 +5,7 @@
   "mixins": [
     "AbstractContainerMenuMixin",
     "CommandManagerMixin",
+    "CommandNodeAccessor",
     "DimensionTypeMixin",
     "GraveProtectionBucketMixin",
     "GraveProtectionDragonMixin",
