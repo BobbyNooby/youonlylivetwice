@@ -305,16 +305,18 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // The test server's name cache makes up an id for any name, so the death is recorded under that id
+    // The test server's name cache makes up an id for any name, so the death is recorded under that id. Other tests
+    // record "Ghost" too, and unkill finds a name in the death log first, so this one has a name of its own.
     @GameTest
     public void unkillEndsLockoutAndReplies(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
-        UUID id = server.services().nameToIdCache().get("Ghost").orElseThrow().id();
-        DeathLockout.recordDeath(id, "Ghost");
+        String name = uniqueName("Unkill");
+        UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
+        DeathLockout.recordDeath(id, name);
         try {
-            helper.assertTrue(DeathLockout.refusal(id) != null, "the death did not lock Ghost out");
-            helper.assertValueEqual(run(server, "yolt unkill Ghost"), List.of("Revived Ghost"), "command output");
-            helper.assertTrue(DeathLockout.refusal(id) == null, "Ghost is still locked out");
+            helper.assertTrue(DeathLockout.refusal(id) != null, "the death did not lock " + name + " out");
+            helper.assertValueEqual(run(server, "yolt unkill " + name), List.of("Revived " + name), "command output");
+            helper.assertTrue(DeathLockout.refusal(id) == null, name + " is still locked out");
         } finally {
             DeathLockout.revive(id, "console");
         }

@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
@@ -192,6 +193,23 @@ public final class DeathLockout {
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not revive {}", uuid, e);
             return ReviveResult.FAILED;
+        }
+    }
+
+    /**
+     * The player who last died under this name, ignoring case, with the name as they had it. Empty while the store is
+     * closed or failing.
+     */
+    public static Optional<NameAndId> latestByName(String name) {
+        DeathStore open = store;
+        if (open == null) {
+            return Optional.empty();
+        }
+        try {
+            return open.latestByName(name).map(log -> new NameAndId(log.uuid(), log.name()));
+        } catch (RuntimeException e) {
+            Yolt.LOGGER.error("Could not look up {} in the death log", name, e);
+            return Optional.empty();
         }
     }
 

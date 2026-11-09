@@ -1,6 +1,7 @@
 package bobbynooby.dev.commands;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
@@ -43,11 +44,17 @@ public final class YoltCommands {
         return 1;
     }
 
-    // Online players first, so the exact player is used even if the name cache is out of date
+    // Online players first, so the exact player is used even if the name cache is out of date. Then the death log: a
+    // locked-out player can't join, so the cache never refreshes them, and once their entry expires it may give
+    // another id for the name.
     static Optional<NameAndId> lookup(MinecraftServer server, String name) {
         ServerPlayer online = server.getPlayerList().getPlayerByName(name);
         if (online != null) {
             return Optional.of(online.nameAndId());
+        }
+        Optional<NameAndId> died = DeathLockout.latestByName(name);
+        if (died.isPresent()) {
+            return died;
         }
         return server.services().nameToIdCache().get(name);
     }

@@ -197,6 +197,22 @@ class DeathStoreTest {
         assertEquals(DeathStore.SCHEMA_VERSION, query(copy, "PRAGMA user_version"));
     }
 
+    @Test
+    void latestByNameIgnoresCase() {
+        DeathStore store = DeathStore.open(dir.resolve("test.db"));
+        try {
+            store.recordDeath(uuid, "Ghost", 1000L, 7, null);
+            assertEquals(uuid, store.latestByName("ghost").orElseThrow().uuid());
+            // Someone else died under the name since, so they are who it means now
+            UUID other = UUID.randomUUID();
+            store.recordDeath(other, "GHOST", 2000L, 7, null);
+            assertEquals(other, store.latestByName("ghost").orElseThrow().uuid());
+            assertTrue(store.latestByName("Ghost2").isEmpty());
+        } finally {
+            store.close();
+        }
+    }
+
     // Every login looks a player up by uuid, and the name lookup ignores case
     @Test
     void indexesExist() throws SQLException {

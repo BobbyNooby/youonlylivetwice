@@ -226,14 +226,24 @@ public final class DeathStore {
     }
 
     public synchronized Optional<DeathLog> latest(UUID uuid) {
-        String sql = "SELECT " + COLUMNS + " FROM death_logs WHERE uuid = ? ORDER BY ROWID DESC LIMIT 1";
+        return newest("SELECT " + COLUMNS + " FROM death_logs WHERE uuid = ? ORDER BY ROWID DESC LIMIT 1",
+                uuid.toString(), "Could not read death log for " + uuid);
+    }
+
+    /** The newest death recorded under this name, ignoring case: whoever last died as it. */
+    public synchronized Optional<DeathLog> latestByName(String name) {
+        return newest("SELECT " + COLUMNS + " FROM death_logs WHERE username = ? COLLATE NOCASE ORDER BY ROWID DESC LIMIT 1",
+                name, "Could not look up the death log for " + name);
+    }
+
+    private Optional<DeathLog> newest(String sql, String key, String failure) {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, uuid.toString());
+            statement.setString(1, key);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(read(rs)) : Optional.empty();
             }
         } catch (SQLException e) {
-            throw new IllegalStateException("Could not read death log for " + uuid, e);
+            throw new IllegalStateException(failure, e);
         }
     }
 
