@@ -63,6 +63,7 @@ public class BodyStoryClientTest implements FabricClientGameTest {
     private static final int HUNT_TIMEOUT = 400;
     private static final int SETTLE_TIMEOUT = 100;
     private static final double GRAVE_VIEW_DISTANCE = 2.0;
+    private static final int DEATH_SMOKE_TICKS = 60;
 
     // Where the scenes play: in front of where the client joined, on the flat world's ground
     private record Stage(BlockPos origin, Direction facing, double groundY) {
@@ -145,6 +146,10 @@ public class BodyStoryClientTest implements FabricClientGameTest {
                                        TestDedicatedServerConnection connection, Stage stage, Made made) {
         Body body = leaveBody(server, stage, made, "Knight", DIAMOND_GEAR);
         connection.waitForClientboundEntityUpdates(EntityTypes.MANNEQUIN);
+        // A new body on the client tips over into its pose over half a second
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
+                mc -> clientLiving(mc, body.entity(), "armoured body").getSwimAmount(0.0F) >= 1.0F,
+                mc -> "the client's body never finished lying down");
         ctx.runOnClient(mc -> {
             LivingEntity seen = clientLiving(mc, body.entity(), "armoured body");
             DIAMOND_GEAR.forEach((slot, item) -> {
@@ -264,6 +269,8 @@ public class BodyStoryClientTest implements FabricClientGameTest {
         if (!ctx.computeOnClient(mc -> mc.level.getBlockState(at).is(Blocks.PLAYER_HEAD))) {
             throw new AssertionError("the client has no player head where the body died");
         }
+        // The smoke it leaves in would cover the head
+        ctx.waitTicks(DEATH_SMOKE_TICKS);
         ClientTests.screenshotWithoutHud(ctx, "05-body-killed-grave");
         // So the next body has the spot to itself
         server.runOnServer(s -> removeGraves(s, body.owner()));
