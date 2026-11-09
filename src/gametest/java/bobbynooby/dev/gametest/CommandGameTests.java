@@ -1,7 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
-import bobbynooby.dev.chat.Whispers;
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -177,9 +177,9 @@ public class CommandGameTests {
         dump(dispatcher, dispatcher.getRoot().getChild("yolt"), "", lines);
         dump(dispatcher, dispatcher.getRoot().getChild("w"), "", lines);
         lines.add("non-op tree, whispers off:");
-        dumpChildren(Whispers.nonOpTree(false), lines);
+        dumpChildren(CommandRestriction.nonOpTree(false), lines);
         lines.add("non-op tree, whispers on:");
-        dumpChildren(Whispers.nonOpTree(true), lines);
+        dumpChildren(CommandRestriction.nonOpTree(true), lines);
 
         String tree = String.join("\n", lines);
         YouOnlyLiveTwice.LOGGER.info("Command trees:\n{}", tree);

@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.chat.Whispers;
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -25,8 +25,8 @@ public abstract class ServerCommandSuggestionsProviderMixin {
             target = "Lnet/minecraft/commands/Commands;getDispatcher()Lcom/mojang/brigadier/CommandDispatcher;"))
     private CommandDispatcher<CommandSourceStack> suggestFromNonOpTree(Commands commands,
                                                                       Operation<CommandDispatcher<CommandSourceStack>> original) {
-        if (Whispers.restricted(this.player)) {
-            return new CommandDispatcher<>(Whispers.nonOpTree(Settings.get().chat.allowWhispers));
+        if (CommandRestriction.restricted(this.player)) {
+            return new CommandDispatcher<>(CommandRestriction.nonOpTree(Settings.get().chat.allowWhispers));
         }
         return original.call(commands);
     }

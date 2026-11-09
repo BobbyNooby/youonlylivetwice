@@ -8,7 +8,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -17,7 +16,7 @@ import net.minecraft.commands.arguments.MessageArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-/** Our /w, which only reaches a player close enough to hear it, and the command tree non-ops see. */
+/** Our /w, which only reaches a player close enough to hear it. */
 public final class Whispers {
     private Whispers() {}
 
@@ -38,25 +37,9 @@ public final class Whispers {
         dispatcher.register(command());
     }
 
-    /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
-    public static boolean restricted(ServerPlayer player) {
-        return Settings.on(c -> c.restrictCommands)
-                && !player.level().getServer().getPlayerList().isOp(player.nameAndId());
-    }
-
-    public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers) {
-        RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
-        // help is answered by the restriction mixin, so its body never runs
-        root.addChild(Commands.literal("help").executes(c -> 1).build());
-        if (allowWhispers) {
-            root.addChild(command().build());
-        }
-        return root;
-    }
-
     // No suggestions on target, so tab-complete can't list who is online.
     // message must be a message argument: the client only signs those.
-    private static LiteralArgumentBuilder<CommandSourceStack> command() {
+    static LiteralArgumentBuilder<CommandSourceStack> command() {
         return Commands.literal("w")
                 .then(Commands.argument("target", StringArgumentType.word())
                         .then(Commands.argument("message", MessageArgument.message())

@@ -1,6 +1,6 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.chat.Whispers;
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import com.mojang.brigadier.CommandDispatcher;
@@ -34,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
 public class WhisperGameTests {
     @GameTest
     public void treeHasOnlyHelpWhenWhispersOff(GameTestHelper helper) {
-        helper.assertValueEqual(childNames(Whispers.nonOpTree(false)), List.of("help"), "non-op commands");
+        helper.assertValueEqual(childNames(CommandRestriction.nonOpTree(false)), List.of("help"), "non-op commands");
 
         YoltConfig config = Settings.get();
         boolean restrictBefore = config.restrictCommands;
@@ -58,7 +58,7 @@ public class WhisperGameTests {
 
     @GameTest
     public void treeHasWhisperWhenOn(GameTestHelper helper) {
-        RootCommandNode<CommandSourceStack> root = Whispers.nonOpTree(true);
+        RootCommandNode<CommandSourceStack> root = CommandRestriction.nonOpTree(true);
         helper.assertValueEqual(childNames(root), List.of("help", "w"), "non-op commands");
 
         CommandNode<CommandSourceStack> target = root.getChild("w").getChild("target");
@@ -99,7 +99,7 @@ public class WhisperGameTests {
 
         // Vanilla's /w refused these names after the client had signed them, which broke the sender's chat
         CommandSourceStack source = server.createCommandSourceStack();
-        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(Whispers.nonOpTree(true));
+        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true));
         for (String command : List.of("w  hi", "w NameLongerThan16Chars hi")) {
             helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
             helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");

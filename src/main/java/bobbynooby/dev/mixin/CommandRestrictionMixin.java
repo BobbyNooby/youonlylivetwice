@@ -1,12 +1,9 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.chat.Whispers;
-import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.chat.CommandRestriction;
 import com.mojang.brigadier.ParseResults;
-import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Final;
@@ -26,29 +23,14 @@ public abstract class CommandRestrictionMixin {
     // Restrict non-op players to help, plus /w when whispers are on
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
-        ServerPlayer player = parseResults.getContext().getSource().getPlayer();
-        if (command.isEmpty() || player == null || !Whispers.restricted(player)) {
-            return;
+        if (CommandRestriction.blocks(parseResults.getContext().getSource().getPlayer(), command)) {
+            ci.cancel();
         }
-        String commandRoot = command.split(" ")[0];
-
-        // /w is our own command (Whispers), so it runs normally and reads the signed message
-        if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
-            return;
-        }
-
-        if (commandRoot.equals("help")) {
-            player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
-        }
-
-        ci.cancel();
     }
 
     @Inject(method = "sendCommands", at = @At("HEAD"), cancellable = true)
     private void sendPatchedCommandTree(ServerPlayer player, CallbackInfo ci) {
-        if (Whispers.restricted(player)) {
-            player.connection.send(new ClientboundCommandsPacket(
-                    Whispers.nonOpTree(Settings.get().chat.allowWhispers), COMMAND_NODE_INSPECTOR));
+        if (CommandRestriction.sendNonOpTree(player, COMMAND_NODE_INSPECTOR)) {
             ci.cancel();
         }
     }
