@@ -41,6 +41,17 @@ class RandomSpawnTest {
         }
     }
 
+    // A centre of 100.5 puts the edges at 50.5 and 150.5, so blocks 50 and 150 are half outside
+    @Test
+    void decimalCentreKeepsWholeBlocksInside() {
+        Random random = new Random(5);
+        for (int i = 0; i < PICKS; i++) {
+            RandomSpawn.Column column = RandomSpawn.pickColumn(random, 100.5, -20.25, 100, 10000);
+            assertTrue(column.x() >= 50.5 && column.x() + 1 <= 150.5, "x not wholly inside the border: " + column.x());
+            assertTrue(column.z() >= -70.25 && column.z() + 1 <= 29.75, "z not wholly inside the border: " + column.z());
+        }
+    }
+
     @Test
     void tinyBorderStillPicks() {
         RandomSpawn.Column column = assertDoesNotThrow(() -> RandomSpawn.pickColumn(new Random(4), 10, 10, 1, 1));

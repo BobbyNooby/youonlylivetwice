@@ -90,10 +90,19 @@ public final class RandomSpawn {
      * The diameter counts even when YOLT's border isn't applied: a new world picks its spawn before the server starts.
      */
     static Column pickColumn(Random random, double centerX, double centerZ, double borderSize, int diameter) {
-        // nextInt(0) throws, so a border under 2 blocks still gets a radius of 1
-        int radius = Math.max(1, (int) (Math.min(borderSize, diameter) / 2));
-        int x = (int) Math.floor(centerX) + random.nextInt(radius * 2) - radius;
-        int z = (int) Math.floor(centerZ) + random.nextInt(radius * 2) - radius;
-        return new Column(x, z);
+        double half = Math.min(borderSize, diameter) / 2;
+        return new Column(pickInside(random, centerX, half), pickInside(random, centerZ, half));
+    }
+
+    // Only whole blocks inside: from the first block starting at or after the low edge to the last one ending at or
+    // before the high edge, so a decimal centre can't put a spawn half a block outside
+    private static int pickInside(Random random, double center, double half) {
+        int low = (int) Math.ceil(center - half);
+        int high = (int) Math.floor(center + half - 1);
+        // A border under a block wide holds no whole block, so the block at the centre is used
+        if (high < low) {
+            return (int) Math.floor(center);
+        }
+        return low + random.nextInt(high - low + 1);
     }
 }
