@@ -210,6 +210,10 @@ public final class YoltCommands {
         WorldBorders.apply(server);
         NameTagHider.apply(server);
         YouOnlyLiveTwice.applyImmediateRespawn(server);
+        // Which commands a player sees depends on restrictCommands and chat.allowWhispers
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            server.getCommands().sendCommands(player);
+        }
 
         LOGGER.info("{} reloaded the config", source.getTextName());
         reply(source, "Config reloaded");
