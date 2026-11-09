@@ -26,6 +26,7 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -276,6 +277,54 @@ public class BodyDeathGameTests {
             helper.assertTrue(DeathLockout.refusal(owner) == null, "body death started the lockout");
             helper.assertFalse(player.isDeadOrDying(), "owner died");
             helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 1, "owner's diamonds");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A wither's kill plants a rose, which would also take the block the grave goes on
+    @GameTest
+    public void witherKilledBodyLeavesNoRose(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Withered");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            // A rose can grow on dirt, so vanilla would plant it on the body's block rather than drop it
+            helper.setBlock(new BlockPos(1, 0, 1), Blocks.DIRT);
+            Mannequin body = leaveBody(helper, player);
+            BlockPos at = body.blockPosition();
+            AABB around = new AABB(at).inflate(4.0);
+            // Never added to the world: it only has to be who the kill is credited to
+            WitherBoss wither = new WitherBoss(EntityTypes.WITHER, helper.getLevel());
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().mobAttack(wither), 1000.0F);
+
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertFalse(helper.getLevel().getBlockState(at).is(Blocks.WITHER_ROSE), "wither rose planted");
+            helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, item -> item.getItem().is(Items.WITHER_ROSE))
+                    .isEmpty(), "wither rose dropped");
+            helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.pos().equals(at)),
+                    "grave not on the body's block");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // An admin can tag a real player by hand; their items are real, so they still go to their grave
+    @GameTest
+    public void taggedPlayerStillDrops(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Tagged");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.addTag(Bodies.TAG);
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+
+            helper.assertTrue(player.isDeadOrDying(), "player did not die");
+            helper.assertValueEqual(countInGraves(gravesOf(helper, owner), Items.DIAMOND), 1, "diamonds in the graves");
         } finally {
             cleanUp(helper, owner, before);
         }
