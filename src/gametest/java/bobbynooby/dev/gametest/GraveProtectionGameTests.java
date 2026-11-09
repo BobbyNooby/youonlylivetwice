@@ -130,6 +130,20 @@ public class GraveProtectionGameTests {
     }
 
     @GameTest
+    public void missingHeadRestoredOnChunkLoad(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        try {
+            ServerLevel level = helper.getLevel();
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            Graves.restoreChunk(level, level.getChunkAt(grave.pos()));
+            assertGraveIntact(helper, grave);
+        } finally {
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    @GameTest
     public void offlineKillMakesGraveWithSavedItems(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "OffGrave", GameType.SURVIVAL, new BlockPos(1, 1, 1));

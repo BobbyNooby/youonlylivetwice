@@ -4,7 +4,9 @@ import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.PlayerInvoker;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponentMap;
@@ -26,6 +28,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -33,6 +36,7 @@ import net.minecraft.world.level.block.SkullBlock;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RotationSegment;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.BlockHitResult;
 
@@ -58,11 +62,37 @@ public final class Graves {
     private Graves() {
     }
 
-    // Grave event handlers register here. The death hook is a mixin, since no Fabric event runs before the drops.
+    // Grave event handlers register here. The death hook is a mixin, since no Fabric event runs before the drops,
+    // and so are the protection hooks for explosions, pistons, fluids, the Wither and the dragon.
     public static void init() {
         UseBlockCallback.EVENT.register(Graves::onUseBlock);
+        // Creative players included, so not even an op can break one by hand
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) -> !isGrave(level, pos));
+        ServerChunkEvents.CHUNK_LOAD.register(Graves::onChunkLoad);
         // A container must never outlive its server and save into the next one started in the same game
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> OPEN.clear());
+    }
+
+    /** True for the head block of a grave while graves are on. Every protection hook asks this. */
+    public static boolean isGrave(Level level, BlockPos pos) {
+        if (!Settings.active() || !Settings.get().graves.enabled || !(level instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+        // The block first: it is cheap, and the hooks run for many blocks that are never heads
+        return level.getBlockState(pos).is(Blocks.PLAYER_HEAD)
+                && GraveStore.get(serverLevel.getServer()).at(level.dimension(), pos).isPresent();
+    }
+
+    /** Puts back the head of every grave in the chunk whose block went missing, for example to /setblock. */
+    public static void restoreChunk(ServerLevel level, LevelChunk chunk) {
+        for (Grave grave : GraveStore.get(level.getServer()).inChunk(level.dimension(), chunk.getPos())) {
+            if (!level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD)) {
+                // The record doesn't keep the facing, so a restored head faces the default way
+                placeHead(level, grave.pos(), grave.profile(), 0);
+                YouOnlyLiveTwice.LOGGER.info("Put back the missing head of {}'s grave at {} {}",
+                        grave.ownerName(), level.dimension().identifier(), grave.pos());
+            }
+        }
     }
 
     /** True when the items went into a grave, so vanilla must not drop them as well. */
@@ -214,6 +244,26 @@ public final class Graves {
             return InteractionResult.SUCCESS;
         }
         return InteractionResult.CONSUME;
+    }
+
+    // The event fires while the chunk is still being loaded, and setting a block in it then would wait on that
+    // same load. So the restore waits until the current tick is done.
+    private static void onChunkLoad(ServerLevel level, LevelChunk chunk, boolean generated) {
+        if (!Settings.active() || !Settings.get().graves.enabled) {
+            return;
+        }
+        MinecraftServer server = level.getServer();
+        ChunkPos pos = chunk.getPos();
+        if (GraveStore.get(server).inChunk(level.dimension(), pos).isEmpty()) {
+            return;
+        }
+        // execute() would run it straight away on the server thread; schedule() always queues it
+        server.schedule(server.wrapRunnable(() -> {
+            // If the chunk unloaded meanwhile, its next load tries again
+            if (level.hasChunk(pos.x(), pos.z())) {
+                restoreChunk(level, chunk);
+            }
+        }));
     }
 
     private static void addStacks(List<ItemStack> into, Container container) {
