@@ -1,17 +1,28 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.SignableCommand;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+
+import java.lang.reflect.Method;
 
 // Each test flips the switch and restores it inside one tick, so no other test sees it
 public class CommandRestrictionGameTests {
@@ -60,7 +71,97 @@ public class CommandRestrictionGameTests {
         helper.succeed();
     }
 
+    // A sign an op wrote runs its click command as the clicking player, but with the sign's own permissions
+    @GameTest
+    public void opSignCommandRunsForNonOp(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Sign", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        boolean before = Settings.get().restrictCommands;
+        try {
+            Settings.get().restrictCommands = true;
+            run(signSource(player), "tag @s add yolt_sign");
+            helper.assertTrue(player.entityTags().contains("yolt_sign"), "the sign's command did not run");
+        } finally {
+            Settings.get().restrictCommands = before;
+            player.removeTag("yolt_sign");
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The same level 0 trigger: typed by the player it stays blocked, clicked on an op's sign it runs
+    @GameTest
+    public void nonOpTypedCommandStillBlocked(GameTestHelper helper) {
+        Scoreboard scoreboard = helper.getLevel().getServer().getScoreboard();
+        ServerPlayer player = TestPlayers.join(helper, "Typed", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        boolean before = Settings.get().restrictCommands;
+        Objective objective = null;
+        try {
+            objective = scoreboard.addObjective("yolt_t", ObjectiveCriteria.TRIGGER, Component.literal("yolt_t"),
+                    ObjectiveCriteria.RenderType.INTEGER, false, null);
+            ScoreAccess score = scoreboard.getOrCreatePlayerScore(player, objective);
+            score.unlock();
+            Settings.get().restrictCommands = true;
+
+            run(player, "trigger yolt_t set 1");
+            helper.assertValueEqual(score.get(), 0, "score after a typed trigger");
+
+            run(signSource(player), "trigger yolt_t set 1");
+            helper.assertValueEqual(score.get(), 1, "score after the sign's trigger");
+        } finally {
+            Settings.get().restrictCommands = before;
+            if (objective != null) {
+                scoreboard.removeObjective(objective);
+            }
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Read against the full tree, /msg has a message to sign, and an online-mode server answers the client's unsigned
+    // /msg with a signature error. Read against the restricted player's own tree it fails at once, with nothing to sign.
+    // The test server is offline, so the signature check itself can't run here.
+    @GameTest
+    public void restrictedParseFailsAtFirstWord(GameTestHelper helper) throws ReflectiveOperationException {
+        ServerPlayer player = TestPlayers.join(helper, "Parse", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        boolean before = Settings.get().restrictCommands;
+        try {
+            Settings.get().restrictCommands = true;
+            ParseResults<CommandSourceStack> restricted = parseCommand(player, "msg x hi");
+            CommandSyntaxException error = Commands.getParseException(restricted);
+            helper.assertTrue(error != null && error.getCursor() == 0
+                            && error.getType() == CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand(),
+                    "a restricted player's /msg did not fail at the first word: " + error);
+            helper.assertFalse(SignableCommand.hasSignableArguments(restricted), "a restricted player's /msg has a message to sign");
+
+            Settings.get().restrictCommands = false;
+            helper.assertTrue(SignableCommand.hasSignableArguments(parseCommand(player, "msg x hi")),
+                    "an unrestricted /msg has no message to sign");
+        } finally {
+            Settings.get().restrictCommands = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // What an op-placed sign runs its click command as (vanilla's SignBlockEntity)
+    private static CommandSourceStack signSource(ServerPlayer player) {
+        return new CommandSourceStack(CommandSource.NULL, player.position(), Vec2.ZERO, player.level(),
+                LevelBasedPermissionSet.GAMEMASTER, player.level().getServer(), player);
+    }
+
+    // The private step every typed command goes through, before vanilla checks its signatures
+    @SuppressWarnings("unchecked")
+    private static ParseResults<CommandSourceStack> parseCommand(ServerPlayer player, String command) throws ReflectiveOperationException {
+        Method parse = ServerGamePacketListenerImpl.class.getDeclaredMethod("parseCommand", String.class);
+        parse.setAccessible(true);
+        return (ParseResults<CommandSourceStack>) parse.invoke(player.connection, command);
+    }
+
     private static void run(ServerPlayer player, String command) {
-        player.level().getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
+        run(player.createCommandSourceStack(), command);
+    }
+
+    private static void run(CommandSourceStack source, String command) {
+        source.getServer().getCommands().performPrefixedCommand(source, command);
     }
 }

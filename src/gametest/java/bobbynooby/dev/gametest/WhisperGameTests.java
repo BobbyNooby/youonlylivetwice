@@ -13,46 +13,39 @@ import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.ArgumentSignatures;
 import net.minecraft.commands.arguments.MessageArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.LastSeenMessages;
+import net.minecraft.network.chat.MessageSignature;
 import net.minecraft.network.chat.SignableCommand;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommandSuggestionsProvider;
 import net.minecraft.world.level.GameType;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // /w runs through the real dispatcher as a non-op test player, so both the restriction mixin and our /w command run.
-// Switches are restored in a finally block in the same tick.
+// Switches are restored in a finally block in the same tick, apart from the signed whisper's, which waits in a batch of its own.
 public class WhisperGameTests {
+    private static final String SIGNED_WHISPER = "you-only-live-twice-gametest:signed_whisper";
+
+    // The reply a restricted player's /w gets with whispers off is checked in whisperOffReplyIsSameWhenRestricted
     @GameTest
     public void treeHasOnlyHelpWhenWhispersOff(GameTestHelper helper) {
         helper.assertValueEqual(childNames(CommandRestriction.nonOpTree(false)), List.of("help"), "non-op commands");
-
-        YoltConfig config = Settings.get();
-        boolean restrictBefore = config.restrictCommands;
-        boolean whispersBefore = config.chat.allowWhispers;
-        List<ServerPlayer> joined = new ArrayList<>();
-        try {
-            config.restrictCommands = true;
-            config.chat.allowWhispers = false;
-            TestPlayers.Recording sender = joinRecording(helper, joined, "woff", BlockPos.ZERO);
-            sender.messages.clear();
-
-            run(sender, "w Nobody123 hi");
-            helper.assertValueEqual(texts(sender), List.of(), "sender messages with whispers off");
-        } finally {
-            config.restrictCommands = restrictBefore;
-            config.chat.allowWhispers = whispersBefore;
-            leaveAll(joined);
-        }
         helper.succeed();
     }
 
@@ -201,6 +194,140 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // A restricted player's tree has no /w with whispers off, so its client sends the command unsigned, as here
+    @GameTest
+    public void whisperOffReplyIsSameWhenRestricted(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "woff", BlockPos.ZERO);
+            // In range, so only the switch keeps the whisper from arriving
+            TestPlayers.Recording target = joinRecording(helper, joined, "woffto", new BlockPos(10, 0, 0));
+            sender.messages.clear();
+            target.messages.clear();
+
+            sender.connection.handleChatCommand(new ServerboundChatCommandPacket("w " + target.nameAndId().name() + " hi"));
+            helper.assertValueEqual(texts(sender), List.of("Whispers are turned off."), "sender messages");
+            helper.assertValueEqual(texts(target), List.of(), "target messages");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // "w  hi" reads as an empty name. The client has signed the message by then, so /w itself has to refuse it.
+    @GameTest
+    public void whisperToBlankNameIsRefused(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wblank", BlockPos.ZERO);
+            TestPlayers.Recording near = joinRecording(helper, joined, "wblanknear", new BlockPos(1, 0, 0));
+            sender.messages.clear();
+            near.messages.clear();
+
+            run(sender, "w  hi");
+            helper.assertValueEqual(texts(sender), List.of("Name a player to whisper to."), "sender messages");
+            helper.assertValueEqual(texts(near), List.of(), "near player messages");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Global chat reaches everyone, so a whisper has no range either
+    @GameTest
+    public void whisperInGlobalModeHasNoRange(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        YoltConfig.ChatMode modeBefore = config.chat.mode;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.chat.mode = YoltConfig.ChatMode.GLOBAL;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wglobal", BlockPos.ZERO);
+            TestPlayers.Recording far = joinRecording(helper, joined, "wglobalfar", BlockPos.ZERO);
+            far.teleportTo(far.getX() + 100, far.getY(), far.getZ());
+            far.messages.clear();
+
+            run(sender, "w " + far.nameAndId().name() + " hi");
+            helper.assertValueEqual(texts(far), List.of(sender.nameAndId().name() + " whispers to you: hi"), "far player messages");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.mode = modeBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // An online-mode client signs /w's message, and the server matches each signature to an argument of its own reading
+    // of the command; for a restricted player that reading uses the non-op tree. A batch of its own: the whisper goes out
+    // a tick or so later, through the sender's chat chain, so the switches stay set until then.
+    @GameTest(environment = SIGNED_WHISPER, maxTicks = 20)
+    public void signedWhisperDeliversWhenRestricted(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        AtomicBoolean cleaned = new AtomicBoolean();
+        Runnable cleanUp = () -> {
+            if (cleaned.compareAndSet(false, true)) {
+                config.restrictCommands = restrictBefore;
+                config.chat.allowWhispers = whispersBefore;
+                config.chat.radius = radiusBefore;
+                leaveAll(joined);
+            }
+        };
+        boolean waiting = false;
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wsigned", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wsignedto", new BlockPos(10, 0, 0));
+            String senderName = sender.nameAndId().name();
+            String targetName = target.nameAndId().name();
+            sender.messages.clear();
+            target.messages.clear();
+
+            sendSigned(sender, "w " + targetName + " hi");
+            helper.runBeforeTestEnd(cleanUp);
+            helper.succeedWhen(() -> {
+                // A signature the server can't place gets the sender an error here instead
+                helper.assertValueEqual(texts(sender), List.of("You whisper to " + targetName + ": hi"), "sender messages");
+                helper.assertValueEqual(texts(target), List.of(senderName + " whispers to you: hi"), "target messages");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // A modified client can ask for suggestions on commands its tree doesn't have, like /msg and its online names
     @GameTest
     public void suggestionsComeFromNonOpTree(GameTestHelper helper) {
@@ -266,6 +393,15 @@ public class WhisperGameTests {
     private static void run(ServerPlayer player, String command) {
         MinecraftServer server = player.level().getServer();
         server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
+    }
+
+    // The packet an online-mode client sends for /w, with the message argument signed. The test server is offline, so
+    // any signature bytes do; what the server still checks is that its own reading has an argument by that name.
+    private static void sendSigned(ServerPlayer player, String command) {
+        ArgumentSignatures signatures = new ArgumentSignatures(List.of(
+                new ArgumentSignatures.Entry("message", new MessageSignature(new byte[MessageSignature.BYTES]))));
+        LastSeenMessages.Update nothingSeen = new LastSeenMessages.Update(0, new BitSet(), LastSeenMessages.Update.IGNORE_CHECKSUM);
+        player.connection.handleSignedChatCommand(new ServerboundChatCommandSignedPacket(command, Instant.now(), 0L, signatures, nothingSeen));
     }
 
     private static List<String> texts(TestPlayers.Recording player) {
