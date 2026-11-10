@@ -82,7 +82,9 @@ public final class Skins {
      */
     public static CompletableFuture<CachedSkin> lookUp(MinecraftServer server, String name) {
         CachedSkin cached = SkinStore.get(server).skin(name);
-        if (cached != null && cached.fresh(System.currentTimeMillis(), Settings.get().skins.refreshHours)) {
+        // An account saved before ids were kept is asked again, since a pick checks whether its id has played here
+        if (cached != null && cached.fresh(System.currentTimeMillis(), Settings.get().skins.refreshHours)
+                && (cached.id() != null || !cached.exists())) {
             return CompletableFuture.completedFuture(cached);
         }
         return lookup().find(name).orTimeout(Settings.get().skins.lookupTimeoutSeconds, TimeUnit.SECONDS);

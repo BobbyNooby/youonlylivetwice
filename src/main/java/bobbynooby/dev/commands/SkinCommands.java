@@ -135,7 +135,7 @@ public final class SkinCommands {
             return YoltCommands.fail(source, LOCKED);
         }
         if (heldToRules(source, own) && Settings.get().skins.refuseKnownPlayers
-                && SkinOwners.taken(source.getServer(), skin.name(), who.id())) {
+                && SkinOwners.taken(source.getServer(), skin, mojangName, who)) {
             return YoltCommands.fail(source, "You can't use " + skin.name() + "'s skin. Pick another.");
         }
         store.choose(who.id(), skin.name());

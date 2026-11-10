@@ -4,11 +4,18 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Yolt;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,12 +36,31 @@ public final class SkinOwners {
     }
 
     /**
-     * True when the account with this name is the skin of a player other than this one who has joined, or one another
-     * player picked. Only players who really joined count: vanilla's name cache also holds names that were only looked up.
+     * True when the account is someone else's here, so a non-op can't pick it.
+     * Someone else's means another player picked it, or a player other than this one has joined as it: under its name
+     * or its id in YOLT's record of joins, or with a save in players/data. A save is tried under the account's own id,
+     * for online mode, and under the id an offline-mode server gives the name as asked and as Mojang spells it. Only a
+     * join writes a save, so a name vanilla merely looked up never counts, and every player from before the record is
+     * covered.
      */
-    public static boolean taken(MinecraftServer server, String name, UUID by) {
+    public static boolean taken(MinecraftServer server, CachedSkin skin, String asked, NameAndId by) {
         SkinStore store = SkinStore.get(server);
-        return store.joinedAs(name, by) || !store.pickedBy(name, by).isEmpty();
+        if (store.joinedAs(skin.name(), by.id()) || !store.pickedBy(skin.name(), by.id()).isEmpty()) {
+            return true;
+        }
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (skin.id() != null) {
+            ids.add(skin.id());
+        }
+        ids.add(UUIDUtil.createOfflinePlayerUUID(asked));
+        ids.add(UUIDUtil.createOfflinePlayerUUID(skin.name()));
+        Path saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        for (UUID id : ids) {
+            if (!id.equals(by.id()) && (store.joined(id) || Files.exists(saves.resolve(id + ".dat")))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void onJoin(ServerPlayer player) {

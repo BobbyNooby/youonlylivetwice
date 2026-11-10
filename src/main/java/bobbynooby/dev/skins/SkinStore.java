@@ -48,8 +48,10 @@ public final class SkinStore extends SavedData {
             Codec.STRING.fieldOf("name").forGetter(CachedSkin::name),
             // None for a name no account has
             TEXTURES_CODEC.optionalFieldOf("textures").forGetter(skin -> Optional.ofNullable(skin.textures())),
-            Codec.LONG.fieldOf("fetched_at").forGetter(CachedSkin::fetchedAt)
-    ).apply(i, (name, textures, fetchedAt) -> new CachedSkin(name, textures.orElse(null), fetchedAt)));
+            Codec.LONG.fieldOf("fetched_at").forGetter(CachedSkin::fetchedAt),
+            // Added later, so an older answer has none
+            UUIDUtil.CODEC.optionalFieldOf("id").forGetter(skin -> Optional.ofNullable(skin.id()))
+    ).apply(i, (name, textures, fetchedAt, id) -> new CachedSkin(name, textures.orElse(null), fetchedAt, id.orElse(null))));
 
     private record Applied(UUID player, SkinTextures textures) {
         static final Codec<Applied> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -245,6 +247,11 @@ public final class SkinStore extends SavedData {
         if (!name.equals(joined.put(player, name))) {
             setDirty();
         }
+    }
+
+    /** True when this player has joined since YOLT started keeping the record. */
+    public boolean joined(UUID player) {
+        return joined.containsKey(player);
     }
 
     /** True when a player other than this one last joined under this name, in any case. */

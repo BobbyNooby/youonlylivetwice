@@ -59,7 +59,8 @@ final class MojangSkinLookup implements SkinLookup {
         if (textures == null) {
             throw new IllegalStateException("Mojang gave no skin for " + found.name);
         }
-        return CachedSkin.found(found.name, new SkinTextures(textures.value(), textures.signature()), System.currentTimeMillis());
+        return CachedSkin.found(found.name, found.id, new SkinTextures(textures.value(), textures.signature()),
+                System.currentTimeMillis());
     }
 
     private static final class Found implements ProfileLookupCallback {
