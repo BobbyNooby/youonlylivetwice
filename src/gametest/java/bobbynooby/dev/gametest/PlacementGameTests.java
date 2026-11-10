@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.border.WorldBorder;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -94,6 +95,51 @@ public class PlacementGameTests {
         helper.succeed();
     }
 
+    // The death spot and the eight blocks above it are stone, so the spot comes from the first ring
+    @GameTest(skyAccess = true)
+    public void ringFindsSideSpotWhenColumnBlocked(GameTestHelper helper) {
+        BlockPos death = new BlockPos(3, 0, 3);
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            for (int dy = 0; dy <= 8; dy++) {
+                place(helper, placed, death.above(dy), Blocks.STONE);
+            }
+            BlockPos at = helper.absolutePos(death);
+            BlockPos result = GravePlacement.find(helper.getLevel(), at, store(helper));
+            helper.assertValueEqual(result.getY(), at.getY(), "grave height");
+            helper.assertValueEqual(Math.max(Math.abs(result.getX() - at.getX()), Math.abs(result.getZ() - at.getZ())), 1,
+                    "grave's distance from the death column");
+        } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // Stone fills the death column eight blocks up and the first three rings three blocks up, so only the surface on
+    // top of the column is left
+    @GameTest(skyAccess = true)
+    public void surfaceFallbackAboveBlockedArea(GameTestHelper helper) {
+        BlockPos death = new BlockPos(3, 0, 3);
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    for (int dy = 0; dy <= 3; dy++) {
+                        place(helper, placed, death.offset(dx, dy, dz), Blocks.STONE);
+                    }
+                }
+            }
+            for (int dy = 4; dy <= 8; dy++) {
+                place(helper, placed, death.above(dy), Blocks.STONE);
+            }
+            BlockPos result = GravePlacement.find(helper.getLevel(), helper.absolutePos(death), store(helper));
+            helper.assertValueEqual(result, helper.absolutePos(death.above(9)), "grave position");
+        } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
     // Broken by hand, leaf litter drops itself, so a head set over it would delete that item
     @GameTest
     public void leafLitterIsNotReplaced(GameTestHelper helper) {
@@ -110,6 +156,18 @@ public class PlacementGameTests {
             helper.setBlock(ground, Blocks.AIR);
         }
         helper.succeed();
+    }
+
+    // Placed blocks are noted first, so finally clears even the ones placed before a failure
+    private static void place(GameTestHelper helper, List<BlockPos> placed, BlockPos pos, Block block) {
+        placed.add(pos);
+        helper.setBlock(pos, block);
+    }
+
+    private static void clear(GameTestHelper helper, List<BlockPos> placed) {
+        for (BlockPos pos : placed) {
+            helper.setBlock(pos, Blocks.AIR);
+        }
     }
 
     @GameTest
