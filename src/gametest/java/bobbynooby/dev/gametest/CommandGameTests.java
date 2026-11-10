@@ -683,6 +683,45 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // What the startup's WARN asks for: a plain reload of the file it rewrote. The worldBorder section is the same as the
+    // held one, yet applying it would put the 10,000 default over the world's 30,000 border with the player 7000 blocks
+    // from its centre, so the border stays held. The settings are put back before the player leaves, since the startup
+    // load turns bodies on.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadWhileHeldChecksTheUnchangedBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Path bak = backupOf(path);
+        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "HeldOut", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        try {
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(30000));
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setCenter(player.getX() - 7000, player.getZ());
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}");
+            Settings.load();
+            helper.assertTrue(Settings.borderHeld(), "border not held after the startup load");
+
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line ->
+                    line.startsWith("World border kept as it was, since the config's border would leave ") && line.contains(name)),
+                    "command output: " + output);
+            helper.assertTrue(Settings.borderHeld(), "border no longer held");
+            helper.assertValueEqual(overworld.getSize(), 30000.0, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            restoreBackup(bak, bakBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // A reload can't be confirmed, so it keeps the live border. The settings are put back before the player leaves,
     // since the reloaded file turns bodies on.
     @GameTest(environment = CONFIG_COMMAND)
