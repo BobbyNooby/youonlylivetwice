@@ -394,8 +394,9 @@ public class OfflineGameTests {
     }
 
     // Every message YOLT logs while the action runs. The appender joins the config YOLT's logger already uses, and
-    // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console.
-    private static List<String> yoltLog(Runnable action) {
+    // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console. Other
+    // test classes use it too.
+    static List<String> yoltLog(Runnable action) {
         LoggerConfig config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
         List<String> lines = new CopyOnWriteArrayList<>();
         AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
@@ -418,7 +419,7 @@ public class OfflineGameTests {
     }
 
     // No item has this id, so the entry can't be read back
-    private static CompoundTag unreadableItem() {
+    static CompoundTag unreadableItem() {
         CompoundTag item = new CompoundTag();
         item.putString("id", "you-only-live-twice-gametest:no_such_item");
         item.putInt("count", 1);

@@ -1,5 +1,6 @@
 package bobbynooby.dev.bodies;
 
+import bobbynooby.dev.core.LenientCodecs;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceKey;
@@ -52,7 +53,8 @@ public record BodySnapshot(
             Codec.DOUBLE.optionalFieldOf("fall_distance", 0.0).forGetter(BodySnapshot::fallDistance),
             Codec.INT.optionalFieldOf("fire_ticks", 0).forGetter(BodySnapshot::fireTicks),
             Codec.INT.optionalFieldOf("air", Entity.TOTAL_AIR_SUPPLY).forGetter(BodySnapshot::air),
-            MobEffectInstance.CODEC.listOf().fieldOf("effects").forGetter(BodySnapshot::effects),
+            // An effect a removed mod or datapack brought is left out on its own, and the record stays
+            LenientCodecs.list(MobEffectInstance.CODEC, "body effect").fieldOf("effects").forGetter(BodySnapshot::effects),
             Codec.unboundedMap(EquipmentSlot.CODEC, ItemStack.CODEC).fieldOf("gear").forGetter(BodySnapshot::gear)
     ).apply(i, BodySnapshot::new));
 

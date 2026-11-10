@@ -30,6 +30,7 @@ import net.minecraft.world.phys.Vec3;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
@@ -246,6 +247,40 @@ public class BodyStoreGameTests {
         GraveStoreGameTests.assertFileCopiedOnce(helper, loaded::checkFile, storeData(keptTag, brokenTag));
         BodyStore whole = BodyStore.TYPE.codec().parse(ops, storeData(keptTag)).getOrThrow();
         GraveStoreGameTests.assertFileNotCopied(helper, whole::checkFile, storeData(keptTag));
+        helper.succeed();
+    }
+
+    // The record's second effect has an id no effect has, as after the mod or datapack that added it went
+    @GameTest
+    public void unknownEffectOnlyDropsThatEffect(GameTestHelper helper) throws IOException {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodySnapshot snapshot = new BodySnapshot(Level.OVERWORLD, new Vec3(1.5, 64, -2.5), 90f, 14f, 2f, 3.5, 40, 120,
+                List.of(new MobEffectInstance(MobEffects.SPEED, 200, 1), new MobEffectInstance(MobEffects.HASTE, 200)),
+                Map.of(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE)));
+        BodyRecord record = new BodyRecord(UUID.randomUUID(), "Alex", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN,
+                1234L, false, snapshot);
+        CompoundTag wholeTag = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, record).getOrThrow();
+        CompoundTag brokenTag = wholeTag.copy();
+        brokenTag.getCompoundOrEmpty("snapshot").getListOrEmpty("effects").getCompound(1).orElseThrow()
+                .putString("id", "you-only-live-twice-gametest:no_such_effect");
+
+        List<BodyStore> loaded = new ArrayList<>();
+        List<String> log = OfflineGameTests.yoltLog(
+                () -> loaded.add(BodyStore.TYPE.codec().parse(ops, storeData(brokenTag)).getOrThrow()));
+        BodySnapshot after = loaded.get(0).byOwner(record.owner()).map(BodyRecord::snapshot).orElse(null);
+        helper.assertTrue(after != null, "the record with an unknown effect was dropped");
+        helper.assertTrue(after.effects().size() == 1 && after.effects().get(0).is(MobEffects.SPEED),
+                "the record did not keep just its known effect: " + after.effects());
+        helper.assertValueEqual(after.health(), 14f, "health");
+        helper.assertTrue(after.gear().getOrDefault(EquipmentSlot.CHEST, ItemStack.EMPTY).is(Items.IRON_CHESTPLATE),
+                "chestplate lost");
+        long effectSkips = log.stream().filter(line -> line.startsWith("Skipping unreadable body effect record")).count();
+        helper.assertValueEqual(effectSkips, 1L, "logged effect skips: " + log);
+        helper.assertTrue(log.stream().noneMatch(line -> line.startsWith("Skipping unreadable body record")),
+                "the whole record was logged as skipped: " + log);
+        GraveStoreGameTests.assertFileCopiedOnce(helper, loaded.get(0)::checkFile, storeData(brokenTag));
+        BodyStore whole = BodyStore.TYPE.codec().parse(ops, storeData(wholeTag)).getOrThrow();
+        GraveStoreGameTests.assertFileNotCopied(helper, whole::checkFile, storeData(wholeTag));
         helper.succeed();
     }
 
