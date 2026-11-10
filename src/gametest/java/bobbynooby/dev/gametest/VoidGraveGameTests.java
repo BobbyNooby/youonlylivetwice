@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
@@ -8,16 +9,21 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.graves.LastGround;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
@@ -38,6 +44,7 @@ import net.minecraft.world.level.storage.LevelData;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 // Deaths over the void. The test world is flat and solid to the bottom in every dimension, so each test digs its own
@@ -85,6 +92,36 @@ public class VoidGraveGameTests {
             helper.assertValueEqual(result.getY(), middle.getY(), "grave height");
             assertOnSolid(helper, level, result);
         } finally {
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // Tracked on a ledge across the test, then dead below the world down a shaft whose side is nearer land
+    @GameTest(skyAccess = true)
+    public void voidDeathUsesLastGround(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player = TestPlayers.join(helper, "Ledge", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            standOnGround(player);
+            helper.assertValueEqual(LastGround.in(player.getUUID(), level.dimension()), Optional.of(onLedge), "last ground");
+
+            dieBelowWorld(helper, level, player, shaft);
+            Grave grave = onlyGrave(helper, level, player.getUUID());
+            helper.assertValueEqual(grave.pos(), onLedge, "grave position");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+            helper.assertTrue(GraveBlocks.isOwnHead(level, grave.pos(), grave), "no grave head at " + grave.pos());
+        } finally {
+            if (player != null) {
+                cleanUp(level, player);
+            }
             putBack(level, before);
         }
         helper.succeed();
@@ -209,6 +246,49 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // Tracked on a ledge, then saved over the void: the logout forgets the ledge, so the kill starts from the save
+    @GameTest(skyAccess = true)
+    public void offlineKillInVoidGoesToLand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        BlockPos shaft = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        UUID owner = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            ServerPlayer player = TestPlayers.join(helper, "VoidSave", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            NameAndId who = player.nameAndId();
+            owner = who.id();
+            try {
+                player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+                standOnGround(player);
+                player.setOnGround(false);
+                player.snapTo(shaft.getX() + 0.5, belowWorld(level, shaft).getY(), shaft.getZ() + 0.5);
+            } finally {
+                TestPlayers.leave(player);
+            }
+            helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(), "the logout kept the last ground");
+
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            Grave grave = onlyGrave(helper, level, owner);
+            helper.assertValueEqual(flatDistanceSqr(grave.pos(), shaft), 1, "grave's distance from the shaft, squared");
+            helper.assertValueEqual(grave.pos().getY(), shaft.getY(), "grave height");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).isEmpty(),
+                    "save still has items");
+            helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
+        } finally {
+            if (owner != null) {
+                removeGraves(level, owner);
+            }
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
     // Ender chest into the grave: 41 stacks on the player and 27 in the chest, so two graves, the second on the first
     @GameTest(skyAccess = true)
     public void voidDeathTwoGravesStackOnLand(GameTestHelper helper) {
@@ -305,6 +385,56 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // A body tracked on a ledge, pushed off down a shaft whose side is nearer land, and killed by the void below
+    @GameTest(skyAccess = true, maxTicks = 40)
+    public void bodyPushedIntoVoidGraveOnLand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = TestPlayers.join(helper, "Pushed", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        Runnable cleanUp = () -> {
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
+            LastGround.forget(owner);
+            putBack(level, before);
+        };
+        boolean waiting = false;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            // The switches only matter while the body spawns
+            Settings.get().bodies = bodiesBefore;
+            // The body ticks on the ledge, and the server tick notes where it stands
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertValueEqual(LastGround.in(owner, level.dimension()), Optional.of(onLedge), "body's last ground");
+                    body.snapTo(shaft.getX() + 0.5, belowWorld(level, shaft).getY(), shaft.getZ() + 0.5);
+                    body.hurtServer(level, level.damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+                    helper.assertTrue(body.isDeadOrDying(), "body did not die");
+
+                    List<Grave> made = BodyTestKit.gravesOf(helper, owner);
+                    helper.assertValueEqual(made.size(), 1, "graves for the owner");
+                    helper.assertValueEqual(made.get(0).pos(), onLedge, "grave position");
+                    helper.assertValueEqual(GraveAsserts.countInGraves(made, Items.DIAMOND), 3, "diamonds in the grave");
+                    helper.assertTrue(BodyTestKit.store(helper).byOwner(owner).isEmpty(), "body record kept");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = bodiesBefore;
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // Notes each block before it goes, so putBack can set back exactly what was there
     static void setRemembered(ServerLevel level, BlockPos pos, Block block, Map<BlockPos, BlockState> before) {
         before.putIfAbsent(pos.immutable(), level.getBlockState(pos));
@@ -349,10 +479,17 @@ public class VoidGraveGameTests {
 
     // Down the shaft to below the world, where the void's own damage kills, totems or not
     private static void dieBelowWorld(GameTestHelper helper, ServerLevel level, ServerPlayer player, BlockPos shaft) {
+        player.setOnGround(false);
         player.snapTo(shaft.getX() + 0.5, belowWorld(level, shaft).getY(), shaft.getZ() + 0.5);
         TestPlayers.markLoaded(player);
         player.hurtServer(level, level.damageSources().fellOutOfWorld(), Float.MAX_VALUE);
         helper.assertTrue(player.isDeadOrDying(), "player did not die");
+    }
+
+    // Test players get no living tick, so this stands in for the one that would note where they stand
+    private static void standOnGround(ServerPlayer player) {
+        player.setOnGround(true);
+        LastGround.update(player.getUUID(), player);
     }
 
     private static BlockPos belowWorld(ServerLevel level, BlockPos column) {
@@ -417,9 +554,10 @@ public class VoidGraveGameTests {
         gravesOf(level, owner).forEach(grave -> removeGrave(level, grave));
     }
 
-    // Leaving first means the queued death kick finds nobody; the graves go too
+    // Leaving first means the queued death kick finds nobody; the graves and the last ground go too
     private static void cleanUp(ServerLevel level, ServerPlayer player) {
         TestPlayers.leave(player);
+        LastGround.forget(player.getUUID());
         removeGraves(level, player.getUUID());
     }
 }
