@@ -20,5 +20,8 @@ public class TestServerSetup implements ModInitializer {
         Settings.get().worldBorder.enabled = false;
         // Every test player's leave is a logout, so bodies stay off unless a body test turns them on
         Settings.get().bodies.enabled = false;
+        // Tests take grave heads away on purpose and check what happens next, which the re-check would undo under them.
+        // The re-check's own tests turn it on, in batches of their own.
+        Settings.get().graves.recheckSeconds = 0;
     }
 }

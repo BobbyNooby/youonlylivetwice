@@ -2,11 +2,17 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
+import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GravePlacement;
+import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
@@ -22,6 +28,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
+import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.dimension.end.DragonRespawnStage;
@@ -205,6 +212,128 @@ public class PlacementGameTests {
             cleanUpEnd(end, grave, before, gateway);
         }
         helper.succeed();
+    }
+
+    // The three below start from a grave already in a rebuilt place, as one made before graves kept out could be. The
+    // rebuild takes its head, and the re-check puts it back outside, where the next rebuild leaves it.
+
+    @GameTest
+    public void arrivalPlatformRebuildKeepsGrave(GameTestHelper helper) {
+        ServerLevel end = end(helper);
+        BlockPos origin = BlockPos.containing(Vec3.atBottomCenterOf(ServerLevel.END_SPAWN_POINT)).below();
+        BoundingBox platform = BoundingBox.fromCorners(origin.offset(-2, -1, -2), origin.offset(2, 2, 2));
+        Map<BlockPos, BlockState> before = remembered(end, BlockPos.betweenClosed(origin.offset(-5, -1, -5), origin.offset(5, 12, 5)));
+        Grave grave = null;
+        try {
+            EndPlatformFeature.createEndPlatform(end, origin, false);
+            grave = oldGraveAt(end, origin);
+            EndPlatformFeature.createEndPlatform(end, origin, true);
+            helper.assertFalse(GraveBlocks.isOwnHead(end, origin, grave), "the arrival left the old grave's head at " + origin);
+            grave = recheckedGrave(helper, end, grave);
+            helper.assertFalse(platform.isInside(grave.pos()), "the grave came back in the arrival platform at " + grave.pos());
+            EndPlatformFeature.createEndPlatform(end, origin, true);
+            assertHeadKept(helper, end, grave);
+        } finally {
+            cleanUpEnd(end, latest(end, grave), before, origin);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void exitPortalActivationKeepsGrave(GameTestHelper helper) {
+        ServerLevel end = end(helper);
+        BlockPos podium = EnderDragonFight.getPodiumLocation(BlockPos.ZERO);
+        // A chunk that isn't loaded reads as the bottom of the world in the heightmap
+        end.getChunk(podium);
+        BlockPos portal = end.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, podium).below();
+        Map<BlockPos, BlockState> before = remembered(end, BlockPos.betweenClosed(portal.offset(-8, -1, -8), portal.offset(8, 32, 8)));
+        Grave grave = null;
+        try {
+            new EndPodiumFeature(false).place(end, end.getChunkSource().getGenerator(), RandomSource.create(), portal);
+            BlockPos rim = portal.east(3);
+            helper.assertTrue(end.getBlockState(rim).is(Blocks.BEDROCK), "no rim at " + rim);
+            grave = oldGraveAt(end, rim.above());
+            new EndPodiumFeature(true).place(end, end.getChunkSource().getGenerator(), RandomSource.create(), portal);
+            helper.assertFalse(GraveBlocks.isOwnHead(end, rim.above(), grave), "the kill left the old grave's head at " + rim.above());
+            grave = recheckedGrave(helper, end, grave);
+            helper.assertTrue(VoidGraveGameTests.flatDistanceSqr(grave.pos(), podium) >= 13,
+                    "the grave came back inside the exit portal's ring at " + grave.pos());
+            new EndPodiumFeature(true).place(end, end.getChunkSource().getGenerator(), RandomSource.create(), portal);
+            assertHeadKept(helper, end, grave);
+        } finally {
+            cleanUpEnd(end, latest(end, grave), before, portal);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void respawnPillarKeepsGrave(GameTestHelper helper) {
+        ServerLevel end = end(helper);
+        EndSpikeFeature.EndSpike spike = EndSpikeFeature.getSpikesForLevel(end).getFirst();
+        BlockPos top = new BlockPos(spike.getCenterX(), spike.getHeight(), spike.getCenterZ());
+        int radius = spike.getRadius();
+        // The re-check reads loaded chunks only, and the ground it moves to is just past the pillar's box
+        for (int x = top.getX() - 16; x <= top.getX() + 16; x += 16) {
+            for (int z = top.getZ() - 16; z <= top.getZ() + 16; z += 16) {
+                end.getChunk(new BlockPos(x, 0, z));
+            }
+        }
+        Map<BlockPos, BlockState> before = remembered(end, BlockPos.betweenClosed(top.offset(-10, -10, -10), top.offset(10, 10, 10)));
+        before.putAll(remembered(end, BlockPos.betweenClosed(new BlockPos(top.getX() - radius, end.getMinY(), top.getZ() - radius),
+                top.offset(radius, 10, radius))));
+        Grave grave = null;
+        try {
+            end.setBlock(top.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
+            grave = oldGraveAt(end, top);
+            // The first pillar is the one the respawn rebuilds at the end of its first beam
+            DragonRespawnStage.SUMMONING_PILLARS.tick(end, end.getDragonFight(), List.of(), 39);
+            helper.assertFalse(GraveBlocks.isOwnHead(end, top, grave), "the respawn left the old grave's head at " + top);
+            grave = recheckedGrave(helper, end, grave);
+            BlockPos at = grave.pos();
+            helper.assertFalse(Math.abs(at.getX() - top.getX()) <= 10 && Math.abs(at.getZ() - top.getZ()) <= 10
+                    && Math.abs(at.getY() - top.getY()) <= 10, "the grave came back within 10 of the pillar's top at " + at);
+            DragonRespawnStage.SUMMONING_PILLARS.tick(end, end.getDragonFight(), List.of(), 39);
+            assertHeadKept(helper, end, grave);
+        } finally {
+            end.getEntitiesOfClass(EndCrystal.class, new AABB(top).inflate(12.0)).forEach(Entity::discard);
+            cleanUpEnd(end, latest(end, grave), before, top);
+        }
+        helper.succeed();
+    }
+
+    // A grave from before graves kept out of the End's rebuilds: its record, and a head showing its owner, the way heads
+    // were before they carried the grave's id, straight on the spot
+    private static Grave oldGraveAt(ServerLevel level, BlockPos pos) {
+        UUID owner = UUID.randomUUID();
+        ResolvableProfile profile = ResolvableProfile.createResolved(new GameProfile(owner, "Ghost"));
+        Grave grave = new Grave(UUID.randomUUID(), owner, "Ghost", profile, level.dimension(), pos,
+                List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND)), 1L);
+        GraveStore.get(level.getServer()).put(grave);
+        level.setBlock(pos, Blocks.PLAYER_HEAD.defaultBlockState(), Block.UPDATE_ALL);
+        if (level.getBlockEntity(pos) instanceof SkullBlockEntity skull) {
+            skull.applyComponents(DataComponentMap.EMPTY, DataComponentPatch.builder().set(DataComponents.PROFILE, profile).build());
+        }
+        return grave;
+    }
+
+    // The re-check's step for this one grave, and the record it leaves: moved off the old spot, with its head and every
+    // item. Only this grave, so no other test's grave is touched.
+    private static Grave recheckedGrave(GameTestHelper helper, ServerLevel end, Grave grave) {
+        GraveStore store = GraveStore.get(end.getServer());
+        GraveRecheck.recheck(end, store, grave);
+        Grave moved = store.byId(grave.id()).orElse(null);
+        helper.assertTrue(moved != null, "the re-check lost the grave's record");
+        helper.assertFalse(moved.pos().equals(grave.pos()), "the re-check left the grave on its old spot at " + grave.pos());
+        helper.assertTrue(GraveBlocks.isOwnHead(end, moved.pos(), moved), "no head for the grave at " + moved.pos());
+        helper.assertValueEqual(moved.items().size(), 2, "stacks in the grave");
+        helper.assertTrue(GraveItems.isGraveHead(moved.items().get(0)), "the grave's first item is not its head");
+        helper.assertValueEqual(GraveAsserts.count(moved.items(), Items.DIAMOND), 1, "diamonds in the grave");
+        return moved;
+    }
+
+    // The record as the store has it now, which a restore may have moved
+    private static @Nullable Grave latest(ServerLevel level, @Nullable Grave grave) {
+        return grave == null ? null : GraveStore.get(level.getServer()).byId(grave.id()).orElse(grave);
     }
 
     private static ServerLevel end(GameTestHelper helper) {

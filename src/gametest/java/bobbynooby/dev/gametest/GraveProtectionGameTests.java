@@ -12,6 +12,7 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import bobbynooby.dev.world.LiveSettings;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -72,6 +73,8 @@ import java.util.UUID;
 public class GraveProtectionGameTests {
     // Tests that turn graves off and on again run apart from the others
     private static final String GRAVES_SWITCH = "you-only-live-twice-gametest:graves_switch";
+    // The test server keeps the re-check off, since tests leave graves without a head on purpose; this one turns it on
+    private static final String GRAVE_RECHECK = "you-only-live-twice-gametest:grave_recheck";
 
     @GameTest
     public void playerCannotBreakGrave(GameTestHelper helper) {
@@ -315,6 +318,45 @@ public class GraveProtectionGameTests {
             removeGraves(helper, List.of(grave));
         }
         helper.succeed();
+    }
+
+    // Gone as to /setblock while its chunk stays loaded, so no chunk load puts it back: the re-check does, within its
+    // interval, here a second set the way a reload sets it
+    @GameTest(environment = GRAVE_RECHECK, maxTicks = 60)
+    public void missingHeadComesBackWhileChunkStaysLoaded(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ChunkPos chunk = ChunkPos.containing(grave.pos());
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int secondsBefore = graves.recheckSeconds;
+        Runnable cleanUp = () -> {
+            graves.recheckSeconds = secondsBefore;
+            LiveSettings.applyAll(server);
+            removeGraves(helper, List.of(grave));
+        };
+        boolean waiting = false;
+        try {
+            graves.recheckSeconds = 1;
+            LiveSettings.applyAll(server);
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.runAfterDelay(30, () -> {
+                try {
+                    helper.assertTrue(level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) != null, "the grave's chunk unloaded");
+                    assertGraveIntact(helper, grave);
+                    helper.assertValueEqual(GraveStore.get(server).byId(grave.id()).map(Grave::pos), Optional.of(grave.pos()),
+                            "grave's spot");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     @GameTest(environment = GRAVES_SWITCH)
