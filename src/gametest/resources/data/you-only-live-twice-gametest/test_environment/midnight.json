@@ -11,6 +11,10 @@
       "rules": {
         "minecraft:advance_time": false
       }
+    },
+    {
+      "type": "minecraft:weather",
+      "weather": "clear"
     }
   ]
 }

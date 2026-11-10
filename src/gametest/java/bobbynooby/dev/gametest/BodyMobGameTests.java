@@ -146,9 +146,10 @@ public class BodyMobGameTests {
         ignoresBody(helper, "Calm", EntityTypes.ZOMBIFIED_PIGLIN, NEXT_TO_BODY, NO_EXTRA_CHECK, NOTHING_TO_RESTORE);
     }
 
-    // Its own batch, which stops the clock at noon and puts it back afterwards. Noon in a shared batch would set undead
-    // in other tests on fire, since barriers let skylight through. Stopped, since a test only starts once its chunks
-    // are loaded, and the idle test server can run thousands of ticks before that, into the night.
+    // Its own batch, which stops the clock at noon, keeps the weather clear, and puts both back afterwards. Noon in a
+    // shared batch would set undead in other tests on fire, since barriers let skylight through. Stopped, since a test
+    // only starts once its chunks are loaded, and the idle test server can run thousands of ticks before that, into
+    // the night or a thunderstorm, where a spider hunts.
     @GameTest(maxTicks = 200, skyAccess = true, environment = DAYLIGHT)
     public void spiderIgnoresBodyInDaylight(GameTestHelper helper) {
         ignoresBody(helper, "Daylight", EntityTypes.SPIDER, NEXT_TO_BODY,
