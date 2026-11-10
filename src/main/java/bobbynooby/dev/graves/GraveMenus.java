@@ -55,7 +55,7 @@ public final class GraveMenus {
         }
         ServerLevel level = server.getLevel(grave.dimension());
         if (level != null) {
-            GraveBlocks.clearHead(level, grave.pos());
+            GraveBlocks.clearHead(level, grave);
         }
         store.remove(grave.id());
         SharedGraveContainer container = OPEN.remove(grave.id());

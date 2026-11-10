@@ -52,7 +52,8 @@ public final class Graves {
         }
         // The block first: it is cheap, and the hooks run for many blocks that are never heads
         return level.getBlockState(pos).is(Blocks.PLAYER_HEAD)
-                && GraveStore.get(serverLevel.getServer()).at(level.dimension(), pos).isPresent();
+                && GraveStore.get(serverLevel.getServer()).at(level.dimension(), pos)
+                .filter(grave -> GraveBlocks.isOwnHead(level, pos, grave)).isPresent();
     }
 
     /**
@@ -95,7 +96,7 @@ public final class Graves {
                             "Could not put back the block {}'s taken-back grave replaced at {} {}",
                             ownerName, level.dimension().identifier(), pos);
                 });
-                GraveBlocks.placeHead(level, pos, profile, rotation);
+                GraveBlocks.placeHead(level, pos, grave, rotation);
                 // Stored before the next search, so the next grave can't land on this one
                 store.put(grave);
                 created.add(grave);
@@ -162,7 +163,7 @@ public final class Graves {
             // No push, so every stack falls straight down the column that was checked
             level.addFreshEntity(new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0));
         }
-        GraveBlocks.clearHead(level, pos);
+        GraveBlocks.clearHead(level, grave);
         store.remove(grave.id());
         return new Removal.Dropped(items.size());
     }

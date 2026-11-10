@@ -14,7 +14,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -26,6 +25,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.BlockHitResult;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /** The grave head blocks: setting, clearing and restoring them, and what a click or a placement does. */
 public final class GraveBlocks {
@@ -53,12 +53,13 @@ public final class GraveBlocks {
 
     /**
      * Puts back the head of every grave in the chunk whose block went missing, for example to /setblock. A spot that
-     * something else has taken since is left alone, and the grave moves to the nearest free spot instead.
+     * something else has taken since, another head included, is left alone, and the grave moves to the nearest free
+     * spot instead.
      */
     public static void restoreChunk(ServerLevel level, LevelChunk chunk) {
         GraveStore store = GraveStore.get(level.getServer());
         for (Grave grave : store.inChunk(level.dimension(), chunk.getPos())) {
-            if (level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD)) {
+            if (isOwnHead(level, grave.pos(), grave)) {
                 continue;
             }
             // Setting the head over a chest would spill it, over a shulker box would delete what it holds
@@ -85,7 +86,7 @@ public final class GraveBlocks {
                 }
             }
             // The record doesn't keep the facing, so a restored head faces the default way
-            placeHead(level, at, grave.profile(), 0);
+            placeHead(level, at, grave, 0);
             if (moved) {
                 Yolt.LOGGER.info("Moved {}'s grave in {} from {} to {}, since its old spot is taken or unsafe",
                         grave.ownerName(), level.dimension().identifier(), grave.pos(), at);
@@ -100,8 +101,10 @@ public final class GraveBlocks {
         if (!Settings.active() || !(player instanceof ServerPlayer serverPlayer)) {
             return InteractionResult.PASS;
         }
-        if (Settings.get().graves.enabled && level.getBlockState(hit.getBlockPos()).is(Blocks.PLAYER_HEAD)) {
-            Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), hit.getBlockPos());
+        BlockPos pos = hit.getBlockPos();
+        if (Settings.get().graves.enabled && level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
+            Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), pos)
+                    .filter(found -> isOwnHead(level, pos, found));
             if (grave.isPresent()) {
                 // A vanilla client sees no use for a head, so it tries the off hand straight after; that must not reopen it
                 if (hand == InteractionHand.MAIN_HAND) {
@@ -138,19 +141,35 @@ public final class GraveBlocks {
         });
     }
 
-    // The skull reads its owner from components, the same way a placed head item hands it over
-    static void placeHead(ServerLevel level, BlockPos pos, ResolvableProfile profile, int rotation) {
+    // The skull reads its owner from components, the same way a placed head item hands it over. The grave's id is
+    // kept with the skull's other components, so isOwnHead can tell this head from any other.
+    static void placeHead(ServerLevel level, BlockPos pos, Grave grave, int rotation) {
         level.setBlock(pos, Blocks.PLAYER_HEAD.defaultBlockState().setValue(SkullBlock.ROTATION, rotation), Block.UPDATE_ALL);
         if (level.getBlockEntity(pos) instanceof SkullBlockEntity skull) {
-            skull.applyComponents(DataComponentMap.EMPTY, DataComponentPatch.builder().set(DataComponents.PROFILE, profile).build());
+            skull.applyComponents(DataComponentMap.EMPTY, DataComponentPatch.builder()
+                    .set(DataComponents.PROFILE, grave.profile())
+                    .set(DataComponents.CUSTOM_DATA, GraveItems.graveMarker(grave.id()))
+                    .build());
             skull.setChanged();
         }
     }
 
-    // Only while it is still a player head, so a block that has since replaced it is left alone
-    static void clearHead(ServerLevel level, BlockPos pos) {
-        if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
-            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+    /**
+     * True when the block at pos is this grave's own head: a head carrying the grave's id, or, for a head placed before
+     * heads carried one, showing the grave's owner. Any other head on the spot is someone's own block.
+     */
+    public static boolean isOwnHead(Level level, BlockPos pos, Grave grave) {
+        if (!level.getBlockState(pos).is(Blocks.PLAYER_HEAD) || !(level.getBlockEntity(pos) instanceof SkullBlockEntity skull)) {
+            return false;
+        }
+        Optional<UUID> id = GraveItems.graveId(skull.components().get(DataComponents.CUSTOM_DATA));
+        return id.isPresent() ? id.get().equals(grave.id()) : grave.profile().equals(skull.getOwnerProfile());
+    }
+
+    // Only the grave's own head, so a block that has since replaced it, another head included, is left alone
+    static void clearHead(ServerLevel level, Grave grave) {
+        if (isOwnHead(level, grave.pos(), grave)) {
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }
     }
 }

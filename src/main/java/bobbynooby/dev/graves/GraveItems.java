@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -8,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ResolvableProfile;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +19,7 @@ public final class GraveItems {
     private static final String ROOT = "yolt";
     private static final String GRAVE_HEAD = "grave_head";
     private static final String REVIVE = "revive";
+    private static final String GRAVE_ID = "grave";
 
     private GraveItems() {
     }
@@ -44,6 +47,23 @@ public final class GraveItems {
         }
         UUID id = profile.partialProfile().id();
         return id.equals(Util.NIL_UUID) ? Optional.empty() : Optional.of(id);
+    }
+
+    /** What a grave's head block carries: the id of the grave it was placed for. */
+    static CustomData graveMarker(UUID graveId) {
+        CompoundTag inner = new CompoundTag();
+        inner.store(GRAVE_ID, UUIDUtil.CODEC, graveId);
+        CompoundTag root = new CompoundTag();
+        root.put(ROOT, inner);
+        return CustomData.of(root);
+    }
+
+    /** The grave id a head block carries, if it was placed with one. */
+    static Optional<UUID> graveId(@Nullable CustomData data) {
+        if (data == null) {
+            return Optional.empty();
+        }
+        return data.copyTag().getCompound(ROOT).flatMap(inner -> inner.read(GRAVE_ID, UUIDUtil.CODEC));
     }
 
     private static CustomData marker(String key) {

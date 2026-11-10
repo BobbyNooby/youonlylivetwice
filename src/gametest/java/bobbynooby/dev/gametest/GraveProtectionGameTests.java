@@ -14,6 +14,9 @@ import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -22,6 +25,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
@@ -40,6 +45,7 @@ import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -215,6 +221,55 @@ public class GraveProtectionGameTests {
             removeGraves(helper, store.byId(grave.id()).stream().toList());
         }
         helper.succeed();
+    }
+
+    // Another player's head set on a grave's spot, for example with /setblock, stays theirs: the grave neither takes it
+    // for its own nor deletes it
+    @GameTest
+    public void foreignHeadOnGraveSpotIsKept(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GraveStore store = GraveStore.get(server);
+        ResolvableProfile stranger = ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Stranger"));
+        Grave restored = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave removed = makeGrave(helper, new BlockPos(5, 1, 5));
+        BlockPos spot = restored.pos();
+        try {
+            setHead(level, spot, stranger);
+            helper.assertFalse(Graves.isGrave(level, spot), "the other head counts as the grave");
+            GraveBlocks.restoreChunk(level, level.getChunkAt(spot));
+            assertHeadOf(helper, spot, stranger);
+            Grave moved = store.byId(restored.id()).orElse(null);
+            helper.assertTrue(moved != null, "grave record is gone");
+            helper.assertFalse(moved.pos().equals(spot), "grave still claims the other head's spot");
+            assertGraveIntact(helper, moved);
+
+            // Removal drops the grave's items and clears only its own head
+            setHead(level, removed.pos(), stranger);
+            helper.assertTrue(Graves.removeAndDrop(server, removed) instanceof Graves.Removal.Dropped, "the grave was not removed");
+            assertHeadOf(helper, removed.pos(), stranger);
+        } finally {
+            near(helper, EntityTypes.ITEM, removed.pos(), 3.0).forEach(Entity::discard);
+            level.setBlock(spot, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(removed.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            removeGraves(helper, store.all().stream()
+                    .filter(grave -> grave.id().equals(restored.id()) || grave.id().equals(removed.id())).toList());
+        }
+        helper.succeed();
+    }
+
+    // A fresh head block with only an owner, the way /setblock or a placed head item makes one
+    private static void setHead(ServerLevel level, BlockPos pos, ResolvableProfile owner) {
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        level.setBlock(pos, Blocks.PLAYER_HEAD.defaultBlockState(), Block.UPDATE_ALL);
+        if (level.getBlockEntity(pos) instanceof SkullBlockEntity skull) {
+            skull.applyComponents(DataComponentMap.EMPTY, DataComponentPatch.builder().set(DataComponents.PROFILE, owner).build());
+        }
+    }
+
+    private static void assertHeadOf(GameTestHelper helper, BlockPos pos, ResolvableProfile owner) {
+        helper.assertTrue(helper.getLevel().getBlockEntity(pos) instanceof SkullBlockEntity skull && owner.equals(skull.getOwnerProfile()),
+                "the other player's head at " + pos + " is gone or changed");
     }
 
     @GameTest
@@ -452,6 +507,12 @@ public class GraveProtectionGameTests {
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-4, -1, -4), center.offset(4, 10, 4))) {
             helper.assertFalse(helper.getLevel().getBlockState(pos).is(Blocks.PLAYER_HEAD), "player head left at " + pos);
         }
+    }
+
+    // Entities near an absolute position. Absolute, since vanilla's relativePos turns an unrotated test's position
+    // half round.
+    private static <T extends Entity> List<T> near(GameTestHelper helper, EntityType<T> type, BlockPos absolutePos, double distance) {
+        return helper.getLevel().getEntities(type, new AABB(absolutePos).inflate(distance), Entity::isAlive);
     }
 
     private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
