@@ -112,16 +112,4 @@ public class TabHeaderGameTests {
         }
         return packets;
     }
-
-    @GameTest
-    public void sendAllSkipsUnknownPlayer(GameTestHelper helper) {
-        ServerPlayer player = TestPlayers.join(helper, "tabskip", GameType.SURVIVAL, BlockPos.ZERO);
-        try {
-            TabHeaders.remove(player.getUUID());
-            TabHeaders.sendAll(helper.getLevel().getServer().getPlayerList());
-        } finally {
-            TestPlayers.leave(player);
-        }
-        helper.succeed();
-    }
 }

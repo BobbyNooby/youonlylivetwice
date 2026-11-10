@@ -2,6 +2,7 @@ package bobbynooby.dev.world;
 
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
+import bobbynooby.dev.visibility.TabHeaders;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -22,6 +23,7 @@ public final class LiveSettings {
         NameTagTeam.apply(server);
         GameRuleSwitches.applyImmediateRespawn(server);
         GameRuleSwitches.applyLocatorBar(server);
+        TabHeaders.applyAll(server);
         // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
         // and which players their client knows about depends on the hide switches
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {

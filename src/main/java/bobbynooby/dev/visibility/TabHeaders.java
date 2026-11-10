@@ -1,18 +1,19 @@
 package bobbynooby.dev.visibility;
 
+import bobbynooby.dev.config.Settings;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.PlayerList;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
-/** Gives each player a random tab-list header and footer. Server thread only. */
+/** Gives each player a random tab-list header and footer, sent on join and when the switch changes. Server thread only. */
 public final class TabHeaders {
     private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "--------------";
 
@@ -38,22 +39,36 @@ public final class TabHeaders {
         return HEADER_FOOTER + "\n" + TAB_HEADERS[RANDOM.nextInt(TAB_HEADERS.length)];
     }
 
-    // Entries are dropped on leave, otherwise every player who ever joined stays in the map
+    // The client keeps a header until it disconnects, so one send per join is enough.
+    // Entries are dropped on leave, otherwise every player who ever joined stays in the map.
     public static void init() {
+        ServerPlayerEvents.JOIN.register(TabHeaders::send);
         ServerPlayerEvents.LEAVE.register(player -> remove(player.getUUID()));
     }
 
-    public static void onJoin(ServerPlayer player) {
-        PLAYER_MAP.put(player.getUUID(), new HeaderFooter(getRandomHeader(), HEADER_FOOTER));
+    /** Sends the player their header. One is picked with the switch off too, so turning it on later covers them. */
+    public static void send(ServerPlayer player) {
+        if (!Settings.active()) {
+            return;
+        }
+        HeaderFooter headerFooter = PLAYER_MAP.computeIfAbsent(player.getUUID(), id -> new HeaderFooter(getRandomHeader(), HEADER_FOOTER));
+        if (Settings.get().hide.tabHeader) {
+            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.header()), Component.literal(headerFooter.footer())));
+        }
     }
 
-    public static void sendAll(PlayerList list) {
-        for (ServerPlayer player : list.getPlayers()) {
-            HeaderFooter headerFooter = PLAYER_MAP.get(player.getUUID());
-            if (headerFooter == null) {
-                continue;
+    /** At startup and on /yolt reload: each player's header with the switch on, and none with it off. */
+    public static void applyAll(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (Settings.get().hide.tabHeader) {
+                send(player);
+            } else {
+                // Empty text is how the client is told to show no header
+                player.connection.send(new ClientboundTabListPacket(Component.empty(), Component.empty()));
             }
-            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.header()), Component.literal(headerFooter.footer())));
         }
     }
 

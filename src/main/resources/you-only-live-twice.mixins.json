@@ -44,7 +44,6 @@
     "SetPlayerTeamPacketInvoker",
     "SleepAnnounceMixin",
     "SleepStatusMixin",
-    "TabHeaderMixin",
     "VisibilityPairingMixin"
   ],
   "injectors": {
