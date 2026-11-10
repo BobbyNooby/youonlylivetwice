@@ -80,8 +80,15 @@ class ChatRulesTest {
     @Test
     void whisperNeedsRangeAndDimension() {
         Listener sender = at(OVERWORLD, 0, false);
-        assertTrue(ChatRules.whisperArrives(sender, at(OVERWORLD, 20, false), 48));
-        assertFalse(ChatRules.whisperArrives(sender, at(OVERWORLD, 49, false), 48));
-        assertFalse(ChatRules.whisperArrives(sender, at(NETHER, 20, false), 48));
+        assertTrue(ChatRules.whisperArrives(sender, at(OVERWORLD, 20, false), ChatMode.PROXIMITY, 48));
+        assertFalse(ChatRules.whisperArrives(sender, at(OVERWORLD, 49, false), ChatMode.PROXIMITY, 48));
+        assertFalse(ChatRules.whisperArrives(sender, at(NETHER, 20, false), ChatMode.PROXIMITY, 48));
+    }
+
+    @Test
+    void globalWhisperHasNoRange() {
+        Listener sender = at(OVERWORLD, 0, false);
+        assertTrue(ChatRules.whisperArrives(sender, at(OVERWORLD, 9000, false), ChatMode.GLOBAL, 48));
+        assertTrue(ChatRules.whisperArrives(sender, at(NETHER, 9000, false), ChatMode.GLOBAL, 48));
     }
 }

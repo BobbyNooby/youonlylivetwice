@@ -28,8 +28,9 @@ public final class ChatRules {
         return heard;
     }
 
-    public static boolean whisperArrives(Listener sender, Listener target, int radius) {
-        return inRange(sender, target, radius);
+    // Global chat reaches everyone, so a whisper there has no range either
+    public static boolean whisperArrives(Listener sender, Listener target, YoltConfig.ChatMode mode, int radius) {
+        return mode == YoltConfig.ChatMode.GLOBAL || inRange(sender, target, radius);
     }
 
     private static boolean inRange(Listener a, Listener b, int radius) {

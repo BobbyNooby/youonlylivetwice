@@ -1,6 +1,7 @@
 package bobbynooby.dev.chat;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.CommandNodeAccessor;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -15,7 +16,7 @@ import net.minecraft.commands.arguments.MessageArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-/** Our /w, which only reaches a player close enough to hear it. */
+/** Our /w, which only reaches a player close enough to hear it, or anyone in global chat mode. */
 public final class Whispers {
     static final String TURNED_OFF = "Whispers are turned off.";
 
@@ -73,8 +74,9 @@ public final class Whispers {
         sender.sendSystemMessage(whisper("You whisper to " + targetName + ": " + message));
 
         ServerPlayer target = sender.level().getServer().getPlayerList().getPlayerByName(targetName);
+        YoltConfig.ChatSection chat = Settings.get().chat;
         if (target != null && ChatRules.whisperArrives(ChatDelivery.listener(sender), ChatDelivery.listener(target),
-                Settings.get().chat.radius)) {
+                chat.mode, chat.radius)) {
             target.sendSystemMessage(whisper(senderName + " whispers to you: " + message));
         }
     }
