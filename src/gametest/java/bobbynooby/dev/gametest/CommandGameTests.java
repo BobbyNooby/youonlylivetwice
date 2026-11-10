@@ -621,6 +621,8 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
+        Path bak = backupOf(path);
+        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         try {
             // A size YOLT's defaults give no dimension (10,000, or 20,000 for the end)
@@ -637,6 +639,7 @@ public class CommandGameTests {
             Settings.load();
             TestServerSetup.applyTestSettings();
             restoreBorders(bordersBefore);
+            restoreBackup(bak, bakBefore);
         }
         helper.succeed();
     }
@@ -648,6 +651,8 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
+        Path bak = backupOf(path);
+        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         String typo = "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}";
         try {
@@ -673,6 +678,7 @@ public class CommandGameTests {
             Settings.load();
             TestServerSetup.applyTestSettings();
             restoreBorders(bordersBefore);
+            restoreBackup(bak, bakBefore);
         }
         helper.succeed();
     }
@@ -760,6 +766,20 @@ public class CommandGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // A startup load that refuses a value keeps the file it rewrites as a .bak
+    private static Path backupOf(Path config) {
+        return config.resolveSibling(config.getFileName() + ".bak");
+    }
+
+    // Puts back the .bak a test's startup load may have written, or removes it if there was none
+    private static void restoreBackup(Path bak, byte[] before) throws IOException {
+        if (before == null) {
+            Files.deleteIfExists(bak);
+        } else {
+            Files.write(bak, before);
+        }
     }
 
     private static void assertCentre(GameTestHelper helper, ServerLevel level, double x, double z) {

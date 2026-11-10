@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -51,8 +52,10 @@ class ConfigLoaderTest {
         ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"diameter\":\"big\",\"endScale\":3.0}}");
         assertEquals(10000, r.config().worldBorder.diameter);
         assertEquals(3.0, r.config().worldBorder.endScale);
-        assertEquals(1, r.warnings().size());
+        // The refused value is the first warning; the second says the typed file was kept before the rewrite
+        assertEquals(2, r.warnings().size());
         assertTrue(r.warnings().get(0).contains("worldBorder.diameter"));
+        assertEquals("old file saved as config.json.bak before the rewrite", r.warnings().get(1));
         assertFalse(r.unparseable());
     }
 
@@ -267,6 +270,34 @@ class ConfigLoaderTest {
         assertEquals(48, r.config().chat.radius);
         assertFalse(r.config().graves.enabled);
         assertTrue(r.warnings().stream().anyMatch(w -> w.startsWith("chat: expected an object")));
+    }
+
+    // The startup rewrite leaves the refused 2.5 out, so the file as typed is kept first; a reload keeps no copy
+    @Test
+    void refusedValueIsBackedUpBeforeTheRewrite() throws IOException {
+        Path file = dir.resolve("config.json");
+        Path bak = dir.resolve("config.json.bak");
+        byte[] typed = "{\"chat\": {\"radius\": 2.5}}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, typed);
+
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true);
+        assertEquals(48, r.config().chat.radius);
+        assertArrayEquals(typed, Files.readAllBytes(bak));
+        assertFalse(Files.readString(file).contains("2.5"));
+        assertTrue(r.warnings().contains("old file saved as config.json.bak before the rewrite"), r.warnings().toString());
+
+        // The same file at the next start leaves one copy, still the typed bytes
+        Files.write(file, typed);
+        ConfigLoader.load(file, null, true);
+        assertArrayEquals(typed, Files.readAllBytes(bak));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of("config.json", "config.json.bak"), files.map(p -> p.getFileName().toString()).sorted().toList());
+        }
+
+        Files.delete(bak);
+        Files.write(file, typed);
+        ConfigLoader.load(file, new YoltConfig(), false);
+        assertFalse(Files.exists(bak));
     }
 
     @Test

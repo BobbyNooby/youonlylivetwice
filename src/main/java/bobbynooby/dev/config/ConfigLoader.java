@@ -107,6 +107,7 @@ public final class ConfigLoader {
         // The keys the file gave but the config doesn't use (fallbacks and unknown keys), so a startup can tell whether
         // the border values are the file's own
         List<String> refused = new ArrayList<>();
+        int warningsBeforeMerge = warnings.size();
         JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused);
 
         YoltConfig config;
@@ -129,6 +130,14 @@ public final class ConfigLoader {
             // Rewriting would drop what only the newer YOLT knows
             warnings.add("config is from a newer version, so it was not rewritten");
             return new Result(config, warnings, false, borderProblem);
+        }
+        // Each warning since the merge began is something typed in the file that the rewrite leaves out or changes, so at
+        // startup the admin's file is kept first, under the same name as one that can't be read. A reload keeps the live
+        // values and writes no copy.
+        if (writeDefaultsOnError && warnings.size() > warningsBeforeMerge) {
+            String backup = file.getFileName() + ".bak";
+            backup(file, backup);
+            warnings.add("old file saved as " + backup + " before the rewrite");
         }
         write(file, config);
         return new Result(config, warnings, false, borderProblem);
