@@ -63,6 +63,19 @@ class ChatRulesTest {
         assertFalse(heard.contains(past.id()));
     }
 
+    // Height counts like any other direction, so someone straight above can be out of range
+    @Test
+    void rangeCountsHeight() {
+        Listener sender = at(OVERWORLD, 0, false);
+        Listener edge = new Listener(UUID.randomUUID(), OVERWORLD, 0, 64 + 48, 0, false);
+        Listener above = new Listener(UUID.randomUUID(), OVERWORLD, 0, 64 + 49, 0, false);
+        Set<UUID> heard = hear(sender, ChatMode.PROXIMITY, edge, above);
+        assertTrue(heard.contains(edge.id()));
+        assertFalse(heard.contains(above.id()));
+        assertTrue(ChatRules.whisperArrives(sender, edge, ChatMode.PROXIMITY, 48));
+        assertFalse(ChatRules.whisperArrives(sender, above, ChatMode.PROXIMITY, 48));
+    }
+
     @Test
     void otherDimensionNeverHears() {
         Listener sender = at(OVERWORLD, 0, false);
