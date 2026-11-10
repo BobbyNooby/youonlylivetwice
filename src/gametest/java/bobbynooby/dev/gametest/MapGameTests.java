@@ -211,12 +211,13 @@ public class MapGameTests {
         return MapItem.create(helper.getLevel(), origin.getX(), origin.getZ(), (byte) 0, true, true);
     }
 
-    // A test position whose x and z count from the map's own centre, at the given position's height. A player shows
-    // on the map only within 63 blocks of that centre, and the test's origin can be 64 away from it.
+    // An absolute position whose x and z count from the map's own centre, at the height of the given test position.
+    // A player shows on the map only within 63 blocks of that centre, and the test's origin can be 64 away from it.
+    // Absolute, since vanilla's relativePos turns an unrotated test's position half round.
     static BlockPos onMap(GameTestHelper helper, ItemStack map, BlockPos fromCentre) {
         MapItemSavedData data = data(helper, map);
         int y = helper.absolutePos(fromCentre).getY();
-        return helper.relativePos(new BlockPos(data.centerX + fromCentre.getX(), y, data.centerZ + fromCentre.getZ()));
+        return new BlockPos(data.centerX + fromCentre.getX(), y, data.centerZ + fromCentre.getZ());
     }
 
     // What each copy's inventory tick does; test players and bodies here get no living tick
@@ -264,8 +265,8 @@ public class MapGameTests {
         return data;
     }
 
-    private static ServerPlayer join(GameTestHelper helper, List<ServerPlayer> joined, String name, BlockPos pos) {
-        ServerPlayer player = TestPlayers.join(helper, name, GameType.SURVIVAL, pos);
+    private static ServerPlayer join(GameTestHelper helper, List<ServerPlayer> joined, String name, BlockPos absolutePos) {
+        ServerPlayer player = TestPlayers.join(helper.getLevel().getServer(), name, GameType.SURVIVAL, absolutePos);
         joined.add(player);
         return player;
     }

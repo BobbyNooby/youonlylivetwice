@@ -259,7 +259,8 @@ public class PlayerBodyGameTests {
     public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
         ItemStack map = MapGameTests.newMap(helper);
         BlockPos onMap = MapGameTests.onMap(helper, map, ON_FLOOR);
-        ServerPlayer player = join(helper, "MapBody", onMap);
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(server, "MapBody", GameType.SURVIVAL, onMap);
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -270,9 +271,9 @@ public class PlayerBodyGameTests {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
             PlayerBody body = leaveBody(helper, player);
-            ServerPlayer stranger = join(helper, "MapStranger", onMap);
+            ServerPlayer stranger = TestPlayers.join(server, "MapStranger", GameType.SURVIVAL, onMap);
             holders.add(stranger);
-            ServerPlayer watcher = join(helper, "MapWatcher", onMap);
+            ServerPlayer watcher = TestPlayers.join(server, "MapWatcher", GameType.SURVIVAL, onMap);
             holders.add(watcher);
             // As if the watcher had started tracking the body
             PlayerVisibility.onPairingStart(watcher, body);
