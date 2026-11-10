@@ -17,7 +17,9 @@ import net.minecraft.server.jsonrpc.internalapi.MinecraftOperatorListServiceImpl
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.ServerOpListEntry;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 
@@ -105,6 +107,43 @@ public class AdminViewGameTests {
             }
             for (ServerPlayer player : joined) {
                 TestPlayers.leave(player);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A death's respawn makes a new player object, which only has admin view if the flag was copied over. The point of
+    // its own brings the admin back here rather than to a random spot. The respawned admin and the later joiner are
+    // both new this tick, so neither has been sent its chunks and they can't start tracking each other: only admin
+    // view tells the admin's client about the joiner.
+    @GameTest
+    public void adminViewSurvivesRespawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        ServerPlayer admin = TestPlayers.join(helper, "avrespawn", GameType.SURVIVAL, BlockPos.ZERO);
+        ServerPlayer current = admin;
+        ServerPlayer late = null;
+        try {
+            hide.distantPlayers = true;
+            TestPlayers.op(admin);
+            helper.assertTrue(AdminView.toggle(admin), "toggle did not turn admin view on");
+            BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
+            admin.setRespawnPosition(new ServerPlayer.RespawnConfig(
+                    LevelData.RespawnData.of(helper.getLevel().dimension(), spot, 0.0F, 0.0F), true), false);
+
+            current = server.getPlayerList().respawn(admin, false, Entity.RemovalReason.KILLED);
+            helper.assertTrue(current != admin, "the respawn kept the old player object");
+            helper.assertTrue(AdminView.isOn(current), "admin view was lost on the respawn");
+            late = TestPlayers.join(helper, "avrespawnlate", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            helper.assertTrue(PlayerVisibility.known(current).contains(late.getUUID()), "the respawned admin does not know a later joiner");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            AdminView.set(current, false);
+            TestPlayers.deop(current);
+            TestPlayers.leave(current);
+            if (late != null) {
+                TestPlayers.leave(late);
             }
         }
         helper.succeed();
