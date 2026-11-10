@@ -213,8 +213,8 @@ public class BodyMobGameTests {
         helper.succeed();
     }
 
-    // A mob's hit of 4 scaled as for a player (26.3 Player.hurtServer): Easy min(4 / 2 + 1, 4), Normal 4, Hard
-    // 4 * 3 / 2, Peaceful none. Its own batch, since it changes the difficulty; it puts it back within the tick.
+    // A hit of 4 scaled as for a player (26.3 Player.hurtServer): Easy min(4 / 2 + 1, 4), Normal 4, Hard 4 * 3 / 2,
+    // Peaceful none. Its own batch, since it changes the difficulty; it puts it back within the tick.
     @GameTest(environment = BODY_DIFFICULTY)
     public void bodyMobDamageFollowsDifficulty(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -233,6 +233,11 @@ public class BodyMobGameTests {
             assertHit(helper, body, Difficulty.PEACEFUL, attack, 0.0F);
             // As for a player, only a hit a mob caused scales
             assertHit(helper, body, Difficulty.HARD, level.damageSources().generic(), 4.0F);
+            // An explosion scales whatever set it off (26.3 DamageTypes: DamageScaling.ALWAYS)
+            DamageSource blast = level.damageSources().explosion(null, null);
+            assertHit(helper, body, Difficulty.EASY, blast, 3.0F);
+            assertHit(helper, body, Difficulty.HARD, blast, 6.0F);
+            assertHit(helper, body, Difficulty.PEACEFUL, blast, 0.0F);
             // A mannequin that isn't a body stays vanilla
             Mannequin plain = helper.spawn(EntityTypes.MANNEQUIN, NEXT_TO_BODY);
             spawned.add(plain);
