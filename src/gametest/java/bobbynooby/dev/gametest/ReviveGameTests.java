@@ -91,6 +91,24 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
+    // Creative players use up none of their items, revive heads included
+    @GameTest
+    public void creativeReviveKeepsHead(GameTestHelper helper) {
+        UUID owner = UUID.randomUUID();
+        DeathLockout.recordDeath(owner, "Ghost");
+        helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner is not locked out to begin with");
+        ServerPlayer user = TestPlayers.join(helper, "CreativeReviver", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        try {
+            ItemStack heads = reviveHead(staticProfile(owner), 2);
+            helper.assertValueEqual(Revive.tryUse(user, heads), Revive.Outcome.REVIVED, "outcome");
+            helper.assertValueEqual(heads.getCount(), 2, "heads left");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
+        } finally {
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void reviveNotUsedWhenOwnerNotDead(GameTestHelper helper) {
         ServerPlayer user = TestPlayers.join(helper, "Early", GameType.SURVIVAL, new BlockPos(1, 1, 1));

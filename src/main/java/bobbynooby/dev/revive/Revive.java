@@ -45,7 +45,7 @@ public final class Revive {
         UseBlockCallback.EVENT.register(Revive::onUseBlock);
     }
 
-    /** Tells the user what happened. Only a revive that went through uses up one head. */
+    /** Tells the user what happened. Only a revive that went through uses up one head, and in creative not even that. */
     public static Outcome tryUse(ServerPlayer user, ItemStack stack) {
         if (!Settings.on(c -> c.revive.enabled)) {
             user.sendSystemMessage(Component.literal("Revives are turned off."));
@@ -71,7 +71,8 @@ public final class Revive {
             user.sendSystemMessage(Component.literal(notDead(name)));
             return Outcome.NOT_DEAD;
         }
-        stack.shrink(1);
+        // As with vanilla's own items, a creative user keeps the head
+        stack.consume(1, user);
         // Sent straight to the user: Player.playSound skips the player it is played for
         user.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.TOTEM_USE),
                 SoundSource.PLAYERS, user.getX(), user.getY(), user.getZ(), 1.0F, 1.0F, user.getRandom().nextLong()));
