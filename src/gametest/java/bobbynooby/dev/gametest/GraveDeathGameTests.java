@@ -11,6 +11,7 @@ import bobbynooby.dev.mixin.PlayerListInvoker;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -35,8 +36,10 @@ import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
@@ -47,6 +50,7 @@ import net.minecraft.world.phys.AABB;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 // Each kill runs inside one tick, so settings and game rules are restored before any other test runs
@@ -627,6 +631,49 @@ public class GraveDeathGameTests {
         }
     }
 
+    // A death that makes no grave says nothing, though the player has an older grave far from its own death: not in
+    // chat at the respawn, and not in the lockout's refusal for a death recorded now. The older grave is a record from
+    // an hour ago, in a chunk nothing loads. Every switch goes back in the same tick.
+    @GameTest
+    public void deathWithNoGraveNamesNoOlderGrave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean gravesBefore = config.graves.enabled;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        ServerPlayer player = TestPlayers.join(helper, "Graveless", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        GraveStore store = GraveStore.get(server);
+        BlockPos far = new BlockPos(30000, 70, 30000);
+        Grave older = new Grave(UUID.randomUUID(), player.getUUID(), name, ResolvableProfile.createUnresolved(name), Level.OVERWORLD,
+                far, List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis() - 3_600_000L,
+                GlobalPos.of(Level.OVERWORLD, far.east(100)));
+        try {
+            assertDefaultTelling(helper);
+            store.put(older);
+            respawnBesideTest(helper, player);
+            // Both stay off through the respawn, as on a server that runs without them
+            config.graves.enabled = false;
+            config.deathLockout.enabled = false;
+            ServerPlayer back;
+            try {
+                kill(helper, player);
+                back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            } finally {
+                config.graves.enabled = gravesBefore;
+                config.deathLockout.enabled = lockoutBefore;
+            }
+            helper.assertValueEqual(graveLines(back), List.of(), "chat at the respawn");
+
+            DeathLockout.recordDeath(player.getUUID(), name);
+            helper.assertValueEqual(refusalGraveLine(helper, server, player.getUUID(), name), Optional.empty(),
+                    "grave line of the refusal");
+        } finally {
+            store.remove(older.id());
+            leaveAndRemoveGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
     // Killed, then back through the death screen's respawn at a point set beside the test, so no random spot is searched
     private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
         respawnBesideTest(helper, player);
@@ -643,6 +690,15 @@ public class GraveDeathGameTests {
     private static void assertDefaultTelling(GameTestHelper helper) {
         helper.assertValueEqual(Settings.get().graves.tellLocation, YoltConfig.TellLocation.WHEN_MOVED, "tellLocation");
         helper.assertValueEqual(Settings.get().graves.tellLocationDistance, 16, "tellLocationDistance");
+    }
+
+    // The grave line of the refusal the owner gets now, the kick's text too
+    private static Optional<String> refusalGraveLine(GameTestHelper helper, MinecraftServer server, UUID owner, String name) {
+        Component refusal = DeathLockout.refusal(server, owner, name);
+        helper.assertTrue(refusal != null, name + " is not locked out");
+        String[] lines = refusal.getString().split("\n", -1);
+        helper.assertTrue(lines.length == 2 || lines.length == 3, "refusal: " + refusal.getString());
+        return lines.length == 3 ? Optional.of(lines[2]) : Optional.empty();
     }
 
     // Whichever player object is online for the owner now leaves, so a queued kick finds nobody
