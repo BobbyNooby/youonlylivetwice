@@ -63,10 +63,11 @@ public record Grave(
             new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos.orElse(null))));
 
     // Same fields, but items stay undecoded so one bad stack can be skipped instead of failing the grave. A grave that
-    // left out an item, or part of one, comes back as an error that still carries it, so its store knows.
+    // left out an item, or part of one, comes back as an error that still carries it, so its store knows. The death
+    // spot too: one that can't be read is only a hint lost, so the grave reads whole without it.
     private record Raw(UUID id, UUID owner, String ownerName, ResolvableProfile profile,
                        ResourceKey<Level> dimension, BlockPos pos, List<Dynamic<?>> items, long createdAt,
-                       Optional<GlobalPos> deathPos) {
+                       Optional<Dynamic<?>> deathPos) {
         static final Codec<Raw> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(Raw::id),
                 UUIDUtil.CODEC.fieldOf("owner").forGetter(Raw::owner),
@@ -76,7 +77,7 @@ public record Grave(
                 BlockPos.CODEC.fieldOf("pos").forGetter(Raw::pos),
                 Codec.PASSTHROUGH.listOf().fieldOf("items").forGetter(Raw::items),
                 Codec.LONG.fieldOf("created_at").forGetter(Raw::createdAt),
-                GlobalPos.CODEC.optionalFieldOf("death_pos").forGetter(Raw::deathPos)
+                Codec.PASSTHROUGH.optionalFieldOf("death_pos").forGetter(Raw::deathPos)
         ).apply(i, Raw::new));
 
         DataResult<Grave> toGrave() {
@@ -91,7 +92,10 @@ public record Grave(
                         "Skipping unreadable item in grave of {} at {} {}: {}", ownerName, dimension.identifier(), pos, error))
                         .ifPresent(stacks::add);
             }
-            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, deathPos.orElse(null));
+            GlobalPos died = deathPos.flatMap(entry -> GlobalPos.CODEC.parse(entry).resultOrPartial(error -> Yolt.LOGGER.warn(
+                    "Ignoring the unreadable death spot of {}'s grave at {} {}: {}", ownerName, dimension.identifier(), pos, error)))
+                    .orElse(null);
+            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, died);
             int left = unread;
             return left == 0 ? DataResult.success(grave)
                     : DataResult.error(() -> left + " items in the grave of " + ownerName + " could not be read whole", grave);
