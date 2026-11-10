@@ -347,11 +347,14 @@ public class WhisperGameTests {
         YoltConfig config = Settings.get();
         boolean restrictBefore = config.restrictCommands;
         boolean whispersBefore = config.chat.allowWhispers;
+        boolean skinChoiceBefore = config.skins.allowPlayerChoice;
         List<ServerPlayer> joined = new ArrayList<>();
         ServerPlayer op = null;
         try {
             config.restrictCommands = true;
             config.chat.allowWhispers = false;
+            // Off, so the tree's only other command is /w
+            config.skins.allowPlayerChoice = false;
             ServerPlayer nonOp = joinRecording(helper, joined, "wsuggest", BlockPos.ZERO);
             op = joinRecording(helper, joined, "wsuggestop", new BlockPos(1, 0, 0));
             TestPlayers.op(op);
@@ -366,6 +369,7 @@ public class WhisperGameTests {
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;
+            config.skins.allowPlayerChoice = skinChoiceBefore;
             if (op != null) {
                 TestPlayers.deop(op);
             }
