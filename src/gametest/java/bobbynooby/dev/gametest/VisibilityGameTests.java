@@ -276,8 +276,8 @@ public class VisibilityGameTests {
             joined.add(far);
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
             helper.assertFalse(PlayerVisibility.known(far).contains(op.getUUID()), "far player knows the op");
-            // An op, so restrictCommands lets vanilla /msg run
-            server.getPlayerList().op(op.nameAndId());
+            // A gamemaster op, so restrictCommands lets vanilla /msg run; the test server's plain op is level 0
+            TestPlayers.op(op);
 
             // A real client signs the message argument; this puts the command on that same signed path
             PlayerChatMessage signed = PlayerChatMessage.unsigned(op.getUUID(), "psst");

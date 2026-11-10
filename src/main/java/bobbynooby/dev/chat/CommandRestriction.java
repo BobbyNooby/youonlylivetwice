@@ -8,6 +8,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.PermissionSet;
 
 /** Holds non-op players to /help, plus /w when whispers are on: what they may run, are sent and get suggested. */
 public final class CommandRestriction {
@@ -15,8 +16,20 @@ public final class CommandRestriction {
 
     /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
     public static boolean restricted(ServerPlayer player) {
-        return Settings.on(c -> c.restrictCommands)
-                && !player.level().getServer().getPlayerList().isOp(player.nameAndId());
+        return heldBelowGamemaster(player.permissions());
+    }
+
+    /**
+     * Whether a command from this source must stay inside the non-op tree. The source's own permissions count, so the
+     * command on a sign an op wrote still runs when a non-op clicks it, since the sign lends it gamemaster permissions.
+     */
+    public static boolean restricts(CommandSourceStack source) {
+        return source.getPlayer() != null && heldBelowGamemaster(source.permissions());
+    }
+
+    // The same line for what a player may run and what it is shown, so a level 1 op isn't sent commands it can't run
+    private static boolean heldBelowGamemaster(PermissionSet permissions) {
+        return Settings.on(c -> c.restrictCommands) && !Commands.LEVEL_GAMEMASTERS.check(permissions);
     }
 
     public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers) {
@@ -30,10 +43,11 @@ public final class CommandRestriction {
     }
 
     /** True when a typed command must not run; a restricted player's /help gets its answer here. */
-    public static boolean blocks(ServerPlayer player, String command) {
-        if (command.isEmpty() || player == null || !restricted(player)) {
+    public static boolean blocks(CommandSourceStack source, String command) {
+        if (command.isEmpty() || !restricts(source)) {
             return false;
         }
+        ServerPlayer player = source.getPlayer();
         String commandRoot = command.split(" ")[0];
 
         // /w is our own command (Whispers), so it runs normally and reads the signed message

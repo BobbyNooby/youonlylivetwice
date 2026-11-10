@@ -23,7 +23,7 @@ public abstract class CommandRestrictionMixin {
     // Restrict non-op players to help, plus /w when whispers are on
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
-        if (CommandRestriction.blocks(parseResults.getContext().getSource().getPlayer(), command)) {
+        if (CommandRestriction.blocks(parseResults.getContext().getSource(), command)) {
             ci.cancel();
         }
     }
