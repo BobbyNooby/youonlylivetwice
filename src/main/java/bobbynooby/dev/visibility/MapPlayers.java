@@ -4,10 +4,10 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,20 +15,27 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * Hides other players' markers on shared paper maps. Every copy of a map shows every other holder at any distance, so
  * each holder's client only gets the markers of players in its sight. The map itself keeps them all. Server thread only.
  */
 public final class MapPlayers {
+    // Each holder's near-drop count when its markers last went out
+    private static final Map<MapItemSavedData.HoldingPlayer, Integer> SENT = new WeakHashMap<>();
+
     private MapPlayers() {}
 
     /** The markers sent to this holder: all of them, less the players it isn't tracking. */
-    public static Collection<MapDecoration> visibleTo(Player holder, Map<String, MapDecoration> markers,
+    public static Collection<MapDecoration> visibleTo(MapItemSavedData.HoldingPlayer holder, Map<String, MapDecoration> markers,
                                                       Collection<MapDecoration> all) {
         // A player body holding a copy has no client to tell
-        if (!Settings.on(c -> c.hide.mapPlayers) || !(holder instanceof ServerPlayer viewer) || StandIn.is(viewer)
-                || AdminView.isOn(viewer)) {
+        if (!Settings.active() || !(holder.player instanceof ServerPlayer viewer) || StandIn.is(viewer)) {
+            return all;
+        }
+        SENT.put(holder, PlayerVisibility.nearDrops(viewer));
+        if (!Settings.get().hide.mapPlayers || AdminView.isOn(viewer)) {
             return all;
         }
         Set<String> near = null;
@@ -46,6 +53,18 @@ public final class MapPlayers {
             shown.add(marker.getValue());
         }
         return shown.size() == markers.size() ? all : shown;
+    }
+
+    /**
+     * True when the holder may have stopped seeing someone since its markers last went out. Vanilla only sends them again
+     * when one of them changes, so a player who just left its sight would otherwise stay on its map, live.
+     */
+    public static boolean resendDue(MapItemSavedData.HoldingPlayer holder) {
+        if (!Settings.on(c -> c.hide.mapPlayers) || !(holder.player instanceof ServerPlayer viewer)) {
+            return false;
+        }
+        Integer sent = SENT.get(holder);
+        return sent != null && sent.intValue() != PlayerVisibility.nearDrops(viewer);
     }
 
     // Frames, banners and an explorer map's targets aren't players

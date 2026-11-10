@@ -19,6 +19,7 @@ import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -104,9 +105,40 @@ public class MapGameTests {
             carry(helper, map, List.of(viewer, near));
 
             helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER), 2,
-                    "player markers sent to the viewer, who knows the near player");
+                    "player markers sent to the viewer, who sees the near player");
             helper.assertValueEqual(count(sentTo(helper, map, near), MapDecorationTypes.PLAYER), 1,
-                    "player markers sent to the near player, who doesn't know the viewer");
+                    "player markers sent to the near player, who doesn't see the viewer");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Nothing on the map changes when a player leaves the viewer's sight, and vanilla only resends markers on a change
+    @GameTest
+    public void playerOutOfSightLeavesSharedMap(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.mapPlayers = true;
+            ServerPlayer viewer = join(helper, joined, "mapgonev", BlockPos.ZERO);
+            ServerPlayer near = join(helper, joined, "mapgone", new BlockPos(3, 0, 0));
+            PlayerVisibility.onPairingStart(viewer, near);
+            ItemStack map = newMap(helper, viewer);
+            carry(helper, map, List.of(viewer, near));
+            helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER), 2,
+                    "player markers sent while the viewer sees the near player");
+
+            // As if the near player had walked out of sight, with nothing ticking the map in between
+            PlayerVisibility.onPairingStop(viewer, near);
+            List<MapDecoration> next = nextMarkers(helper, map, viewer);
+            helper.assertTrue(next != null, "the viewer's map was not sent its markers again");
+            helper.assertValueEqual(count(next, MapDecorationTypes.PLAYER), 1, "player markers sent once the near player is out of sight");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.mapPlayers = mapBefore;
@@ -192,6 +224,18 @@ public class MapGameTests {
         helper.assertTrue(packet instanceof ClientboundMapItemDataPacket update && update.decorations().isPresent(),
                 "no map markers sent to " + holder.getPlainTextName());
         return ((ClientboundMapItemDataPacket) packet).decorations().orElseThrow();
+    }
+
+    // Vanilla sends a holder's markers on one update call in 5 at most, so this asks up to 5 times; null if none came
+    static @Nullable List<MapDecoration> nextMarkers(GameTestHelper helper, ItemStack map, ServerPlayer holder) {
+        MapItemSavedData data = data(helper, map);
+        for (int i = 0; i < 5; i++) {
+            if (data.getUpdatePacket(map.get(DataComponents.MAP_ID), holder) instanceof ClientboundMapItemDataPacket update
+                    && update.decorations().isPresent()) {
+                return update.decorations().get();
+            }
+        }
+        return null;
     }
 
     static int count(Iterable<MapDecoration> markers, Holder<MapDecorationType> type) {

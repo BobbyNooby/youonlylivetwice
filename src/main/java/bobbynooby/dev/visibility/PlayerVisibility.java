@@ -37,12 +37,20 @@ public final class PlayerVisibility {
         final Set<UUID> known = new HashSet<>();
         // Players whose entity this client is tracking
         final Set<UUID> tracked = new HashSet<>();
+        // Goes up whenever this client may have to stop showing someone, so its shared maps send their markers again
+        int nearDrops;
     }
 
     /** The players whose entries this viewer's client has, as a live read-only view. */
     public static Set<UUID> known(ServerPlayer viewer) {
         Viewer state = viewer.connection == null ? null : VIEWERS.get(viewer.connection);
         return state == null ? Set.of() : Collections.unmodifiableSet(state.known);
+    }
+
+    /** A count that goes up whenever the viewer may have stopped seeing someone. */
+    public static int nearDrops(ServerPlayer viewer) {
+        Viewer state = viewer.connection == null ? null : VIEWERS.get(viewer.connection);
+        return state == null ? 0 : state.nearDrops;
     }
 
     /** The viewer and each player whose entry its client has, player bodies included. */
@@ -105,7 +113,9 @@ public final class PlayerVisibility {
             return;
         }
         Viewer state = state(viewer);
-        state.tracked.remove(seen.getUUID());
+        if (state.tracked.remove(seen.getUUID())) {
+            state.nearDrops++;
+        }
         // A player outside the player list (a player body) would otherwise stay on as an online name.
         // A leaving or respawning player is still in it here, so viewers who see everyone keep them.
         boolean online = seen.level().getServer().getPlayerList().getPlayer(seen.getUUID()) != null;
@@ -121,6 +131,8 @@ public final class PlayerVisibility {
             return;
         }
         Viewer state = state(viewer);
+        // Admin view or a switch may have changed what this client should see
+        state.nearDrops++;
         Map<UUID, ServerPlayer> wanted = new LinkedHashMap<>();
         wanted.put(viewer.getUUID(), viewer);
         if (seesEveryone(viewer)) {

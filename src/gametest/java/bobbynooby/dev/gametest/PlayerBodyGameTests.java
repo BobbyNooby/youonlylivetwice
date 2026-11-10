@@ -254,7 +254,7 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
-    // A body keeps carrying its owner's copy, so its marker only goes to holders whose client knows the body
+    // A body keeps carrying its owner's copy, so its marker only goes to holders who see the body
     @GameTest
     public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
         ServerPlayer player = join(helper, "MapBody", ON_FLOOR);
@@ -278,9 +278,9 @@ public class PlayerBodyGameTests {
             MapGameTests.carry(helper, map, List.of(body, stranger, watcher));
 
             helper.assertValueEqual(MapGameTests.count(MapGameTests.sentTo(helper, map, stranger), MapDecorationTypes.PLAYER), 1,
-                    "player markers sent to a holder who doesn't know the body");
+                    "player markers sent to a holder who doesn't see the body");
             helper.assertValueEqual(MapGameTests.count(MapGameTests.sentTo(helper, map, watcher), MapDecorationTypes.PLAYER), 2,
-                    "player markers sent to a holder who knows the body");
+                    "player markers sent to a holder who sees the body");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.mapPlayers = mapBefore;
