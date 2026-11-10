@@ -265,22 +265,12 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
-    // A test player never ticks, so its chestplate's modifier goes on by hand, as the player's first tick would put it
     @GameTest
     public void healthAboveBaseMaxKeptWithGearModifier(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Hearty", GameType.SURVIVAL);
         YoltConfig.BodiesSection before = useDefaultBodies();
         try {
-            ItemStack chest = new ItemStack(Items.IRON_CHESTPLATE);
-            chest.set(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.builder().add(Attributes.MAX_HEALTH,
-                    new AttributeModifier(Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "hearty"), 10.0,
-                            AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.CHEST).build());
-            player.setItemSlot(EquipmentSlot.CHEST, chest);
-            chest.forEachModifier(EquipmentSlot.CHEST,
-                    (attribute, modifier) -> player.getAttribute(attribute).addTransientModifier(modifier));
-            player.setHealth(28.0F);
-            helper.assertValueEqual(player.getHealth(), 28.0F, "player health");
-
+            wearHeartyChestplate(helper, player);
             Mannequin body = logOut(helper, player);
             helper.assertValueEqual(body.getMaxHealth(), 30.0F, "body max health");
             helper.assertValueEqual(body.getHealth(), 28.0F, "body health");
@@ -288,6 +278,38 @@ public class BodyLifecycleGameTests {
             cleanUp(helper, player, before);
         }
         helper.succeed();
+    }
+
+    // Loading puts the health back before the gear, so it is clamped to the base maximum on the way in
+    @GameTest
+    public void reloadedBodyKeepsHealthFromGear(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Reloaded", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            wearHeartyChestplate(helper, player);
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(body.getHealth(), 28.0F, "body health before its chunk unloads");
+            Mannequin loaded = loadAgain(helper, unload(helper, body));
+            helper.assertValueEqual(loaded.getMaxHealth(), 30.0F, "max health after the load");
+            helper.assertValueEqual(loaded.getHealth(), 28.0F, "health after the load");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    // A chestplate with +10 max health, and the player at 28 of 30. A test player never ticks, so the modifier goes
+    // on by hand, as the player's first tick would put it.
+    private static void wearHeartyChestplate(GameTestHelper helper, ServerPlayer player) {
+        ItemStack chest = new ItemStack(Items.IRON_CHESTPLATE);
+        chest.set(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.builder().add(Attributes.MAX_HEALTH,
+                new AttributeModifier(Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "hearty"), 10.0,
+                        AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.CHEST).build());
+        player.setItemSlot(EquipmentSlot.CHEST, chest);
+        chest.forEachModifier(EquipmentSlot.CHEST,
+                (attribute, modifier) -> player.getAttribute(attribute).addTransientModifier(modifier));
+        player.setHealth(28.0F);
+        helper.assertValueEqual(player.getHealth(), 28.0F, "player health");
     }
 
     @GameTest
