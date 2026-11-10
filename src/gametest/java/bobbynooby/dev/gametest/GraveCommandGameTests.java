@@ -66,6 +66,26 @@ public class GraveCommandGameTests {
         helper.succeed();
     }
 
+    // Removing a grave must never delete its items, so the stacks it drops never despawn
+    @GameTest
+    public void removedGraveItemsNeverDespawn(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        try {
+            BlockPos pos = grave.pos();
+            run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+            List<ItemEntity> drops = dropsAt(helper, grave);
+            helper.assertValueEqual(drops.size(), 3, "dropped stacks");
+            for (ItemEntity drop : drops) {
+                // ItemEntity.setUnlimitedLifetime sets this age, which the item's tick never counts up from
+                helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, drop.getItem() + "'s age");
+            }
+        } finally {
+            cleanUp(helper, grave);
+            discardDrops(helper, grave);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void removeOneStackSaysStack(GameTestHelper helper) {
         // Only the grave head, so the reply has one stack to count

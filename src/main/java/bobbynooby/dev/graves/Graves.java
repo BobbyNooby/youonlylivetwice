@@ -161,7 +161,10 @@ public final class Graves {
         Vec3 centre = Vec3.atCenterOf(dropAt.get());
         for (ItemStack stack : items) {
             // No push, so every stack falls straight down the column that was checked
-            level.addFreshEntity(new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0));
+            ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0);
+            // Removing a grave must never delete its items, so they don't despawn after five minutes
+            item.setUnlimitedLifetime();
+            level.addFreshEntity(item);
         }
         GraveBlocks.clearHead(level, grave);
         store.remove(grave.id());
