@@ -49,7 +49,11 @@ import java.util.function.Consumer;
 // The scenes stand on the structure's barrier floor. Bodies are only switched on while the body spawns, and
 // mobsAttack is on by default. A test that holds a switch or the world clock across ticks runs in a batch of its own.
 public class BodyMobGameTests {
-    private static final String SOLO = "you-only-live-twice-gametest:solo";
+    // Each of these holds mobsAttack off across ticks, so each has a batch of its own
+    private static final String MOBS_IGNORE = "you-only-live-twice-gametest:mobs_ignore";
+    private static final String MOBS_STOP = "you-only-live-twice-gametest:mobs_stop";
+    // The clock stopped at midnight, so daylight can't decide a hunt: a zombie burns in it, and a spider won't start one
+    private static final String MIDNIGHT = "you-only-live-twice-gametest:midnight";
     private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
     private static final String BODY_DIFFICULTY = "you-only-live-twice-gametest:body_difficulty";
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
@@ -63,12 +67,12 @@ public class BodyMobGameTests {
     };
 
     // Spec 11.2 warns a mob may need re-aiming every tick, so this shows a zombie walk up and hit
-    @GameTest(maxTicks = 300)
+    @GameTest(maxTicks = 300, environment = MIDNIGHT)
     public void zombieAttacksBody(GameTestHelper helper) {
         hurtsBody(helper, "Hunted", spawned -> spawned.add(helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY)));
     }
 
-    @GameTest(maxTicks = 200, environment = SOLO)
+    @GameTest(maxTicks = 200, environment = MOBS_IGNORE)
     public void zombieIgnoresBodyWhenSwitchOff(GameTestHelper helper) {
         YoltConfig.BodiesSection bodies = Settings.get().bodies;
         boolean before = bodies.mobsAttack;
@@ -78,9 +82,8 @@ public class BodyMobGameTests {
                 () -> bodies.mobsAttack = before);
     }
 
-    // The test above shares this batch and holds the switch off for its wait. So this waits for the hunt to start,
-    // and only reads the switch when it turns it off.
-    @GameTest(maxTicks = 400, environment = SOLO)
+    // Waits for the hunt to start, then turns the switch off and keeps it off until the end
+    @GameTest(maxTicks = 400, environment = MOBS_STOP)
     public void huntStopsWhenSwitchTurnedOff(GameTestHelper helper) {
         YoltConfig.BodiesSection bodies = Settings.get().bodies;
         List<Entity> spawned = new ArrayList<>();
@@ -140,8 +143,7 @@ public class BodyMobGameTests {
 
     // Its own batch, which stops the clock at noon and puts it back afterwards. Noon in a shared batch would set undead
     // in other tests on fire, since barriers let skylight through. Stopped, since a test only starts once its chunks
-    // are loaded, and the idle test server can run thousands of ticks before that, into the night. Not solo: a solo
-    // test holds mobsAttack off meanwhile.
+    // are loaded, and the idle test server can run thousands of ticks before that, into the night.
     @GameTest(maxTicks = 200, skyAccess = true, environment = DAYLIGHT)
     public void spiderIgnoresBodyInDaylight(GameTestHelper helper) {
         ignoresBody(helper, "Daylight", EntityTypes.SPIDER, NEXT_TO_BODY,
@@ -151,7 +153,7 @@ public class BodyMobGameTests {
     }
 
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
-    @GameTest(maxTicks = 100)
+    @GameTest(maxTicks = 100, environment = MIDNIGHT)
     public void creeperExplosionHurtsBody(GameTestHelper helper) {
         hurtsBody(helper, "Blasted", spawned -> {
             Creeper creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, FOUR_AWAY);

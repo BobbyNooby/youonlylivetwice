@@ -410,7 +410,8 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    // The expiry pass runs over every body, so this has the expiry batch
+    @GameTest(environment = BODY_EXPIRY)
     public void playerBodyExpires(GameTestHelper helper) {
         ServerPlayer player = join(helper, "PlayerExpires", ON_FLOOR);
         UUID owner = player.getUUID();

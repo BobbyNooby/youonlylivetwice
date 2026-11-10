@@ -794,7 +794,8 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    // Swaps the whole config object, so it runs with the other tests that do
+    @GameTest(environment = CONFIG_COMMAND)
     public void reloadReadsFileChanges(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
@@ -813,8 +814,9 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // One typo in the file must not reset a running server, or undo the test server's border override
-    @GameTest
+    // One typo in the file must not reset a running server, or undo the test server's border override. Should the
+    // check fail, the reload swaps the whole config object, so it runs with the tests that do.
+    @GameTest(environment = CONFIG_COMMAND)
     public void reloadOfBrokenFileChangesNothing(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();

@@ -159,7 +159,8 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
-    @GameTest
+    // The expiry pass runs over every body, so this has the expiry batch
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void timedBodyExpiresAndSavesState(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Expires", new BlockPos(1, 1, 1));
         UUID owner = player.getUUID();
@@ -505,7 +506,7 @@ public class BodyBehaviourGameTests {
     }
 
     // The save only lists the attributes the player has used, so an effect gained on the body may need one it lacks
-    @GameTest
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void effectGainedOnBodyKeepsItsModifier(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Weakened", new BlockPos(1, 1, 1));
         UUID owner = player.getUUID();
@@ -542,7 +543,7 @@ public class BodyBehaviourGameTests {
     }
 
     // Only the offline-death routine edits a dead player's save, so the expiry leaves it exactly as it is
-    @GameTest
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void expiryOfDeadSaveOnlyDropsRecord(GameTestHelper helper) throws IOException {
         ServerPlayer player = join(helper, "DeadSave", new BlockPos(1, 1, 1));
         UUID owner = player.getUUID();
@@ -570,7 +571,7 @@ public class BodyBehaviourGameTests {
     }
 
     // Each failed try reloads the save, and vanilla warns and copies an unreadable one every time, so the next try waits
-    @GameTest
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void failedExpiryWaitsBeforeRetrying(GameTestHelper helper) throws IOException {
         ServerPlayer player = join(helper, "Retry", new BlockPos(1, 1, 1));
         UUID owner = player.getUUID();

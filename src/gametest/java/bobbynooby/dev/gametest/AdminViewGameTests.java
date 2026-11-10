@@ -27,6 +27,9 @@ import java.util.List;
 import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
 
 public class AdminViewGameTests {
+    private static final String ADMIN_OPS = "you-only-live-twice-gametest:admin_ops";
+    private static final String ADMIN_TEAM = "you-only-live-twice-gametest:admin_team";
+
     @GameTest
     public void toggleFlipsAndPersists(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -108,8 +111,8 @@ public class AdminViewGameTests {
     }
 
     // The test server has no management API, so this empties the list the way operators/clear does and calls our hook's helper.
-    // Emptying the list deops everyone online, so this runs on its own.
-    @GameTest(environment = "you-only-live-twice-gametest:solo")
+    // Emptying the list deops everyone online, so this has a batch of its own.
+    @GameTest(environment = ADMIN_OPS)
     public void clearedOpListDropsAdminView(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -197,8 +200,8 @@ public class AdminViewGameTests {
         helper.succeed();
     }
 
-    // What /team remove and /team add do. Removing our team takes every player out of it, so this runs on its own.
-    @GameTest(environment = "you-only-live-twice-gametest:solo")
+    // What /team remove and /team add do. Removing our team takes every player out of it, so this has a batch of its own.
+    @GameTest(environment = ADMIN_TEAM)
     public void adminKeepsNametagsWhenTeamIsMadeAgain(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerScoreboard scoreboard = server.getScoreboard();
