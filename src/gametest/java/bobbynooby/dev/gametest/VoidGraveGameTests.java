@@ -30,6 +30,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -647,6 +649,68 @@ public class VoidGraveGameTests {
             putBack(level, before);
         }
         helper.succeed();
+    }
+
+    // A menu whose close throws fails the grave, so the items drop instead. Vanilla would drop them where the player
+    // died, below the world, where they'd be gone at once; they drop where the grave would have gone: the ledge.
+    @GameTest(skyAccess = true)
+    public void failedGraveDropsItemsOnLastGround(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player = TestPlayers.join(helper, "Unmade", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            standOnGround(player);
+            helper.assertValueEqual(LastGround.in(player.getUUID(), level.dimension()), Optional.of(onLedge), "last ground");
+            player.containerMenu = new BrokenMenu();
+
+            dieBelowWorld(helper, level, player, shaft);
+            helper.assertTrue(gravesOf(level, player.getUUID()).isEmpty(), "a grave was made though its menu failed");
+            helper.assertTrue(player.getInventory().isEmpty(), "items left in the inventory");
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, onLedge, 1.0), 3, "diamonds on the ledge");
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, belowWorld(level, shaft), 3.0), 0,
+                    "diamonds below the world");
+        } finally {
+            if (player != null) {
+                cleanUp(level, player);
+            }
+            level.getEntitiesOfClass(ItemEntity.class, new AABB(onLedge).inflate(3.0)).forEach(Entity::discard);
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // A modded menu with a fault: its first close throws, and later ones work
+    private static final class BrokenMenu extends AbstractContainerMenu {
+        private boolean thrown;
+
+        private BrokenMenu() {
+            super(null, 1);
+        }
+
+        @Override
+        public ItemStack quickMoveStack(Player player, int slotIndex) {
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean stillValid(Player player) {
+            return true;
+        }
+
+        @Override
+        public void removed(Player player) {
+            if (!thrown) {
+                thrown = true;
+                throw new IllegalStateException("a broken menu, thrown on purpose by the test");
+            }
+            super.removed(player);
+        }
     }
 
     // A player saved standing at pos and logged out, ready for an offline kill there
