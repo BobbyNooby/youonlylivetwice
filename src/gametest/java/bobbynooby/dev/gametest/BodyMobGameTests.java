@@ -271,8 +271,9 @@ public class BodyMobGameTests {
         helper.succeed();
     }
 
+    // BodyTargetGoal is final, so the compiler only allows the cast to the mixed-in interface through Object
     private static int unseenMemoryTicks(Mob mob) {
-        return ((TargetGoalAccessor) bodyGoal(mob)).yoltUnseenMemoryTicks();
+        return ((TargetGoalAccessor) (Object) bodyGoal(mob)).yoltUnseenMemoryTicks();
     }
 
     // A phantom's own player goal sets its target without claiming it, which is what this does by hand
