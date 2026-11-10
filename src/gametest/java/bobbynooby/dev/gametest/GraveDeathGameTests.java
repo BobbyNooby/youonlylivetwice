@@ -6,10 +6,13 @@ import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.mixin.PlayerListInvoker;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
@@ -462,6 +465,63 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // With no kick to save them, the emptied players are saved at once: one dies with the lockout off, one with a
+    // lockout of 0 days. Each save first holds the items, like an autosave before the death, so only a save at the death
+    // can empty it. Each switch goes back in the same tick.
+    @GameTest(maxTicks = 20)
+    public void deathWithoutKickSavesEmptiedPlayer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean enabledBefore = lockout.enabled;
+        int daysBefore = lockout.cooldownDays;
+        ServerPlayer lockoutOff = TestPlayers.join(helper, "SavedOff", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer noDays = TestPlayers.join(helper, "SavedNoDays", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        List<ServerPlayer> players = List.of(lockoutOff, noDays);
+        Runnable cleanUp = () -> players.forEach(player -> cleanUp(helper, player));
+        boolean waiting = false;
+        try {
+            for (ServerPlayer player : players) {
+                player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+                ((PlayerListInvoker) server.getPlayerList()).yoltSave(player);
+                helper.assertValueEqual(savedDiamonds(helper, player), 3, player.nameAndId().name() + "'s saved diamonds before the death");
+            }
+            lockout.enabled = false;
+            try {
+                kill(helper, lockoutOff);
+            } finally {
+                lockout.enabled = enabledBefore;
+            }
+            lockout.cooldownDays = 0;
+            try {
+                kill(helper, noDays);
+            } finally {
+                lockout.cooldownDays = daysBefore;
+            }
+            for (ServerPlayer player : players) {
+                assertSavedDead(helper, player, "at the death");
+            }
+            helper.runAfterDelay(5, () -> {
+                try {
+                    for (ServerPlayer player : players) {
+                        String name = player.nameAndId().name();
+                        helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, name + " was kicked");
+                        assertSavedDead(helper, player, "after the tick");
+                        helper.assertValueEqual(GraveAsserts.countInGraves(server, player.getUUID(), Items.DIAMOND), 3,
+                                name + "'s diamonds in the grave");
+                    }
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // Never says nothing even for a grave far below the death, and always tells even for one where the player died: in
     // chat after the respawn while the lockout is off, and in the kick while it is on. The setting is held until the
     // kick, so the test runs apart.
@@ -547,6 +607,22 @@ public class GraveDeathGameTests {
     private static String graveLine(Grave grave) {
         BlockPos pos = grave.pos();
         return "Your grave is at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " in the Overworld.";
+    }
+
+    private static int savedDiamonds(GameTestHelper helper, ServerPlayer player) {
+        MinecraftServer server = helper.getLevel().getServer();
+        CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+        return GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), player.nameAndId().name()), Items.DIAMOND);
+    }
+
+    // The save on disk is a dead player's with nothing left on them
+    private static void assertSavedDead(GameTestHelper helper, ServerPlayer player, String when) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = player.nameAndId().name();
+        CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+        helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), name).isEmpty(),
+                name + "'s save still has items " + when);
+        helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, name + "'s saved health " + when);
     }
 
     // Counts the item across the item entities near an absolute position. Absolute, since vanilla's relativePos turns
