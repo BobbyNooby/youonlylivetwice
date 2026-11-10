@@ -67,14 +67,14 @@ public final class GraveBlocks {
 
     /**
      * Puts back one grave's missing head, the way restoreChunk does. From the re-check, only loaded chunks are read, and
-     * a failure is logged once per grave, since the re-check tries again every few seconds.
+     * a failure is logged once per grave and kind, since the re-check tries again every few seconds.
      */
     static void restore(ServerLevel level, GraveStore store, Grave grave, boolean recheck) {
         // Setting the head over a chest would spill it, over a shulker box would delete what it holds
         Optional<BlockPos> pos = GravePlacement.keeps(level, grave.pos(), store) ? Optional.of(grave.pos())
                 : GravePlacement.nearestSafe(level, grave.pos(), store, !recheck);
         if (pos.isEmpty()) {
-            if (!recheck || GraveRecheck.firstFailure(grave)) {
+            if (!recheck || GraveRecheck.failed(grave, GraveRecheck.Failure.NO_SPOT)) {
                 Yolt.LOGGER.warn("Could not put back the head of {}'s grave at {} {}: its spot is taken or unsafe, and "
                         + "there is no free spot near it", grave.ownerName(), level.dimension().identifier(), grave.pos());
             }
@@ -90,7 +90,7 @@ public final class GraveBlocks {
                 store.saveNow(level.getServer());
             } catch (RuntimeException e) {
                 store.put(grave);
-                if (!recheck || GraveRecheck.firstFailure(grave)) {
+                if (!recheck || GraveRecheck.failed(grave, GraveRecheck.Failure.NOT_SAVED)) {
                     Yolt.LOGGER.error("Could not save {}'s grave at its new spot {}, so it stays at {} {} without a head for now",
                             grave.ownerName(), at, level.dimension().identifier(), grave.pos(), e);
                 }

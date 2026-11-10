@@ -20,9 +20,17 @@ public final class GraveRecheck {
     private static final int TICKS_PER_SECOND = 20;
     // Server thread only, like the rest
     private static long ticksLeft;
-    // Graves whose failed restore was logged since the server started. A pass tries again every few seconds, and the
-    // log says so once.
-    private static final Set<UUID> LOGGED_FAILURES = new HashSet<>();
+    // Each grave's failures logged since the server started, one line per kind
+    private static final Set<Logged> LOGGED = new HashSet<>();
+
+    /** Why the re-check couldn't put a grave back. */
+    enum Failure {
+        NO_SPOT,
+        NOT_SAVED
+    }
+
+    private record Logged(UUID grave, Failure failure) {
+    }
 
     private GraveRecheck() {
     }
@@ -31,7 +39,7 @@ public final class GraveRecheck {
         ServerTickEvents.END_SERVER_TICK.register(GraveRecheck::tick);
         // Static, so it would outlive the server in a JVM that starts another one
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
-            LOGGED_FAILURES.clear();
+            LOGGED.clear();
             ticksLeft = 0;
         });
     }
@@ -74,8 +82,8 @@ public final class GraveRecheck {
         }
     }
 
-    // True the first time this grave's restore fails since the server started
-    static boolean firstFailure(Grave grave) {
-        return LOGGED_FAILURES.add(grave.id());
+    // True the first time this grave failed this way since the server started
+    static boolean failed(Grave grave, Failure failure) {
+        return LOGGED.add(new Logged(grave.id(), failure));
     }
 }
