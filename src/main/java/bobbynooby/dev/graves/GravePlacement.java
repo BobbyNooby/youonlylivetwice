@@ -5,10 +5,12 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -35,6 +37,7 @@ public final class GravePlacement {
     private GravePlacement() {
     }
 
+    /** Where a new grave goes. Always inside the world border. */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {
         BlockPos start = start(level, deathPos);
         return search(level, start, store).orElseGet(() -> lastResort(level, start, store));
@@ -96,9 +99,10 @@ public final class GravePlacement {
                 || state.is(Blocks.CACTUS) || state.is(Blocks.END_PORTAL);
     }
 
-    // Clamped into the world, and moved off a column with nothing below to stand on
+    // Clamped into the world and inside the border, and moved off a column with nothing below to stand on
     private static BlockPos start(ServerLevel level, BlockPos pos) {
-        BlockPos start = new BlockPos(pos.getX(), Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1), pos.getZ());
+        int y = Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1);
+        BlockPos start = insideBorder(level, pos.atY(y));
         return isVoidColumn(level, start) ? reachableSpotNear(level, start) : start;
     }
 
@@ -146,8 +150,26 @@ public final class GravePlacement {
 
     // Past the border nobody could reach the grave to open it
     private static boolean usable(ServerLevel level, BlockPos pos, GraveStore store) {
-        return fits(level, pos, store) && store.at(level.dimension(), pos).isEmpty()
-                && level.getWorldBorder().isWithinBounds(pos);
+        return level.getWorldBorder().isWithinBounds(pos) && fits(level, pos, store)
+                && store.at(level.dimension(), pos).isEmpty();
+    }
+
+    // The nearest block the live border counts as inside: a block is inside when its low corner is at or past the
+    // border's low edge and short of its high edge
+    private static BlockPos insideBorder(ServerLevel level, BlockPos pos) {
+        WorldBorder border = level.getWorldBorder();
+        if (border.isWithinBounds(pos)) {
+            return pos;
+        }
+        return new BlockPos(insideOn(pos.getX(), border.getMinX(), border.getMaxX()), pos.getY(),
+                insideOn(pos.getZ(), border.getMinZ(), border.getMaxZ()));
+    }
+
+    // A border narrower than one block has no block fully inside, so its middle is used
+    private static int insideOn(int coordinate, double min, double max) {
+        int low = Mth.ceil(min);
+        int high = Mth.ceil(max) - 1;
+        return low <= high ? Math.clamp(coordinate, low, high) : Mth.floor((min + max) / 2.0);
     }
 
     // A grave over the void can't be reached, so a column with nothing solid below counts as one
@@ -163,19 +185,20 @@ public final class GravePlacement {
 
     private static BlockPos reachableSpotNear(ServerLevel level, BlockPos from) {
         int minY = level.getMinY();
+        WorldBorder border = level.getWorldBorder();
         for (int r = 1; r <= VOID_SEARCH_RADIUS; r++) {
             for (BlockPos column : ring(from, r)) {
                 int x = column.getX();
                 int z = column.getZ();
                 int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
-                if (top > minY) {
+                if (top > minY && border.isWithinBounds(column)) {
                     return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
                 }
             }
         }
 
         // Nobody has been near enough to load chunks here, so load the spawn column before reading it
-        BlockPos spawn = level.dimension() == Level.OVERWORLD ? level.getRespawnData().pos() : BlockPos.ZERO;
+        BlockPos spawn = insideBorder(level, level.dimension() == Level.OVERWORLD ? level.getRespawnData().pos() : BlockPos.ZERO);
         level.getChunk(spawn);
         int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, spawn.getX(), spawn.getZ()), minY + 1);
         return new BlockPos(spawn.getX(), Math.min(top, level.getMaxY() - 1), spawn.getZ());

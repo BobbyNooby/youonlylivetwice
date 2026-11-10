@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -91,6 +92,29 @@ public class PlacementGameTests {
             for (int dy = 0; dy <= 8; dy++) {
                 level.setBlock(death.above(dy), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             }
+        }
+        helper.succeed();
+    }
+
+    // The death is 40 blocks past the east edge of a 50 wide border around the test. Set and put back in this tick.
+    @GameTest
+    public void deathFarOutsideBorderGraveInside(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos centre = helper.absolutePos(new BlockPos(4, 1, 4));
+        try {
+            border.setCenter(centre.getX(), centre.getZ());
+            border.setSize(50);
+            BlockPos death = new BlockPos(Mth.floor(border.getMaxX()) + 40, centre.getY(), centre.getZ());
+            helper.assertFalse(border.isWithinBounds(death), "death spot inside the border");
+            BlockPos result = GravePlacement.find(level, death, store(helper));
+            helper.assertTrue(border.isWithinBounds(result), "grave outside the world border: " + result);
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
         }
         helper.succeed();
     }
