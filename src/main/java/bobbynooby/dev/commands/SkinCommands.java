@@ -134,11 +134,13 @@ public final class SkinCommands {
         if (locked(source, who, own)) {
             return YoltCommands.fail(source, LOCKED);
         }
-        if (heldToRules(source, own) && Settings.get().skins.refuseKnownPlayers
+        boolean held = heldToRules(source, own);
+        if (held && Settings.get().skins.refuseKnownPlayers
                 && SkinOwners.taken(source.getServer(), skin, mojangName, who)) {
             return YoltCommands.fail(source, "You can't use " + skin.name() + "'s skin. Pick another.");
         }
-        store.choose(who.id(), skin.name());
+        // An op's pick is kept apart, since a player who joins takes their own skin back only from players' picks
+        store.choose(who.id(), skin.name(), !held);
         saveNow(source, who);
         LOGGER.info("{} set the skin of {} to the Mojang account {}", source.getTextName(), who.name(), skin.name());
         return YoltCommands.done(source, own

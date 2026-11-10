@@ -60,10 +60,12 @@ public final class SkinStore extends SavedData {
         ).apply(i, Applied::new));
     }
 
-    private record Choice(UUID player, String name) {
+    private record Choice(UUID player, String name, boolean byOp) {
         static final Codec<Choice> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("player").forGetter(Choice::player),
-                Codec.STRING.fieldOf("name").forGetter(Choice::name)
+                Codec.STRING.fieldOf("name").forGetter(Choice::name),
+                // Added later, so an older pick reads as the player's own
+                Codec.BOOL.optionalFieldOf("by_op", false).forGetter(Choice::byOp)
         ).apply(i, Choice::new));
     }
 
@@ -109,6 +111,8 @@ public final class SkinStore extends SavedData {
     private final Map<UUID, SkinTextures> applied = new LinkedHashMap<>();
     // The Mojang account name each player picked
     private final Map<UUID, String> choices = new LinkedHashMap<>();
+    // The players whose pick an op or the console made
+    private final Set<UUID> opPicks = new LinkedHashSet<>();
     // The name each player last joined with
     private final Map<UUID, String> joined = new LinkedHashMap<>();
     // Players whose pick was reset because its owner joined, until they are told at their next join
@@ -137,6 +141,9 @@ public final class SkinStore extends SavedData {
         }
         for (Choice choice : loaded.choices().values()) {
             choices.put(choice.player(), choice.name());
+            if (choice.byOp()) {
+                opPicks.add(choice.player());
+            }
         }
         for (Joined entry : loaded.joined().values()) {
             joined.put(entry.player(), entry.name());
@@ -148,7 +155,7 @@ public final class SkinStore extends SavedData {
         List<Applied> appliedList = new ArrayList<>();
         applied.forEach((player, textures) -> appliedList.add(new Applied(player, textures)));
         List<Choice> choiceList = new ArrayList<>();
-        choices.forEach((player, name) -> choiceList.add(new Choice(player, name)));
+        choices.forEach((player, name) -> choiceList.add(new Choice(player, name, opPicks.contains(player))));
         List<Joined> joinedList = new ArrayList<>();
         joined.forEach((player, name) -> joinedList.add(new Joined(player, name)));
         return new StoreVersions.Loaded<>(new Contents(new LenientCodecs.Read<>(List.copyOf(skins.values()), true),
@@ -217,15 +224,28 @@ public final class SkinStore extends SavedData {
         return choices.get(player);
     }
 
+    /** A pick the player made themselves. */
     public void choose(UUID player, String name) {
-        if (!name.equals(choices.put(player, name))) {
+        choose(player, name, false);
+    }
+
+    public void choose(UUID player, String name, boolean byOp) {
+        boolean changed = !name.equals(choices.put(player, name));
+        changed |= byOp ? opPicks.add(player) : opPicks.remove(player);
+        if (changed) {
             setDirty();
         }
+    }
+
+    /** True when an op or the console made this player's pick. */
+    public boolean pickedByOp(UUID player) {
+        return opPicks.contains(player);
     }
 
     /** False when the player had picked nothing. */
     public boolean clearChoice(UUID player) {
         boolean had = choices.remove(player) != null;
+        opPicks.remove(player);
         if (had) {
             setDirty();
         }

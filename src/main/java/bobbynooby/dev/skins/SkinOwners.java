@@ -21,7 +21,7 @@ import java.util.UUID;
 /**
  * Skins that belong to someone here: the skin of each player who has joined this server, and the account each player
  * picked. With skins.refuseKnownPlayers on, a non-op can't pick one (SkinCommands), and a player who joins takes their
- * own skin back from whoever picked it.
+ * own skin back from every player who picked it, though not from a pick an op made.
  */
 public final class SkinOwners {
     static final String RESET = "Your skin was reset because its owner joined this server.";
@@ -81,7 +81,8 @@ public final class SkinOwners {
         if (!Settings.get().skins.refuseKnownPlayers) {
             return;
         }
-        List<UUID> borrowers = store.pickedBy(name, player.getUUID());
+        // An op's pick stays: ops may give anyone any skin
+        List<UUID> borrowers = store.pickedBy(name, player.getUUID()).stream().filter(id -> !store.pickedByOp(id)).toList();
         if (borrowers.isEmpty()) {
             return;
         }
