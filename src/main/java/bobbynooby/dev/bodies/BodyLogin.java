@@ -2,6 +2,7 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.LastGround;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -32,6 +33,8 @@ public final class BodyLogin {
             return;
         }
         BodyRecord record = found.get();
+        // The body goes, and its last ground with it: the player notes their own from here
+        LastGround.forget(record.owner());
         BodySnapshot snapshot;
         boolean bodyAlive;
         if (Bodies.entityOf(server, record) instanceof LivingEntity body) {

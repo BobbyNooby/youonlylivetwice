@@ -3,6 +3,7 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Profiles;
+import bobbynooby.dev.graves.LastGround;
 import bobbynooby.dev.lockout.DeathMessages;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
@@ -122,5 +123,7 @@ final class BodyDeath {
             OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage, unplaced);
         }
         BodyStore.get(server).remove(record.owner());
+        // The grave has used it, and the body is gone
+        LastGround.forget(record.owner());
     }
 }

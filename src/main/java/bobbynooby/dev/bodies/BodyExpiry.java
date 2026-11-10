@@ -3,6 +3,7 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.LastGround;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -131,6 +132,7 @@ public final class BodyExpiry {
         // The record goes first, so the discard's unload no longer counts this as a body. One that isn't loaded
         // goes when it next loads, since no record points at it.
         BodyStore.get(server).remove(record.owner());
+        LastGround.forget(record.owner());
         if (entity != null) {
             entity.discard();
         }

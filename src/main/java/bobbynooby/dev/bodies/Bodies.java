@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -37,6 +38,8 @@ public final class Bodies {
         ServerPlayerEvents.LEAVE.register(player -> {
             // A failure here must not stop the logout save that follows
             Guard.run(() -> BodyLogout.onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
+            Guard.run(() -> keepGroundForBody(player), "Could not keep the last ground of {} for their body",
+                    player.nameAndId().name());
         });
         // JOIN runs on the server thread once the player is in the world
         ServerPlayerEvents.JOIN.register(player -> {
@@ -67,6 +70,15 @@ public final class Bodies {
         // Every save too, autosaves included, so after a crash a player body comes back as last saved, not as it logged out
         ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> BodyRestart.snapshotBodies(server));
         BodyExpiry.init();
+    }
+
+    // A body left behind keeps the player's last ground until it stands somewhere itself, so a logout in mid-fall still
+    // has one. With no body it goes.
+    private static void keepGroundForBody(ServerPlayer player) {
+        BodyStore store = BodyStore.get(player.level().getServer());
+        if (store.byOwner(player.getUUID()).filter(record -> !record.pendingRemoval()).isEmpty()) {
+            LastGround.forget(player.getUUID());
+        }
     }
 
     private static void noteGround(MinecraftServer server) {

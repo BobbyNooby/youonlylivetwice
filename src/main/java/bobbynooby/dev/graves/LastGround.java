@@ -1,7 +1,6 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.config.Settings;
-import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
@@ -18,7 +17,8 @@ import java.util.UUID;
 
 /**
  * Where each online player last stood on solid ground, and each body for its owner, so a grave for a death over the
- * void goes back there. Memory only: an offline death starts from the save instead.
+ * void goes back there. A body left at logout keeps its owner's, and it goes with the body (see Bodies). Memory only:
+ * an offline death with no body starts from the save instead.
  */
 public final class LastGround {
     // Owner to the block they last stood in. Server thread only.
@@ -33,8 +33,6 @@ public final class LastGround {
                 update(player.getUUID(), player);
             }
         });
-        // The body left behind notes its own ground from its first tick
-        ServerPlayerEvents.LEAVE.register(player -> forget(player.getUUID()));
         // Static, so it would outlive the server in a JVM that starts another one
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> LAST.clear());
     }
