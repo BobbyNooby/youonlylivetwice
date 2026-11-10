@@ -37,9 +37,10 @@ public final class Revive {
         FAILED
     }
 
-    // The server tick each player's last click on a block was answered in. Weak keys, since a respawn or a relog
-    // makes a new player object. Server thread only.
-    private static final Map<ServerPlayer, Integer> BLOCK_USE_TICKS = new WeakHashMap<>();
+    // The server tick each player's last revive-head use was answered in. Weak keys, so an entry goes once its player
+    // object is collected. Players compare by entity id, which a respawn keeps, so a respawned player may share the
+    // old object's entry until then. Server thread only.
+    private static final Map<ServerPlayer, Integer> ANSWERED_TICKS = new WeakHashMap<>();
 
     private Revive() {
     }
@@ -101,10 +102,7 @@ public final class Revive {
         if (!GraveItems.isReviveHead(stack)) {
             return InteractionResult.PASS;
         }
-        // In adventure mode a client can't place a head, so after the click on a block it sends a use in the air too.
-        // That is the same click, and it was answered already.
-        Integer answered = BLOCK_USE_TICKS.get(user);
-        if (answered != null && answered == user.level().getServer().getTickCount()) {
+        if (!firstUseThisTick(user)) {
             return InteractionResult.FAIL;
         }
         // The client saw no use for a head, so it didn't swing; the server swings for it
@@ -121,11 +119,21 @@ public final class Revive {
         if (!GraveItems.isReviveHead(stack)) {
             return InteractionResult.PASS;
         }
-        tryUse(user, stack);
-        BLOCK_USE_TICKS.put(user, user.level().getServer().getTickCount());
+        if (firstUseThisTick(user)) {
+            tryUse(user, stack);
+        }
         // The client placed the head on its side and took it off the stack, so send it the real stack
         user.inventoryMenu.sendAllDataToRemote();
         return InteractionResult.FAIL;
+    }
+
+    // A vanilla client sees no use for a head, so one click goes on to every use it can try: on the block (unless it
+    // placed the head itself), then in the air, for the main hand and then the off hand. They all arrive together and
+    // are handled in the same tick, so only the first is answered. Marks this tick as answered.
+    private static boolean firstUseThisTick(ServerPlayer user) {
+        int tick = user.level().getServer().getTickCount();
+        Integer last = ANSWERED_TICKS.put(user, tick);
+        return last == null || last != tick;
     }
 
     // A head given by id alone has no name to show

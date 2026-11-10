@@ -193,7 +193,8 @@ public class ReviveGameTests {
     }
 
     // The plain head first shows this spot takes a head at all, so the marked heads can't pass by accident.
-    // Sneaking skips the crafting table's own use, so that click goes straight to placing.
+    // Sneaking skips the crafting table's own use, so that click goes straight to placing. The revive head's two uses
+    // come in one tick, so its second is taken for part of the first click and skipped, which must fail the same way.
     @GameTest
     public void markedHeadsCannotBePlaced(GameTestHelper helper) {
         BlockPos plainStone = new BlockPos(3, 1, 3);
@@ -350,6 +351,65 @@ public class ReviveGameTests {
             DeathLockout.revive(owner, "Test", "console");
             GraveStore.get(helper.getLevel().getServer()).remove(grave.id());
             helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.succeed();
+    }
+
+    // One click in the air with a head in each hand: the client sees no use for the main hand's head, so it sends the
+    // off hand's use straight after, in the same tick. Two owners, so a second answer would revive the second one.
+    @GameTest
+    public void twoOwnerHeadsInBothHandsReviveOne(GameTestHelper helper) {
+        UUID mainOwner = lockedOut(helper);
+        UUID offOwner = lockedOut(helper);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "BothHands", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            user.setItemInHand(InteractionHand.MAIN_HAND, reviveHead(staticProfile(mainOwner), 2));
+            user.setItemInHand(InteractionHand.OFF_HAND, reviveHead(staticProfile(offOwner), 2));
+            int mark = user.messages.size();
+            for (InteractionHand hand : InteractionHand.values()) {
+                user.gameMode.useItem(user, user.level(), user.getItemInHand(hand), hand);
+            }
+            helper.assertTrue(DeathLockout.refusal(mainOwner, "Test") == null, "the main hand's owner is still locked out");
+            helper.assertTrue(DeathLockout.refusal(offOwner, "Test") != null, "the off hand's owner was revived by the same click");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left in the main hand");
+            helper.assertValueEqual(user.getOffhandItem().getCount(), 2, "heads left in the off hand");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost can come back now."), "replies to one click");
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(mainOwner, "Test", "console");
+            DeathLockout.revive(offOwner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // Everything an adventure client sends for one click on a block with a head in each hand, in its order: on the
+    // block, then in the air, for the main hand and then the off hand
+    @GameTest
+    public void adventureBothHandsBlockClickAnswersOnce(GameTestHelper helper) {
+        UUID mainOwner = lockedOut(helper);
+        UUID offOwner = lockedOut(helper);
+        BlockPos stone = new BlockPos(3, 1, 3);
+        helper.setBlock(stone, Blocks.STONE);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "BothHandsAdventurer", GameType.ADVENTURE, new BlockPos(1, 1, 1));
+        try {
+            user.setItemInHand(InteractionHand.MAIN_HAND, reviveHead(staticProfile(mainOwner), 2));
+            user.setItemInHand(InteractionHand.OFF_HAND, reviveHead(staticProfile(offOwner), 2));
+            BlockPos pos = helper.absolutePos(stone);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos).add(0.0, 0.5, 0.0), Direction.UP, pos, false);
+            int mark = user.messages.size();
+            for (InteractionHand hand : InteractionHand.values()) {
+                user.gameMode.useItemOn(user, user.level(), user.getItemInHand(hand), hand, hit);
+                user.gameMode.useItem(user, user.level(), user.getItemInHand(hand), hand);
+            }
+            helper.assertTrue(DeathLockout.refusal(mainOwner, "Test") == null, "the main hand's owner is still locked out");
+            helper.assertTrue(DeathLockout.refusal(offOwner, "Test") != null, "the off hand's owner was revived by the same click");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left in the main hand");
+            helper.assertValueEqual(user.getOffhandItem().getCount(), 2, "heads left in the off hand");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost can come back now."), "replies to one click");
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(mainOwner, "Test", "console");
+            DeathLockout.revive(offOwner, "Test", "console");
         }
         helper.succeed();
     }
