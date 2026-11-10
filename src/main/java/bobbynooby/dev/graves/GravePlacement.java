@@ -147,8 +147,14 @@ public final class GravePlacement {
     }
 
     // Clamped into the world and inside the border, and dropped to where its items would land. A spot with nothing below
-    // to stand on moves to the owner's last ground, else to the nearest land, else to a fixed spot.
+    // to stand on moves to the owner's last ground, else to the nearest land, else to a fixed spot. One in an End spike's
+    // box then moves off the spike. Reading the death column, the last ground and the fixed spot, and searching round
+    // them, can load chunks: up to 2 by 2 round each.
     private static BlockPos start(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
+        return besideSpike(level, landedStart(level, pos, lastGround, store), store);
+    }
+
+    private static BlockPos landedStart(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
         BlockPos start = clamped(level, pos);
         if (!isVoidColumn(level, start)) {
             return landing(level, start);
@@ -339,15 +345,29 @@ public final class GravePlacement {
         return true;
     }
 
-    // The nearest column out to 16 blocks with ground to stand on that items would last on, its own column included.
-    // Only loaded chunks are read, since reading one that isn't would load it on the server thread: a column there
-    // counts as unknown.
+    // The nearest column out to 16 blocks with ground to stand on that items would last on, its own column included
     private static Optional<BlockPos> nearestLand(ServerLevel level, BlockPos from, GraveStore store) {
+        List<BlockPos> columns = NEAREST_FIRST.stream().map(offset -> from.offset(offset.getX(), 0, offset.getZ())).toList();
+        return firstGround(level, columns, topY(level, from.getY()), store);
+    }
+
+    // A respawn builds a spike's top and the column under it again, so a start in that box moves out to the ground just
+    // past it, the nearest column first, rather than up over the top, where nobody gets without a tower
+    private static BlockPos besideSpike(ServerLevel level, BlockPos start, GraveStore store) {
+        return EndRebuilds.spikeAround(level, start).flatMap(centre -> {
+            List<BlockPos> columns = new ArrayList<>(ring(centre, EndRebuilds.SPIKE_REACH + 1));
+            columns.sort(Comparator.comparingLong((BlockPos column) -> flatDistanceSqr(column, start)));
+            return firstGround(level, columns, topY(level, start.getY()), store);
+        }).orElse(start);
+    }
+
+    // The first of the columns, in order, with ground to stand on that items would last on. Only loaded chunks are read,
+    // since reading one that isn't would load it on the server thread: a column there counts as unknown.
+    private static Optional<BlockPos> firstGround(ServerLevel level, List<BlockPos> columns, int cap, GraveStore store) {
         WorldBorder border = level.getWorldBorder();
-        int cap = topY(level, from.getY());
-        for (BlockPos offset : NEAREST_FIRST) {
-            int x = from.getX() + offset.getX();
-            int z = from.getZ() + offset.getZ();
+        for (BlockPos column : columns) {
+            int x = column.getX();
+            int z = column.getZ();
             if (!border.isWithinBounds(x, z) || !loadedAround(level, x, z)) {
                 continue;
             }
@@ -357,6 +377,12 @@ public final class GravePlacement {
             }
         }
         return Optional.empty();
+    }
+
+    private static long flatDistanceSqr(BlockPos a, BlockPos b) {
+        long dx = a.getX() - b.getX();
+        long dz = a.getZ() - b.getZ();
+        return dx * dx + dz * dz;
     }
 
     // The column's chunk and every chunk the search from it reads: its rings and the blocks beside them

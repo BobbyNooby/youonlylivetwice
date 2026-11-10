@@ -9,6 +9,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The places in the End that vanilla builds again on its own, setting every block there with no event to stop it, so a
@@ -43,22 +44,36 @@ final class EndRebuilds {
 
     /** The main island just south of the podium, outside every box: the far fallback for a grave in the End. */
     static final BlockPos BESIDE_EXIT_PORTAL = PODIUM.offset(0, 0, 4);
+    /**
+     * How far a spike's rebuild reaches out from its centre on x and z. The reach round its top is the wider, since no
+     * spike's radius is more than 5 (EndSpikeFeature.java:195).
+     */
+    static final int SPIKE_REACH = SPIKE_TOP_REACH;
 
     private EndRebuilds() {
     }
 
     /** True when pos is in the End and vanilla rebuilds it, deleting whatever stands there. */
     static boolean wipes(ServerLevel level, BlockPos pos) {
-        if (level.dimension() != Level.END) {
-            return false;
-        }
-        return inFixedBox(pos) || EndSpikeFeature.getSpikesForLevel(level).stream().anyMatch(spike ->
-                inSpikeBox(pos, spike.getCenterX(), spike.getCenterZ(), spike.getRadius(), spike.getHeight()));
+        return level.dimension() == Level.END && (inFixedBox(pos) || spikeAround(level, pos).isPresent());
     }
 
     /** The boxes at the same place in every End: the arrival platform, the exit portal and the gateways. */
     static boolean inFixedBox(BlockPos pos) {
         return ARRIVAL_PLATFORM.isInside(pos) || nearPodium(pos) || GATEWAYS.stream().anyMatch(box -> box.isInside(pos));
+    }
+
+    /** The centre of the spike whose rebuild takes in pos, at pos's height, when pos is in the End and in one. */
+    static Optional<BlockPos> spikeAround(ServerLevel level, BlockPos pos) {
+        if (level.dimension() != Level.END) {
+            return Optional.empty();
+        }
+        for (EndSpikeFeature.EndSpike spike : EndSpikeFeature.getSpikesForLevel(level)) {
+            if (inSpikeBox(pos, spike.getCenterX(), spike.getCenterZ(), spike.getRadius(), spike.getHeight())) {
+                return Optional.of(new BlockPos(spike.getCenterX(), pos.getY(), spike.getCenterZ()));
+            }
+        }
+        return Optional.empty();
     }
 
     /** True when a respawn rebuilds pos as part of the spike with this centre, radius and top. */
