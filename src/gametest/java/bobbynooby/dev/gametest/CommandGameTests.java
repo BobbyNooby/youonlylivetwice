@@ -702,7 +702,8 @@ public class CommandGameTests {
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000}}");
             List<String> output = run(server, "yolt reload");
             helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line -> line.contains(name)
-                    && line.contains("a restart will apply it") && line.contains("change the file back")), "command output: " + output);
+                    && line.contains("A restart will apply the config's border") && line.endsWith("or change the file.")),
+                    "command output: " + output);
             helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
             helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), sizeBefore, "overworld border size");
@@ -716,8 +717,8 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // The live section is set to what the file holds, so the reload changes no border value and the player, far outside
-    // a 1000 block border, is no reason to warn
+    // The world's borders already are what the file holds, so the reload changes none, and the player, already far
+    // outside the 1000 block border, is no reason to warn
     @GameTest(environment = CONFIG_COMMAND)
     public void reloadWithUnchangedBorderSaysNothing(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -730,8 +731,10 @@ public class CommandGameTests {
             live.enabled = true;
             live.diameter = 1000;
             live.endScale = 2.0;
+            WorldBorders.apply(server);
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000, \"endScale\": 2.0}}");
             helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 1000.0, "overworld border size");
         } finally {
             Files.writeString(path, fileBefore);
             Settings.reload();
@@ -764,6 +767,71 @@ public class CommandGameTests {
             TestServerSetup.applyTestSettings();
             restoreBorders(bordersBefore);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // YOLT's border is 2000, but a timed /worldborder has since grown the overworld's to 4000, and the player is 1500
+    // blocks from its centre. A reload of the unchanged file must not snap the border back onto them.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadAfterLiveBorderDriftedChecksStranding(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Drifted", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        YoltConfig.WorldBorderSection live = Settings.get().worldBorder;
+        try {
+            live.enabled = true;
+            live.diameter = 2000;
+            live.endScale = 2.0;
+            WorldBorders.apply(server);
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setCenter(player.getX() - 1500, player.getZ());
+            overworld.setSize(4000);
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000, \"endScale\": 2.0}}");
+
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line ->
+                    line.startsWith("World border kept as it was, since the config's border would leave ") && line.contains(name)),
+                    "command output: " + output);
+            helper.assertValueEqual(overworld.getSize(), 4000.0, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The overworld's border shrank to 1000 under a timed /worldborder while YOLT's stayed 2000. Growing it back
+    // leaves nobody outside, so the reload applies the config's border.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadAfterLiveBorderDriftedAppliesWhenNobodyIsStranded(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        YoltConfig.WorldBorderSection live = Settings.get().worldBorder;
+        try {
+            live.enabled = true;
+            live.diameter = 2000;
+            live.endScale = 2.0;
+            WorldBorders.apply(server);
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setSize(1000);
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000, \"endScale\": 2.0}}");
+
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
+            helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
         }
         helper.succeed();
     }

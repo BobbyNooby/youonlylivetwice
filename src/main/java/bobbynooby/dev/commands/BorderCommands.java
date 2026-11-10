@@ -22,6 +22,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -62,36 +63,59 @@ final class BorderCommands {
     }
 
     /**
-     * The online players, bodies and graves a border would leave outside, where they take border damage or can't be
-     * reached: the overworld and nether border around this centre, the end's around 0, 0, where /yolt center keeps it.
-     * Empty while the border feature is off, since then YOLT changes no border. The switch is read from the live config,
-     * so a change to it is made before asking.
+     * The online players, bodies and graves a border command would leave outside, where they take border damage or can't
+     * be reached. The command sets every size now, a moving border's too, and each level keeps its own centre. Empty
+     * while the border feature is off, since then YOLT changes no border. The switch is read from the live config, so a
+     * change to it is made before asking.
      */
-    static List<String> stranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ) {
-        return stranded(server, diameter, endScale, centerX, centerZ, false);
+    static List<String> stranded(MinecraftServer server, int diameter, double endScale) {
+        return stranded(server, sized(diameter, endScale, false), false);
     }
 
-    /** Like stranded, but leaves out what is already outside the live border, so a bigger border is never refused for it. */
-    static List<String> newlyStranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ) {
-        return stranded(server, diameter, endScale, centerX, centerZ, true);
+    /**
+     * The same for a reload. A moving border is left to finish, so it isn't checked, and what is already outside a
+     * level's border is left out, so a bigger border is never refused for it.
+     */
+    static List<String> newlyStranded(MinecraftServer server, int diameter, double endScale) {
+        return stranded(server, sized(diameter, endScale, true), true);
     }
 
-    private static List<String> stranded(MinecraftServer server, int diameter, double endScale, double centerX, double centerZ,
-                                         boolean newlyOnly) {
+    // The border one level would have after a change, or null when the change leaves that level's border alone
+    private interface Proposal {
+        @Nullable WorldBorder of(WorldBorder live, boolean isEnd);
+    }
+
+    // Only the sizes change: the overworld and nether take the diameter, the end that times endScale
+    private static Proposal sized(int diameter, double endScale, boolean leaveMoving) {
+        return (live, isEnd) -> leaveMoving && live.getStatus() != BorderStatus.STATIONARY
+                ? null
+                : border(live.getCenterX(), live.getCenterZ(), isEnd ? diameter * endScale : diameter);
+    }
+
+    // /yolt center moves the overworld and nether to the new centre and the end to 0, 0
+    private static Proposal centred(double centerX, double centerZ, int diameter, double endScale) {
+        return (live, isEnd) -> isEnd ? border(0, 0, diameter * endScale) : border(centerX, centerZ, diameter);
+    }
+
+    private static WorldBorder border(double centerX, double centerZ, double size) {
+        WorldBorder border = new WorldBorder();
+        border.setCenter(centerX, centerZ);
+        border.setSize(size);
+        return border;
+    }
+
+    private static List<String> stranded(MinecraftServer server, Proposal proposal, boolean newlyOnly) {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
             return List.of();
         }
-        // Vanilla's own border answers "inside", so the edge is the one border damage and block use go by
+        // Each level is checked against its own border as it is now. Vanilla's border answers "inside", so the edge is
+        // the one border damage and block use go by.
         Map<ResourceKey<Level>, Edges> borders = new HashMap<>();
         WorldBorders.forEachBorder(server, (level, isEnd) -> {
-            WorldBorder proposed = new WorldBorder();
-            if (isEnd) {
-                proposed.setSize(diameter * endScale);
-            } else {
-                proposed.setCenter(centerX, centerZ);
-                proposed.setSize(diameter);
+            WorldBorder proposed = proposal.of(level.getWorldBorder(), isEnd);
+            if (proposed != null) {
+                borders.put(level.dimension(), new Edges(level.getWorldBorder(), proposed, newlyOnly));
             }
-            borders.put(level.dimension(), new Edges(level.getWorldBorder(), proposed, newlyOnly));
         });
 
         // A set, since one player can have several graves
@@ -128,12 +152,11 @@ final class BorderCommands {
     }
 
     // Null when the change may go ahead
-    private static @Nullable String strandedRefusal(MinecraftServer server, boolean confirmed, int diameter, double endScale,
-                                                    double centerX, double centerZ) {
+    private static @Nullable String strandedRefusal(MinecraftServer server, boolean confirmed, Proposal proposal) {
         if (confirmed) {
             return null;
         }
-        List<String> outside = stranded(server, diameter, endScale, centerX, centerZ);
+        List<String> outside = stranded(server, proposal, false);
         return outside.isEmpty()
                 ? null
                 : "This would leave " + listed(outside) + " outside the world border. Add confirm to the command to do it anyway.";
@@ -149,8 +172,7 @@ final class BorderCommands {
 
     private static int border(CommandSourceStack source, int diameter, boolean confirmed) {
         MinecraftServer server = source.getServer();
-        WorldBorder live = server.overworld().getWorldBorder();
-        String refusal = strandedRefusal(server, confirmed, diameter, Settings.get().worldBorder.endScale, live.getCenterX(), live.getCenterZ());
+        String refusal = strandedRefusal(server, confirmed, sized(diameter, Settings.get().worldBorder.endScale, false));
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
@@ -171,7 +193,7 @@ final class BorderCommands {
         }
         MinecraftServer server = source.getServer();
         YoltConfig.WorldBorderSection config = Settings.get().worldBorder;
-        String refusal = strandedRefusal(server, confirmed, config.diameter, config.endScale, x, z);
+        String refusal = strandedRefusal(server, confirmed, centred(x, z, config.diameter, config.endScale));
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
@@ -194,8 +216,7 @@ final class BorderCommands {
             return YoltCommands.fail(source, "End world border scaling factor must be above 0.");
         }
         MinecraftServer server = source.getServer();
-        WorldBorder live = server.overworld().getWorldBorder();
-        String refusal = strandedRefusal(server, confirmed, Settings.get().worldBorder.diameter, scaling, live.getCenterX(), live.getCenterZ());
+        String refusal = strandedRefusal(server, confirmed, sized(Settings.get().worldBorder.diameter, scaling, false));
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }

@@ -11,7 +11,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.border.WorldBorder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,29 +48,28 @@ final class AdminCommands {
             return YoltCommands.fail(source, "Config not reloaded, nothing changed: " + problem);
         }
         List<String> warnings = new ArrayList<>(result.warnings());
-        YoltConfig.WorldBorderSection reloaded = Settings.get().worldBorder;
+        boolean applyBorder = true;
         if (Settings.borderHeld() && result.borderProblem() != null) {
             // A bad border key keeps the live value, and while the border is held that is a startup default, not the world's
             warnings.add("World border still not applied, since " + result.borderProblem() + ". Fix it, then reload again.");
         } else {
             // A reload can't be confirmed, so a border that would leave someone outside waits for /yolt border and the others.
-            // An unchanged border strands nobody new, so it isn't checked; a held border was never applied, so it always is.
-            boolean borderChanged = Settings.borderHeld() || reloaded.enabled != liveBorder.enabled
-                    || reloaded.diameter != liveBorder.diameter || Double.compare(reloaded.endScale, liveBorder.endScale) != 0;
-            WorldBorder overworld = server.overworld().getWorldBorder();
-            List<String> outside = borderChanged
-                    ? BorderCommands.newlyStranded(server, reloaded.diameter, reloaded.endScale, overworld.getCenterX(), overworld.getCenterZ())
-                    : List.of();
+            // An unchanged file is checked too: what counts is the world's own border, which a timed /worldborder can have
+            // moved away from the config.
+            YoltConfig.WorldBorderSection reloaded = Settings.get().worldBorder;
+            List<String> outside = BorderCommands.newlyStranded(server, reloaded.diameter, reloaded.endScale);
             if (!outside.isEmpty()) {
+                // The world's borders stay exactly as they are, and the live values as they were
                 Settings.get().worldBorder = liveBorder;
-                warnings.add("World border kept as it was, since the new one would leave " + BorderCommands.listed(outside)
-                        + " outside it. The file still holds the new border and a restart will apply it; use /yolt border or endscaling"
-                        + " with confirm to apply it now, or change the file back.");
+                applyBorder = false;
+                warnings.add("World border kept as it was, since the config's border would leave " + BorderCommands.listed(outside)
+                        + " outside it. A restart will apply the config's border; use /yolt border or endscaling with confirm"
+                        + " to apply it now, or change the file.");
             } else {
                 Settings.releaseBorder();
             }
         }
-        LiveSettings.applyAll(server);
+        LiveSettings.applyAll(server, applyBorder);
 
         LOGGER.info("{} reloaded the config", source.getTextName());
         YoltCommands.reply(source, "Config reloaded.");

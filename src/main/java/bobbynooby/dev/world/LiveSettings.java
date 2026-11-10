@@ -10,8 +10,15 @@ public final class LiveSettings {
     private LiveSettings() {}
 
     public static void applyAll(MinecraftServer server) {
+        applyAll(server, true);
+    }
+
+    /** With border false every world border stays as it is: a reload whose border would leave someone outside. */
+    public static void applyAll(MinecraftServer server, boolean border) {
         // Each of these checks its own switch
-        WorldBorders.apply(server);
+        if (border) {
+            WorldBorders.apply(server);
+        }
         NameTagTeam.apply(server);
         GameRuleSwitches.applyImmediateRespawn(server);
         GameRuleSwitches.applyLocatorBar(server);
