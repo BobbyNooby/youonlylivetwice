@@ -168,11 +168,14 @@ public final class GraveDeath {
                 return;
             }
             Yolt.LOGGER.error("Could not hand {} back to {}, so it drops at them instead", stack, name, e);
+            // A full inventory's put-back drops this very stack, which may already sit in an item entity. Emptying it
+            // leaves that entity with nothing, so the items can't be in two entities and double on the next load.
+            ItemStack dropped = stack.copyAndClear();
             Guard.run(() -> {
-                ItemEntity item = new ItemEntity(player.level(), player.getX(), player.getEyeY() - 0.3, player.getZ(), stack);
+                ItemEntity item = new ItemEntity(player.level(), player.getX(), player.getEyeY() - 0.3, player.getZ(), dropped);
                 item.setDefaultPickUpDelay();
                 player.level().addFreshEntity(item);
-            }, "Could not drop {} at {} either, so it is lost", stack, name);
+            }, "Could not drop {} at {} either, so it is lost", dropped, name);
         }
     }
 }
