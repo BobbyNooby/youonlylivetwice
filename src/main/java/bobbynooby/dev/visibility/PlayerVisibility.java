@@ -47,10 +47,20 @@ public final class PlayerVisibility {
 
     /** The viewer and each player whose entry its client has, player bodies included. */
     public static List<ServerPlayer> knownPlayers(ServerPlayer viewer) {
+        return withPlayers(viewer, known(viewer));
+    }
+
+    /** The viewer and each player it is tracking now, player bodies included: the ones in sight, whatever the switches say. */
+    public static List<ServerPlayer> nearPlayers(ServerPlayer viewer) {
+        Viewer state = viewer.connection == null ? null : VIEWERS.get(viewer.connection);
+        return withPlayers(viewer, state == null ? Set.of() : state.tracked);
+    }
+
+    private static List<ServerPlayer> withPlayers(ServerPlayer viewer, Collection<UUID> ids) {
         List<ServerPlayer> players = new ArrayList<>();
         players.add(viewer);
         PlayerList playerList = viewer.level().getServer().getPlayerList();
-        for (UUID id : known(viewer)) {
+        for (UUID id : ids) {
             ServerPlayer player = playerList.getPlayer(id);
             // Player bodies are players outside the player list, in the viewer's level when it knows them
             if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {

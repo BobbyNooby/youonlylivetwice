@@ -18,12 +18,12 @@ import java.util.Set;
 
 /**
  * Hides other players' markers on shared paper maps. Every copy of a map shows every other holder at any distance, so
- * each holder's client only gets the markers of players it knows about. The map itself keeps them all. Server thread only.
+ * each holder's client only gets the markers of players in its sight. The map itself keeps them all. Server thread only.
  */
 public final class MapPlayers {
     private MapPlayers() {}
 
-    /** The markers sent to this holder: all of them, less the players its client doesn't know. */
+    /** The markers sent to this holder: all of them, less the players it isn't tracking. */
     public static Collection<MapDecoration> visibleTo(Player holder, Map<String, MapDecoration> markers,
                                                       Collection<MapDecoration> all) {
         // A player body holding a copy has no client to tell
@@ -31,15 +31,15 @@ public final class MapPlayers {
                 || AdminView.isOn(viewer)) {
             return all;
         }
-        Set<String> known = null;
+        Set<String> near = null;
         List<MapDecoration> shown = new ArrayList<>(markers.size());
         for (Map.Entry<String, MapDecoration> marker : markers.entrySet()) {
             // Vanilla keys a player's marker by their name, player bodies included
             if (isPlayer(marker.getValue()) && !marker.getKey().equals(viewer.getPlainTextName())) {
-                if (known == null) {
-                    known = knownNames(viewer);
+                if (near == null) {
+                    near = nearNames(viewer);
                 }
-                if (!known.contains(marker.getKey())) {
+                if (!near.contains(marker.getKey())) {
                     continue;
                 }
             }
@@ -55,9 +55,11 @@ public final class MapPlayers {
                 || type.is(MapDecorationTypes.PLAYER_OFF_LIMITS);
     }
 
-    private static Set<String> knownNames(ServerPlayer viewer) {
+    // The near set, not the client's entries: with hide.distantPlayers off a client has everyone's entry, which says
+    // who is online but not where they are
+    private static Set<String> nearNames(ServerPlayer viewer) {
         Set<String> names = new HashSet<>();
-        for (ServerPlayer player : PlayerVisibility.knownPlayers(viewer)) {
+        for (ServerPlayer player : PlayerVisibility.nearPlayers(viewer)) {
             names.add(player.getPlainTextName());
         }
         return names;

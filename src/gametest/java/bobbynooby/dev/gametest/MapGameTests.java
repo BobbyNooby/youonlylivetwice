@@ -25,6 +25,8 @@ import java.util.List;
 
 // Each test makes a map of its own, so the markers on it are its own players'. The switches go back in the same tick.
 public class MapGameTests {
+    private static final String MAP_DISTANT_SHOWN = "you-only-live-twice-gametest:map_distant_shown";
+
     @GameTest
     public void farPlayerNotOnSharedMap(GameTestHelper helper) {
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -48,6 +50,35 @@ public class MapGameTests {
             List<MapDecoration> farSees = sentTo(helper, map, far);
             helper.assertValueEqual(count(farSees, MapDecorationTypes.PLAYER), 0, "viewer's marker sent to the far player");
             helper.assertValueEqual(count(farSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 1, "far player's own marker");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // hide.distantPlayers off tells every client who is online, not where they are. A batch of its own, since players
+    // joining with that switch off reach every other client.
+    @GameTest(environment = MAP_DISTANT_SHOWN)
+    public void farPlayerNotOnSharedMapWithDistantPlayersShown(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = false;
+            hide.mapPlayers = true;
+            ServerPlayer viewer = join(helper, joined, "mapshownv", BlockPos.ZERO);
+            ServerPlayer far = join(helper, joined, "mapshownfar", new BlockPos(1, 0, 0));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            helper.assertTrue(PlayerVisibility.known(viewer).contains(far.getUUID()), "the viewer's client has no entry for the far player");
+            ItemStack map = newMap(helper, viewer);
+            carry(helper, map, List.of(viewer, far));
+
+            List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER), 1, "player markers sent to the viewer");
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 0, "far player's marker sent to the viewer");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.mapPlayers = mapBefore;
