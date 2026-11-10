@@ -183,8 +183,7 @@ public class CommandRestrictionGameTests {
         } finally {
             // The settings go back before the player leaves
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            CommandGameTests.restoreConfig(server);
             TestPlayers.leave(player);
         }
         helper.succeed();

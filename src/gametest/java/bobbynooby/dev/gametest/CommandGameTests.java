@@ -8,6 +8,7 @@ import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
+import bobbynooby.dev.world.LiveSettings;
 import bobbynooby.dev.world.WorldBorders;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
@@ -523,8 +524,7 @@ public class CommandGameTests {
             }
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
             server.setRespawnData(spawnBefore);
         }
@@ -808,8 +808,7 @@ public class CommandGameTests {
             helper.assertFalse(Settings.get().randomSpawn, "randomSpawn still on after reload");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
         }
         helper.succeed();
     }
@@ -831,8 +830,7 @@ public class CommandGameTests {
         } finally {
             Files.writeString(path, fileBefore);
             if (Settings.get() != configBefore) {
-                Settings.reload();
-                TestServerSetup.applyTestSettings();
+                restoreConfig(server);
             }
         }
         helper.succeed();
@@ -857,8 +855,7 @@ public class CommandGameTests {
         } finally {
             Files.move(moved, path, StandardCopyOption.REPLACE_EXISTING);
             if (Settings.get() != configBefore) {
-                Settings.reload();
-                TestServerSetup.applyTestSettings();
+                restoreConfig(server);
             }
         }
         helper.succeed();
@@ -928,6 +925,8 @@ public class CommandGameTests {
             Files.writeString(path, fileBefore);
             Settings.load();
             TestServerSetup.applyTestSettings();
+            // The test's reloads applied their files to the world
+            LiveSettings.applyAll(server);
             restoreBorders(bordersBefore);
             restoreBackup(bak, bakBefore);
         }
@@ -966,6 +965,8 @@ public class CommandGameTests {
             Files.writeString(path, fileBefore);
             Settings.load();
             TestServerSetup.applyTestSettings();
+            // The test's reload applied its file to the world
+            LiveSettings.applyAll(server);
             restoreBorders(bordersBefore);
             restoreBackup(bak, bakBefore);
             TestPlayers.leave(player);
@@ -999,8 +1000,7 @@ public class CommandGameTests {
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), sizeBefore, "overworld border size");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
             TestPlayers.leave(player);
         }
@@ -1027,8 +1027,7 @@ public class CommandGameTests {
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 1000.0, "overworld border size");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
             TestPlayers.leave(player);
         }
@@ -1053,8 +1052,7 @@ public class CommandGameTests {
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 2000, "live diameter");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
             TestPlayers.leave(player);
         }
@@ -1089,8 +1087,7 @@ public class CommandGameTests {
             helper.assertValueEqual(overworld.getSize(), 4000.0, "overworld border size");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
             TestPlayers.leave(player);
         }
@@ -1119,8 +1116,7 @@ public class CommandGameTests {
             helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size");
         } finally {
             Files.writeString(path, fileBefore);
-            Settings.reload();
-            TestServerSetup.applyTestSettings();
+            restoreConfig(server);
             restoreBorders(bordersBefore);
         }
         helper.succeed();
@@ -1153,6 +1149,14 @@ public class CommandGameTests {
             saved.put(level, new double[] {border.getCenterX(), border.getCenterZ(), border.getSize()});
         }
         return saved;
+    }
+
+    // Reads the config file back and applies it to the world as a reload does, with the test server's overrides first
+    // so its border stays off. Without the apply, the world would keep what the test's reload set.
+    static void restoreConfig(MinecraftServer server) {
+        Settings.reload();
+        TestServerSetup.applyTestSettings();
+        LiveSettings.applyAll(server);
     }
 
     private static void restoreBorders(Map<ServerLevel, double[]> saved) {
