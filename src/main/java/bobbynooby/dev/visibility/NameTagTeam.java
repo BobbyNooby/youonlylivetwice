@@ -79,7 +79,12 @@ public final class NameTagTeam {
             return;
         }
         PlayerTeam team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
-        if (team != null && player.getTeam() != team) {
+        if (team == null) {
+            // Gone after /team remove: made again the way a reload makes it, so a body coming back still joins
+            apply(server);
+            team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+        }
+        if (player.getTeam() != team) {
             server.getScoreboard().addPlayerToTeam(player.getScoreboardName(), team);
         }
     }
