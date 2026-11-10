@@ -33,8 +33,6 @@ public final class BodyLogin {
             return;
         }
         BodyRecord record = found.get();
-        // The body goes, and its last ground with it: the player notes their own from here
-        LastGround.forget(record.owner());
         BodySnapshot snapshot;
         boolean bodyAlive;
         if (Bodies.entityOf(server, record) instanceof LivingEntity body) {
@@ -57,7 +55,11 @@ public final class BodyLogin {
         // Health 0 without a death would respawn the player and drop their inventory. A player who joins dead
         // stays dead: their gear may be in a grave already, and the body only holds copies of it.
         if (bodyAlive && !player.isDeadOrDying()) {
+            // The player stands where the body did, so the body's last ground, kept under the owner, is theirs now
             takeOver(player, snapshot, Settings.get().bodies.copyEffects);
+        } else {
+            // The body goes, and its last ground with it: the player notes their own from here
+            LastGround.forget(record.owner());
         }
     }
 

@@ -17,8 +17,9 @@ import java.util.UUID;
 
 /**
  * Where each online player last stood on solid ground, and each body for its owner, so a grave for a death over the
- * void goes back there. A body left at logout keeps its owner's, and it goes with the body (see Bodies). Memory only:
- * an offline death with no body starts from the save instead.
+ * void goes back there. A body left at logout keeps its owner's, the owner takes it back with the body at login, and
+ * it goes when the body dies or expires (see Bodies). Memory only: an offline death with no body starts from the save
+ * instead.
  */
 public final class LastGround {
     // Owner to the block they last stood in. Server thread only.
