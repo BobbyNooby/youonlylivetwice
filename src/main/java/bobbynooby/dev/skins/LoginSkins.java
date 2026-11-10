@@ -12,6 +12,7 @@ import java.net.SocketAddress;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * One joining player's skin, worked out as vanilla starts checking their login: the account they picked, else the
@@ -25,6 +26,8 @@ public final class LoginSkins {
     private final SocketAddress address;
     private final GameProfile profile;
     private final int ticksAllowed;
+    private final long nanosAllowed;
+    private final long startedAt = System.nanoTime();
     private int ticksWaited;
     // Set once Mojang has failed or run out of time, so from then on only saved answers are used
     private boolean savedOnly;
@@ -39,8 +42,12 @@ public final class LoginSkins {
         this.server = server;
         this.address = address;
         this.profile = profile;
-        // Ticks, like vanilla's own limit on a login, so the wait stays inside it even when the server lags
-        this.ticksAllowed = Settings.get().skins.lookupTimeoutSeconds * SharedConstants.TICKS_PER_SECOND;
+        // Both ticks and plain time, since vanilla ends a login at 600 ticks and its connection after 30 seconds without
+        // a packet from the client, which sends nothing while the login is checked. Whichever runs out first ends the
+        // wait, so lag can't stretch it past either.
+        int seconds = Settings.get().skins.lookupTimeoutSeconds;
+        this.ticksAllowed = seconds * SharedConstants.TICKS_PER_SECOND;
+        this.nanosAllowed = TimeUnit.SECONDS.toNanos(seconds);
     }
 
     public static LoginSkins start(MinecraftServer server, SocketAddress address, GameProfile profile) {
@@ -143,14 +150,14 @@ public final class LoginSkins {
             ready = profile;
             return;
         }
-        if (ticksWaited++ < ticksAllowed) {
+        if (ticksWaited++ < ticksAllowed && System.nanoTime() - startedAt < nanosAllowed) {
             return;
         }
         String name = asked;
         boolean pick = askedForPick;
         CachedSkin before = earlier;
         Yolt.LOGGER.warn("Mojang took more than {} seconds over the skin of {}, so {} joins with the skin saved before, or none",
-                ticksAllowed / SharedConstants.TICKS_PER_SECOND, name, profile.name());
+                TimeUnit.NANOSECONDS.toSeconds(nanosAllowed), name, profile.name());
         // A late answer is still kept, for their next join
         answer.thenAcceptAsync(skin -> SkinStore.get(server).putSkin(skin), server);
         clearAsked();

@@ -9,8 +9,10 @@ final class ConfigChecks {
     // Vanilla's own sample never has more than 12 names. Past these, a long list could push the status reply over its size limit.
     static final int MAX_HOVER_LINES = 12;
     static final int MAX_HOVER_LINE_LENGTH = 256;
-    // Vanilla drops a login after 30 seconds, so a skin lookup may hold it for well under that
-    static final int MAX_SKIN_LOOKUP_SECONDS = 20;
+    // A login waits on a skin for at most this long. Vanilla ends a login 600 ticks after it began and a connection 30
+    // seconds after the client's last packet, and online-mode checks and other mods' login steps come before the wait,
+    // so this leaves two thirds of both for them.
+    static final int MAX_SKIN_LOOKUP_SECONDS = 10;
 
     private ConfigChecks() {}
 

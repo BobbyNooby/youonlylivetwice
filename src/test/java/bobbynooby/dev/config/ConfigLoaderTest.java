@@ -103,11 +103,12 @@ class ConfigLoaderTest {
             assertTrue(bad.warnings().stream().anyMatch(w -> w.startsWith(key + ":")), "no warning for " + key);
         }
         assertEquals(5, loadJson("{\"skins\":{\"lookupTimeoutSeconds\":0}}").config().skins.lookupTimeoutSeconds);
+        assertEquals(5, loadJson("{\"skins\":{\"lookupTimeoutSeconds\":11}}").config().skins.lookupTimeoutSeconds);
 
-        YoltConfig.SkinsSection edges = loadJson("{\"skins\":{\"mode\":\"off\",\"lookupTimeoutSeconds\":20,\"refreshHours\":0}}")
+        YoltConfig.SkinsSection edges = loadJson("{\"skins\":{\"mode\":\"off\",\"lookupTimeoutSeconds\":10,\"refreshHours\":0}}")
                 .config().skins;
         assertEquals(YoltConfig.SkinMode.OFF, edges.mode);
-        assertEquals(20, edges.lookupTimeoutSeconds);
+        assertEquals(10, edges.lookupTimeoutSeconds);
         assertEquals(0, edges.refreshHours);
     }
 
