@@ -156,7 +156,7 @@ public final class Graves {
         GraveStore store = GraveStore.get(server);
         BlockPos pos = grave.pos();
         Optional<BlockPos> dropAt = GravePlacement.safeForItems(level, pos, store)
-                ? Optional.of(pos) : GravePlacement.nearestSafe(level, pos, store);
+                ? Optional.of(pos) : GravePlacement.nearestSafe(level, pos, store, true);
         if (dropAt.isEmpty()) {
             Yolt.LOGGER.error("Could not remove {}'s grave at {} {}: every spot near it would destroy its items",
                     grave.ownerName(), grave.dimension().identifier(), pos);

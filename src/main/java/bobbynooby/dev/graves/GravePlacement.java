@@ -64,23 +64,13 @@ public final class GravePlacement {
                 .orElseGet(() -> lastResort(level, start, store));
     }
 
-    /** The spot find would pick near pos, or nothing when only its wider search or last resort is left. */
-    static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store) {
-        return search(level, start(level, pos, null, store), store);
-    }
-
     /**
-     * Like nearestSafe, but reading loaded chunks only, so it never loads one. Nothing when the chunks round pos aren't
-     * loaded, or pos is over the void with no loaded land near, where nearestSafe would load its fixed spot.
+     * The spot find would pick near pos, or nothing when only its wider search or last resort is left. With mayLoad
+     * false only loaded chunks are read, so it never loads one: then also nothing when the chunks round pos aren't
+     * loaded, or pos is over the void with no loaded land near, where it would load its fixed spot.
      */
-    static Optional<BlockPos> nearestSafeLoaded(ServerLevel level, BlockPos pos, GraveStore store) {
-        BlockPos from = clamped(level, pos);
-        if (!loadedAround(level, from.getX(), from.getZ())) {
-            return Optional.empty();
-        }
-        Optional<BlockPos> landed = isVoidColumn(level, from) ? nearestLand(level, from, store) : Optional.of(landing(level, from));
-        // Every start these give is a column whose chunks round it are loaded, which is all a search reads
-        return landed.map(start -> besideSpike(level, start, store)).flatMap(start -> search(level, start, store));
+    static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store, boolean mayLoad) {
+        return start(level, pos, null, store, mayLoad).flatMap(start -> search(level, start, store));
     }
 
     /**
@@ -195,22 +185,35 @@ public final class GravePlacement {
     // box then moves off the spike. Reading the death column, the last ground and the fixed spot, and searching round
     // them, can load chunks: up to 2 by 2 round each.
     private static BlockPos start(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
-        return besideSpike(level, landedStart(level, pos, lastGround, store), store);
+        return start(level, pos, lastGround, store, true).orElseThrow();
     }
 
-    private static BlockPos landedStart(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
+    // With mayLoad false, the same from loaded chunks only, and nothing where that isn't enough. Every start it gives
+    // is a column whose chunks round it are loaded, which is all a search from it reads.
+    private static Optional<BlockPos> start(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store,
+                                            boolean mayLoad) {
+        return landedStart(level, pos, lastGround, store, mayLoad).map(landed -> besideSpike(level, landed, store));
+    }
+
+    private static Optional<BlockPos> landedStart(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround,
+                                                  GraveStore store, boolean mayLoad) {
         BlockPos start = clamped(level, pos);
+        if (!mayLoad && !loadedAround(level, start.getX(), start.getZ())) {
+            return Optional.empty();
+        }
         if (!isVoidColumn(level, start)) {
-            return landing(level, start);
+            return Optional.of(landing(level, start));
         }
         if (lastGround != null) {
             BlockPos ground = clamped(level, lastGround);
             // The block they stood on may be gone since
-            if (!isVoidColumn(level, ground)) {
-                return landing(level, ground);
+            if ((mayLoad || loadedAround(level, ground.getX(), ground.getZ())) && !isVoidColumn(level, ground)) {
+                return Optional.of(landing(level, ground));
             }
         }
-        return nearestLand(level, start, store).orElseGet(() -> fallback(level, start, store));
+        // The nearest land is read from loaded chunks only; the fixed spot loads its own
+        Optional<BlockPos> land = nearestLand(level, start, store);
+        return mayLoad ? Optional.of(land.orElseGet(() -> fallback(level, start, store))) : land;
     }
 
     private static BlockPos clamped(ServerLevel level, BlockPos pos) {

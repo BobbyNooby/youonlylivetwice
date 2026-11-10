@@ -72,7 +72,7 @@ public final class GraveBlocks {
     static void restore(ServerLevel level, GraveStore store, Grave grave, boolean recheck) {
         // Setting the head over a chest would spill it, over a shulker box would delete what it holds
         Optional<BlockPos> pos = GravePlacement.keeps(level, grave.pos(), store) ? Optional.of(grave.pos())
-                : recheck ? GravePlacement.nearestSafeLoaded(level, grave.pos(), store) : GravePlacement.nearestSafe(level, grave.pos(), store);
+                : GravePlacement.nearestSafe(level, grave.pos(), store, !recheck);
         if (pos.isEmpty()) {
             if (!recheck || GraveRecheck.firstFailure(grave)) {
                 Yolt.LOGGER.warn("Could not put back the head of {}'s grave at {} {}: its spot is taken or unsafe, and "
