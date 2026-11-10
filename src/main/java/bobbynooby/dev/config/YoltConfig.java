@@ -22,6 +22,7 @@ public class YoltConfig {
     public boolean immediateRespawn = true;
     public BodiesSection bodies = new BodiesSection();
     public ServerListSection serverList = new ServerListSection();
+    public SkinsSection skins = new SkinsSection();
 
     public static class WorldBorderSection {
         public boolean enabled = true;
@@ -84,6 +85,12 @@ public class YoltConfig {
         public List<String> hoverLines = new ArrayList<>(List.of("You scream out for help, but no one answers."));
     }
 
+    public static class SkinsSection {
+        public SkinMode mode = SkinMode.AUTO;
+        public int lookupTimeoutSeconds = 5;
+        public int refreshHours = 24;
+    }
+
     public enum EnderChestMode {
         @SerializedName("keep") KEEP,
         @SerializedName("grave") GRAVE,
@@ -105,5 +112,10 @@ public class YoltConfig {
         @SerializedName("prone") PRONE,
         @SerializedName("sleeping") SLEEPING,
         @SerializedName("standing") STANDING
+    }
+
+    public enum SkinMode {
+        @SerializedName("auto") AUTO,
+        @SerializedName("off") OFF
     }
 }

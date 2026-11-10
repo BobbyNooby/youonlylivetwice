@@ -13,6 +13,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.datafix.DataFixers;
 import net.minecraft.util.datafix.fixes.References;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -63,13 +64,28 @@ public final class StoreVersions {
      */
     public static <R> Codec<Loaded<R>> codec(String what, int format, List<Migrations.Step<Dynamic<?>>> steps,
                                               Items items, MapCodec<R> records) {
+        return versioned(what, format, steps, items, records);
+    }
+
+    /**
+     * The same for a store that holds no items: it has only "format", since Minecraft's data version doesn't change
+     * what it can read.
+     */
+    public static <R> Codec<Loaded<R>> codec(String what, int format, List<Migrations.Step<Dynamic<?>>> steps,
+                                              MapCodec<R> records) {
+        return versioned(what, format, steps, null, records);
+    }
+
+    private static <R> Codec<Loaded<R>> versioned(String what, int format, List<Migrations.Step<Dynamic<?>>> steps,
+                                                  @Nullable Items items, MapCodec<R> records) {
         Codec<R> recordsCodec = records.codec();
         Encoder<Loaded<R>> encoder = new Encoder<>() {
             @Override
             public <T> DataResult<T> encode(Loaded<R> input, DynamicOps<T> ops, T prefix) {
-                return recordsCodec.encode(input.records(), ops, prefix)
-                        .flatMap(map -> ops.mergeToMap(map, ops.createString(FORMAT), ops.createInt(format)))
-                        .flatMap(map -> ops.mergeToMap(map, ops.createString(DATA_VERSION), ops.createInt(currentDataVersion())));
+                DataResult<T> encoded = recordsCodec.encode(input.records(), ops, prefix)
+                        .flatMap(map -> ops.mergeToMap(map, ops.createString(FORMAT), ops.createInt(format)));
+                return items == null ? encoded
+                        : encoded.flatMap(map -> ops.mergeToMap(map, ops.createString(DATA_VERSION), ops.createInt(currentDataVersion())));
             }
         };
         Decoder<Loaded<R>> decoder = new Decoder<>() {
@@ -83,12 +99,12 @@ public final class StoreVersions {
                 if (savedFormat <= format) {
                     upgraded = Migrations.run(what + " file", savedFormat, format, steps, upgraded);
                 }
-                if (savedDataVersion < current) {
+                if (items != null && savedDataVersion < current) {
                     Yolt.LOGGER.info("Running the {} file's items through Minecraft's data fixer, from data version {} to {}",
                             what, savedDataVersion, current);
                     upgraded = items.fixEach(upgraded, stack -> fixItem(stack, savedDataVersion, current));
                 }
-                boolean fromNewer = savedFormat > format || savedDataVersion > current;
+                boolean fromNewer = savedFormat > format || (items != null && savedDataVersion > current);
                 return recordsCodec.parse(upgraded.convert(ops))
                         .map(loaded -> Pair.of(new Loaded<R>(loaded, fromNewer), input));
             }

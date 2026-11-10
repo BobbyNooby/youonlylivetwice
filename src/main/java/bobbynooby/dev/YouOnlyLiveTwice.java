@@ -9,6 +9,7 @@ import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
+import bobbynooby.dev.skins.Skins;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.TabHeaders;
@@ -44,6 +45,8 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         NameTagTeam.init();
         ChatDelivery.init();
         Whispers.init();
+        // Skins: its hook only makes the Mojang lookup when a server starts, which no other hook reads
+        Skins.init();
         // Bodies: last, so the handover follows the lockout check, and the bodies come back once the team is there
         Bodies.init();
 

@@ -91,6 +91,26 @@ class ConfigLoaderTest {
         assertEquals(7, loadJson("{\"deathLockout\":{\"cooldownDays\":-1}}").config().deathLockout.cooldownDays);
     }
 
+    // The timeout has to stay well inside vanilla's 30 second login limit
+    @Test
+    void skinKeysOutOfRangeFallBack() throws IOException {
+        ConfigLoader.Result bad = loadJson("{\"skins\":{\"mode\":\"sometimes\",\"lookupTimeoutSeconds\":60,\"refreshHours\":-1}}");
+        YoltConfig.SkinsSection skins = bad.config().skins;
+        assertEquals(YoltConfig.SkinMode.AUTO, skins.mode);
+        assertEquals(5, skins.lookupTimeoutSeconds);
+        assertEquals(24, skins.refreshHours);
+        for (String key : List.of("skins.mode", "skins.lookupTimeoutSeconds", "skins.refreshHours")) {
+            assertTrue(bad.warnings().stream().anyMatch(w -> w.startsWith(key + ":")), "no warning for " + key);
+        }
+        assertEquals(5, loadJson("{\"skins\":{\"lookupTimeoutSeconds\":0}}").config().skins.lookupTimeoutSeconds);
+
+        YoltConfig.SkinsSection edges = loadJson("{\"skins\":{\"mode\":\"off\",\"lookupTimeoutSeconds\":20,\"refreshHours\":0}}")
+                .config().skins;
+        assertEquals(YoltConfig.SkinMode.OFF, edges.mode);
+        assertEquals(20, edges.lookupTimeoutSeconds);
+        assertEquals(0, edges.refreshHours);
+    }
+
     @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");

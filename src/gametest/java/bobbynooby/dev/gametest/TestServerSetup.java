@@ -1,12 +1,15 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.skins.Skins;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 
 public class TestServerSetup implements ModInitializer {
     @Override
     public void onInitialize() {
+        // Before any server starts, so YOLT never makes its Mojang lookup and no test reaches the network
+        Skins.useLookupForTesting(FakeSkinLookup.INSTANCE);
         // SERVER_STARTING runs before the border is applied on SERVER_STARTED.
         ServerLifecycleEvents.SERVER_STARTING.register(server -> applyTestSettings());
     }

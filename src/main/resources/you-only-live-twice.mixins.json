@@ -28,6 +28,7 @@
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
     "LockoutDeathMessageMixin",
+    "LoginSkinMixin",
     "MapPlayersMixin",
     "MobAccessor",
     "NearestAttackableTargetGoalAccessor",

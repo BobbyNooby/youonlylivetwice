@@ -9,6 +9,8 @@ final class ConfigChecks {
     // Vanilla's own sample never has more than 12 names. Past these, a long list could push the status reply over its size limit.
     static final int MAX_HOVER_LINES = 12;
     static final int MAX_HOVER_LINE_LENGTH = 256;
+    // Vanilla drops a login after 30 seconds, so a skin lookup may hold it for well under that
+    static final int MAX_SKIN_LOOKUP_SECONDS = 20;
 
     private ConfigChecks() {}
 
@@ -69,6 +71,18 @@ final class ConfigChecks {
         if (c.bodies.duration == null) {
             c.bodies.duration = fallback.bodies.duration;
             fellBack.accept("bodies.duration", "expected \"offline\" or minutes of 1 or more");
+        }
+        if (c.skins.mode == null) {
+            c.skins.mode = fallback.skins.mode;
+            fellBack.accept("skins.mode", "unknown value");
+        }
+        if (c.skins.lookupTimeoutSeconds < 1 || c.skins.lookupTimeoutSeconds > MAX_SKIN_LOOKUP_SECONDS) {
+            c.skins.lookupTimeoutSeconds = fallback.skins.lookupTimeoutSeconds;
+            fellBack.accept("skins.lookupTimeoutSeconds", "must be 1 to " + MAX_SKIN_LOOKUP_SECONDS);
+        }
+        if (c.skins.refreshHours < 0) {
+            c.skins.refreshHours = fallback.skins.refreshHours;
+            fellBack.accept("skins.refreshHours", "must be 0 or more");
         }
         // Like the End cap, what fits is kept rather than the whole list falling back
         List<String> lines = c.serverList.hoverLines;
