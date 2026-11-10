@@ -545,52 +545,59 @@ public class SkinGameTests {
         helper.succeed();
     }
 
-    // The owner of a skin joins: every player's pick of it goes, but not one an op made, nor a pick of another account.
-    // Nobody is told then, since that would tell a borrower online the owner just came online. Each borrower hears it
-    // once, at their next join, whether they were online at the time or away.
-    @GameTest
-    public void ownerJoinResetsBorrowedSkin(GameTestHelper helper) {
+    // The owner of a skin joins and nothing changes for anyone: a borrower online keeps the pick, and the reply to a
+    // locked pick stays the same. At the borrower's own next login the pick goes, so they log in with their own skin,
+    // and they are told once, at the join. A pick of a member who is away goes the same way at its holder's login, and
+    // a pick an op made stays through its holder's login. Each login runs with nobody online. Every switch goes back in
+    // the same tick.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void borrowedSkinGoesAtTheBorrowersLogin(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
         String reset = "Your skin was reset because its owner joined this server.";
+        String locked = "Your skin is locked. Ask an op to change it.";
         GameProfile owner = new GameProfile(UUID.randomUUID(), uniqueName("Owner"));
-        GameProfile online = new GameProfile(UUID.randomUUID(), uniqueName("Online"));
-        GameProfile away = new GameProfile(UUID.randomUUID(), uniqueName("Away"));
-        UUID other = UUID.randomUUID();
+        GameProfile member = new GameProfile(UUID.randomUUID(), uniqueName("Member"));
+        GameProfile borrower = TestLogins.offline(uniqueName("Borrow"));
+        GameProfile away = TestLogins.offline(uniqueName("Away"));
+        GameProfile given = TestLogins.offline(uniqueName("Given"));
         String otherAccount = uniqueName("Acct");
-        MOJANG.answer(owner.name());
+        List<String> answered = List.of(owner.name(), member.name(), borrower.name(), away.name(), given.name(), otherAccount);
+        answered.forEach(MOJANG::answer);
         SkinStore store = SkinStore.get(server);
         List<UUID> joined = new ArrayList<>();
-        UUID given = null;
         try {
-            joined.add(online.id());
-            ServerPlayer borrower = TestPlayers.join(helper, online, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            ServerPlayer opGiven = TestPlayers.join(helper, "OpGiven", GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            given = opGiven.getUUID();
-            joined.add(given);
-            String givenName = opGiven.nameAndId().name();
-            store.choose(online.id(), owner.name());
-            store.choose(away.id(), owner.name());
-            store.choose(other, otherAccount);
-            helper.assertValueEqual(console(server, "yolt skin set " + givenName + " " + owner.name()),
-                    List.of(givenName + "'s skin is now " + owner.name() + "'s. It shows once they rejoin."), "the op's pick");
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.lockAfterFirstChoice = true;
+            // Has played here, and is away
+            joined.add(member.id());
+            TestPlayers.leave(TestPlayers.join(helper, member, GameType.SURVIVAL, new BlockPos(1, 1, 1)));
+            store.choose(borrower.id(), owner.name());
+            store.choose(away.id(), member.name());
+            helper.assertValueEqual(console(server, "yolt skin set " + given.name() + " " + owner.name()),
+                    List.of(given.name() + "'s skin is now " + owner.name() + "'s. It shows once they rejoin."), "the op's pick");
 
+            joined.add(borrower.id());
+            ServerPlayer online = TestPlayers.join(helper, borrower, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            type(online, "yolt skin set " + otherAccount);
+            helper.assertValueEqual(chatLines(online, locked), 1, "lock replies before the owner joined");
             joined.add(owner.id());
-            TestPlayers.join(helper, owner, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            assertEqual(helper, store.choice(online.id()), null, "the online borrower's pick");
-            assertEqual(helper, store.choice(away.id()), null, "the away borrower's pick");
-            assertEqual(helper, store.choice(other), otherAccount, "a pick of another account");
-            assertEqual(helper, store.choice(given), owner.name(), "the pick an op made");
-            helper.assertValueEqual(chatLines(borrower, reset), 0, "times the online borrower was told at the owner's join");
+            TestPlayers.leave(TestPlayers.join(helper, owner, GameType.SURVIVAL, new BlockPos(1, 1, 1)));
+            assertEqual(helper, store.choice(borrower.id()), owner.name(), "the online borrower's pick once the owner joined");
+            assertEqual(helper, store.choice(away.id()), member.name(), "the away borrower's pick once the owner joined");
+            assertEqual(helper, store.choice(given.id()), owner.name(), "the op's pick once the owner joined");
+            type(online, "yolt skin set " + otherAccount);
+            helper.assertValueEqual(chatLines(online, locked), 2, "lock replies after the owner joined");
+            helper.assertValueEqual(chatLines(online, reset), 0, "times the online borrower was told while online");
+            TestPlayers.leave(online);
 
-            TestPlayers.leave(borrower);
-            ServerPlayer onlineBack = TestPlayers.join(helper, online, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            helper.assertValueEqual(chatLines(onlineBack, reset), 1, "times the online borrower was told at their next join");
-            joined.add(away.id());
-            ServerPlayer awayBack = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            helper.assertValueEqual(chatLines(awayBack, reset), 1, "times the away borrower was told at their join");
-            TestPlayers.leave(awayBack);
-            awayBack = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            helper.assertValueEqual(chatLines(awayBack, reset), 0, "times the away borrower was told at the join after");
+            assertLoginResets(helper, borrower, null, FakeSkinLookup.texturesOf(borrower.name()), 1, "the online borrower");
+            assertLoginResets(helper, away, null, FakeSkinLookup.texturesOf(away.name()), 1, "the away member's borrower");
+            assertLoginResets(helper, given, owner.name(), FakeSkinLookup.texturesOf(owner.name()), 0, "the op's pick");
         } finally {
             for (UUID id : joined) {
                 ServerPlayer still = server.getPlayerList().getPlayer(id);
@@ -598,15 +605,45 @@ public class SkinGameTests {
                     TestPlayers.leave(still);
                 }
             }
-            store.clearChoice(online.id());
-            store.clearChoice(away.id());
-            store.clearChoice(other);
-            if (given != null) {
-                store.clearChoice(given);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            for (GameProfile profile : List.of(borrower, away, given)) {
+                store.clearChoice(profile.id());
+                // A reset nobody joined to hear would be told in another test
+                store.takeReset(profile.id());
             }
-            MOJANG.forget(owner.name());
+            answered.forEach(MOJANG::forget);
         }
         helper.succeed();
+    }
+
+    // Logs the player in with nobody online, then joins them twice: the pick after the login, the skin they log in
+    // with, and the reset line at each join, once at the first and never at the second
+    private static void assertLoginResets(GameTestHelper helper, GameProfile profile, @Nullable String pickAfter,
+                                          SkinTextures skin, int toldAtJoin, String who) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String reset = "Your skin was reset because its owner joined this server.";
+        GameProfile loggedIn;
+        try (TestLogins.Login login = TestLogins.start(server, profile)) {
+            login.tick();
+            helper.assertTrue(login.finished().isPresent(), "the login of " + who + " did not go through");
+            loggedIn = login.profile();
+        }
+        assertEqual(helper, SkinStore.get(server).choice(profile.id()), pickAfter, "the pick of " + who + " after the login");
+        assertEqual(helper, textures(loggedIn), skin, "the skin " + who + " logged in with");
+        ServerPlayer player = TestPlayers.join(helper, loggedIn, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            helper.assertValueEqual(chatLines(player, reset), toldAtJoin, "times " + who + " was told at the join");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        player = TestPlayers.join(helper, loggedIn, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            helper.assertValueEqual(chatLines(player, reset), 0, "times " + who + " was told at the join after");
+        } finally {
+            TestPlayers.leave(player);
+        }
     }
 
     // A member from before YOLT kept its record of joins: only their save in players/data says they played here. It
