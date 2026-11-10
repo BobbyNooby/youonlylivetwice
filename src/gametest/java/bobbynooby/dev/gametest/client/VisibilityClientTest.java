@@ -23,6 +23,8 @@ import java.util.function.Predicate;
 public class VisibilityClientTest implements FabricClientGameTest {
     private static final int NEAR_BLOCKS = 5;
     private static final int FAR_BLOCKS = 1000;
+    // How long the far player has to stay unknown once the near one is known: the fixed wait this test used to have
+    private static final int FAR_UNKNOWN_TICKS = 40;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -40,6 +42,9 @@ public class VisibilityClientTest implements FabricClientGameTest {
                 ServerPlayer far = join(server, connection, joined, "Far", FAR_BLOCKS);
                 waitDriving(ctx, server, joined, mc -> mc.getConnection().getPlayerInfo(near.getUUID()) != null,
                         mc -> "the client never got an entry for the near player");
+                // A leak could come a few ticks later, so the far player has to stay unknown for a while
+                holdDriving(ctx, server, joined, FAR_UNKNOWN_TICKS, mc -> mc.getConnection().getPlayerInfo(far.getUUID()) == null,
+                        mc -> "the client got an entry for the far player");
                 // So whatever the server sent about the far player by now has reached the client too
                 connection.waitForClientboundPackets();
 
@@ -128,7 +133,23 @@ public class VisibilityClientTest implements FabricClientGameTest {
             ctx.waitTick();
         }
         if (!ctx.computeOnClient(condition::test)) {
-            throw new AssertionError(ctx.computeOnClient(failure::apply));
+            throw ClientTests.explained(new AssertionError("timed out after " + ClientGameTestContext.DEFAULT_TIMEOUT
+                    + " driven ticks"), () -> ctx.computeOnClient(failure::apply));
+        }
+    }
+
+    // The same driving, while the condition has to hold on every one of the ticks
+    private static void holdDriving(ClientGameTestContext ctx, TestDedicatedServerContext server, List<ServerPlayer> players,
+                                    int ticks, Predicate<Minecraft> condition, Function<Minecraft, String> failure) {
+        for (int tick = 0; tick <= ticks; tick++) {
+            if (!ctx.computeOnClient(condition::test)) {
+                throw ClientTests.explained(new AssertionError("held for " + tick + " of " + ticks + " driven ticks"),
+                        () -> ctx.computeOnClient(failure::apply));
+            }
+            if (tick < ticks) {
+                server.runOnServer(s -> players.forEach(TestPlayers::driveTracking));
+                ctx.waitTick();
+            }
         }
     }
 

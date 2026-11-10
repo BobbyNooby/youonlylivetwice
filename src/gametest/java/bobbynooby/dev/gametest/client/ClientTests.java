@@ -78,7 +78,7 @@ public final class ClientTests {
     }
 
     // Reading what was wrong can fail too, say when the entity it looks at is gone. The wait's own failure is kept.
-    private static AssertionError explained(AssertionError failed, Supplier<String> message) {
+    static AssertionError explained(AssertionError failed, Supplier<String> message) {
         try {
             return new AssertionError(message.get(), failed);
         } catch (RuntimeException | Error e) {
