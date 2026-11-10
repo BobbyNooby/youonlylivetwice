@@ -5,6 +5,7 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveNotice;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
@@ -795,6 +796,53 @@ public class GraveDeathGameTests {
             BodyTestKit.cleanUp(helper, owner, bodiesBefore);
         }
         helper.succeed();
+    }
+
+    // The kick tells a locked-out player where their grave is, so the respawn after the lockout doesn't tell them again.
+    // The notice is set the way a death sets it, for a grave record far from its death spot, so the default would tell;
+    // then the lockout's own record of the death kicks, and a revive lets the player back.
+    @GameTest(maxTicks = 20)
+    public void kickedPlayerIsNotToldAgainAtTheRespawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "KickedOnce", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        GraveStore store = GraveStore.get(server);
+        List<Grave> made = new ArrayList<>();
+        Runnable cleanUp = () -> {
+            made.forEach(grave -> store.remove(grave.id()));
+            leaveAndRemoveGraves(helper, owner);
+        };
+        boolean waiting = false;
+        try {
+            assertDefaultTelling(helper);
+            BlockPos at = new BlockPos(30000, 70, 30000);
+            Grave grave = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(100)),
+                    System.currentTimeMillis());
+            GraveNotice.tellAtRespawn(owner, grave.id());
+            DeathLockout.recordDeath(player);
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(owner) == null, "the player was not kicked");
+                    String reason = LockoutGameTests.disconnectReason(player);
+                    helper.assertTrue(reason.endsWith("\n" + graveLine(grave)), "kick reason: " + reason);
+                    helper.assertValueEqual(DeathLockout.revive(owner, name, "test"), DeathLockout.ReviveResult.REVIVED, "the revive");
+                    ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
+                    respawnBesideTest(helper, back);
+                    ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+                    helper.assertValueEqual(graveLines(respawned), List.of(), "chat at the respawn after the lockout");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // A way back from the End respawns a living player, not a dead one, so it tells nothing. A dead player can't take
