@@ -31,6 +31,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.config.Property;
 
 import java.io.IOException;
@@ -392,22 +393,25 @@ public class OfflineGameTests {
         return item;
     }
 
-    // Every message YOLT logs while the action runs
+    // Every message YOLT logs while the action runs. The appender joins the config YOLT's logger already uses, and
+    // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console.
     private static List<String> yoltLog(Runnable action) {
-        Logger logger = (Logger) LogManager.getLogger(Yolt.MOD_ID);
+        LoggerConfig config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
         List<String> lines = new CopyOnWriteArrayList<>();
         AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
             @Override
             public void append(LogEvent event) {
-                lines.add(event.getMessage().getFormattedMessage());
+                if (Yolt.MOD_ID.equals(event.getLoggerName())) {
+                    lines.add(event.getMessage().getFormattedMessage());
+                }
             }
         };
         appender.start();
-        logger.addAppender(appender);
+        config.addAppender(appender, null, null);
         try {
             action.run();
         } finally {
-            logger.removeAppender(appender);
+            config.removeAppender(appender.getName());
             appender.stop();
         }
         return lines;
