@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.damagesource.DamageSource;
@@ -44,7 +45,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 // The scenes stand on the structure's barrier floor. Bodies are only switched on while the body spawns, and
 // mobsAttack is on by default. A test that holds a switch or the world clock across ticks runs in a batch of its own.
@@ -69,7 +70,12 @@ public class BodyMobGameTests {
     // Spec 11.2 warns a mob may need re-aiming every tick, so this shows a zombie walk up and hit
     @GameTest(maxTicks = 300, environment = MIDNIGHT)
     public void zombieAttacksBody(GameTestHelper helper) {
-        hurtsBody(helper, "Hunted", spawned -> spawned.add(helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY)));
+        hurtsBody(helper, "Hunted", spawned -> {
+            Mob zombie = helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY);
+            spawned.add(zombie);
+            return zombie;
+        }, (zombie, body) -> helper.assertTrue(body.getLastHurtByMob() == zombie,
+                "the body was last hurt by " + body.getLastHurtByMob() + ", not the zombie"));
     }
 
     @GameTest(maxTicks = 200, environment = MOBS_IGNORE)
@@ -159,6 +165,12 @@ public class BodyMobGameTests {
             Creeper creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, FOUR_AWAY);
             spawned.add(creeper);
             creeper.ignite();
+            return creeper;
+        }, (creeper, body) -> {
+            // The creeper is gone once it blows up, so it is the blast's own source that names it
+            DamageSource hurtBy = body.getLastDamageSource();
+            helper.assertTrue(hurtBy != null && hurtBy.is(DamageTypeTags.IS_EXPLOSION) && hurtBy.getEntity() == creeper,
+                    "the body was last hurt by " + hurtBy + ", not the creeper's blast");
         });
     }
 
@@ -377,8 +389,10 @@ public class BodyMobGameTests {
                 .toList();
     }
 
-    // Succeeds once the body has lost health. Cleans up then, or just before a timeout.
-    private static void hurtsBody(GameTestHelper helper, String name, Consumer<List<Entity>> spawnMobs) {
+    // Succeeds once the body has lost health and hurtBy finds the spawned mob did it. Cleans up then, or just before a
+    // timeout.
+    private static void hurtsBody(GameTestHelper helper, String name, Function<List<Entity>, Mob> spawnMob,
+                                  BiConsumer<Mob, Mannequin> hurtBy) {
         List<Entity> spawned = new ArrayList<>();
         UUID owner = null;
         boolean waiting = false;
@@ -386,11 +400,12 @@ public class BodyMobGameTests {
             ServerPlayer player = join(helper, name);
             owner = player.getUUID();
             Mannequin body = leaveBody(helper, player);
-            spawnMobs.accept(spawned);
+            Mob mob = spawnMob.apply(spawned);
             UUID bodyOwner = owner;
             helper.runBeforeTestEnd(() -> cleanUp(helper, bodyOwner, spawned));
             helper.succeedWhen(() -> {
                 helper.assertTrue(body.getHealth() < body.getMaxHealth(), "the body has not been hurt");
+                hurtBy.accept(mob, body);
                 cleanUp(helper, bodyOwner, spawned);
             });
             waiting = true;

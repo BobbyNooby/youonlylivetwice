@@ -41,6 +41,7 @@ import net.minecraft.server.players.SleepStatus;
 import net.minecraft.server.waypoints.ServerWaypointManager;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -476,17 +477,14 @@ public class PlayerBodyGameTests {
             }
 
             BodyExpiry.tick(server);
-            int first = expiredOf(store, owners);
-            helper.assertTrue(first <= BodyExpiry.MAX_PER_PASS, "one pass removed " + first + " bodies");
+            helper.assertValueEqual(expiredOf(store, owners), BodyExpiry.MAX_PER_PASS, "bodies the first pass removed");
             BodyExpiry.tick(server);
-            helper.assertTrue(expiredOf(store, owners) > first, "the next pass removed no more");
+            helper.assertValueEqual(expiredOf(store, owners), owners.size(), "bodies removed after the second pass");
             for (ServerPlayer owner : owners) {
-                if (store.byOwner(owner.getUUID()).isEmpty()) {
-                    CompoundTag saved = OfflinePlayerData.load(server, owner.nameAndId()).orElseThrow();
-                    helper.assertValueEqual(saved.read(ServerPlayer.SavedPosition.MAP_CODEC)
-                            .flatMap(ServerPlayer.SavedPosition::position), Optional.of(movedTo.get(owner.getUUID())),
-                            "saved position");
-                }
+                CompoundTag saved = OfflinePlayerData.load(server, owner.nameAndId()).orElseThrow();
+                helper.assertValueEqual(saved.read(ServerPlayer.SavedPosition.MAP_CODEC)
+                        .flatMap(ServerPlayer.SavedPosition::position), Optional.of(movedTo.get(owner.getUUID())),
+                        "saved position");
             }
         } finally {
             Settings.get().bodies = before;
@@ -648,18 +646,29 @@ public class PlayerBodyGameTests {
     }
 
     // A mannequin's death says nothing, and a player body's message would name its offline owner to everyone. Its
-    // death also has to leave the level's players, where a dead body would go on counting for spawning.
+    // death also has to leave the level's players, where a dead body would go on counting for spawning. A normal
+    // player dies the same way first, to show the listener does get a death message.
     @GameTest(maxTicks = 60, environment = PLAYER_BODY)
     public void playerBodyDeathSaysNothingAndLeaves(GameTestHelper helper) {
         helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
         ServerPlayer player = join(helper, "Silent", ON_FLOOR);
         UUID owner = player.getUUID();
         TestPlayers.Recording listener = TestPlayers.joinRecording(helper, "Listener", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        ServerPlayer mortal = join(helper, "Mortal", new BlockPos(5, 1, 1));
         YoltConfig.HideSection hide = Settings.get().hide;
         boolean messagesHidden = hide.gameMessages;
         YoltConfig.BodiesSection before = usePlayerBodies();
         boolean waiting = false;
         try {
+            TestPlayers.markLoaded(mortal);
+            hide.gameMessages = false;
+            mortal.kill(helper.getLevel());
+            hide.gameMessages = messagesHidden;
+            helper.assertTrue(mortal.isDeadOrDying(), "the normal player did not die");
+            helper.assertTrue(listener.messages.stream().anyMatch(PlayerBodyGameTests::isDeathMessage),
+                    "a normal player's death message did not reach the listener");
+            listener.messages.clear();
+
             PlayerBody body = leaveBody(helper, player);
             // Off, so a death message would reach every player rather than only admins
             hide.gameMessages = false;
@@ -688,6 +697,8 @@ public class PlayerBodyGameTests {
             if (helper.getLevel().getServer().getPlayerList().getPlayer(listener.getUUID()) != null) {
                 TestPlayers.leave(listener);
             }
+            // Dead, so its logout leaves no body; its death's kick finds it gone
+            cleanUp(helper, mortal.getUUID(), before);
             if (!waiting) {
                 cleanUp(helper, owner, before);
             }
@@ -770,6 +781,9 @@ public class PlayerBodyGameTests {
                     if (movable) {
                         helper.assertTrue(body.getY() < startY, "movable body did not fall");
                         helper.assertTrue(body.getHealth() < 20.0F, "body took no fall damage");
+                        DamageSource hurtBy = body.getLastDamageSource();
+                        helper.assertTrue(hurtBy != null && hurtBy.is(DamageTypes.FALL),
+                                "body was last hurt by " + hurtBy + ", not a fall");
                     } else {
                         helper.assertValueEqual(body.getY(), startY, "immovable body's height");
                     }

@@ -80,10 +80,13 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // The same player is refused first, with the switch on, so the login below is let in by the switch alone
     @GameTest(environment = LOGIN_CHECK)
     public void lockoutOffLetsEveryoneIn(GameTestHelper helper) {
         UUID uuid = UUID.randomUUID();
         DeathLockout.recordDeath(uuid, "Ghost");
+        helper.assertTrue(refusedForLockout(loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Ghost"))),
+                "player not refused with the lockout on");
         boolean before = Settings.get().deathLockout.enabled;
         Settings.get().deathLockout.enabled = false;
         try {
@@ -111,7 +114,7 @@ public class LockoutGameTests {
 
     // A closed store makes every query throw, like a failing database would
     @GameTest
-    public void storeFailureLetsPlayerInAndLogs(GameTestHelper helper) throws java.io.IOException {
+    public void storeFailureLetsPlayerIn(GameTestHelper helper) throws java.io.IOException {
         UUID uuid = UUID.randomUUID();
         java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("yolt-broken-store");
         DeathStore broken = DeathStore.open(dir.resolve("broken.db"));

@@ -20,6 +20,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -633,6 +635,9 @@ public class BodyBehaviourGameTests {
                     if (movable) {
                         helper.assertTrue(body.getY() < startY, "movable body did not fall");
                         helper.assertTrue(body.getHealth() < 20.0F, "body took no fall damage");
+                        DamageSource hurtBy = body.getLastDamageSource();
+                        helper.assertTrue(hurtBy != null && hurtBy.is(DamageTypes.FALL),
+                                "body was last hurt by " + hurtBy + ", not a fall");
                     } else {
                         helper.assertValueEqual(body.getY(), startY, "immovable body's height");
                     }
