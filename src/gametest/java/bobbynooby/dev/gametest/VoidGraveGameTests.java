@@ -67,7 +67,7 @@ public class VoidGraveGameTests {
             dig(level, shaft, before);
             BlockPos result = GravePlacement.find(level, belowWorld(level, shaft), store(level));
             // Straight beside the shaft is the nearest land; a corner of it is further
-            helper.assertValueEqual(flatDistanceSqr(result, shaft), 1, "grave's distance from the shaft, squared");
+            helper.assertValueEqual(flatDistanceSqr(result, shaft), 1L, "grave's distance from the shaft, squared");
             helper.assertValueEqual(result.getY(), shaft.getY(), "grave height");
             assertOnSolid(helper, level, result);
         } finally {
@@ -93,7 +93,7 @@ public class VoidGraveGameTests {
             helper.assertTrue(Math.abs(result.getX() - middle.getX()) > 1 || Math.abs(result.getZ() - middle.getZ()) > 1,
                     "grave in the hole at " + result);
             // One of the four floor blocks straight out from the middle; the hole's corners are further
-            helper.assertValueEqual(flatDistanceSqr(result, middle), 4, "grave's distance from the hole's middle, squared");
+            helper.assertValueEqual(flatDistanceSqr(result, middle), 4L, "grave's distance from the hole's middle, squared");
             helper.assertValueEqual(result.getY(), middle.getY(), "grave height");
             assertOnSolid(helper, level, result);
         } finally {
@@ -150,7 +150,7 @@ public class VoidGraveGameTests {
             BlockPos result = GravePlacement.find(level, belowWorld(level, shaft), store(level));
             helper.assertTrue(result.getY() < roofY, "grave on or in the roof at " + result);
             helper.assertValueEqual(result.getY(), shaft.getY(), "grave height");
-            helper.assertValueEqual(flatDistanceSqr(result, shaft), 1, "grave's distance from the shaft, squared");
+            helper.assertValueEqual(flatDistanceSqr(result, shaft), 1L, "grave's distance from the shaft, squared");
             assertOnSolid(helper, level, result);
         } finally {
             putBack(level, before);
@@ -172,7 +172,7 @@ public class VoidGraveGameTests {
         try {
             emptyLoneChunk(helper, end, chunk, before);
             grave = graveFor(end, death);
-            int fromPodium = flatDistanceSqr(grave.pos(), podium);
+            long fromPodium = flatDistanceSqr(grave.pos(), podium);
             helper.assertTrue(fromPodium >= 13, "grave inside the exit portal's ring at " + grave.pos());
             helper.assertTrue(fromPodium <= 49, "grave not beside the exit portal: " + grave.pos());
             assertOnSolid(helper, end, grave.pos());
@@ -216,7 +216,7 @@ public class VoidGraveGameTests {
             }
             BlockPos result = withoutLastResort(helper, () -> GravePlacement.find(nether, death, store(nether)));
             helper.assertTrue(result.getY() < roofY, "grave on or in the roof at " + result);
-            helper.assertValueEqual(flatDistanceSqr(result, BlockPos.ZERO), 1, "grave's distance from 0, 0, squared");
+            helper.assertValueEqual(flatDistanceSqr(result, BlockPos.ZERO), 1L, "grave's distance from 0, 0, squared");
             helper.assertValueEqual(result.getY(), floorY, "grave height");
             assertOnSolid(helper, nether, result);
         } finally {
@@ -312,7 +312,7 @@ public class VoidGraveGameTests {
 
             helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             Grave grave = onlyGrave(helper, level, owner);
-            helper.assertValueEqual(flatDistanceSqr(grave.pos(), shaft), 1, "grave's distance from the shaft, squared");
+            helper.assertValueEqual(flatDistanceSqr(grave.pos(), shaft), 1L, "grave's distance from the shaft, squared");
             helper.assertValueEqual(grave.pos().getY(), shaft.getY(), "grave height");
             helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
@@ -413,7 +413,7 @@ public class VoidGraveGameTests {
             helper.assertTrue(result.getX() < edge.getX() - 3 || result.getX() >= edge.getX()
                     || Math.abs(result.getZ() - edge.getZ()) > 1, "grave in the hole at " + result);
             // Two out from the hole's inside edge, where the death was moved in to
-            helper.assertValueEqual(flatDistanceSqr(result, edge.west()), 4, "grave's distance from the hole's edge, squared");
+            helper.assertValueEqual(flatDistanceSqr(result, edge.west()), 4L, "grave's distance from the hole's edge, squared");
             helper.assertValueEqual(result.getY(), edge.getY(), "grave height");
             assertOnSolid(helper, level, result);
         } finally {
@@ -636,11 +636,11 @@ public class VoidGraveGameTests {
         return made.getFirst();
     }
 
-    // Throws past what an int holds, so a grave thrown far off fails the test rather than wrapping round to near
-    static int flatDistanceSqr(BlockPos a, BlockPos b) {
+    // In longs: the tests compare spots millions apart, whose distance squared an int can't hold
+    static long flatDistanceSqr(BlockPos a, BlockPos b) {
         long dx = a.getX() - b.getX();
         long dz = a.getZ() - b.getZ();
-        return Math.toIntExact(dx * dx + dz * dz);
+        return dx * dx + dz * dz;
     }
 
     // The placement, failing the test if it fell back on the last resort, which logs why

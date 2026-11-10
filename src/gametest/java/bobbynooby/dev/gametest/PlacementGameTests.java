@@ -177,7 +177,7 @@ public class PlacementGameTests {
             end.setBlock(top.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
             grave = VoidGraveGameTests.withoutLastResort(helper, () -> VoidGraveGameTests.graveFor(end, top));
             BlockPos at = grave.pos();
-            helper.assertValueEqual(VoidGraveGameTests.flatDistanceSqr(at, top), 11 * 11,
+            helper.assertValueEqual(VoidGraveGameTests.flatDistanceSqr(at, top), 11L * 11,
                     "grave's distance from the pillar's centre, squared, at " + at);
             helper.assertValueEqual(at.getY(), groundY, "grave height");
             VoidGraveGameTests.assertOnSolid(helper, end, at);
