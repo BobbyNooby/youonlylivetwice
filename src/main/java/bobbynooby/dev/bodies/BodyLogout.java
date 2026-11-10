@@ -27,7 +27,7 @@ public final class BodyLogout {
         MinecraftServer server = player.level().getServer();
         BodyStore store = BodyStore.get(server);
         // Out again before the old body was taken back: it goes, so there is never a second one
-        store.byOwner(player.getUUID()).ifPresent(old -> discard(server, old));
+        Optional<BodyRecord> old = store.byOwner(player.getUUID());
 
         LivingEntity body = cfg.type == YoltConfig.BodyType.PLAYER
                 ? PlayerBody.spawn(player, cfg)
@@ -38,6 +38,8 @@ public final class BodyLogout {
                 : PropertyMap.EMPTY;
         store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
                 System.currentTimeMillis(), false, BodySnapshot.of(body), skin));
+        // Only once the new body stands, so a spawn that fails leaves the old one
+        old.ifPresent(record -> discard(server, record));
         return Optional.of(body);
     }
 
