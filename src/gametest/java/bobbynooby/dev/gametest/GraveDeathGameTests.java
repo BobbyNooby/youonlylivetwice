@@ -17,6 +17,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -674,6 +676,115 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // The default tells in chat only for a grave that went far: a death 20 up has its grave on the floor, one just above
+    // the floor has it where the player died. The lockout is off for the deaths only.
+    @GameTest(skyAccess = true)
+    public void whenMovedTellsInChatOnlyForAFarGrave(GameTestHelper helper) {
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean lockoutBefore = lockout.enabled;
+        ServerPlayer far = TestPlayers.join(helper, "MovedFar", GameType.SURVIVAL, new BlockPos(3, 20, 3));
+        ServerPlayer near = TestPlayers.join(helper, "MovedNear", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            assertDefaultTelling(helper);
+            ServerPlayer farBack;
+            ServerPlayer nearBack;
+            lockout.enabled = false;
+            try {
+                farBack = dieAndRespawn(helper, far);
+                nearBack = dieAndRespawn(helper, near);
+            } finally {
+                lockout.enabled = lockoutBefore;
+            }
+            Grave farGrave = onlyGrave(helper, far);
+            helper.assertValueEqual(farGrave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "far grave, 20 below the death");
+            helper.assertValueEqual(graveLines(farBack), List.of(graveLine(farGrave)), "chat for the far grave");
+            helper.assertValueEqual(onlyGrave(helper, near).pos(), helper.absolutePos(new BlockPos(1, 0, 1)), "near grave, just below the death");
+            helper.assertValueEqual(graveLines(nearBack), List.of(), "chat for the near grave");
+        } finally {
+            leaveAndRemoveGraves(helper, far.getUUID());
+            leaveAndRemoveGraves(helper, near.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // The kick and the login refusal name the death's grave by the death's time. They tell for a grave in another
+    // dimension than the death, even at the same spot; by the distance as set; and name a dimension that isn't one of
+    // the three by its id. The graves are records, each made after the death is recorded, within its minute. The test
+    // server has no dimension of its own, so that grave is a record in a dimension with no level. The distance goes back
+    // in the same tick.
+    @GameTest
+    public void refusalTellsByDimensionAndDistance(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int distanceBefore = graves.tellLocationDistance;
+        UUID owner = UUID.randomUUID();
+        String name = "Elsewhere";
+        GraveStore store = GraveStore.get(server);
+        BlockPos at = new BlockPos(30000, 70, 30000);
+        String overworldLine = "Your grave is at 30000, 70, 30000 in the Overworld.";
+        List<Grave> made = new ArrayList<>();
+        try {
+            assertDefaultTelling(helper);
+            DeathLockout.recordDeath(owner, name);
+
+            Grave nether = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at));
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of(overworldLine),
+                    "grave line for a death in the Nether at the same spot");
+            store.remove(nether.id());
+
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(20)));
+            graves.tellLocationDistance = 30;
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(),
+                    "grave line for a grave 20 from the death, told past 30");
+            graves.tellLocationDistance = 10;
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of(overworldLine),
+                    "grave line for a grave 20 from the death, told past 10");
+            graves.tellLocationDistance = distanceBefore;
+            made.forEach(grave -> store.remove(grave.id()));
+
+            ResourceKey<Level> modded = ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "elsewhere"));
+            putRecord(store, made, owner, name, modded, at, GlobalPos.of(Level.OVERWORLD, at));
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name),
+                    Optional.of("Your grave is at 30000, 70, 30000 in you-only-live-twice-gametest:elsewhere."),
+                    "grave line for a grave in a dimension of a mod's");
+        } finally {
+            graves.tellLocationDistance = distanceBefore;
+            made.forEach(grave -> store.remove(grave.id()));
+        }
+        helper.succeed();
+    }
+
+    // A way back from the End respawns a living player, not a dead one, so it tells nothing. A dead player can't take
+    // one, so the test makes it: a death owed a line, then the End's respawn, then the death's own. The lockout is off
+    // for the death only.
+    @GameTest(skyAccess = true)
+    public void wayBackFromTheEndTellsNothing(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean lockoutBefore = lockout.enabled;
+        ServerPlayer player = TestPlayers.join(helper, "FromTheEnd", GameType.SURVIVAL, new BlockPos(3, 20, 3));
+        try {
+            assertDefaultTelling(helper);
+            respawnBesideTest(helper, player);
+            lockout.enabled = false;
+            try {
+                kill(helper, player);
+            } finally {
+                lockout.enabled = lockoutBefore;
+            }
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "grave, 20 below the death");
+            ServerPlayer fromEnd = server.getPlayerList().respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION);
+            helper.assertValueEqual(graveLines(fromEnd), List.of(), "chat after the way back from the End");
+            ServerPlayer back = server.getPlayerList().respawn(fromEnd, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(graveLines(back), List.of(graveLine(grave)), "chat at the death's respawn");
+        } finally {
+            leaveAndRemoveGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
     // Killed, then back through the death screen's respawn at a point set beside the test, so no random spot is searched
     private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
         respawnBesideTest(helper, player);
@@ -690,6 +801,16 @@ public class GraveDeathGameTests {
     private static void assertDefaultTelling(GameTestHelper helper) {
         helper.assertValueEqual(Settings.get().graves.tellLocation, YoltConfig.TellLocation.WHEN_MOVED, "tellLocation");
         helper.assertValueEqual(Settings.get().graves.tellLocationDistance, 16, "tellLocationDistance");
+    }
+
+    // A grave record only, made now, with no head in the world
+    private static Grave putRecord(GraveStore store, List<Grave> made, UUID owner, String name, ResourceKey<Level> dimension,
+                                   BlockPos pos, GlobalPos died) {
+        Grave grave = new Grave(UUID.randomUUID(), owner, name, ResolvableProfile.createUnresolved(name), dimension, pos,
+                List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis(), died);
+        store.put(grave);
+        made.add(grave);
+        return grave;
     }
 
     // The grave line of the refusal the owner gets now, the kick's text too
