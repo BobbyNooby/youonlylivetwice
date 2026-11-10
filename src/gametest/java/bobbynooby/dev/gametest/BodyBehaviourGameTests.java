@@ -56,6 +56,9 @@ import java.util.UUID;
 // Like the other body tests: each one runs with the default body switches (bodies on) and puts the server's own
 // back in the same tick. The ones that wait only need the switches while the body spawns, or until its item drops.
 public class BodyBehaviourGameTests {
+    // Where a test player joins inside its block: the middle of the bottom
+    private static final Vec3 BLOCK_CENTRE = new Vec3(0.5, 0.0, 0.5);
+
     @GameTest
     public void armourWearsWhenHit(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Armour", new BlockPos(1, 1, 1));
@@ -399,14 +402,24 @@ public class BodyBehaviourGameTests {
     // drops stays at its feet rather than falling, since lava or the void could be under it.
     @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, maxTicks = 60)
     public void bodyItemOverAirStaysPut(GameTestHelper helper) {
-        assertStaysPut(helper, dropAtExpiry(helper, "Floating", new BlockPos(1, 3, 1), false));
+        assertStaysPut(helper, dropAtExpiry(helper, "Floating", new BlockPos(1, 3, 1), BLOCK_CENTRE, false));
+    }
+
+    // A body stands on a fence top 0.1 from the post's side, so the body (0.6 wide) still overlaps the post while
+    // the item (0.25 wide) misses it. The block under the body is the fence all the same, so only a check on the
+    // item's own box keeps it from falling past the post.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, maxTicks = 60)
+    public void bodyItemBesideFencePostStaysPut(GameTestHelper helper) {
+        // A lone fence is only its post, which spans 0.375 to 0.625 of the block and stands 1.5 high
+        helper.setBlock(new BlockPos(1, 2, 1), Blocks.OAK_FENCE);
+        assertStaysPut(helper, dropAtExpiry(helper, "Railing", new BlockPos(1, 3, 1), new Vec3(0.1, 0.5, 0.5), true));
     }
 
     // On solid ground the item falls as vanilla's drops do, which only puts it on the floor
     @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void bodyItemOverStoneKeepsGravity(GameTestHelper helper) {
         helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
-        ItemEntity drop = dropAtExpiry(helper, "Grounded", new BlockPos(1, 1, 1), true);
+        ItemEntity drop = dropAtExpiry(helper, "Grounded", new BlockPos(1, 1, 1), BLOCK_CENTRE, true);
         try {
             helper.assertFalse(drop.isNoGravity(), "the chestplate dropped on stone has no gravity");
         } finally {
@@ -440,10 +453,12 @@ public class BodyBehaviourGameTests {
         }
     }
 
-    // The no-free-slot expiry above, for a body standing at the given spot. Returns the one chestplate it dropped; the
-    // switches, the body and its record are gone again by then.
-    private static ItemEntity dropAtExpiry(GameTestHelper helper, String name, BlockPos at, boolean movable) {
+    // The no-free-slot expiry above, for a body left at inBlock, an offset from the corner of the block at. Returns
+    // the one chestplate it dropped; the switches, the body and its record are gone again by then.
+    private static ItemEntity dropAtExpiry(GameTestHelper helper, String name, BlockPos at, Vec3 inBlock, boolean movable) {
         ServerPlayer player = join(helper, name, at);
+        // From the absolute corner: vanilla's relativePos would turn an unrotated test's position half round
+        player.snapTo(Vec3.atLowerCornerOf(helper.absolutePos(at)).add(inBlock));
         UUID owner = player.getUUID();
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.BodiesSection before = useDefaultBodies();
