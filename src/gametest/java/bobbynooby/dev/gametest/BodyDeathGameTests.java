@@ -5,6 +5,8 @@ import bobbynooby.dev.bodies.BodyChunks;
 import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
+import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
@@ -46,6 +48,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -281,6 +284,117 @@ public class BodyDeathGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // Vanilla /kill leaves both kinds of body standing and says how many it left, in one line; what else it hit dies,
+    // and only that is counted. The command runs from a spot under 2 blocks from all three, and far from any other
+    // test's entities. Every switch goes back in the same tick.
+    @GameTest
+    public void vanillaKillSkipsBodiesWithHint(GameTestHelper helper) {
+        ServerPlayer first = join(helper, "KillSkipM");
+        helper.setBlock(new BlockPos(3, 0, 1), Blocks.STONE);
+        ServerPlayer second = TestPlayers.join(helper, "KillSkipP", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        UUID mannequinOwner = first.getUUID();
+        UUID playerBodyOwner = second.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(1, 1, 3));
+        try {
+            helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies by default");
+            Mannequin mannequin = leaveBody(helper, first);
+            Settings.get().bodies.type = YoltConfig.BodyType.PLAYER;
+            PlayerBody playerBody = BodyTestKit.leavePlayerBody(helper, second);
+
+            helper.assertValueEqual(killFrom(helper, new BlockPos(2, 1, 2), "kill @e[distance=..2.5]"),
+                    List.of("Killed " + zombie.getDisplayName().getString(),
+                            "Skipped 2 offline player bodies. Use /yolt kill <player> to kill one."), "output of /kill");
+            helper.assertTrue(zombie.isDeadOrDying(), "the zombie /kill hit is alive");
+            helper.assertFalse(mannequin.isDeadOrDying() || mannequin.isRemoved(), "the mannequin body died");
+            helper.assertFalse(playerBody.isDeadOrDying() || playerBody.isRemoved(), "the player body died");
+
+            // A body alone: nothing dies, and the line says "body"
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill @e[distance=..0.5]"),
+                    List.of("Killed 0 entities", "Skipped 1 offline player body. Use /yolt kill <player> to kill one."),
+                    "output of /kill for one body");
+            helper.assertFalse(mannequin.isDeadOrDying() || mannequin.isRemoved(), "the mannequin body died to the second /kill");
+            for (UUID owner : List.of(mannequinOwner, playerBodyOwner)) {
+                helper.assertTrue(LockoutGameTests.refusalText(owner).isEmpty(), "an owner was locked out");
+                helper.assertTrue(gravesOf(helper, owner).isEmpty(), "an owner got a grave");
+                helper.assertTrue(store(helper).byOwner(owner).isPresent(), "a body record went");
+            }
+        } finally {
+            zombie.discard();
+            cleanUp(helper, mannequinOwner, before);
+            BodyTestKit.removeBodies(helper, playerBodyOwner);
+            BodyTestKit.removeGraves(helper, playerBodyOwner);
+        }
+        helper.succeed();
+    }
+
+    // With the switch off, vanilla /kill kills a body like anything else, and its owner dies with it
+    @GameTest
+    public void vanillaKillSwitchOffKillsBodies(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "KillOff");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            Mannequin body = leaveBody(helper, player);
+            Settings.get().bodies.ignoreVanillaKill = false;
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill @e[distance=..0.5]"),
+                    List.of("Killed " + body.getDisplayName().getString()), "output of /kill");
+            helper.assertTrue(body.isDeadOrDying(), "the body /kill hit is alive");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.DIAMOND), 1, "diamonds in the graves");
+            helper.assertTrue(LockoutGameTests.refusalText(owner).startsWith("You died"), "the owner was not locked out");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Only the command leaves bodies alone: a body below the world still dies of the void, and its owner with it. The
+    // switches go back before the wait, since a body's death counts with bodies off too. At 1 health the first tick of
+    // void damage kills it, whatever the damage cooldown.
+    @GameTest(maxTicks = 20)
+    public void voidStillKillsBody(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "VoidBody");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Mannequin body;
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            body = leaveBody(helper, player);
+        } finally {
+            Settings.get().bodies = before;
+        }
+        boolean waiting = false;
+        try {
+            helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies");
+            body.setHealth(1.0F);
+            body.teleportTo(body.getX(), helper.getLevel().getMinY() - 70, body.getZ());
+            helper.runAfterDelay(10, () -> {
+                try {
+                    helper.assertTrue(body.isDeadOrDying(), "the body is still alive below the world");
+                    helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.DIAMOND), 1, "diamonds in the graves");
+                    helper.assertTrue(LockoutGameTests.refusalText(owner).startsWith("You died"), "the owner was not locked out");
+                } finally {
+                    cleanUp(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp(helper, owner);
+            }
+        }
+    }
+
+    // Runs a command as the console from the bottom middle of a block of the test, and returns what it said back
+    private static List<String> killFrom(GameTestHelper helper, BlockPos relativePos, String command) {
+        return SkinGameTests.console(helper.getLevel().getServer().createCommandSourceStack().withLevel(helper.getLevel())
+                .withPosition(Vec3.atBottomCenterOf(helper.absolutePos(relativePos))), command);
     }
 
     // A pending record was taken over already, so its body is a stale copy and its death means nothing
