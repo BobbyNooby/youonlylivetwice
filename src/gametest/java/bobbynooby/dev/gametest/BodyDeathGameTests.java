@@ -20,15 +20,21 @@ import com.mojang.authlib.properties.PropertyMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -37,6 +43,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -57,6 +64,9 @@ import java.util.UUID;
 public class BodyDeathGameTests {
     // A batch of its own: the test turns show_death_messages off, which every death in the batch would read
     private static final String DEATH_MESSAGES = "you-only-live-twice-gametest:death_messages";
+    // In the test datapack: adds 5 XP to any kill made with it in the main hand
+    private static final ResourceKey<Enchantment> MOB_EXPERIENCE = ResourceKey.create(Registries.ENCHANTMENT,
+            Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "mob_experience"));
 
     // With death messages hidden the death screen is empty, so the lockout names no killer either: not for a player,
     // and not for a body. The first pair, with the rule on, shows the killer does come through otherwise.
@@ -199,23 +209,38 @@ public class BodyDeathGameTests {
     }
 
     // The body wears copies of the saved gear, so anything it dropped would exist twice. Vanilla's mannequin drops
-    // nothing, so the test datapack gives mannequins a diamond, and a plain one dies first to show the loot is there.
+    // nothing and has no XP, so the test datapack gives mannequins a diamond, and the killer's sword an enchantment that
+    // gives XP for any kill. A plain mannequin dies first to show both are there.
     @GameTest
     public void bodyDeathDropsNothing(GameTestHelper helper) {
         ServerPlayer player = join(helper, "NoDrops");
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = useDefaultBodies();
         Mannequin plain = null;
+        ServerPlayer killer = null;
         try {
+            killer = TestPlayers.join(helper, "XpSlayer", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+            ItemStack sword = new ItemStack(Items.IRON_SWORD);
+            sword.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(MOB_EXPERIENCE),
+                    1);
+            killer.setItemSlot(EquipmentSlot.MAINHAND, sword);
+            // Made by a player, so the XP counts, and past any armour, so the body's chestplate doesn't wear
+            DamageSource kill = new DamageSource(helper.getLevel().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE)
+                    .getOrThrow(DamageTypes.GENERIC_KILL), killer);
+
             plain = helper.spawn(EntityTypes.MANNEQUIN, new BlockPos(5, 1, 5));
             AABB aroundPlain = new AABB(plain.blockPosition()).inflate(2.0);
-            plain.kill(helper.getLevel());
+            plain.hurtServer(helper.getLevel(), kill, Float.MAX_VALUE);
+            helper.assertTrue(plain.isDeadOrDying(), "the plain mannequin did not die");
             List<ItemEntity> loot = helper.getLevel().getEntities(EntityTypes.ITEM, aroundPlain, Entity::isAlive);
             helper.assertValueEqual(loot.size(), 1, "item entities the plain mannequin dropped");
             helper.assertTrue(ItemStack.matches(loot.get(0).getItem(), new ItemStack(Items.DIAMOND)),
                     "the plain mannequin's drop: " + loot.get(0).getItem());
-            // Gone before the body dies, so the check below sees only the body's drops
+            List<ExperienceOrb> orbs = helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, aroundPlain, Entity::isAlive);
+            helper.assertFalse(orbs.isEmpty(), "the plain mannequin dropped no XP");
+            // Gone before the body dies, so the checks below see only the body's drops
             loot.forEach(Entity::discard);
+            orbs.forEach(Entity::discard);
 
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             // The main hand is the selected hotbar slot, so the diamond goes in after it
@@ -223,7 +248,8 @@ public class BodyDeathGameTests {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             Mannequin body = leaveBody(helper, player);
             AABB around = new AABB(body.blockPosition()).inflate(4.0);
-            body.kill(helper.getLevel());
+            body.hurtServer(helper.getLevel(), kill, Float.MAX_VALUE);
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
 
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, Entity::isAlive).isEmpty(), "items dropped");
             // The owner had no XP, so any orb would be the body's own
@@ -238,11 +264,16 @@ public class BodyDeathGameTests {
             helper.assertValueEqual(GraveAsserts.count(saved, Items.IRON_CHESTPLATE), 0, "chestplates left in the save");
         } finally {
             if (plain != null) {
-                helper.getLevel().getEntities(EntityTypes.ITEM, new AABB(plain.blockPosition()).inflate(2.0), Entity::isAlive)
-                        .forEach(Entity::discard);
+                AABB aroundPlain = new AABB(plain.blockPosition()).inflate(2.0);
+                helper.getLevel().getEntities(EntityTypes.ITEM, aroundPlain, Entity::isAlive).forEach(Entity::discard);
+                helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, aroundPlain, Entity::isAlive).forEach(Entity::discard);
                 plain.discard();
             }
             cleanUp(helper, owner, before);
+            // After the switches went back, so this logout leaves no body
+            if (killer != null) {
+                TestPlayers.leave(killer);
+            }
         }
         helper.succeed();
     }
