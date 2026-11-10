@@ -13,13 +13,16 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class TabHeaderGameTests {
     private static final String TAB_HEADER = "you-only-live-twice-gametest:tab_header";
     private static final String TAB_HEADER_OFF = "you-only-live-twice-gametest:tab_header_off";
+    private static final String TAB_HEADER_ON = "you-only-live-twice-gametest:tab_header_on";
 
     @GameTest
     public void headerEntryRemovedOnLeave(GameTestHelper helper) {
@@ -39,22 +42,34 @@ public class TabHeaderGameTests {
         helper.succeed();
     }
 
-    // Turning the switch on mid-session must also cover players who joined while it was off
-    @GameTest
-    public void headerPickedWithSwitchOff(GameTestHelper helper) {
+    // Turning the switch on mid-session must also cover players who joined while it was off: the header picked at
+    // their join reaches them when the live settings are applied, as /yolt reload and /yolt config do. A batch of its
+    // own, since applying the live settings reaches every online player.
+    @GameTest(environment = TAB_HEADER_ON)
+    public void headerPickedWithSwitchOff(GameTestHelper helper) throws ReflectiveOperationException {
+        MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.HideSection hide = Settings.get().hide;
         boolean before = hide.tabHeader;
-        hide.tabHeader = false;
-        ServerPlayer player;
+        ServerPlayer player = null;
         try {
+            hide.tabHeader = false;
             player = TestPlayers.join(helper, "taboff", GameType.SURVIVAL, BlockPos.ZERO);
+            helper.assertValueEqual(tabListPackets(player).size(), 0, "tab list packets at a join with the switch off");
+            TabHeaders.HeaderFooter picked = picked(player.getUUID());
+            helper.assertTrue(picked != null, "no header picked for a player who joined with the switch off");
+
+            hide.tabHeader = true;
+            LiveSettings.applyAll(server);
+            List<ClientboundTabListPacket> sent = tabListPackets(player);
+            helper.assertValueEqual(sent.size(), 1, "tab list packets after the switch went on");
+            helper.assertValueEqual(sent.get(0).header().getString(), picked.header(), "header after the switch went on");
+            helper.assertValueEqual(sent.get(0).footer().getString(), picked.footer(), "footer after the switch went on");
         } finally {
             hide.tabHeader = before;
-        }
-        try {
-            helper.assertTrue(TabHeaders.has(player.getUUID()), "no header for a player who joined with the switch off");
-        } finally {
-            TestPlayers.leave(player);
+            LiveSettings.applyAll(server);
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
         }
         helper.succeed();
     }
@@ -103,6 +118,13 @@ public class TabHeaderGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // Private and only read here: the header and footer each player was given at their join
+    private static TabHeaders.HeaderFooter picked(UUID uuid) throws ReflectiveOperationException {
+        Field field = TabHeaders.class.getDeclaredField("PLAYER_MAP");
+        field.setAccessible(true);
+        return (TabHeaders.HeaderFooter) ((Map<?, ?>) field.get(null)).get(uuid);
     }
 
     private static List<ClientboundTabListPacket> tabListPackets(ServerPlayer player) {
