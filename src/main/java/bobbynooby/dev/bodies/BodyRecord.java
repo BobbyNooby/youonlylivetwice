@@ -8,13 +8,19 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ExtraCodecs;
+import net.minecraft.world.entity.EquipmentSlot;
 
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * One logged-out player's body: who owns it, which entity stands for it, and its last saved state. A player body also
  * keeps its owner's skin, since it comes back from this record after a restart.
+ * <p>
+ * emptyAtLogout holds the gear slots the owner had empty when they logged out, so the body's were empty too. Only a
+ * dispenser can fill one of those, so an item there is real, not a copy. A record saved before this was kept has
+ * none, so nothing on its body counts as real.
  */
 public record BodyRecord(
         UUID owner,
@@ -24,8 +30,13 @@ public record BodyRecord(
         long loggedOutAt,
         boolean pendingRemoval,
         BodySnapshot snapshot,
-        PropertyMap skin
+        PropertyMap skin,
+        Set<EquipmentSlot> emptyAtLogout
 ) {
+    public BodyRecord {
+        emptyAtLogout = Set.copyOf(emptyAtLogout);
+    }
+
     public static final Codec<BodyRecord> CODEC = RecordCodecBuilder.create(i -> i.group(
             UUIDUtil.CODEC.fieldOf("owner").forGetter(BodyRecord::owner),
             Codec.STRING.fieldOf("owner_name").forGetter(BodyRecord::ownerName),
@@ -41,8 +52,16 @@ public record BodyRecord(
             Codec.BOOL.fieldOf("pending_removal").forGetter(BodyRecord::pendingRemoval),
             BodySnapshot.CODEC.fieldOf("snapshot").forGetter(BodyRecord::snapshot),
             // Optional, so records saved before skins were kept still load
-            ExtraCodecs.PROPERTY_MAP.optionalFieldOf("skin", PropertyMap.EMPTY).forGetter(BodyRecord::skin)
+            ExtraCodecs.PROPERTY_MAP.optionalFieldOf("skin", PropertyMap.EMPTY).forGetter(BodyRecord::skin),
+            EquipmentSlot.CODEC.listOf().<Set<EquipmentSlot>>xmap(Set::copyOf, slots -> slots.stream().sorted().toList())
+                    .optionalFieldOf("empty_at_logout", Set.of()).forGetter(BodyRecord::emptyAtLogout)
     ).apply(i, BodyRecord::new));
+
+    /** A record that counts nothing on its body as real, as one saved before that was kept. */
+    public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
+                      boolean pendingRemoval, BodySnapshot snapshot, PropertyMap skin) {
+        this(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, Set.of());
+    }
 
     /** A record with no skin kept, as for a mannequin, which keeps its own with its chunk. */
     public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
@@ -55,10 +74,10 @@ public record BodyRecord(
     }
 
     public BodyRecord withSnapshot(BodySnapshot snapshot) {
-        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin);
+        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout);
     }
 
     public BodyRecord withPendingRemoval(boolean pendingRemoval) {
-        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin);
+        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout);
     }
 }

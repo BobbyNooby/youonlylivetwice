@@ -34,6 +34,8 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
@@ -43,6 +45,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -166,6 +169,63 @@ public class BodyLifecycleGameTests {
             cleanUp(helper, player, before);
         }
         helper.succeed();
+    }
+
+    // A stale body as above, whose empty chest slot a dispenser filled: that chestplate is real, so clearing the body
+    // must not take it along. It goes into the owner's inventory, never the hand, or with no room drops where the body
+    // stood, for good.
+    @GameTest
+    public void staleBodyGearAddedSinceIsKept(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Restocked", GameType.SURVIVAL);
+        ServerPlayer packed = join(helper, "Packed", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Mannequin old = logOut(helper, player);
+            old.setItemSlot(EquipmentSlot.CHEST, dispensedChestplate());
+            Mannequin fresh = logOut(helper, player);
+            helper.assertTrue(old.isRemoved(), "the old body still stands");
+            helper.assertTrue(fresh.getItemBySlot(EquipmentSlot.CHEST).isEmpty(), "the new body wears the chestplate");
+            Inventory inventory = player.getInventory();
+            int found = -1;
+            for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+                if (inventory.getItem(slot).is(Items.IRON_CHESTPLATE)) {
+                    found = slot;
+                }
+            }
+            helper.assertTrue(found >= 0, "the chestplate is not in the owner's inventory");
+            helper.assertTrue(found != inventory.getSelectedSlot(), "the chestplate went into the owner's hand");
+            helper.assertValueEqual(inventory.getItem(found).getDamageValue(), 7, "chestplate damage");
+
+            for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+                packed.getInventory().setItem(slot, new ItemStack(Items.DIRT));
+            }
+            Mannequin oldPacked = logOut(helper, packed);
+            oldPacked.setItemSlot(EquipmentSlot.CHEST, dispensedChestplate());
+            around = new AABB(oldPacked.blockPosition()).inflate(2.0);
+            logOut(helper, packed);
+            helper.assertTrue(oldPacked.isRemoved(), "the packed player's old body still stands");
+            List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
+                    drop -> drop.getItem().is(Items.IRON_CHESTPLATE));
+            helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the old body");
+            helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped chestplate's age");
+        } finally {
+            if (around != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_CHESTPLATE))
+                        .forEach(Entity::discard);
+            }
+            cleanUp(helper, player, before);
+            cleanUp(helper, packed, before);
+        }
+        helper.succeed();
+    }
+
+    // What a dispenser puts on a body: a real chestplate, with wear its owner never had
+    private static ItemStack dispensedChestplate() {
+        ItemStack chestplate = new ItemStack(Items.IRON_CHESTPLATE);
+        chestplate.setDamageValue(7);
+        return chestplate;
     }
 
     @GameTest
