@@ -51,11 +51,13 @@ public final class DeathLockout {
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            // A player body's death records its owner's, through the offline death
-            if (entity instanceof ServerPlayer player && !StandIn.is(player)) {
+            // A player body's death records its owner's, through the offline death. One in creative or spectator
+            // doesn't count.
+            if (entity instanceof ServerPlayer player && !StandIn.is(player) && !UncountedDeaths.uncounted(player)) {
                 recordDeath(player);
             }
         });
+        UncountedDeaths.init();
 
         // A death can land after the login check, before the save is read (a body killed while its owner's spawn
         // area loads). They join dead, and would respawn and play through the lockout.

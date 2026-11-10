@@ -1,6 +1,7 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.core.Profiles;
+import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.minecraft.nbt.CompoundTag;
@@ -12,7 +13,8 @@ import java.util.Optional;
 
 /** Kills a player whether they are online or not, so both end in the same state. */
 public final class Kills {
-    public enum Result { KILLED_ONLINE, KILLED_OFFLINE, NOT_FOUND, ALREADY_DEAD, NOT_KILLED }
+    // KILLED_UNCOUNTED: dead, but in creative or spectator, so the death doesn't count
+    public enum Result { KILLED_ONLINE, KILLED_OFFLINE, KILLED_UNCOUNTED, NOT_FOUND, ALREADY_DEAD, NOT_KILLED }
 
     /** A failure the body's death path has logged already, so the caller only reports it. */
     public static final class LoggedFailure extends IllegalStateException {
@@ -36,7 +38,10 @@ public final class Kills {
             // Same as vanilla /kill: the normal death runs, and its death event starts the lockout
             online.kill(online.level());
             // Vanilla ignores the kill while the player is still loading in or changing dimension
-            return online.isDeadOrDying() ? Result.KILLED_ONLINE : Result.NOT_KILLED;
+            if (!online.isDeadOrDying()) {
+                return Result.NOT_KILLED;
+            }
+            return UncountedDeaths.uncounted(online) ? Result.KILLED_UNCOUNTED : Result.KILLED_ONLINE;
         }
         // No save file means they never played here
         Optional<CompoundTag> tag = OfflinePlayerData.load(server, who);
@@ -52,9 +57,11 @@ public final class Kills {
         if (body.isPresent()) {
             return BodyDeath.killBody(server, body.get());
         }
+        // Read before the death, which changes the tag
+        boolean uncounted = UncountedDeaths.uncounted(OfflinePlayerData.gameType(tag.get()));
         // No player or body to copy a skin from, so the grave head gets the one last known for them
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
                 Profiles.of(server, who), null);
-        return Result.KILLED_OFFLINE;
+        return uncounted ? Result.KILLED_UNCOUNTED : Result.KILLED_OFFLINE;
     }
 }

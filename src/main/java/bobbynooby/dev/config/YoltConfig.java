@@ -33,6 +33,8 @@ public class YoltConfig {
     public static class DeathLockoutSection {
         public boolean enabled = true;
         public int cooldownDays = 7;
+        // Off: a death in creative or spectator makes no lockout, grave or death record, and the player keeps their items
+        public boolean countCreativeAndSpectatorDeaths = false;
     }
 
     public static class GravesSection {

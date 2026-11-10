@@ -8,6 +8,7 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathMessages;
+import bobbynooby.dev.lockout.UncountedDeaths;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -56,10 +57,13 @@ public final class OfflineDeath {
         ServerLevel level = levelFor(server, where);
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
         // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory, but
-        // only while graves are on, since an online death with graves off never reaches it.
-        boolean spectator = OfflinePlayerData.gameType(tag) == GameType.SPECTATOR;
+        // only while graves are on, since an online death with graves off never reaches it. A death that doesn't
+        // count takes nothing either, and records nothing: the items stay in the save for the respawn to hand back.
+        GameType mode = OfflinePlayerData.gameType(tag);
+        boolean uncounted = UncountedDeaths.uncounted(mode);
+        boolean keepsAll = mode == GameType.SPECTATOR || uncounted;
         boolean graves = Settings.on(c -> c.graves.enabled);
-        boolean dropsLoot = !spectator && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
+        boolean dropsLoot = !keepsAll && !level.getGameRules().get(GameRules.KEEP_INVENTORY);
         List<ItemStack> items = new ArrayList<>();
         int experience = 0;
         if (dropsLoot) {
@@ -72,7 +76,7 @@ public final class OfflineDeath {
             // Vanilla's Player.getBaseExperienceReward, read from the save instead of a live player
             experience = Math.min(OfflinePlayerData.takeExperience(tag) * 7, 100);
         }
-        if (!spectator && graves) {
+        if (!keepsAll && graves) {
             switch (Settings.get().graves.enderChestOnDeath) {
                 case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess(), who.name()));
                 case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess(), who.name());
@@ -89,7 +93,7 @@ public final class OfflineDeath {
         List<Runnable> undo = new ArrayList<>();
         try {
             // An online spectator's death never reaches the grave hook either, but unplaced items have to go somewhere
-            if (!spectator || !unplaced.isEmpty()) {
+            if (!keepsAll || !unplaced.isEmpty()) {
                 undo.add(deposit(server, who, items, where, profile));
             }
             undo.add(dropExperience(level, where, experience));
@@ -101,7 +105,9 @@ public final class OfflineDeath {
             throw e;
         }
 
-        DeathLockout.recordDeath(who.id(), who.name(), DeathMessages.whileAway(bodyDeathMessage));
+        if (!uncounted) {
+            DeathLockout.recordDeath(who.id(), who.name(), DeathMessages.whileAway(bodyDeathMessage));
+        }
     }
 
     /**

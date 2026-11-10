@@ -8,6 +8,7 @@ import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.mixin.PlayerInvoker;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.minecraft.core.BlockPos;
@@ -49,6 +50,11 @@ public final class GraveDeath {
         }
         // Before the switch too: a death that makes no grave must not be told about an older one at the respawn
         GraveNotice.forget(player.getUUID());
+        // Before the switch as well: a death in creative drops nothing, graves or not. The items stay on the dead
+        // player for the respawn to hand back, so there is no emptied player to save at once either.
+        if (UncountedDeaths.uncounted(player)) {
+            return true;
+        }
         if (!Settings.on(c -> c.graves.enabled)) {
             return false;
         }

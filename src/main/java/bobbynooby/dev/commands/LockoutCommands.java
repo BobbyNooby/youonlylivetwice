@@ -63,10 +63,17 @@ final class LockoutCommands {
             case NOT_FOUND -> "Player " + name + " not found.";
             case ALREADY_DEAD -> who.get().name() + " is already dead.";
             case NOT_KILLED -> "Could not kill " + who.get().name() + " right now.";
-            case KILLED_ONLINE, KILLED_OFFLINE -> null;
+            case KILLED_ONLINE, KILLED_OFFLINE, KILLED_UNCOUNTED -> null;
         };
         if (failure != null) {
             return YoltCommands.fail(source, failure);
+        }
+        // No death was recorded, and none was meant to be
+        if (result == Kills.Result.KILLED_UNCOUNTED) {
+            LOGGER.info("{} killed {}, whose death doesn't count in creative or spectator mode", source.getTextName(),
+                    who.get().name());
+            return YoltCommands.done(source, "Killed " + who.get().name()
+                    + ". They were in creative or spectator mode, so the death doesn't count.");
         }
         LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
         // The player is dead either way; without the record they are not locked out, so the admin has to know
