@@ -61,7 +61,17 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
     // Also checked here, so turning the switch off stops a hunt already under way
     @Override
     public boolean canContinueToUse() {
-        return switchedOn() && super.canContinueToUse();
+        return !phantomRetargeted() && switchedOn() && super.canContinueToUse();
+    }
+
+    // Only a body is this goal's to let go of: the phantom's own goal keeps after the player it picked
+    @Override
+    public void stop() {
+        if (phantomRetargeted()) {
+            this.targetMob = null;
+            return;
+        }
+        super.stop();
     }
 
     @Override
@@ -82,6 +92,11 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
                     axis == Direction.Axis.Z ? 4.0 : followDistance);
         }
         return super.getTargetSearchArea(followDistance);
+    }
+
+    // The phantom's own player goal sets its target without claiming it, so it can switch to a player under this goal
+    private boolean phantomRetargeted() {
+        return this.mob instanceof Phantom && this.mob.getTarget() != null && !(this.mob.getTarget() instanceof Mannequin);
     }
 
     private static boolean switchedOn() {

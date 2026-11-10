@@ -26,6 +26,7 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -48,6 +49,7 @@ public class BodyMobGameTests {
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
     private static final BlockPos NEXT_TO_BODY = new BlockPos(3, 0, 1);
     private static final BlockPos FOUR_AWAY = new BlockPos(5, 0, 1);
+    private static final BlockPos ABOVE_BODY = new BlockPos(3, 3, 1);
     private static final int WAIT_TICKS = 160;
     private static final BiConsumer<Mob, Mannequin> NO_EXTRA_CHECK = (mob, body) -> {
     };
@@ -203,6 +205,78 @@ public class BodyMobGameTests {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();
+    }
+
+    // A phantom's own player goal sets its target without claiming it, which is what this does by hand
+    @GameTest
+    public void phantomDropsBodyGoalForPlayer(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = join(helper, "Dreamer");
+        ServerPlayer awake = null;
+        try {
+            Mannequin body = leaveBody(helper, owner);
+            awake = join(helper, "Awake");
+            Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, ABOVE_BODY);
+            spawned.add(phantom);
+            BodyTargetGoal goal = bodyGoal(phantom);
+            phantom.setTarget(body);
+            helper.assertTrue(goal.canContinueToUse(), "the body goal let go of the body");
+            phantom.setTarget(awake);
+            helper.assertFalse(goal.canContinueToUse(), "the body goal kept going after the phantom picked a player");
+            goal.stop();
+            helper.assertTrue(phantom.getTarget() == awake, "stopping the body goal took the player off the phantom");
+        } finally {
+            if (awake != null) {
+                TestPlayers.leave(awake);
+            }
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void chasingPhantomIgnoresBody(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = join(helper, "Sleepless");
+        ServerPlayer awake = null;
+        try {
+            leaveBody(helper, owner);
+            awake = join(helper, "Chased");
+            Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, ABOVE_BODY);
+            spawned.add(phantom);
+            BodyTargetGoal goal = bodyGoal(phantom);
+            phantom.setTarget(awake);
+            helper.assertFalse(canUseWithin(goal), "the body goal would take the phantom off the player it chases");
+            helper.assertTrue(phantom.getTarget() == awake, "the phantom no longer chases the player");
+            // Proves the scene: with nobody to chase, the phantom does go for the body
+            phantom.setTarget(null);
+            helper.assertTrue(canUseWithin(goal), "a phantom with no target never went for the body");
+        } finally {
+            if (awake != null) {
+                TestPlayers.leave(awake);
+            }
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    // canUse only looks for a target one try in five, so a check gets plenty of tries
+    private static boolean canUseWithin(BodyTargetGoal goal) {
+        for (int i = 0; i < 100; i++) {
+            if (goal.canUse()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static BodyTargetGoal bodyGoal(Mob mob) {
+        return ((MobAccessor) mob).yoltTargetSelector().getAvailableGoals().stream()
+                .map(WrappedGoal::getGoal)
+                .filter(BodyTargetGoal.class::isInstance)
+                .map(BodyTargetGoal.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no body goal on " + mob.getType()));
     }
 
     private static void assertBodyGoals(GameTestHelper helper, List<Entity> spawned, EntityType<? extends Mob> type,
