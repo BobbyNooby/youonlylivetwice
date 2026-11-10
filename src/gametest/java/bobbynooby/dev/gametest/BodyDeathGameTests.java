@@ -317,10 +317,13 @@ public class BodyDeathGameTests {
             body.kill(helper.getLevel());
 
             List<Grave> graves = gravesOf(helper, owner);
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the graves");
             helper.assertTrue(graves.stream().flatMap(grave -> grave.items().stream())
                     .anyMatch(item -> item.is(Items.IRON_CHESTPLATE) && item.getDamageValue() == 7), "no grave holds the chestplate");
             helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.DIRT), Inventory.INVENTORY_SIZE, "dirt in the graves");
             helper.assertValueEqual(save(helper, player).getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
+            helper.assertValueEqual(GraveAsserts.count(savedItems(helper, player), Items.IRON_CHESTPLATE), 0,
+                    "chestplates left in the save");
         } finally {
             cleanUp(helper, owner, before);
         }

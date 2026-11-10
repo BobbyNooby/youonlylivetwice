@@ -200,17 +200,20 @@ public class BodyLifecycleGameTests {
         try {
             Mannequin old = logOut(helper, player);
             old.setItemSlot(EquipmentSlot.CHEST, dispensedChestplate());
+            AABB aroundOld = new AABB(old.blockPosition()).inflate(2.0);
             Mannequin fresh = logOut(helper, player);
             helper.assertTrue(old.isRemoved(), "the old body still stands");
             helper.assertTrue(fresh.getItemBySlot(EquipmentSlot.CHEST).isEmpty(), "the new body wears the chestplate");
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(ItemEntity.class, aroundOld,
+                    drop -> drop.getItem().is(Items.IRON_CHESTPLATE)).isEmpty(), "a chestplate dropped although there was room");
             Inventory inventory = player.getInventory();
+            helper.assertValueEqual(inventory.countItem(Items.IRON_CHESTPLATE), 1, "chestplates in the owner's inventory");
             int found = -1;
             for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
                 if (inventory.getItem(slot).is(Items.IRON_CHESTPLATE)) {
                     found = slot;
                 }
             }
-            helper.assertTrue(found >= 0, "the chestplate is not in the owner's inventory");
             helper.assertTrue(found != inventory.getSelectedSlot(), "the chestplate went into the owner's hand");
             helper.assertValueEqual(inventory.getItem(found).getDamageValue(), 7, "chestplate damage");
 
@@ -220,8 +223,12 @@ public class BodyLifecycleGameTests {
             Mannequin oldPacked = logOut(helper, packed);
             oldPacked.setItemSlot(EquipmentSlot.CHEST, dispensedChestplate());
             around = new AABB(oldPacked.blockPosition()).inflate(2.0);
-            logOut(helper, packed);
+            Mannequin freshPacked = logOut(helper, packed);
             helper.assertTrue(oldPacked.isRemoved(), "the packed player's old body still stands");
+            helper.assertTrue(freshPacked.getItemBySlot(EquipmentSlot.CHEST).isEmpty(),
+                    "the packed player's new body wears the chestplate");
+            helper.assertValueEqual(packed.getInventory().countItem(Items.IRON_CHESTPLATE), 0,
+                    "chestplates in the packed player's inventory");
             List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
                     drop -> drop.getItem().is(Items.IRON_CHESTPLATE));
             helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the old body");
