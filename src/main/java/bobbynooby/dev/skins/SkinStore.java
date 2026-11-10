@@ -49,8 +49,8 @@ public final class SkinStore extends SavedData {
             // None for a name no account has
             TEXTURES_CODEC.optionalFieldOf("textures").forGetter(skin -> Optional.ofNullable(skin.textures())),
             Codec.LONG.fieldOf("fetched_at").forGetter(CachedSkin::fetchedAt),
-            // Added later, so an older answer has none
-            UUIDUtil.CODEC.optionalFieldOf("id").forGetter(skin -> Optional.ofNullable(skin.id()))
+            // Added later, so an older answer has none. One that can't be read only means the account is asked again.
+            UUIDUtil.CODEC.lenientOptionalFieldOf("id").forGetter(skin -> Optional.ofNullable(skin.id()))
     ).apply(i, (name, textures, fetchedAt, id) -> new CachedSkin(name, textures.orElse(null), fetchedAt, id.orElse(null))));
 
     private record Applied(UUID player, SkinTextures textures) {
@@ -64,8 +64,8 @@ public final class SkinStore extends SavedData {
         static final Codec<Choice> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("player").forGetter(Choice::player),
                 Codec.STRING.fieldOf("name").forGetter(Choice::name),
-                // Added later, so an older pick reads as the player's own
-                Codec.BOOL.optionalFieldOf("by_op", false).forGetter(Choice::byOp)
+                // Added later, so an older pick reads as the player's own, as does one whose mark can't be read
+                Codec.BOOL.lenientOptionalFieldOf("by_op", false).forGetter(Choice::byOp)
         ).apply(i, Choice::new));
     }
 
