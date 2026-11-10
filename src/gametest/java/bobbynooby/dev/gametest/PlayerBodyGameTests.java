@@ -79,8 +79,8 @@ public class PlayerBodyGameTests {
     private static final String PLAYER_BODY = "you-only-live-twice-gametest:player_body";
     // For tests that save or bring back every body on the server, which would rewrite the records of other tests
     static final String BODY_RESTART = "you-only-live-twice-gametest:body_restart";
-    // For the test that brings back and expires every body at once, where another test's record would take a turn
-    private static final String BODY_EXPIRY = "you-only-live-twice-gametest:body_expiry";
+    // For the tests that run the expiry over every body at once, where another test's record would take a turn
+    static final String BODY_EXPIRY = "you-only-live-twice-gametest:body_expiry";
     // For the tests that remove the nametag team around player bodies, each done within its tick
     private static final String BODY_TEAM = "you-only-live-twice-gametest:body_team";
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);

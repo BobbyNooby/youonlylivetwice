@@ -1,5 +1,6 @@
 package bobbynooby.dev.bodies;
 
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
@@ -27,12 +28,28 @@ public final class BodySaves {
 
     /**
      * Carries what happened to a body's gear over to the gear in the save, by GearSync's rules. Only for a body
-     * that is being removed, or its copies would exist twice.
+     * that is being removed, or its copies would exist twice. An entry in the save that doesn't read back is the
+     * owner's own item, from a mod or datapack removed since, so nothing is ever written over it.
      */
-    public static void applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear, HolderLookup.Provider registries) {
-        Map<EquipmentSlot, ItemStack> saved = OfflinePlayerData.readGear(tag, registries);
+    public static void applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear,
+                                     HolderLookup.Provider registries, String owner) {
+        OfflinePlayerData.Gear saved = OfflinePlayerData.readGear(tag, registries);
         Map<EquipmentSlot, ItemStack> changed = new EnumMap<>(EquipmentSlot.class);
-        GearSync.applyBodyGear(bodyGear, slot -> saved.getOrDefault(slot, ItemStack.EMPTY), changed::put);
+        GearSync.applyBodyGear(bodyGear, slot -> saved.items().getOrDefault(slot, ItemStack.EMPTY), changed::put);
+        saved.unreadable().forEach((slot, entry) -> {
+            ItemStack bodyItem = changed.remove(slot);
+            if (bodyItem != null) {
+                Yolt.LOGGER.warn("Keeping {}'s unreadable item in slot {} in their save file instead of the body's {}: {}",
+                        owner, slot.getName(), bodyItem, entry);
+            }
+        });
+        // One that reads back in part counts as the item, as in vanilla's own load, and the raw entry goes in the log
+        saved.partlyRead().forEach((slot, entry) -> {
+            if (changed.containsKey(slot)) {
+                Yolt.LOGGER.warn("Writing {}'s partly unreadable item in slot {} back as the body left it, without the "
+                        + "parts that can't be read: {}", owner, slot.getName(), entry);
+            }
+        });
         OfflinePlayerData.writeGear(tag, changed, registries);
     }
 
@@ -40,7 +57,8 @@ public final class BodySaves {
      * Writes a body's state into its owner's save, as a login would have taken it over: where it stands, its
      * health, fall, fire and air, its effects when copyEffects is on, and its gear. Only for a body being removed.
      */
-    public static void applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects, HolderLookup.Provider registries) {
+    public static void applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects,
+                                     HolderLookup.Provider registries, String owner) {
         // The body only keeps which way it faces, so the saved pitch stays
         OfflinePlayerData.writePosition(tag, snapshot.dimension(), snapshot.pos(), snapshot.yRot());
         tag.putFloat(OfflinePlayerData.HEALTH, snapshot.health());
@@ -54,7 +72,7 @@ public final class BodySaves {
             OfflinePlayerData.writeAttributes(tag, swapEffectModifiers(attributes, before, snapshot.effects()), registries);
             OfflinePlayerData.writeEffects(tag, snapshot.effects(), registries);
         }
-        applyBodyGear(tag, snapshot.gear(), registries);
+        applyBodyGear(tag, snapshot.gear(), registries, owner);
     }
 
     // An effect's attribute modifiers are saved with the attributes and loading doesn't add them again, so the old

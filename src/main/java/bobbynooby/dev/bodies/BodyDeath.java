@@ -115,7 +115,7 @@ final class BodyDeath {
         // Already dead, say after a crash before the record's removal was saved: a second death would restart the lockout
         if (!OfflinePlayerData.isDead(tag)) {
             // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
-            BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess());
+            BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess(), who.name());
             OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage);
         }
         BodyStore.get(server).remove(record.owner());

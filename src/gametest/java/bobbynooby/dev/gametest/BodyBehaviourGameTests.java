@@ -13,6 +13,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.Identifier;
@@ -183,12 +184,60 @@ public class BodyBehaviourGameTests {
             helper.assertValueEqual(saved.getShortOr("Air", (short) -1), (short) 120, "saved air");
             helper.assertValueEqual(saved.read(ServerPlayer.SavedPosition.MAP_CODEC).flatMap(ServerPlayer.SavedPosition::position),
                     Optional.of(at), "saved position");
-            ItemStack chest = OfflinePlayerData.readGear(saved, server.registryAccess()).getOrDefault(EquipmentSlot.CHEST, ItemStack.EMPTY);
+            ItemStack chest = OfflinePlayerData.readGear(saved, server.registryAccess()).items()
+                    .getOrDefault(EquipmentSlot.CHEST, ItemStack.EMPTY);
             helper.assertTrue(chest.is(Items.IRON_CHESTPLATE), "chestplate lost from the save");
             helper.assertValueEqual(chest.getDamageValue(), 30, "saved chestplate damage");
             helper.assertFalse(saved.contains("active_effects"), "worn-off effect still saved");
             // Loading doesn't take an effect's modifier off again, so a stale one would stay for good
             helper.assertTrue(speedModifiers(helper, saved).isEmpty(), "worn-off speed's modifier still saved");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // As after the mod or datapack that added them went: the save's chest and main-hand entries don't read back, while
+    // the body wears a chestplate and holds a sword. The pass runs over every body, so this has the expiry batch.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void unreadableGearSlotIsNotOverwritten(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unreadable", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            Mannequin body = leaveBody(helper, player);
+            body.getItemBySlot(EquipmentSlot.HEAD).setDamageValue(30);
+            CompoundTag tag = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            CompoundTag chest = OfflineGameTests.unreadableItem();
+            tag.getCompound("equipment").orElseThrow().put("chest", chest.copy());
+            CompoundTag held = OfflineGameTests.unreadableItem();
+            held.putByte("Slot", (byte) tag.getIntOr("SelectedItemSlot", 0));
+            ListTag inventory = new ListTag();
+            inventory.add(held.copy());
+            tag.put("Inventory", inventory);
+            OfflinePlayerData.save(server, owner, tag);
+            expiredLogout(helper, owner);
+
+            List<String> log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server));
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
+            helper.assertValueEqual(saved.getListOrEmpty("Inventory"), inventory, "saved inventory");
+            // The rest of the body's gear still carries over
+            ItemStack helmet = OfflinePlayerData.readGear(saved, server.registryAccess()).items()
+                    .getOrDefault(EquipmentSlot.HEAD, ItemStack.EMPTY);
+            helper.assertTrue(helmet.is(Items.IRON_HELMET) && helmet.getDamageValue() == 30, "saved helmet: " + helmet);
+            for (String slot : List.of("chest", "mainhand")) {
+                String kept = "Keeping " + name + "'s unreadable item in slot " + slot + " ";
+                helper.assertValueEqual(log.stream().filter(line -> line.startsWith(kept)).count(), 1L,
+                        "warnings for the " + slot + " entry: " + log);
+            }
         } finally {
             cleanUp(helper, owner, before);
         }

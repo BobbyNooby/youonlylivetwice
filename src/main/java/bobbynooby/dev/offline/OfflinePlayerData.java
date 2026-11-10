@@ -188,49 +188,89 @@ public final class OfflinePlayerData {
     }
 
     /**
-     * Every worn or held item in the save. The main hand is the selected hotbar slot of the inventory list; the
-     * other slots sit under equipment. Empty slots, and items that don't read back, are left out.
+     * The worn and held items of a save, by slot. A slot with no entry is in none of the maps. An item that reads back
+     * only in part is in items, as vanilla's own load would take it, and its raw entry in partlyRead. An entry that
+     * doesn't read back at all is only in unreadable, as saved, so a caller can leave it alone.
      */
-    public static Map<EquipmentSlot, ItemStack> readGear(CompoundTag tag, HolderLookup.Provider registries) {
+    public record Gear(Map<EquipmentSlot, ItemStack> items, Map<EquipmentSlot, Tag> partlyRead,
+                       Map<EquipmentSlot, Tag> unreadable) {
+        private void read(EquipmentSlot slot, Tag entry, DataResult<ItemStack> result) {
+            Optional<ItemStack> stack = result.resultOrPartial();
+            if (stack.isEmpty()) {
+                unreadable.put(slot, entry);
+                return;
+            }
+            if (result.isError()) {
+                partlyRead.put(slot, entry);
+            }
+            if (!stack.get().isEmpty()) {
+                items.put(slot, stack.get());
+            }
+        }
+    }
+
+    /**
+     * Every worn or held item in the save. The main hand is the selected hotbar slot of the inventory list; the other
+     * slots sit under equipment. An inventory or equipment key that isn't the list or compound vanilla writes counts
+     * as an unreadable entry for each slot it would hold.
+     */
+    public static Gear readGear(CompoundTag tag, HolderLookup.Provider registries) {
         RegistryOps<Tag> ops = ops(registries);
-        Map<EquipmentSlot, ItemStack> gear = new EnumMap<>(EquipmentSlot.class);
-        CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
+        Gear gear = new Gear(new EnumMap<>(EquipmentSlot.class), new EnumMap<>(EquipmentSlot.class),
+                new EnumMap<>(EquipmentSlot.class));
+        Tag inventory = tag.get(INVENTORY);
+        if (inventory instanceof ListTag entries) {
+            int selected = selectedSlot(tag);
+            Optional<Tag> held = entries.stream().filter(entry -> isSlot(entry, selected)).findFirst();
+            held.ifPresent(entry -> gear.read(EquipmentSlot.MAINHAND, entry,
+                    ItemStackWithSlot.CODEC.parse(ops, entry).map(ItemStackWithSlot::stack)));
+        } else if (inventory != null) {
+            gear.unreadable().put(EquipmentSlot.MAINHAND, inventory);
+        }
+        Tag equipment = tag.get(EQUIPMENT);
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            Optional<ItemStack> stack = slot == EquipmentSlot.MAINHAND
-                    ? tag.getListOrEmpty(INVENTORY).stream()
-                            .filter(entry -> isSlot(entry, selectedSlot(tag)))
-                            .findFirst()
-                            .flatMap(entry -> ItemStackWithSlot.CODEC.parse(ops, entry).result())
-                            .map(ItemStackWithSlot::stack)
-                    : equipment.read(slot.getSerializedName(), ItemStack.CODEC, ops);
-            stack.filter(item -> !item.isEmpty()).ifPresent(item -> gear.put(slot, item));
+            if (slot == EquipmentSlot.MAINHAND || equipment == null) {
+                continue;
+            }
+            if (!(equipment instanceof CompoundTag worn)) {
+                gear.unreadable().put(slot, equipment);
+                continue;
+            }
+            Tag entry = worn.get(slot.getSerializedName());
+            if (entry != null) {
+                gear.read(slot, entry, ItemStack.CODEC.parse(ops, entry));
+            }
         }
         return gear;
     }
 
     /**
      * Writes the given slots into the save; an empty stack clears its slot. Slots not in the map, and every other
-     * inventory entry, stay exactly as saved. A slot in the map is overwritten even if its saved item didn't read
-     * back (readGear reports that slot as empty), so such an item is lost.
+     * inventory entry, stay exactly as saved. A slot in the map is written over whatever its entry held, so a caller
+     * leaves out the slots readGear found unreadable.
      */
     public static void writeGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> gear, HolderLookup.Provider registries) {
         RegistryOps<Tag> ops = ops(registries);
         CompoundTag equipment = tag.getCompoundOrEmpty(EQUIPMENT);
-        ListTag inventory = tag.getListOrEmpty(INVENTORY);
-        int selected = selectedSlot(tag);
         gear.forEach((slot, stack) -> {
             if (slot == EquipmentSlot.MAINHAND) {
+                ListTag inventory = tag.getListOrEmpty(INVENTORY);
+                int selected = selectedSlot(tag);
                 inventory.removeIf(entry -> isSlot(entry, selected));
                 if (!stack.isEmpty()) {
                     inventory.add(ItemStackWithSlot.CODEC.encodeStart(ops, new ItemStackWithSlot(selected, stack)).getOrThrow());
                 }
+                tag.put(INVENTORY, inventory);
             } else if (stack.isEmpty()) {
                 equipment.remove(slot.getSerializedName());
             } else {
                 equipment.store(slot.getSerializedName(), ItemStack.CODEC, ops, stack);
             }
         });
-        tag.put(INVENTORY, inventory);
+        // Only when a worn slot was written, so an equipment key that couldn't be read stays as saved
+        if (gear.keySet().stream().allMatch(slot -> slot == EquipmentSlot.MAINHAND)) {
+            return;
+        }
         // Vanilla leaves the key out when nothing is worn
         if (equipment.isEmpty()) {
             tag.remove(EQUIPMENT);
