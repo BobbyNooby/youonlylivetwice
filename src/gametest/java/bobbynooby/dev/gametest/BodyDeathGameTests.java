@@ -26,14 +26,19 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.LightningBolt;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -44,6 +49,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
@@ -57,6 +63,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
@@ -613,6 +620,126 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // A body pressed against a cactus is pricked like anyone: a normal death, with the grave on the body's block beside
+    // the cactus, never on it. The body ticks itself; at 2 health two pricks do it.
+    @GameTest(maxTicks = 80)
+    public void bodyDiesInCactus(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x <= 3; x++) {
+            for (int z = 0; z <= 2; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), x == 2 && z == 1 ? Blocks.SAND : Blocks.STONE);
+            }
+        }
+        helper.setBlock(new BlockPos(2, 1, 1), Blocks.CACTUS);
+        BlockPos cactus = helper.absolutePos(new BlockPos(2, 1, 1));
+        ServerPlayer player = join(helper, "Pricked");
+        // A twentieth of a block into the cactus's space, short of its spines, the way a player stands against one
+        player.snapTo(cactus.getX() - 0.25, cactus.getY(), cactus.getZ() + 0.5);
+        UUID owner = player.getUUID();
+        String name = player.getGameProfile().name();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Runnable cleanUp = once(() -> cleanUp(helper, owner, before));
+        boolean waiting = false;
+        try {
+            player.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
+            player.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 3));
+            Mannequin body = BodyTestKit.disconnectBody(helper, player);
+            Settings.get().bodies = before;
+            helper.assertTrue(body.getBoundingBox().intersects(new AABB(cactus)), "the body does not touch the cactus");
+            BlockPos at = body.blockPosition();
+            body.setHealth(2.0F);
+            helper.runBeforeTestEnd(cleanUp);
+            helper.succeedWhen(() -> {
+                helper.assertTrue(body.isDeadOrDying(), "the cactus did not kill the body");
+                DamageSource hurtBy = body.getLastDamageSource();
+                helper.assertTrue(hurtBy != null && hurtBy.is(DamageTypes.CACTUS), "the body was last hurt by " + hurtBy + ", not the cactus");
+                List<Grave> graves = gravesOf(helper, owner);
+                helper.assertValueEqual(graves.size(), 1, "graves for the owner");
+                Grave grave = graves.get(0);
+                helper.assertValueEqual(grave.pos(), at, "grave position");
+                helper.assertTrue(level.getBlockState(cactus).is(Blocks.CACTUS), "the cactus is gone");
+                assertGraveHolds(helper, grave);
+                String refusal = LockoutGameTests.refusalText(owner);
+                helper.assertTrue(refusal.startsWith("You died: Killed while away (" + name + " was pricked to death)\n"),
+                        "the owner's lockout: " + refusal);
+                helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // No conversion for a body, unlike a pig or a villager: the strike kills it, a normal death. A real bolt, so any
+    // fire it lights round the body is there as the grave is placed, and the grave keeps out of it.
+    @GameTest(maxTicks = 40)
+    public void bodyStruckByLightning(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x <= 2; x++) {
+            for (int z = 0; z <= 2; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
+        ServerPlayer player = join(helper, "Struck");
+        UUID owner = player.getUUID();
+        String name = player.getGameProfile().name();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Runnable cleanUp = once(() -> {
+            cleanUp(helper, owner, before);
+            BlockPos.betweenClosed(helper.absolutePos(new BlockPos(0, 0, 0)), helper.absolutePos(new BlockPos(4, 3, 4))).forEach(pos -> {
+                if (level.getBlockState(pos).is(BlockTags.FIRE)) {
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                }
+            });
+        });
+        boolean waiting = false;
+        try {
+            player.getInventory().setItem(0, new ItemStack(Items.IRON_SWORD));
+            player.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 3));
+            Mannequin body = BodyTestKit.disconnectBody(helper, player);
+            Settings.get().bodies = before;
+            BlockPos at = body.blockPosition();
+            // Below a strike's 5 damage
+            body.setHealth(4.0F);
+            LightningBolt bolt = EntityTypes.LIGHTNING_BOLT.create(level, EntitySpawnReason.COMMAND);
+            helper.assertTrue(bolt != null, "no lightning bolt");
+            bolt.snapTo(body.getX(), body.getY(), body.getZ());
+            helper.assertTrue(level.addFreshEntity(bolt), "the bolt was not added");
+            helper.runBeforeTestEnd(cleanUp);
+            helper.succeedWhen(() -> {
+                helper.assertTrue(body.isDeadOrDying(), "the strike did not kill the body");
+                DamageSource hurtBy = body.getLastDamageSource();
+                helper.assertTrue(hurtBy != null && hurtBy.is(DamageTypes.LIGHTNING_BOLT), "the body was last hurt by " + hurtBy + ", not lightning");
+                helper.assertTrue(level.getEntities(body, helper.getBounds(), entity -> entity instanceof LivingEntity && entity.isAlive())
+                        .isEmpty(), "something took the body's place");
+                List<Grave> graves = gravesOf(helper, owner);
+                helper.assertValueEqual(graves.size(), 1, "graves for the owner");
+                Grave grave = graves.get(0);
+                BlockPos below = grave.pos().below();
+                helper.assertTrue(grave.pos().closerThan(at, 4.0), "grave at " + grave.pos() + ", away from the body at " + at);
+                helper.assertFalse(level.getBlockState(below).is(BlockTags.FIRE), "grave over fire at " + grave.pos());
+                helper.assertFalse(level.getBlockState(below).getCollisionShape(level, below).isEmpty(),
+                        "nothing solid under the grave at " + grave.pos());
+                assertGraveHolds(helper, grave);
+                String refusal = LockoutGameTests.refusalText(owner);
+                helper.assertTrue(refusal.startsWith("You died: Killed while away (" + name + " was struck by lightning)\n"),
+                        "the owner's lockout: " + refusal);
+                helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // An admin can tag a real player by hand; their items are real, so they still go to their grave
     @GameTest
     public void taggedPlayerStillDrops(GameTestHelper helper) {
@@ -638,6 +765,25 @@ public class BodyDeathGameTests {
         // Something solid under the body, so its grave goes on the body's own block
         helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
         return TestPlayers.join(helper, name, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+    }
+
+    // What the cactus and lightning tests' owner had: the head, then the sword and the three diamonds, each once
+    private static void assertGraveHolds(GameTestHelper helper, Grave grave) {
+        List<ItemStack> items = grave.items();
+        helper.assertValueEqual(items.size(), 3, "grave stacks");
+        helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "the first grave item is not the grave head");
+        helper.assertValueEqual(GraveAsserts.count(items, Items.IRON_SWORD), 1, "swords in the grave");
+        helper.assertValueEqual(GraveAsserts.count(items, Items.DIAMOND), 3, "diamonds in the grave");
+    }
+
+    // Runs at the test's end or just before its timeout, whichever comes first, and only once
+    private static Runnable once(Runnable action) {
+        AtomicBoolean done = new AtomicBoolean();
+        return () -> {
+            if (done.compareAndSet(false, true)) {
+                action.run();
+            }
+        };
     }
 
     private static ResolvableProfile texturedProfile(ServerPlayer player) {

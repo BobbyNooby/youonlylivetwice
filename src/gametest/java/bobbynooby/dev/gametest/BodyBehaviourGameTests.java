@@ -213,6 +213,57 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // A body set alight burns on its own ticks until its time is up. The expiry is no death: the burn and the health it
+    // cost go into the save, the owner logs in still burning, and there is no grave or lockout. The pass runs over every
+    // body, so this has the expiry batch; the switches are only on in the ticks that need them.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, maxTicks = 80)
+    public void bodyExpiresWhileBurning(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "Smoulder", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        boolean waiting = false;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Settings.get().bodies = before;
+            body.igniteForSeconds(10.0F);
+            helper.runAfterDelay(45, () -> {
+                YoltConfig.BodiesSection during = useDefaultBodies();
+                try {
+                    float health = body.getHealth();
+                    int fire = body.getRemainingFireTicks();
+                    helper.assertTrue(health < 20.0F, "the fire did not hurt the body");
+                    helper.assertTrue(fire > 0, "the body stopped burning");
+                    Settings.get().bodies.duration = new BodyDuration(1);
+                    expiredLogout(helper, owner);
+                    BodyExpiry.tick(server);
+                    Settings.get().bodies = during;
+                    helper.assertTrue(body.isRemoved(), "the body is still in the world");
+                    CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+                    helper.assertValueEqual(saved.getShortOr("Fire", (short) -1), (short) fire, "saved fire ticks");
+                    helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), health, "saved health");
+                    helper.assertTrue(BodyTestKit.gravesOf(helper, owner).isEmpty(), "the expiry made a grave");
+                    helper.assertTrue(LockoutGameTests.refusalText(owner).isEmpty(), "the expiry started the lockout");
+
+                    ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
+                    helper.assertFalse(back.isDeadOrDying(), "the owner logged in dead");
+                    helper.assertValueEqual(back.getRemainingFireTicks(), fire, "fire ticks after login");
+                    helper.assertValueEqual(back.getHealth(), health, "health after login");
+                } finally {
+                    cleanUp(helper, owner, during);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
     // As after the mod or datapack that added them went: the save's chest and main-hand entries don't read back, while
     // the body wears a chestplate and holds a sword. Those can't be written over the entries, so they go to free
     // inventory slots. The pass runs over every body, so this has the expiry batch.

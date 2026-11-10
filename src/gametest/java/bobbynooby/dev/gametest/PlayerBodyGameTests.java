@@ -259,6 +259,41 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // The record is by uuid. After a restart the body comes back from it under the old name, and its owner, renamed
+    // since, still takes it over. The restart is done by hand, as above.
+    @GameTest(environment = BODY_RESTART)
+    public void renamedOwnerTakesOverBodyAfterRestart(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "OldName", ON_FLOOR);
+        UUID owner = player.getUUID();
+        String oldName = player.getGameProfile().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            PlayerBody body = leavePlayerBody(helper, player);
+            body.setHealth(12.0F);
+            BodyRestart.snapshotBodies(server);
+            body.discard();
+            BodyRestart.restorePlayerBodies(server);
+            Entity found = helper.getLevel().getEntity(body.getUUID());
+            helper.assertTrue(found instanceof PlayerBody && found != body, "no player body brought back");
+            PlayerBody restored = (PlayerBody) found;
+            helper.assertValueEqual(restored.getGameProfile().name(), oldName, "the restored body's name");
+
+            GameProfile renamed = new GameProfile(owner, "Renamed" + owner.toString().substring(0, 8));
+            ServerPlayer back = TestPlayers.rejoin(helper, renamed, GameType.SURVIVAL, ON_FLOOR);
+            helper.assertValueEqual(back.getGameProfile().name(), renamed.name(), "the owner's name after login");
+            helper.assertTrue(restored.isRemoved(), "the restored body is still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertValueEqual(back.getHealth(), 12.0F, "health after login");
+            helper.assertTrue(ItemStack.matches(back.getItemBySlot(EquipmentSlot.HEAD), new ItemStack(Items.IRON_HELMET)),
+                    "head slot after login: " + back.getItemBySlot(EquipmentSlot.HEAD));
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // A body keeps carrying its owner's copy, so its marker only goes to holders who see the body
     @GameTest
     public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
