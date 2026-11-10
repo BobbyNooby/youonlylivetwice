@@ -2,6 +2,7 @@ package bobbynooby.dev.offline;
 
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Yolt;
+import com.mojang.serialization.DataResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
@@ -145,8 +146,9 @@ public final class OfflinePlayerData {
     }
 
     /**
-     * Takes the main inventory plus every equipment slot (armour, offhand), which 26.x saves under its own key. An
-     * entry that doesn't read back stays in the save as it was and is logged, so its item is never lost.
+     * Takes the main inventory plus every equipment slot (armour, offhand), which 26.x saves under its own key. Like
+     * vanilla's own load, an item that only partly reads back is taken without the parts that don't. An entry with no
+     * readable item at all stays in the save as it was. Both are logged.
      */
     public static List<ItemStack> takeInventory(CompoundTag tag, HolderLookup.Provider registries, String owner) {
         RegistryOps<Tag> ops = ops(registries);
@@ -166,9 +168,11 @@ public final class OfflinePlayerData {
         }
         Map<EquipmentSlot, ItemStack> worn = new EnumMap<>(EquipmentSlot.class);
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            Tag entry = equipment.get(slot.getSerializedName());
+            String key = slot.getSerializedName();
+            Tag entry = equipment.get(key);
             if (entry != null) {
-                ItemStack.CODEC.parse(ops, entry).result().ifPresent(stack -> worn.put(slot, stack));
+                readItem(ItemStack.CODEC.parse(ops, entry), owner, "equipment slot " + key, entry)
+                        .ifPresent(stack -> worn.put(slot, stack));
             }
         }
         worn.keySet().forEach(slot -> equipment.remove(slot.getSerializedName()));
@@ -313,18 +317,30 @@ public final class OfflinePlayerData {
         Iterator<Tag> each = entries.iterator();
         while (each.hasNext()) {
             Tag entry = each.next();
-            Optional<ItemStackWithSlot> read = ItemStackWithSlot.CODEC.parse(ops, entry).result();
+            Object slot = entry instanceof CompoundTag item ? slotOf(item) : "?";
+            Optional<ItemStack> read = readItem(ItemStackWithSlot.CODEC.parse(ops, entry).map(ItemStackWithSlot::stack),
+                    owner, what + " slot " + slot, entry);
             if (read.isPresent()) {
-                items.add(read.get().stack());
+                items.add(read.get());
                 each.remove();
             } else {
-                Object slot = entry instanceof CompoundTag item ? slotOf(item) : "?";
                 Yolt.LOGGER.warn("Keeping {}'s unreadable item in {} slot {} in their save file: {}", owner, what, slot, entry);
             }
         }
         if (entries.isEmpty()) {
             tag.remove(key);
         }
-        return Stacks.nonEmpty(items);
+        return items;
+    }
+
+    // An item from a mod or datapack removed since reads back without the component it brought, as in vanilla's
+    // own load, and the raw entry goes in the log. Empty means no usable item at all, so the entry stays saved.
+    private static Optional<ItemStack> readItem(DataResult<ItemStack> read, String owner, String where, Tag entry) {
+        Optional<ItemStack> stack = read.resultOrPartial().filter(item -> !item.isEmpty());
+        if (stack.isPresent() && read.isError()) {
+            Yolt.LOGGER.warn("Taking {}'s partly unreadable item in {} without the parts that can't be read: {}",
+                    owner, where, entry);
+        }
+        return stack;
     }
 }

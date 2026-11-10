@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -26,6 +27,11 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Property;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,6 +39,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 
 public class OfflineGameTests {
@@ -333,6 +340,77 @@ public class OfflineGameTests {
             removeGraves(helper, who.id());
         }
         helper.succeed();
+    }
+
+    // Like an item that carries a component from a mod removed since: the item reads back, only that component doesn't
+    @GameTest
+    public void partlyReadableItemGoesToGrave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Partly", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        TestPlayers.leave(player);
+        CompoundTag inInventory = partlyReadableItem("minecraft:diamond");
+        inInventory.putByte("Slot", (byte) 5);
+        CompoundTag inOffhand = partlyReadableItem("minecraft:emerald");
+        CompoundTag tag = OfflinePlayerData.load(server, who).orElseThrow();
+        ListTag inventory = tag.getListOrEmpty("Inventory");
+        inventory.add(inInventory.copy());
+        tag.put("Inventory", inventory);
+        CompoundTag equipment = tag.getCompoundOrEmpty("equipment");
+        equipment.put("offhand", inOffhand.copy());
+        tag.put("equipment", equipment);
+        OfflinePlayerData.save(server, who.id(), tag);
+
+        try {
+            List<String> log = yoltLog(() ->
+                    helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result"));
+            List<ItemStack> items = onlyGrave(helper, who.id()).items();
+            helper.assertValueEqual(items.size(), 3, "grave item count");
+            helper.assertTrue(ItemStack.matches(items.get(1), new ItemStack(Items.DIAMOND)), "inventory item in the grave: " + items.get(1));
+            helper.assertTrue(ItemStack.matches(items.get(2), new ItemStack(Items.EMERALD)), "offhand item in the grave: " + items.get(2));
+            for (CompoundTag raw : List.of(inInventory, inOffhand)) {
+                helper.assertTrue(log.stream().anyMatch(line -> line.startsWith("Taking ") && line.contains(raw.toString())),
+                        "no warning holds " + raw + ": " + log);
+            }
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            helper.assertTrue(saved.getListOrEmpty("Inventory").isEmpty(), "save still holds " + saved.get("Inventory"));
+            helper.assertTrue(saved.getCompoundOrEmpty("equipment").isEmpty(), "save still holds " + saved.get("equipment"));
+        } finally {
+            removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // A real item with one component no registry knows
+    private static CompoundTag partlyReadableItem(String id) {
+        CompoundTag components = new CompoundTag();
+        components.putInt("you-only-live-twice-gametest:no_such_component", 1);
+        CompoundTag item = new CompoundTag();
+        item.putString("id", id);
+        item.putInt("count", 1);
+        item.put("components", components);
+        return item;
+    }
+
+    // Every message YOLT logs while the action runs
+    private static List<String> yoltLog(Runnable action) {
+        Logger logger = (Logger) LogManager.getLogger(Yolt.MOD_ID);
+        List<String> lines = new CopyOnWriteArrayList<>();
+        AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
+            @Override
+            public void append(LogEvent event) {
+                lines.add(event.getMessage().getFormattedMessage());
+            }
+        };
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            action.run();
+        } finally {
+            logger.removeAppender(appender);
+            appender.stop();
+        }
+        return lines;
     }
 
     // No item has this id, so the entry can't be read back
