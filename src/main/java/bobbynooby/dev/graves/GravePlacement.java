@@ -176,13 +176,27 @@ public final class GravePlacement {
         for (int r = RING_RADIUS + 1; r <= WIDE_RADIUS; r++) {
             for (int dy = 0; dy <= UP_SEARCH && start.getY() + dy <= topY; dy++) {
                 for (BlockPos pos : ring(start.above(dy), r)) {
-                    if (usable(level, pos, store)) {
+                    if (loaded(level, pos) && usable(level, pos, store)) {
                         return Optional.of(pos);
                     }
                 }
             }
         }
         return Optional.empty();
+    }
+
+    // This far out a spot can be in a chunk that isn't loaded, and reading it would load it on the server thread. The
+    // checks also read the blocks beside the spot, which can be in the next chunk.
+    private static boolean loaded(ServerLevel level, BlockPos pos) {
+        if (!level.isLoaded(pos)) {
+            return false;
+        }
+        for (Direction side : Direction.Plane.HORIZONTAL) {
+            if (!level.isLoaded(pos.relative(side))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Nothing near is safe. A safe spot anywhere up the start column comes first, such as a cave above a lava sea.
