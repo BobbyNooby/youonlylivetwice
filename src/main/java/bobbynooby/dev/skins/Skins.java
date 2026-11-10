@@ -37,6 +37,7 @@ public final class Skins {
 
     public static void init() {
         ServerLifecycleEvents.SERVER_STARTING.register(Skins::onServerStarting);
+        SkinOwners.init();
     }
 
     // The only place the Mojang lookup is made, so a lookup the tests put in before the server started is never replaced

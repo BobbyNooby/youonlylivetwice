@@ -20,15 +20,18 @@ import org.jspecify.annotations.Nullable;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * The skins YOLT knows, saved with the world's data: what Mojang said about each account name, the skin each player
- * last joined with, and the account each player picked with /yolt skin. Only the server thread reads or writes it.
+ * last joined with, the account each player picked with /yolt skin, the name each player last joined with, and who
+ * is still to hear that their pick was reset. Only the server thread reads or writes it.
  */
 public final class SkinStore extends SavedData {
     /** The layout of the skin file's own fields. */
@@ -62,10 +65,18 @@ public final class SkinStore extends SavedData {
         ).apply(i, Choice::new));
     }
 
+    private record Joined(UUID player, String name) {
+        static final Codec<Joined> CODEC = RecordCodecBuilder.create(i -> i.group(
+                UUIDUtil.CODEC.fieldOf("player").forGetter(Joined::player),
+                Codec.STRING.fieldOf("name").forGetter(Joined::name)
+        ).apply(i, Joined::new));
+    }
+
     private record Contents(LenientCodecs.Read<CachedSkin> skins, LenientCodecs.Read<Applied> applied,
-                            LenientCodecs.Read<Choice> choices) {
+                            LenientCodecs.Read<Choice> choices, LenientCodecs.Read<Joined> joined,
+                            LenientCodecs.Read<UUID> resets) {
         boolean complete() {
-            return skins.complete() && applied.complete() && choices.complete();
+            return skins.complete() && applied.complete() && choices.complete() && joined.complete() && resets.complete();
         }
     }
 
@@ -76,7 +87,12 @@ public final class SkinStore extends SavedData {
             LenientCodecs.read(Applied.CODEC, "applied skin").optionalFieldOf("applied", new LenientCodecs.Read<>(List.of(), true))
                     .forGetter(Contents::applied),
             LenientCodecs.read(Choice.CODEC, "skin choice").optionalFieldOf("choices", new LenientCodecs.Read<>(List.of(), true))
-                    .forGetter(Contents::choices)
+                    .forGetter(Contents::choices),
+            // Both added after the first format; a file without them reads them as empty
+            LenientCodecs.read(Joined.CODEC, "joined player").optionalFieldOf("joined", new LenientCodecs.Read<>(List.of(), true))
+                    .forGetter(Contents::joined),
+            LenientCodecs.read(UUIDUtil.CODEC, "skin reset").optionalFieldOf("resets", new LenientCodecs.Read<>(List.of(), true))
+                    .forGetter(Contents::resets)
     ).apply(i, Contents::new));
 
     private static final Codec<SkinStore> CODEC = StoreVersions.codec("skin", FORMAT, STEPS, CONTENTS)
@@ -91,6 +107,10 @@ public final class SkinStore extends SavedData {
     private final Map<UUID, SkinTextures> applied = new LinkedHashMap<>();
     // The Mojang account name each player picked
     private final Map<UUID, String> choices = new LinkedHashMap<>();
+    // The name each player last joined with
+    private final Map<UUID, String> joined = new LinkedHashMap<>();
+    // Players whose pick was reset while they were away, until they are told at their next join
+    private final Set<UUID> resets = new LinkedHashSet<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
     private final boolean fromNewer;
@@ -116,6 +136,10 @@ public final class SkinStore extends SavedData {
         for (Choice choice : loaded.choices().values()) {
             choices.put(choice.player(), choice.name());
         }
+        for (Joined entry : loaded.joined().values()) {
+            joined.put(entry.player(), entry.name());
+        }
+        resets.addAll(loaded.resets().values());
     }
 
     private StoreVersions.Loaded<Contents> contents() {
@@ -123,8 +147,11 @@ public final class SkinStore extends SavedData {
         applied.forEach((player, textures) -> appliedList.add(new Applied(player, textures)));
         List<Choice> choiceList = new ArrayList<>();
         choices.forEach((player, name) -> choiceList.add(new Choice(player, name)));
+        List<Joined> joinedList = new ArrayList<>();
+        joined.forEach((player, name) -> joinedList.add(new Joined(player, name)));
         return new StoreVersions.Loaded<>(new Contents(new LenientCodecs.Read<>(List.copyOf(skins.values()), true),
-                new LenientCodecs.Read<>(appliedList, true), new LenientCodecs.Read<>(choiceList, true)), false);
+                new LenientCodecs.Read<>(appliedList, true), new LenientCodecs.Read<>(choiceList, true),
+                new LenientCodecs.Read<>(joinedList, true), new LenientCodecs.Read<>(List.copyOf(resets), true)), false);
     }
 
     public static SkinStore get(MinecraftServer server) {
@@ -197,6 +224,49 @@ public final class SkinStore extends SavedData {
     /** False when the player had picked nothing. */
     public boolean clearChoice(UUID player) {
         boolean had = choices.remove(player) != null;
+        if (had) {
+            setDirty();
+        }
+        return had;
+    }
+
+    /** The players other than this one who picked the account with this name, in any case. */
+    public List<UUID> pickedBy(String name, UUID except) {
+        List<UUID> found = new ArrayList<>();
+        choices.forEach((player, picked) -> {
+            if (!player.equals(except) && picked.equalsIgnoreCase(name)) {
+                found.add(player);
+            }
+        });
+        return found;
+    }
+
+    public void noteJoin(UUID player, String name) {
+        if (!name.equals(joined.put(player, name))) {
+            setDirty();
+        }
+    }
+
+    /** True when a player other than this one last joined under this name, in any case. */
+    public boolean joinedAs(String name, UUID except) {
+        for (Map.Entry<UUID, String> entry : joined.entrySet()) {
+            if (!entry.getKey().equals(except) && entry.getValue().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The player is told at their next join that their pick was reset. */
+    public void noteReset(UUID player) {
+        if (resets.add(player)) {
+            setDirty();
+        }
+    }
+
+    /** True once for a player whose pick was reset while they were away. */
+    public boolean takeReset(UUID player) {
+        boolean had = resets.remove(player);
         if (had) {
             setDirty();
         }

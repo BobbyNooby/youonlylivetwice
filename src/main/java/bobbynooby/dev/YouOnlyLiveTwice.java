@@ -45,7 +45,7 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         NameTagTeam.init();
         ChatDelivery.init();
         Whispers.init();
-        // Skins: its hook only makes the Mojang lookup when a server starts, which no other hook reads
+        // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads
         Skins.init();
         // Bodies: last, so the handover follows the lockout check, and the bodies come back once the team is there
         Bodies.init();

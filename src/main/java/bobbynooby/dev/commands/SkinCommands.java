@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.skins.CachedSkin;
+import bobbynooby.dev.skins.SkinOwners;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.Skins;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -24,10 +25,12 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
 /**
  * /yolt skin: a player wears the skin of a real Mojang account from their next join on, over every other skin. A
  * non-op may set and clear only their own, in the full tree and in CommandRestriction's; ops and the console anyone's.
+ * A non-op is also held to skins.refuseKnownPlayers and skins.lockAfterFirstChoice; ops and the console never are.
  */
 public final class SkinCommands {
     // What a Mojang account name can be made of. Anything else can't be one, so Mojang isn't asked about it.
     private static final Pattern MOJANG_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
+    private static final String LOCKED = "Your skin is locked. Ask an op to change it.";
 
     private SkinCommands() {}
 
@@ -90,6 +93,10 @@ public final class SkinCommands {
         if (off.isPresent()) {
             return YoltCommands.fail(source, off.get());
         }
+        // Before Mojang is asked, since the answer can't change it
+        if (locked(source, who, own)) {
+            return YoltCommands.fail(source, LOCKED);
+        }
         if (!MOJANG_NAME.matcher(mojangName).matches()) {
             return YoltCommands.fail(source, noAccount(mojangName));
         }
@@ -123,6 +130,15 @@ public final class SkinCommands {
         if (!skin.exists()) {
             return YoltCommands.fail(source, noAccount(mojangName));
         }
+        // Checked again with the answer in: another pick may have come in while Mojang was asked
+        if (locked(source, who, own)) {
+            return YoltCommands.fail(source, LOCKED);
+        }
+        if (heldToRules(source, own) && Settings.get().skins.refuseKnownPlayers
+                && SkinOwners.taken(source.getServer(), skin.name(), who.id())) {
+            return YoltCommands.fail(source, "Someone on this server already has " + skin.name()
+                    + "'s skin. Pick another.");
+        }
         store.choose(who.id(), skin.name());
         saveNow(source, who);
         LOGGER.info("{} set the skin of {} to the Mojang account {}", source.getTextName(), who.name(), skin.name());
@@ -144,8 +160,11 @@ public final class SkinCommands {
         return clear(source, who.get(), false);
     }
 
-    // Nothing goes to Mojang, so this works with skins off too
+    // Nothing goes to Mojang, so this works with skins off too. Going back to the default changes a locked skin too.
     private static int clear(CommandSourceStack source, NameAndId who, boolean own) {
+        if (locked(source, who, own)) {
+            return YoltCommands.fail(source, LOCKED);
+        }
         if (!SkinStore.get(source.getServer()).clearChoice(who.id())) {
             return YoltCommands.fail(source, own ? "You haven't picked a skin." : who.name() + " hasn't picked a skin.");
         }
@@ -154,6 +173,17 @@ public final class SkinCommands {
         return YoltCommands.done(source, own
                 ? "Your skin is back to the default. Rejoin to see it."
                 : who.name() + "'s skin is back to the default. It shows once they rejoin.");
+    }
+
+    // A non-op's own pick. Ops and the console may pick anything for anyone.
+    private static boolean heldToRules(CommandSourceStack source, boolean own) {
+        return own && !YoltCommands.GAMEMASTER.test(source);
+    }
+
+    // A non-op who has a pick keeps it, while the lock is on, until an op changes it
+    private static boolean locked(CommandSourceStack source, NameAndId who, boolean own) {
+        return heldToRules(source, own) && Settings.get().skins.lockAfterFirstChoice
+                && SkinStore.get(source.getServer()).choice(who.id()) != null;
     }
 
     // The pick is made either way; a failed write leaves it for the world's next save

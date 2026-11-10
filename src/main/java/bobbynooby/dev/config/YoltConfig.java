@@ -99,6 +99,10 @@ public class YoltConfig {
         public int lookupTimeoutSeconds = 5;
         public int refreshHours = 24;
         public boolean allowPlayerChoice = true;
+        // A non-op can't pick the skin of a player who has joined this server, or one another player picked
+        public boolean refuseKnownPlayers = true;
+        // A non-op picks once; after that only an op changes it, with /yolt skin set <player> <name>
+        public boolean lockAfterFirstChoice = false;
     }
 
     public enum EnderChestMode {
