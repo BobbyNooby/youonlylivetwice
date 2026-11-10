@@ -152,22 +152,26 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // The end is moved off 0, 0 first, so the command putting it back is what the test sees
+    // The end is moved off 0, 0 first, so the command putting it back is what the test sees. The border feature is turned
+    // on for the command, which leaves the border alone while it's off.
     @GameTest
     public void centerMovesOverworldAndNetherOnly(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
         Map<ServerLevel, double[]> centresBefore = new HashMap<>();
         for (ServerLevel level : server.getAllLevels()) {
             centresBefore.put(level, new double[] {level.getWorldBorder().getCenterX(), level.getWorldBorder().getCenterZ()});
         }
+        border.enabled = true;
         try {
             level(helper, Level.END).getWorldBorder().setCenter(5, 5);
-            helper.assertValueEqual(run(server, "yolt center 100 -200"),
-                    List.of("World border center set to 100, -200. The world border feature is off, so YOLT sizes no border."), "command output");
+            helper.assertValueEqual(run(server, "yolt center 100 -200"), List.of("World border center set to 100, -200."), "command output");
             assertCentre(helper, server.overworld(), 100, -200);
             assertCentre(helper, level(helper, Level.NETHER), 100, -200);
             assertCentre(helper, level(helper, Level.END), 0, 0);
         } finally {
+            border.enabled = enabledBefore;
             for (ServerLevel level : server.getAllLevels()) {
                 double[] centre = centresBefore.get(level);
                 level.getWorldBorder().setCenter(centre[0], centre[1]);
@@ -195,19 +199,23 @@ public class CommandGameTests {
     @GameTest
     public void centerKeepsDecimals(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        border.enabled = true;
         try {
             List<String> output = run(server, "yolt center 100.5 -20.25");
             helper.assertTrue(output.size() == 1 && output.get(0).startsWith("World border center set to 100.5, -20.25."),
                     "command output: " + output);
             assertCentre(helper, server.overworld(), 100.5, -20.25);
         } finally {
+            border.enabled = enabledBefore;
             restoreBorders(bordersBefore);
         }
         helper.succeed();
     }
 
-    // The centre still moves with the feature off, as vanilla keeps the border either way
+    // Off, YOLT leaves the border alone, as /yolt border does, so no centre moves and nothing needs a stranding check
     @GameTest
     public void centerWithBorderOffSaysSo(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -217,8 +225,9 @@ public class CommandGameTests {
 
         border.enabled = false;
         try {
-            List<String> output = run(server, "yolt center 10 20");
-            helper.assertTrue(output.size() == 1 && output.get(0).endsWith("The world border feature is off, so YOLT sizes no border."), "command output: " + output);
+            helper.assertValueEqual(run(server, "yolt center 10 20"), List.of("The world border feature is off, so YOLT moves no border."),
+                    "command output");
+            bordersBefore.forEach((level, before) -> assertCentre(helper, level, before[0], before[1]));
         } finally {
             border.enabled = enabledBefore;
             restoreBorders(bordersBefore);

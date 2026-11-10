@@ -191,6 +191,10 @@ final class BorderCommands {
         if (Math.abs(x) > WorldBorder.MAX_CENTER_COORDINATE || Math.abs(z) > WorldBorder.MAX_CENTER_COORDINATE) {
             return YoltCommands.fail(source, "Center must be within ±" + (long) WorldBorder.MAX_CENTER_COORDINATE + ".");
         }
+        // Off, YOLT leaves the border alone: /yolt border then only saves its value, and the centre has none to save
+        if (!Settings.on(c -> c.worldBorder.enabled)) {
+            return YoltCommands.fail(source, "The world border feature is off, so YOLT moves no border.");
+        }
         MinecraftServer server = source.getServer();
         String refusal = strandedRefusal(server, confirmed, centred(x, z));
         if (refusal != null) {
@@ -205,8 +209,7 @@ final class BorderCommands {
             }
         });
         LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
-        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "."
-                + borderOffNote() + spawnOutsideNote(server));
+        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + spawnOutsideNote(server));
     }
 
     private static int endScaling(CommandSourceStack source, double scaling, boolean confirmed) {
@@ -236,7 +239,7 @@ final class BorderCommands {
         return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 
-    // With the feature off YOLT sizes no border: border and endscaling only save their value, center only moves vanilla's
+    // With the feature off YOLT sizes no border: border and endscaling only save their value, and center is refused
     private static String borderOffNote() {
         return Settings.get().worldBorder.enabled ? "" : " The world border feature is off, so YOLT sizes no border.";
     }
