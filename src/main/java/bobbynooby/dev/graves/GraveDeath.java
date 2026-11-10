@@ -8,10 +8,12 @@ import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.PlayerInvoker;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -19,6 +21,7 @@ import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,10 +72,11 @@ public final class GraveDeath {
             }
             Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
-            // Only the menu items have left the player; put them back so vanilla drops them with the rest
+            // Only the menu items have left the player; put them back so they drop with the rest
             Yolt.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
             handBack(player, fromMenus);
-            return false;
+            // With keepInventory vanilla drops nothing, and the inventory stays
+            return !keepInventory && dropWhereTheyLast(player, level, name);
         }
 
         // The lockout kick right after a death saves the emptied player at once, so the graves must reach the
@@ -109,6 +113,44 @@ public final class GraveDeath {
         if (!stack.isEmpty()) {
             collected.add(stack);
         }
+        return true;
+    }
+
+    // Vanilla would drop them at the player, which over the void is below the world, where they are gone at once. So
+    // they drop where the grave would have gone, or on the last ground, the way vanilla's own death drops go: curse of
+    // vanishing destroyed, the rest out of the inventory. False if that fails too, so vanilla drops them after all.
+    private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name) {
+        Inventory inventory = player.getInventory();
+        List<ItemEntity> added = new ArrayList<>();
+        BlockPos spot;
+        try {
+            ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
+            spot = GravePlacement.dropSpot(level, player.blockPosition(),
+                    LastGround.in(player.getUUID(), level.dimension()).orElse(null), GraveStore.get(level.getServer()));
+            // Entities added to a chunk that isn't loaded sit in limbo
+            level.getChunkAt(spot);
+            Vec3 centre = Vec3.atCenterOf(spot);
+            for (int i = 0; i < inventory.getContainerSize(); i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                // No push, so each falls straight down the column that was checked. Like a grave's, they never despawn.
+                ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack.copy(), 0.0, 0.0, 0.0);
+                item.setUnlimitedLifetime();
+                if (!level.addFreshEntity(item)) {
+                    throw new IllegalStateException("Could not add " + stack + " to the world");
+                }
+                added.add(item);
+            }
+        } catch (RuntimeException e) {
+            // Copies, so taking them back leaves every item in the inventory for vanilla to drop
+            added.forEach(Entity::discard);
+            Yolt.LOGGER.error("Could not drop {}'s items where they would last either, so they drop where {} died", name, name, e);
+            return false;
+        }
+        inventory.clearContent();
+        Yolt.LOGGER.info("Dropped {}'s items at {} {}, since their grave could not be made", name, level.dimension().identifier(), spot);
         return true;
     }
 
