@@ -77,7 +77,11 @@ public final class TestPlayers {
 
     // The test server gives ops level 0 unless told otherwise, below the level /yolt and admin view need
     public static void op(ServerPlayer player) {
-        player.level().getServer().getPlayerList().op(player.nameAndId(), Optional.of(LevelBasedPermissionSet.GAMEMASTER), Optional.empty());
+        op(player, LevelBasedPermissionSet.GAMEMASTER);
+    }
+
+    public static void op(ServerPlayer player, LevelBasedPermissionSet level) {
+        player.level().getServer().getPlayerList().op(player.nameAndId(), Optional.of(level), Optional.empty());
     }
 
     public static void deop(ServerPlayer player) {

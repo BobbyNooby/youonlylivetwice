@@ -51,8 +51,9 @@ public final class Whispers {
     private static int run(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer sender = context.getSource().getPlayerOrException();
         // The node stays even with whispers off, so the client's tree and the server's signing tree still match.
-        // With restrictCommands off nothing else stops a non-op, so the refusal is here.
-        if (!Settings.get().chat.allowWhispers && !sender.level().getServer().getPlayerList().isOp(sender.nameAndId())) {
+        // With restrictCommands off nothing else stops a non-op, so the refusal is here. Only a gamemaster op is exempt,
+        // going by the player's own permissions, so a sign an op wrote can't whisper for a non-op.
+        if (!Settings.get().chat.allowWhispers && !Commands.LEVEL_GAMEMASTERS.check(sender.permissions())) {
             context.getSource().sendFailure(Component.literal(TURNED_OFF));
             return 0;
         }

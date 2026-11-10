@@ -28,6 +28,7 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommandSuggestionsProvider;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.world.level.GameType;
 
 import java.time.Instant;
@@ -172,6 +173,7 @@ public class WhisperGameTests {
         boolean whispersBefore = config.chat.allowWhispers;
         int radiusBefore = config.chat.radius;
         List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer moderator = null;
         try {
             config.restrictCommands = false;
             config.chat.allowWhispers = false;
@@ -185,10 +187,21 @@ public class WhisperGameTests {
             run(sender, "w " + target.nameAndId().name() + " hi");
             helper.assertValueEqual(texts(sender), List.of("Whispers are turned off."), "sender messages");
             helper.assertValueEqual(texts(target), List.of(), "target messages");
+
+            // A level 1 op is an op, but not one who may whisper with whispers off
+            moderator = sender;
+            TestPlayers.op(moderator, LevelBasedPermissionSet.MODERATOR);
+            sender.messages.clear();
+            run(sender, "w " + target.nameAndId().name() + " hi");
+            helper.assertValueEqual(texts(sender), List.of("Whispers are turned off."), "level 1 op's messages");
+            helper.assertValueEqual(texts(target), List.of(), "target messages after the level 1 op's whisper");
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;
             config.chat.radius = radiusBefore;
+            if (moderator != null) {
+                TestPlayers.deop(moderator);
+            }
             leaveAll(joined);
         }
         helper.succeed();
