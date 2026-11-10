@@ -271,6 +271,37 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // A picked account that no longer exists gives way to the player's own name at login, as it does for heads built
+    // from the name alone, so the player and a later head agree
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void goneAccountPickFallsBackToUsername(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Gone");
+        // No test sets this one up, so the fake says no account has it, as after the account was renamed
+        String account = uniqueName("Acct");
+        MOJANG.answer(name);
+        GameProfile profile = TestLogins.offline(name);
+        SkinStore store = SkinStore.get(server);
+        // Straight into the store, as a pick made while the account still existed: a command now would refuse it
+        store.choose(profile.id(), account);
+        try (TestLogins.Login login = TestLogins.start(server, profile)) {
+            login.tick();
+            helper.assertTrue(login.finished().isPresent(), "the login did not go through");
+            assertEqual(helper, textures(login.profile()), FakeSkinLookup.texturesOf(name), "textures with the picked account gone");
+            helper.assertValueEqual(MOJANG.timesAsked(account), 1, "times Mojang was asked about the picked account");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked about the player's own name");
+            assertEqual(helper, textures(Skins.known(server, new NameAndId(profile))), FakeSkinLookup.texturesOf(name),
+                    "textures of a head built from the name");
+            // Kept, so the pick comes back if someone takes the name again
+            assertEqual(helper, store.choice(profile.id()), account, "the pick after its account was found gone");
+        } finally {
+            store.clearChoice(profile.id());
+            MOJANG.forget(name);
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void unknownMojangNameChangesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
