@@ -21,6 +21,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
@@ -49,6 +50,9 @@ import java.util.UUID;
 
 // Every grave a test makes is removed again in finally, record and block, so no other test runs into it
 public class GraveProtectionGameTests {
+    // Tests that turn graves off and on again run apart from the others
+    private static final String GRAVES_SWITCH = "you-only-live-twice-gametest:graves_switch";
+
     @GameTest
     public void playerCannotBreakGrave(GameTestHelper helper) {
         Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
@@ -159,6 +163,54 @@ public class GraveProtectionGameTests {
             assertGraveIntact(helper, grave);
         } finally {
             removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    @GameTest(environment = GRAVES_SWITCH)
+    public void restoreDoesNotOverwriteChest(GameTestHelper helper) {
+        restoreLeavesContainer(helper, Blocks.CHEST);
+    }
+
+    @GameTest(environment = GRAVES_SWITCH)
+    public void restoreDoesNotOverwriteShulker(GameTestHelper helper) {
+        restoreLeavesContainer(helper, Blocks.SHULKER_BOX);
+    }
+
+    // With graves off the head is an ordinary block, so someone can break it and build on the spot. Graves come back
+    // on, and the chunk's next load puts the missing head back.
+    private static void restoreLeavesContainer(GameTestHelper helper, Block block) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        BlockPos spot = grave.pos();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean before = graves.enabled;
+        try {
+            graves.enabled = false;
+            level.setBlock(spot, block.defaultBlockState(), Block.UPDATE_ALL);
+            ((Container) level.getBlockEntity(spot)).setItem(0, new ItemStack(Items.DIAMOND, 3));
+            graves.enabled = true;
+            GraveBlocks.restoreChunk(level, level.getChunkAt(spot));
+
+            String name = block.getName().getString();
+            helper.assertTrue(level.getBlockState(spot).is(block), "the " + name + " was replaced");
+            helper.assertTrue(level.getBlockEntity(spot) instanceof Container container && container.countItem(Items.DIAMOND) == 3,
+                    "the " + name + " does not hold exactly 3 diamonds");
+            helper.assertItemEntityNotPresent(Items.DIAMOND, helper.relativePos(spot), 3.0);
+            Grave moved = store.byId(grave.id()).orElse(null);
+            helper.assertTrue(moved != null, "grave record is gone");
+            helper.assertFalse(moved.pos().equals(spot), "grave record still points at the taken spot");
+            assertGraveIntact(helper, moved);
+            helper.assertTrue(ItemStack.listMatches(moved.items(), grave.items()), "grave items changed: " + moved.items());
+        } finally {
+            graves.enabled = before;
+            // Emptied first, so removing the chest doesn't spill it
+            if (level.getBlockEntity(spot) instanceof Container container) {
+                container.clearContent();
+            }
+            level.setBlock(spot, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            removeGraves(helper, store.byId(grave.id()).stream().toList());
         }
         helper.succeed();
     }

@@ -82,4 +82,8 @@ public record Grave(
     public Grave withItems(List<ItemStack> items) {
         return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt);
     }
+
+    public Grave withPos(BlockPos pos) {
+        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt);
+    }
 }
