@@ -8,6 +8,7 @@ import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.PlayerInvoker;
+import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -81,9 +82,11 @@ public final class GraveDeath {
 
         // The lockout kick right after a death saves the emptied player at once, so the graves must reach the
         // disk first. This runs inside the death, so a failed write only logs; the next save tries again.
+        boolean gravesOnDisk = true;
         try {
             GraveStore.get(level.getServer()).saveNow(level.getServer());
         } catch (RuntimeException e) {
+            gravesOnDisk = false;
             Yolt.LOGGER.error("Could not write {}'s grave to disk, it is kept in memory until the next save", name, e);
         }
 
@@ -93,6 +96,12 @@ public final class GraveDeath {
         }
         if (enderMode == YoltConfig.EnderChestMode.GRAVE || enderMode == YoltConfig.EnderChestMode.WIPE) {
             enderChest.clearContent();
+        }
+        // A death with no kick would wait for the next autosave, and a crash before it would bring the items back
+        // beside their graves. Only once the graves are on disk, or that crash would lose them instead.
+        if (gravesOnDisk && !deathKicks()) {
+            Guard.run(() -> ((PlayerListInvoker) level.getServer().getPlayerList()).yoltSave(player),
+                    "Could not save {} after their death, so their items are in their save until the next one", name);
         }
         return true;
     }
