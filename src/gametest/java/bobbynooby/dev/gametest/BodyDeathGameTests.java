@@ -139,7 +139,8 @@ public class BodyDeathGameTests {
             helper.assertValueEqual(grave.items().size(), 2, "grave item count");
             ItemStack head = grave.items().get(0);
             helper.assertTrue(GraveItems.isGraveHead(head), "first grave item is not the grave head");
-            helper.assertTrue(grave.items().get(1).is(Items.DIAMOND), "second grave item is not the diamond");
+            helper.assertTrue(ItemStack.matches(grave.items().get(1), new ItemStack(Items.DIAMOND)),
+                    "second grave item: " + grave.items().get(1));
             helper.assertTrue(hasSkin(head.get(DataComponents.PROFILE)), "grave head lost the body's skin");
             helper.assertTrue(hasSkin(grave.profile()), "grave lost the body's skin");
 

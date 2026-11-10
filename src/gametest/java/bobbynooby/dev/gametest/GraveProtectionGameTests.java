@@ -32,7 +32,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.BucketItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -292,7 +291,7 @@ public class GraveProtectionGameTests {
             List<ItemStack> items = grave.items();
             helper.assertValueEqual(items.size(), 3, "grave item count");
             helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "first item is not the grave head");
-            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            helper.assertTrue(ItemStack.matches(items.get(1), new ItemStack(Items.DIAMOND)), "second item: " + items.get(1));
             helper.assertTrue(items.get(2).is(Items.IRON_HELMET), "third item is not the iron helmet");
             assertGraveIntact(helper, grave);
             helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped as well");
@@ -394,8 +393,8 @@ public class GraveProtectionGameTests {
             }
 
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
-            helper.assertTrue(contains(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()), Items.DIAMOND),
-                    "save lost the diamond");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()),
+                    Items.DIAMOND), 1, "diamonds in the save");
             helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 30, "saved XP level");
             helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
             Grave grave = onlyGrave(helper, who.id());
@@ -428,8 +427,8 @@ public class GraveProtectionGameTests {
         try {
             helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             Grave grave = onlyGrave(helper, who.id());
-            helper.assertFalse(contains(grave.items(), Items.IRON_HELMET), "cursed helmet went into the grave");
-            helper.assertTrue(contains(grave.items(), Items.DIAMOND), "diamond missing from the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.IRON_HELMET), 0, "cursed helmets in the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 1, "diamonds in the grave");
             helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.IRON_HELMET, last, 3.0), 0, "cursed helmets dropped");
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
             helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).isEmpty(), "save still has items");
@@ -467,10 +466,10 @@ public class GraveProtectionGameTests {
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
             helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
             helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 30, "saved XP level");
-            helper.assertTrue(contains(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()), Items.DIAMOND),
-                    "save lost the diamond");
-            helper.assertTrue(contains(OfflinePlayerData.takeEnderChest(saved, server.registryAccess(), who.name()), Items.EMERALD),
-                    "save lost the ender chest emerald");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()),
+                    Items.DIAMOND), 1, "diamonds in the save");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeEnderChest(saved, server.registryAccess(), who.name()),
+                    Items.EMERALD), 1, "emeralds in the saved ender chest");
             helper.assertTrue(gravesOf(helper, who.id()).isEmpty(), "a spectator got a grave");
             helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
             helper.assertTrue(near(helper, EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
@@ -524,10 +523,6 @@ public class GraveProtectionGameTests {
         List<Grave> graves = gravesOf(helper, owner);
         helper.assertValueEqual(graves.size(), 1, "graves for the player");
         return graves.get(0);
-    }
-
-    private static boolean contains(List<ItemStack> items, Item item) {
-        return items.stream().anyMatch(stack -> stack.is(item));
     }
 
     private static void removeGraves(GameTestHelper helper, List<Grave> graves) {

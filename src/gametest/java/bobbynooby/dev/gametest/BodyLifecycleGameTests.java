@@ -517,8 +517,8 @@ public class BodyLifecycleGameTests {
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
                     Profiles.of(server, player.nameAndId()), null);
-            helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.items().stream()
-                    .anyMatch(item -> item.is(Items.IRON_CHESTPLATE))), "no grave holds the chestplate");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.IRON_CHESTPLATE), 1, "chestplates in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.IRON_SWORD), 1, "swords in the graves");
 
             ServerPlayer back = rejoin(helper, player);
             helper.assertTrue(back.isDeadOrDying(), "dead player came back alive");
