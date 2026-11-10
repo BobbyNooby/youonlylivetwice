@@ -47,6 +47,7 @@
     "SetPlayerTeamPacketInvoker",
     "SleepAnnounceMixin",
     "SleepStatusMixin",
+    "TargetGoalAccessor",
     "VisibilityPairingMixin"
   ],
   "injectors": {

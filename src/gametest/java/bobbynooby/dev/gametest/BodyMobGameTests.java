@@ -9,6 +9,7 @@ import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.MobAccessor;
+import bobbynooby.dev.mixin.TargetGoalAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -205,6 +206,25 @@ public class BodyMobGameTests {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();
+    }
+
+    // An evoker keeps after a player out of sight for 300 ticks (26.3 Evoker.registerGoals); most mobs for 60
+    @GameTest
+    public void evokerBodyGoalKeepsItsMemory(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            helper.assertValueEqual(unseenMemoryTicks(spawnMob(helper, spawned, EntityTypes.EVOKER)), 300,
+                    "evoker's body goal memory");
+            helper.assertValueEqual(unseenMemoryTicks(spawnMob(helper, spawned, EntityTypes.ZOMBIE)), 60,
+                    "zombie's body goal memory");
+        } finally {
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    private static int unseenMemoryTicks(Mob mob) {
+        return ((TargetGoalAccessor) bodyGoal(mob)).yoltUnseenMemoryTicks();
     }
 
     // A phantom's own player goal sets its target without claiming it, which is what this does by hand
