@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class GraveStoreGameTests {
@@ -188,8 +189,8 @@ public class GraveStoreGameTests {
         GraveStore loaded = GraveStore.TYPE.codec().parse(ops, storeData(keptTag, brokenTag)).getOrThrow();
         helper.assertTrue(loaded.byId(kept.id()).isPresent(), "the readable grave was not loaded");
         helper.assertTrue(loaded.byId(broken.id()).isEmpty(), "the grave with no position was loaded");
-        assertFileCopiedOnce(helper, loaded, storeData(keptTag, brokenTag));
-        assertFileNotCopied(helper, GraveStore.TYPE.codec().parse(ops, storeData(keptTag)).getOrThrow(), storeData(keptTag));
+        assertFileCopiedOnce(helper, loaded::checkFile, storeData(keptTag, brokenTag));
+        assertFileNotCopied(helper, GraveStore.TYPE.codec().parse(ops, storeData(keptTag)).getOrThrow()::checkFile, storeData(keptTag));
         helper.succeed();
     }
 
@@ -206,8 +207,8 @@ public class GraveStoreGameTests {
         List<ItemStack> items = loaded.byId(grave.id()).map(Grave::items).orElse(List.of());
         helper.assertTrue(items.size() == 1 && items.get(0).is(Items.DIAMOND) && items.get(0).getCount() == 2,
                 "the grave did not keep just its readable item: " + items);
-        assertFileCopiedOnce(helper, loaded, storeData(brokenTag));
-        assertFileNotCopied(helper, GraveStore.TYPE.codec().parse(ops, storeData(wholeTag)).getOrThrow(), storeData(wholeTag));
+        assertFileCopiedOnce(helper, loaded::checkFile, storeData(brokenTag));
+        assertFileNotCopied(helper, GraveStore.TYPE.codec().parse(ops, storeData(wholeTag)).getOrThrow()::checkFile, storeData(wholeTag));
         helper.succeed();
     }
 
@@ -222,37 +223,37 @@ public class GraveStoreGameTests {
         return data;
     }
 
-    // A temp file stands in for the grave file the store was loaded from. The live store loads at server start, so
-    // this checks the store's own file check, which get runs on first use.
-    private static void assertFileCopiedOnce(GameTestHelper helper, GraveStore loaded, CompoundTag data) throws IOException {
-        Path file = writeGraveFile(helper, data);
+    // A temp file stands in for the store file the store was loaded from. The live store loads at server start, so
+    // this checks the store's own file check, which get runs on first use. Body tests use these too.
+    static void assertFileCopiedOnce(GameTestHelper helper, Consumer<Path> checkFile, CompoundTag data) throws IOException {
+        Path file = writeStoreFile(helper, data);
         try {
-            loaded.checkFile(file);
+            checkFile.accept(file);
             List<Path> copies = copiesOf(file);
             helper.assertValueEqual(copies.size(), 1, "copies next to the file");
             helper.assertTrue(Arrays.equals(Files.readAllBytes(copies.get(0)), Files.readAllBytes(file)), "the copy differs from the file");
             // A restart before the next save finds the same file, and one copy of it is enough
-            loaded.checkFile(file);
+            checkFile.accept(file);
             helper.assertValueEqual(copiesOf(file).size(), 1, "copies after a second check");
         } finally {
             deleteWithCopies(file);
         }
     }
 
-    private static void assertFileNotCopied(GameTestHelper helper, GraveStore loaded, CompoundTag data) throws IOException {
-        Path file = writeGraveFile(helper, data);
+    static void assertFileNotCopied(GameTestHelper helper, Consumer<Path> checkFile, CompoundTag data) throws IOException {
+        Path file = writeStoreFile(helper, data);
         try {
-            loaded.checkFile(file);
+            checkFile.accept(file);
             helper.assertTrue(copiesOf(file).isEmpty(), "a copy was kept of a file read whole");
         } finally {
             deleteWithCopies(file);
         }
     }
 
-    private static Path writeGraveFile(GameTestHelper helper, CompoundTag data) throws IOException {
+    private static Path writeStoreFile(GameTestHelper helper, CompoundTag data) throws IOException {
         Path dir = helper.getLevel().getServer().getWorldPath(LevelResource.DATA);
         Files.createDirectories(dir);
-        Path file = Files.createTempFile(dir, "graves-test-", ".dat");
+        Path file = Files.createTempFile(dir, "store-test-", ".dat");
         CompoundTag root = new CompoundTag();
         root.put("data", data);
         NbtIo.writeCompressed(root, file);

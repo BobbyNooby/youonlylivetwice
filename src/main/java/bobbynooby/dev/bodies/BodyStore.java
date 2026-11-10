@@ -33,9 +33,10 @@ public final class BodyStore extends SavedData {
     private static final Codec<BodyStore> CODEC = StoreVersions.codec("body", FORMAT, STEPS,
                     (data, fix) -> StoreVersions.eachInList(data, "bodies",
                             body -> body.update("snapshot", snapshot -> StoreVersions.eachInMap(snapshot, "gear", fix))),
-                    LenientCodecs.list(BodyRecord.CODEC, "body").fieldOf("bodies"))
-            .xmap(loaded -> new BodyStore(loaded.records(), loaded.fromNewer()),
-                    store -> new StoreVersions.Loaded<>(List.copyOf(store.bodies.values()), false));
+                    LenientCodecs.read(BodyRecord.CODEC, "body").fieldOf("bodies"))
+            .xmap(loaded -> new BodyStore(loaded.records().values(), loaded.fromNewer(), !loaded.records().complete()),
+                    store -> new StoreVersions.Loaded<>(
+                            new LenientCodecs.Read<>(List.copyOf(store.bodies.values()), true), false));
 
     // The storage runs this fixer on every load and fails on null, which would lose the bodies after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -47,16 +48,20 @@ public final class BodyStore extends SavedData {
     private final boolean fromDisk;
     // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
     private final boolean fromNewer;
+    // True when a record in the file, or part of one, couldn't be read, so the next save would drop it
+    private final boolean partlyRead;
     private boolean fileChecked;
 
     private BodyStore() {
         fromDisk = false;
         fromNewer = false;
+        partlyRead = false;
     }
 
-    private BodyStore(List<BodyRecord> loaded, boolean fromNewer) {
+    private BodyStore(List<BodyRecord> loaded, boolean fromNewer, boolean partlyRead) {
         fromDisk = true;
         this.fromNewer = fromNewer;
+        this.partlyRead = partlyRead;
         for (BodyRecord record : loaded) {
             bodies.put(record.owner(), record);
         }
@@ -67,12 +72,23 @@ public final class BodyStore extends SavedData {
         // Checked on first use, before anything can save, so a file that couldn't be read is kept
         if (!store.fileChecked) {
             store.fileChecked = true;
-            UnreadableFiles.keepCopy(file(server), store.fromDisk, "body");
-            if (store.fromNewer) {
-                UnreadableFiles.keepNewerCopy(file(server), "body");
-            }
+            store.checkFile(file(server));
         }
         return store;
+    }
+
+    /**
+     * Keeps a copy of the file this store was loaded from whenever the store doesn't hold all of it, so the next save
+     * can't lose the rest: the file couldn't be read at all, it came from a newer version, or part of it was skipped.
+     */
+    public void checkFile(Path file) {
+        UnreadableFiles.keepCopy(file, fromDisk, "body");
+        if (fromNewer) {
+            UnreadableFiles.keepNewerCopy(file, "body");
+        } else if (partlyRead) {
+            // A newer file's copy already holds whatever this version skipped
+            UnreadableFiles.keepPartlyReadCopy(file, "body");
+        }
     }
 
     /** Where the storage keeps the bodies. */

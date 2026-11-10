@@ -5,6 +5,7 @@ import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -227,6 +228,36 @@ public class BodyStoreGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // The second record has no owner, so it can't be read at all
+    @GameTest
+    public void skippedBodyRecordKeepsFileCopy(GameTestHelper helper) throws IOException {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyRecord kept = record(Map.of());
+        BodyRecord broken = record(Map.of());
+        Tag keptTag = BodyRecord.CODEC.encodeStart(ops, kept).getOrThrow();
+        CompoundTag brokenTag = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, broken).getOrThrow();
+        brokenTag.remove("owner");
+
+        BodyStore loaded = BodyStore.TYPE.codec().parse(ops, storeData(keptTag, brokenTag)).getOrThrow();
+        helper.assertTrue(loaded.byOwner(kept.owner()).isPresent(), "the readable record was not loaded");
+        helper.assertTrue(loaded.byEntity(broken.bodyEntity()).isEmpty(), "the record with no owner was loaded");
+        GraveStoreGameTests.assertFileCopiedOnce(helper, loaded::checkFile, storeData(keptTag, brokenTag));
+        BodyStore whole = BodyStore.TYPE.codec().parse(ops, storeData(keptTag)).getOrThrow();
+        GraveStoreGameTests.assertFileNotCopied(helper, whole::checkFile, storeData(keptTag));
+        helper.succeed();
+    }
+
+    // A body file's data part, with the version fields at today's values so no fixer runs
+    private static CompoundTag storeData(Tag... bodies) {
+        ListTag list = new ListTag();
+        list.addAll(Arrays.asList(bodies));
+        CompoundTag data = new CompoundTag();
+        data.put("bodies", list);
+        data.putInt("format", BodyStore.FORMAT);
+        data.putInt("data_version", StoreVersions.currentDataVersion());
+        return data;
     }
 
     private static List<Path> copiesOf(Path file) throws IOException {
