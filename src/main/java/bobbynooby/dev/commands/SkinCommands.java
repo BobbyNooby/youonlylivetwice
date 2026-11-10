@@ -119,6 +119,7 @@ public final class SkinCommands {
             return YoltCommands.fail(source, noAccount(mojangName));
         }
         store.choose(who.id(), skin.name());
+        saveNow(source, who);
         LOGGER.info("{} set the skin of {} to the Mojang account {}", source.getTextName(), who.name(), skin.name());
         return YoltCommands.done(source, own
                 ? "Your skin is now " + skin.name() + "'s. Rejoin to see it."
@@ -143,10 +144,20 @@ public final class SkinCommands {
         if (!SkinStore.get(source.getServer()).clearChoice(who.id())) {
             return YoltCommands.fail(source, own ? "You haven't picked a skin." : who.name() + " hasn't picked a skin.");
         }
+        saveNow(source, who);
         LOGGER.info("{} cleared the skin {} picked", source.getTextName(), who.name());
         return YoltCommands.done(source, own
                 ? "Your skin is back to the default. Rejoin to see it."
                 : who.name() + "'s skin is back to the default. It shows once they rejoin.");
+    }
+
+    // The pick is made either way; a failed write leaves it for the world's next save
+    private static void saveNow(CommandSourceStack source, NameAndId who) {
+        try {
+            SkinStore.get(source.getServer()).saveNow(source.getServer());
+        } catch (RuntimeException e) {
+            LOGGER.error("Could not save {}'s skin pick at once, so it is saved with the world", who.name(), e);
+        }
     }
 
     private static String noAccount(String mojangName) {

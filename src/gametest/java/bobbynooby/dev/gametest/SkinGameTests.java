@@ -28,6 +28,8 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
@@ -43,8 +45,11 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -475,7 +480,7 @@ public class SkinGameTests {
 
     // Clearing goes back to the account with the player's own name
     @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
-    public void skinClearRestoresDefault(GameTestHelper helper) {
+    public void skinClearRestoresDefault(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         String name = uniqueName("Clear");
         String account = uniqueName("Acct");
@@ -485,9 +490,12 @@ public class SkinGameTests {
         try {
             console(server, "yolt skin set " + name + " " + account);
             assertEqual(helper, SkinStore.get(server).choice(profile.id()), account, "the pick");
+            // On disk at once, so a crash can't lose what the player was told
+            assertEqual(helper, onDisk(server).choice(profile.id()), account, "the pick in the skin file");
             helper.assertValueEqual(console(server, "yolt skin clear " + name),
                     List.of(name + "'s skin is back to the default. It shows once they rejoin."), "command output");
             assertEqual(helper, SkinStore.get(server).choice(profile.id()), null, "the pick after clearing");
+            assertEqual(helper, onDisk(server).choice(profile.id()), null, "the pick in the skin file after clearing");
             helper.assertValueEqual(console(server, "yolt skin clear " + name), List.of(name + " hasn't picked a skin."),
                     "output of a second clear");
             try (TestLogins.Login login = TestLogins.start(server, profile)) {
@@ -501,6 +509,13 @@ public class SkinGameTests {
             MOJANG.forget(account);
         }
         helper.succeed();
+    }
+
+    // What the skin file on disk holds right now
+    private static SkinStore onDisk(MinecraftServer server) throws IOException {
+        Path file = SkinStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        CompoundTag saved = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+        return SkinStore.TYPE.codec().parse(NbtOps.INSTANCE, saved.get("data")).getOrThrow();
     }
 
     // As the player's client sends a typed command, so it is read against the tree that player has
