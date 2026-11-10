@@ -12,7 +12,6 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.Collection;
 import java.util.Optional;
-import java.util.OptionalInt;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
@@ -49,13 +48,18 @@ final class GraveCommands {
         if (grave.isEmpty()) {
             return YoltCommands.fail(source, "No grave at " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + ".");
         }
-        OptionalInt dropped = Graves.removeAndDrop(server, grave.get());
-        if (dropped.isEmpty()) {
-            return YoltCommands.fail(source, "Could not remove " + grave.get().ownerName() + "'s grave: its dimension is not loaded.");
-        }
-        String stacks = dropped.getAsInt() == 1 ? "1 stack" : dropped.getAsInt() + " stacks";
-        LOGGER.info("{} removed {}'s grave at {} {} and dropped {}", source.getTextName(), grave.get().ownerName(),
-                source.getLevel().dimension().identifier(), pos, stacks);
-        return YoltCommands.done(source, "Removed " + grave.get().ownerName() + "'s grave and dropped " + stacks + ".");
+        String owner = grave.get().ownerName();
+        return switch (Graves.removeAndDrop(server, grave.get())) {
+            case Graves.Removal.DimensionNotLoaded ignored ->
+                    YoltCommands.fail(source, "Could not remove " + owner + "'s grave: its dimension is not loaded.");
+            case Graves.Removal.NoSafeSpot ignored -> YoltCommands.fail(source,
+                    "Could not remove " + owner + "'s grave: there is nowhere near it to drop its items safely.");
+            case Graves.Removal.Dropped dropped -> {
+                String stacks = dropped.stacks() == 1 ? "1 stack" : dropped.stacks() + " stacks";
+                LOGGER.info("{} removed {}'s grave at {} {} and dropped {}", source.getTextName(), owner,
+                        source.getLevel().dimension().identifier(), pos, stacks);
+                yield YoltCommands.done(source, "Removed " + owner + "'s grave and dropped " + stacks + ".");
+            }
+        };
     }
 }

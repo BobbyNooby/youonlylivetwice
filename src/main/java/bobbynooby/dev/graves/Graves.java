@@ -24,7 +24,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Makes and removes graves. Its init wires the use-block, block-break and chunk hooks; the rest are mixins. */
@@ -109,20 +109,45 @@ public final class Graves {
         return new Created(List.copyOf(created), undoAll);
     }
 
+    /** What an admin removal did: dropped the grave's stacks, or left the grave as it was and why. */
+    public sealed interface Removal {
+        record Dropped(int stacks) implements Removal {
+        }
+
+        record DimensionNotLoaded() implements Removal {
+        }
+
+        record NoSafeSpot() implements Removal {
+        }
+    }
+
     /**
-     * Admin removal: drops everything at the grave, clears the head and deletes the record. Returns the stacks dropped,
-     * or nothing when the grave's dimension isn't loaded, in which case the grave is left as it was.
-     * The container leaves OPEN before any menu closes, so nothing can save the grave back or drop an item twice.
+     * Admin removal: drops everything at the grave, clears the head and deletes the record. When the spot would now
+     * destroy dropped items, for example lava has flowed under it, they drop at the nearest safe spot instead. With no
+     * such spot, or no loaded dimension, the grave is left as it was. The container leaves OPEN before any menu
+     * closes, so nothing can save the grave back or drop an item twice.
      */
-    public static OptionalInt removeAndDrop(MinecraftServer server, Grave grave) {
+    public static Removal removeAndDrop(MinecraftServer server, Grave grave) {
         ServerLevel level = server.getLevel(grave.dimension());
         if (level == null) {
             // Nowhere to drop the items, so the record must stay until the dimension is back
             Yolt.LOGGER.error("Could not remove {}'s grave at {} {}: that dimension is not loaded",
                     grave.ownerName(), grave.dimension().identifier(), grave.pos());
-            return OptionalInt.empty();
+            return new Removal.DimensionNotLoaded();
         }
         GraveStore store = GraveStore.get(server);
+        BlockPos pos = grave.pos();
+        Optional<BlockPos> dropAt = GravePlacement.safeForItems(level, pos, store)
+                ? Optional.of(pos) : GravePlacement.nearestSafe(level, pos, store);
+        if (dropAt.isEmpty()) {
+            Yolt.LOGGER.error("Could not remove {}'s grave at {} {}: every spot near it would destroy its items",
+                    grave.ownerName(), grave.dimension().identifier(), pos);
+            return new Removal.NoSafeSpot();
+        }
+        if (!dropAt.get().equals(pos)) {
+            Yolt.LOGGER.info("Dropping {}'s grave items at {} {} instead of at the grave, where they would be destroyed",
+                    grave.ownerName(), grave.dimension().identifier(), dropAt.get());
+        }
         SharedGraveContainer container = GraveMenus.OPEN.remove(grave.id());
         // The live container is newer than the record while anyone has the grave open
         List<ItemStack> source = container != null ? container.getItems() : store.byId(grave.id()).map(Grave::items).orElse(grave.items());
@@ -132,14 +157,14 @@ public final class Graves {
             container.clearContent();
             container.closeMenus();
         }
-        BlockPos pos = grave.pos();
-        Vec3 centre = Vec3.atCenterOf(pos);
+        Vec3 centre = Vec3.atCenterOf(dropAt.get());
         for (ItemStack stack : items) {
-            level.addFreshEntity(new ItemEntity(level, centre.x, centre.y, centre.z, stack));
+            // No push, so every stack falls straight down the column that was checked
+            level.addFreshEntity(new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0));
         }
         GraveBlocks.clearHead(level, pos);
         store.remove(grave.id());
-        return OptionalInt.of(items.size());
+        return new Removal.Dropped(items.size());
     }
 
     // Only an online owner has a facing, so graves for offline owners face the default way

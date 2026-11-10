@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
@@ -32,6 +33,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -333,6 +335,57 @@ public class GraveDeathGameTests {
             assertHeadBlock(helper, second);
         } finally {
             cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // A 3x3 lava pool with a stone rim, so the lava has nowhere to flow; the player dies in the middle of it.
+    // No ceiling, which the search would take as a floor.
+    @GameTest(skyAccess = true)
+    public void lavaDeathPutsGraveOutOfLava(GameTestHelper helper) {
+        List<BlockPos> lava = new ArrayList<>();
+        List<BlockPos> rim = new ArrayList<>();
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 5; z++) {
+                BlockPos pos = new BlockPos(x, 0, z);
+                if (x == 1 || x == 5 || z == 1 || z == 5) {
+                    rim.add(pos);
+                    helper.setBlock(pos, Blocks.STONE);
+                } else {
+                    lava.add(pos);
+                    helper.setBlock(pos, Blocks.LAVA);
+                }
+            }
+        }
+        ServerPlayer player = TestPlayers.join(helper, "Lava", GameType.SURVIVAL, new BlockPos(3, 0, 3));
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            player.getInventory().add(new ItemStack(Items.IRON_SWORD));
+            TestPlayers.markLoaded(player);
+            ServerLevel level = helper.getLevel();
+            player.hurtServer(level, level.damageSources().lava(), Float.MAX_VALUE);
+            helper.assertTrue(player.isDeadOrDying(), "player did not die");
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertFalse(lava.contains(helper.relativePos(grave.pos())), "grave placed in the lava pool at " + grave.pos());
+            BlockPos below = grave.pos().below();
+            helper.assertFalse(level.getFluidState(below).is(FluidTags.LAVA), "grave over lava at " + grave.pos());
+            helper.assertFalse(level.getBlockState(below).getCollisionShape(level, below).isEmpty(),
+                    "nothing solid under the grave at " + grave.pos());
+            List<ItemStack> items = grave.items();
+            helper.assertValueEqual(items.size(), 3, "grave item count");
+            helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "grave head is not the first item");
+            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            helper.assertTrue(items.get(2).is(Items.IRON_SWORD), "third item is not the sword");
+            assertHeadBlock(helper, grave);
+        } finally {
+            cleanUp(helper, player);
+            for (BlockPos pos : lava) {
+                helper.setBlock(pos, Blocks.AIR);
+            }
+            for (BlockPos pos : rim) {
+                helper.setBlock(pos, Blocks.AIR);
+            }
         }
         helper.succeed();
     }

@@ -14,6 +14,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -25,6 +27,7 @@ import net.minecraft.world.level.block.Blocks;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 // Commands run as the console; each test removes the grave it made
 public class GraveCommandGameTests {
@@ -98,6 +101,88 @@ public class GraveCommandGameTests {
             discardDrops(helper, grave);
         }
         helper.succeed();
+    }
+
+    // Lava has reached the floor under and around the grave since it was made, and a stone rim keeps it there.
+    // Burning takes a few ticks, so the count waits two seconds. No ceiling, which the search would take as a floor.
+    @GameTest(maxTicks = 60, skyAccess = true)
+    public void graveRemoveNeverDropsIntoLava(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        List<BlockPos> pool = new ArrayList<>();
+        boolean waiting = false;
+        try {
+            for (int x = 0; x <= 4; x++) {
+                for (int z = 0; z <= 4; z++) {
+                    BlockPos pos = new BlockPos(x, 0, z);
+                    boolean rim = x == 0 || x == 4 || z == 0 || z == 4;
+                    helper.setBlock(pos, rim ? Blocks.STONE : Blocks.LAVA);
+                    pool.add(pos);
+                }
+            }
+            BlockPos pos = grave.pos();
+            helper.assertTrue(helper.getLevel().getFluidState(pos.below()).is(FluidTags.LAVA), "no lava under the grave");
+            List<String> out = run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+            helper.assertValueEqual(out, List.of("Removed Ghost's grave and dropped 3 stacks."), "command output");
+
+            helper.runAfterDelay(40, () -> {
+                try {
+                    List<ItemEntity> drops = helper.getEntities(EntityTypes.ITEM);
+                    for (ItemEntity drop : drops) {
+                        helper.assertFalse(drop.isInLava(), drop.getItem() + " is in lava at " + drop.blockPosition());
+                    }
+                    helper.assertValueEqual(drops.size(), 3, "dropped stacks left after two seconds");
+                    helper.assertValueEqual(count(drops, stack -> stack.is(Items.DIAMOND)), 1, "diamonds left");
+                    helper.assertValueEqual(count(drops, stack -> stack.is(Items.IRON_SWORD)), 1, "swords left");
+                    helper.assertValueEqual(count(drops, GraveItems::isGraveHead), 1, "grave heads left");
+                } finally {
+                    removePool(helper, grave, pool);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                removePool(helper, grave, pool);
+            }
+        }
+    }
+
+    // Lava covers the floor as far as the search looks, with the barrier walls and a stone rim around it
+    @GameTest(skyAccess = true)
+    public void graveRemoveRefusesWhenNoSpotIsSafe(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        List<BlockPos> pool = new ArrayList<>();
+        try {
+            for (int x = 0; x <= 6; x++) {
+                for (int z = 0; z <= 6; z++) {
+                    BlockPos pos = new BlockPos(x, 0, z);
+                    helper.setBlock(pos, x == 6 || z == 6 ? Blocks.STONE : Blocks.LAVA);
+                    pool.add(pos);
+                }
+            }
+            BlockPos pos = grave.pos();
+            List<String> out = run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+            helper.assertValueEqual(out, List.of("Could not remove Ghost's grave: there is nowhere near it to drop its items safely."),
+                    "command output");
+            helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isPresent(), "record removed");
+            helper.assertTrue(helper.getLevel().getBlockState(pos).is(Blocks.PLAYER_HEAD), "head removed");
+            helper.assertTrue(helper.getEntities(EntityTypes.ITEM).isEmpty(), "items dropped");
+        } finally {
+            removePool(helper, grave, pool);
+        }
+        helper.succeed();
+    }
+
+    private static int count(List<ItemEntity> drops, Predicate<ItemStack> which) {
+        return drops.stream().map(ItemEntity::getItem).filter(which).mapToInt(ItemStack::getCount).sum();
+    }
+
+    private static void removePool(GameTestHelper helper, Grave grave, List<BlockPos> pool) {
+        cleanUp(helper, grave);
+        helper.getEntities(EntityTypes.ITEM).forEach(ItemEntity::discard);
+        for (BlockPos pos : pool) {
+            helper.setBlock(pos, Blocks.AIR);
+        }
     }
 
     private static Grave makeGrave(GameTestHelper helper) {

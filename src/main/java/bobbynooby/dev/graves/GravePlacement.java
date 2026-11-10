@@ -1,12 +1,22 @@
 package bobbynooby.dev.graves;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Picks the block a grave head goes on: near the death spot, never on another grave, always reachable. */
 public final class GravePlacement {
@@ -14,32 +24,81 @@ public final class GravePlacement {
     private static final int UP_SEARCH = 8;
     private static final int RING_RADIUS = 3;
     private static final int RING_UP = 3;
+    // An item is a quarter block wide, so one dropped at a block's centre with no push falls straight down this column
+    private static final VoxelShape ITEM_COLUMN = Block.column(4.0, 0.0, 16.0);
 
     private GravePlacement() {
     }
 
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {
+        BlockPos start = start(level, deathPos);
+        return search(level, start, store).orElseGet(() -> lastResort(level, start, store));
+    }
+
+    /** The spot find would pick near pos, or nothing when only its last resort is left. */
+    static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store) {
+        return search(level, start(level, pos), store);
+    }
+
+    /** True when a head can go at pos: the block there gives way and holds nothing, and items dropped there last. */
+    static boolean fits(ServerLevel level, BlockPos pos, GraveStore store) {
+        BlockState state = level.getBlockState(pos);
+        return state.canBeReplaced() && !state.hasBlockEntity() && safeForItems(level, pos, store);
+    }
+
+    /**
+     * True when stacks dropped at the centre of pos come to rest without being destroyed. Whatever stands at pos
+     * itself is replaced by the head or cleared with it, so there only something that destroys items counts.
+     */
+    static boolean safeForItems(ServerLevel level, BlockPos pos, GraveStore store) {
+        if (destroysItems(level.getBlockState(pos))) {
+            return false;
+        }
+        BlockPos.MutableBlockPos below = pos.mutable();
+        while (below.move(Direction.DOWN).getY() >= level.getMinY()) {
+            BlockState state = level.getBlockState(below);
+            if (destroysItems(state)) {
+                return false;
+            }
+            // A grave's head goes when the grave does, so it is no floor
+            if (Shapes.joinIsNotEmpty(state.getCollisionShape(level, below), ITEM_COLUMN, BooleanOp.AND)
+                    && !(state.is(Blocks.PLAYER_HEAD) && store.at(level.dimension(), below.immutable()).isPresent())) {
+                return true;
+            }
+        }
+        // Nothing to land on, so the items would fall out of the world
+        return false;
+    }
+
+    // Lava and fire burn an item, a cactus breaks it, and an end portal takes it to another dimension
+    private static boolean destroysItems(BlockState state) {
+        return state.getFluidState().is(FluidTags.LAVA) || state.is(BlockTags.FIRE) || state.is(Blocks.LAVA_CAULDRON)
+                || state.is(Blocks.CACTUS) || state.is(Blocks.END_PORTAL);
+    }
+
+    // Clamped into the world, and moved off a column with nothing below to stand on
+    private static BlockPos start(ServerLevel level, BlockPos pos) {
+        BlockPos start = new BlockPos(pos.getX(), Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1), pos.getZ());
+        return isVoidColumn(level, start) ? reachableSpotNear(level, start) : start;
+    }
+
+    private static Optional<BlockPos> search(ServerLevel level, BlockPos start, GraveStore store) {
         int minY = level.getMinY();
         int topY = level.getMaxY() - 1;
-        BlockPos start = new BlockPos(deathPos.getX(), Math.clamp(deathPos.getY(), minY, topY), deathPos.getZ());
-        if (isVoidColumn(level, start)) {
-            start = reachableSpotNear(level, start);
-        }
-
         if (usable(level, start, store)) {
-            return start;
+            return Optional.of(start);
         }
         for (int dy = 1; dy <= UP_SEARCH && start.getY() + dy <= topY; dy++) {
             BlockPos pos = start.above(dy);
             if (usable(level, pos, store)) {
-                return pos;
+                return Optional.of(pos);
             }
         }
         for (int r = 1; r <= RING_RADIUS; r++) {
             for (int dy = 0; dy <= RING_UP && start.getY() + dy <= topY; dy++) {
                 for (BlockPos pos : ring(start.above(dy), r)) {
                     if (usable(level, pos, store)) {
-                        return pos;
+                        return Optional.of(pos);
                     }
                 }
             }
@@ -49,13 +108,17 @@ public final class GravePlacement {
         for (int y = surface; y <= topY; y++) {
             BlockPos pos = new BlockPos(start.getX(), y, start.getZ());
             if (usable(level, pos, store)) {
-                return pos;
+                return Optional.of(pos);
             }
         }
+        return Optional.empty();
+    }
 
-        // Nothing free: replace the block at the clamped spot, but never an existing grave
+    // Nothing free: replace the block at the start spot, but never an existing grave, and never lava or fire
+    private static BlockPos lastResort(ServerLevel level, BlockPos start, GraveStore store) {
+        int topY = level.getMaxY() - 1;
         BlockPos pos = start;
-        while (store.at(level.dimension(), pos).isPresent() && pos.getY() < topY) {
+        while ((store.at(level.dimension(), pos).isPresent() || destroysItems(level.getBlockState(pos))) && pos.getY() < topY) {
             pos = pos.above();
         }
         return pos;
@@ -63,7 +126,7 @@ public final class GravePlacement {
 
     // Past the border nobody could reach the grave to open it
     private static boolean usable(ServerLevel level, BlockPos pos, GraveStore store) {
-        return level.getBlockState(pos).canBeReplaced() && store.at(level.dimension(), pos).isEmpty()
+        return fits(level, pos, store) && store.at(level.dimension(), pos).isEmpty()
                 && level.getWorldBorder().isWithinBounds(pos);
     }
 
