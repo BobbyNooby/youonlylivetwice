@@ -6,6 +6,7 @@ import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -465,9 +466,9 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
-    // With no kick to save them, the emptied players are saved at once: one dies with the lockout off, one with a
-    // lockout of 0 days. Each save first holds the items, like an autosave before the death, so only a save at the death
-    // can empty it. Each switch goes back in the same tick.
+    // With no kick to save them, the emptied players are saved once the kick would have come: one dies with the lockout
+    // off, one with a lockout of 0 days. Each save first holds the items, like an autosave before the death, so only a
+    // save after the death can empty it before the next autosave. Each switch goes back in the same tick.
     @GameTest(maxTicks = 20)
     public void deathWithoutKickSavesEmptiedPlayer(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -497,10 +498,8 @@ public class GraveDeathGameTests {
             } finally {
                 lockout.cooldownDays = daysBefore;
             }
-            for (ServerPlayer player : players) {
-                assertSavedDead(helper, player, "at the death");
-            }
-            helper.runAfterDelay(5, () -> {
+            // The save is queued from a queued task, and a server running behind runs each within 4 ticks
+            helper.runAfterDelay(10, () -> {
                 try {
                     for (ServerPlayer player : players) {
                         String name = player.nameAndId().name();
@@ -586,13 +585,73 @@ public class GraveDeathGameTests {
         }
     }
 
+    // The lockout is on, but a revive in the same tick leaves nothing to kick for. So the player is saved once the kick
+    // would have come, like any death that doesn't kick, and told in chat at the respawn. A death 20 up puts the grave
+    // far enough below for the default to tell. Only the death's own row changes, so nothing is held across ticks.
+    @GameTest(skyAccess = true, maxTicks = 20)
+    public void sameTickReviveSavesAndTellsInChat(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Revived", GameType.SURVIVAL, new BlockPos(3, 20, 3));
+        Runnable cleanUp = () -> leaveAndRemoveGraves(helper, player.getUUID());
+        boolean waiting = false;
+        try {
+            assertDefaultTelling(helper);
+            helper.assertTrue(Settings.get().deathLockout.enabled && Settings.get().deathLockout.cooldownDays > 0,
+                    "the lockout is not on with days to wait");
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            ((PlayerListInvoker) server.getPlayerList()).yoltSave(player);
+            helper.assertValueEqual(savedDiamonds(helper, player), 3, "saved diamonds before the death");
+            respawnBesideTest(helper, player);
+            kill(helper, player);
+            helper.assertValueEqual(DeathLockout.revive(player.getUUID(), player.nameAndId().name(), "test"),
+                    DeathLockout.ReviveResult.REVIVED, "the revive");
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "grave, 20 below the death");
+            // The save is queued from a queued task, and a server running behind runs each within 4 ticks
+            helper.runAfterDelay(10, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, "the revived player was kicked");
+                    assertSavedDead(helper, player, "after the tick");
+                    ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+                    helper.assertValueEqual(graveLines(back), List.of(graveLine(grave)), "chat at the respawn");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // Killed, then back through the death screen's respawn at a point set beside the test, so no random spot is searched
     private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
-        ServerLevel level = helper.getLevel();
-        player.setRespawnPosition(new ServerPlayer.RespawnConfig(
-                LevelData.RespawnData.of(level.dimension(), helper.absolutePos(new BlockPos(7, 1, 7)), 0.0F, 0.0F), true), false);
+        respawnBesideTest(helper, player);
         kill(helper, player);
-        return level.getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        return helper.getLevel().getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+    }
+
+    private static void respawnBesideTest(GameTestHelper helper, ServerPlayer player) {
+        player.setRespawnPosition(new ServerPlayer.RespawnConfig(
+                LevelData.RespawnData.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(7, 1, 7)), 0.0F, 0.0F), true), false);
+    }
+
+    // The tests that rely on the defaults: tell only for a grave more than 16 blocks from the death
+    private static void assertDefaultTelling(GameTestHelper helper) {
+        helper.assertValueEqual(Settings.get().graves.tellLocation, YoltConfig.TellLocation.WHEN_MOVED, "tellLocation");
+        helper.assertValueEqual(Settings.get().graves.tellLocationDistance, 16, "tellLocationDistance");
+    }
+
+    // Whichever player object is online for the owner now leaves, so a queued kick finds nobody
+    private static void leaveAndRemoveGraves(GameTestHelper helper, UUID owner) {
+        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+        removeGraves(helper, owner);
     }
 
     // The grave lines a player was sent in chat, oldest first
