@@ -204,20 +204,29 @@ public class MapGameTests {
         helper.succeed();
     }
 
-    // Unlimited tracking, like an explorer map, so even a far holder shows, pinned to the edge. Made at the test's
-    // origin, but its centre snaps to a 128 block grid, so holders go at onMap rather than at the origin.
+    // Unlimited tracking, like an explorer map, so even a far holder shows, pinned to the edge
     static ItemStack newMap(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(BlockPos.ZERO);
         return MapItem.create(helper.getLevel(), origin.getX(), origin.getZ(), (byte) 0, true, true);
     }
 
-    // An absolute position whose x and z count from the map's own centre, at the height of the given test position.
-    // A player shows on the map only within 63 blocks of that centre, and the test's origin can be 64 away from it.
-    // Absolute, since vanilla's relativePos turns an unrotated test's position half round.
-    static BlockPos onMap(GameTestHelper helper, ItemStack map, BlockPos fromCentre) {
+    // Where a holder joins, as an absolute position: offset (0 to 4 blocks east and south, the height as in the test)
+    // from the spot nearest the map's centre in the test's own chunk. The centre snaps to a 128 block grid and a player
+    // shows on the map only within 63 blocks of it, so the test's origin can be off the map. A chunk never straddles two
+    // map cells (cells start on 16 block lines), so that spot is at most 57 blocks out. It stays in the test's chunk,
+    // which is kept loaded: a player joining where no chunk is ready yet starts tracking the others at once.
+    static BlockPos onMap(GameTestHelper helper, ItemStack map, BlockPos offset) {
         MapItemSavedData data = data(helper, map);
-        int y = helper.absolutePos(fromCentre).getY();
-        return new BlockPos(data.centerX + fromCentre.getX(), y, data.centerZ + fromCentre.getZ());
+        BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+        int x = nearestInChunk(origin.getX(), data.centerX) + offset.getX();
+        int z = nearestInChunk(origin.getZ(), data.centerZ) + offset.getZ();
+        return new BlockPos(x, origin.getY() + offset.getY(), z);
+    }
+
+    // Along one axis, the block of this coordinate's chunk nearest the centre, 4 in from either edge
+    private static int nearestInChunk(int coordinate, int centre) {
+        int chunkStart = Math.floorDiv(coordinate, 16) * 16;
+        return Math.clamp(centre, chunkStart + 4, chunkStart + 11);
     }
 
     // What each copy's inventory tick does; test players and bodies here get no living tick
