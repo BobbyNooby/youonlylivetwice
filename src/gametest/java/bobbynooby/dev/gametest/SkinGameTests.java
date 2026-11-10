@@ -9,6 +9,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.skins.CachedSkin;
+import bobbynooby.dev.skins.SkinOwners;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.SkinTextures;
 import bobbynooby.dev.skins.Skins;
@@ -35,6 +36,7 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.CachedUserNameToIdResolver;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
@@ -694,6 +696,23 @@ public class SkinGameTests {
             TestPlayers.leave(player);
             MOJANG.forget(onlineName);
             MOJANG.forget(offlineName);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla's name cache gives the id it holds for a name in any case, and nothing for a name it doesn't hold. This
+    // cache has no Mojang to ask, so vanilla's own lookup on a miss would throw.
+    @GameTest
+    public void nameCacheIdIgnoresCase(GameTestHelper helper) throws IOException {
+        Path file = Files.createTempFile("yolt-usercache", ".json");
+        try {
+            CachedUserNameToIdResolver cache = new CachedUserNameToIdResolver(null, file.toFile());
+            UUID id = UUID.randomUUID();
+            cache.add(new NameAndId(id, "steve"));
+            assertEqual(helper, SkinOwners.cachedId(cache, "STEVE"), Optional.of(id), "the id for the name in capitals");
+            assertEqual(helper, SkinOwners.cachedId(cache, "alex"), Optional.empty(), "the id for a name the cache doesn't hold");
+        } finally {
+            Files.deleteIfExists(file);
         }
         helper.succeed();
     }
