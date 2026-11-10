@@ -23,6 +23,8 @@ import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -56,7 +58,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Off", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
@@ -80,9 +82,10 @@ public class OfflineGameTests {
             graves.enabled = gravesBefore;
         }
         helper.assertValueEqual(itemEntities(helper, Items.DIAMOND, last), 1, "diamond item entities");
-        helper.assertItemEntityCountIs(Items.DIAMOND, last, 2.0, 1);
+        helper.assertValueEqual(GraveAsserts.count(itemsAt(helper, last).stream().map(ItemEntity::getItem).toList(), Items.DIAMOND),
+                1, "diamonds dropped");
         helper.assertValueEqual(itemEntities(helper, Items.IRON_HELMET, last), 1, "iron helmet item entities");
-        helper.assertEntityPresent(EntityTypes.EXPERIENCE_ORB, last, 2.0);
+        helper.assertFalse(orbsAt(helper, last).isEmpty(), "no XP dropped");
 
         CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
         helper.assertTrue(saved.getListOrEmpty("Inventory").isEmpty(), "saved inventory still has items");
@@ -102,7 +105,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Fail", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.giveExperienceLevels(30);
@@ -131,10 +134,10 @@ public class OfflineGameTests {
 
         helper.assertTrue(failed, "kill did not report the failed save");
         helper.assertValueEqual(itemEntities(helper, Items.DIAMOND, last), 0, "diamond item entities");
-        helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "XP orbs left behind");
+        helper.assertTrue(orbsAt(helper, last).isEmpty(), "XP orbs left behind");
         CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
-        helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).stream().anyMatch(item -> item.is(Items.DIAMOND)),
-                "save lost the diamond");
+        helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()), Items.DIAMOND),
+                1, "diamonds in the save");
         helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 30, "saved XP level");
         helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "failed kill started the lockout");
         try (Stream<Path> files = Files.list(dir)) {
@@ -149,7 +152,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Twice", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.giveExperienceLevels(30);
@@ -159,16 +162,18 @@ public class OfflineGameTests {
         try {
             helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "first kill result");
 
-            // Clear the first death's drops and lockout, so anything found afterwards came from the second kill
-            helper.getEntities(EntityTypes.ITEM, last, 2.0).forEach(Entity::discard);
-            helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).forEach(Entity::discard);
+            // Clear the first death's drops and lockout, so anything found afterwards came from the second kill. Its
+            // XP lands where the search looks, so the second kill's empty search means something.
+            helper.assertFalse(orbsAt(helper, last).isEmpty(), "the first kill dropped no XP");
+            itemsAt(helper, last).forEach(Entity::discard);
+            orbsAt(helper, last).forEach(Entity::discard);
             helper.assertValueEqual(DeathLockout.revive(who.id(), "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive after the first kill");
             byte[][] filesBefore = saveFiles(server, who);
             int gravesBefore = gravesOf(helper, who.id()).size();
 
             helper.assertValueEqual(Kills.kill(server, who), Kills.Result.ALREADY_DEAD, "second kill result");
-            helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 2.0).isEmpty(), "second kill dropped items");
-            helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "second kill dropped XP");
+            helper.assertTrue(itemsAt(helper, last).isEmpty(), "second kill dropped items");
+            helper.assertTrue(orbsAt(helper, last).isEmpty(), "second kill dropped XP");
             helper.assertValueEqual(gravesOf(helper, who.id()).size(), gravesBefore, "graves after the second kill");
             helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
             helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "second kill restarted the lockout");
@@ -183,7 +188,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Ender", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
         } finally {
@@ -202,7 +207,7 @@ public class OfflineGameTests {
             }
             helper.assertTrue(enderChest(server, who).isEmpty(), "ender chest not wiped");
             // Wiped means gone, not dropped or kept in a grave
-            helper.assertItemEntityNotPresent(Items.EMERALD, last, 2.0);
+            helper.assertValueEqual(itemEntities(helper, Items.EMERALD, last), 0, "emerald item entities");
             helper.assertFalse(gravesOf(helper, who.id()).stream()
                     .anyMatch(grave -> grave.items().stream().anyMatch(item -> item.is(Items.EMERALD))), "grave holds the wiped emerald");
         } finally {
@@ -217,7 +222,7 @@ public class OfflineGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "EnderOff", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
         } finally {
@@ -235,8 +240,8 @@ public class OfflineGameTests {
             graves.enabled = enabledBefore;
             graves.enderChestOnDeath = modeBefore;
         }
-        helper.assertTrue(enderChest(server, who).stream().anyMatch(item -> item.is(Items.EMERALD)), "ender chest lost the emerald");
-        helper.assertItemEntityNotPresent(Items.EMERALD, last, 2.0);
+        helper.assertValueEqual(GraveAsserts.count(enderChest(server, who), Items.EMERALD), 1, "emeralds in the ender chest");
+        helper.assertValueEqual(itemEntities(helper, Items.EMERALD, last), 0, "emerald item entities");
         helper.succeed();
     }
 
@@ -458,9 +463,18 @@ public class OfflineGameTests {
     }
 
     // Entities, not items: checked in the same tick as the drop, before anything could merge
-    private static int itemEntities(GameTestHelper helper, Item item, BlockPos relativePos) {
-        AABB area = new AABB(helper.absolutePos(relativePos)).inflate(2.0);
-        return helper.getLevel().getEntities(EntityTypes.ITEM, area, entity -> entity.isAlive() && entity.getItem().is(item)).size();
+    private static int itemEntities(GameTestHelper helper, Item item, BlockPos at) {
+        return (int) itemsAt(helper, at).stream().filter(entity -> entity.getItem().is(item)).count();
+    }
+
+    // An offline death drops at the bottom centre of the save's block, and in the same tick nothing has moved yet, so
+    // the search is that block alone. Absolute, since vanilla's relativePos turns an unrotated test's position half round.
+    private static List<ItemEntity> itemsAt(GameTestHelper helper, BlockPos at) {
+        return helper.getLevel().getEntities(EntityTypes.ITEM, new AABB(at), Entity::isAlive);
+    }
+
+    private static List<ExperienceOrb> orbsAt(GameTestHelper helper, BlockPos at) {
+        return helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, new AABB(at), Entity::isAlive);
     }
 
     // A write moves the current save to .dat_old, so both files staying the same means nothing was written
