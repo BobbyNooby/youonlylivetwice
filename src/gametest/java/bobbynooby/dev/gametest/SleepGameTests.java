@@ -45,7 +45,7 @@ import java.util.UUID;
 
 // Every switch and the clock are flipped and restored inside one tick, so no other test sees them
 public class SleepGameTests {
-    private static final BlockPos NEXT_TO_BED = new BlockPos(1, 1, 0);
+    static final BlockPos NEXT_TO_BED = new BlockPos(1, 1, 0);
     // The action-bar lines vanilla sends everyone in the dimension when the sleeper count changes
     private static final Set<String> SLEEP_LINES = Set.of("sleep.players_sleeping", "sleep.skipping_night");
     private static final String SPAWN_SET = "block.minecraft.set_spawn";
@@ -434,7 +434,7 @@ public class SleepGameTests {
     }
 
     // A red bed with its foot at (1, 1, 1), facing south; returns the head
-    private static BlockPos placeBed(GameTestHelper helper) {
+    static BlockPos placeBed(GameTestHelper helper) {
         BlockPos foot = new BlockPos(1, 1, 1);
         BlockPos head = foot.relative(Direction.SOUTH);
         BlockState bed = Blocks.BED.pick(DyeColor.RED).defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
@@ -444,7 +444,7 @@ public class SleepGameTests {
     }
 
     // What a right click on the bed runs on the server
-    private static void useBed(GameTestHelper helper, ServerPlayer player, BlockPos head) {
+    static void useBed(GameTestHelper helper, ServerPlayer player, BlockPos head) {
         useBlock(helper.getLevel(), player, helper.absolutePos(head));
     }
 
@@ -459,7 +459,7 @@ public class SleepGameTests {
         player.stopSleepInBed(false, true);
     }
 
-    private static void wakeAndLeave(ServerPlayer player) {
+    static void wakeAndLeave(ServerPlayer player) {
         if (player.isSleeping()) {
             player.stopSleepInBed(true, true);
         }
@@ -474,14 +474,14 @@ public class SleepGameTests {
     }
 
     // Beds only work in the dark, and the sky brightness is cached until the next level tick
-    private static void toMidnight(GameTestHelper helper) {
+    static void toMidnight(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         level.getServer().clockManager().moveToTimeMarker(clock(level), ClockTimeMarkers.MIDNIGHT);
         level.updateSkyBrightness();
         helper.assertTrue(level.isDarkOutside(), "it is not dark after moving the clock to midnight");
     }
 
-    private static long clockTicks(GameTestHelper helper) {
+    static long clockTicks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         return level.getServer().clockManager().getInstance(clock(level)).totalTicks();
     }

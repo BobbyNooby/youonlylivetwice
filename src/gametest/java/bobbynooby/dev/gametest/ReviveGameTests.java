@@ -5,15 +5,16 @@ import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.revive.Revive;
 import com.mojang.authlib.GameProfile;
-import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Util;
@@ -34,13 +35,18 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 // Owners are fresh random uuids, so a death recorded here never locks out anyone else
 public class ReviveGameTests {
@@ -244,27 +250,100 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // A right-click on a block reaches the revive through the use-block hook, not the item use
+    // What a right-click in the air runs on the server
     @GameTest
-    public void reviveHeadOnBlockUsesHook(GameTestHelper helper) {
-        UUID owner = UUID.randomUUID();
-        DeathLockout.recordDeath(owner, "Ghost");
-        helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner is not locked out to begin with");
+    public void reviveInAirThroughUseItem(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "AirReviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            ItemStack heads = reviveHead(staticProfile(owner), 2);
+            user.setItemInHand(InteractionHand.MAIN_HAND, heads);
+            int mark = user.messages.size();
+            InteractionResult result = user.gameMode.useItem(user, user.level(), heads, InteractionHand.MAIN_HAND);
+            helper.assertTrue(result instanceof InteractionResult.Success, "using a revive head in the air did not succeed: " + result);
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost can come back now."), "replies");
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // What a right-click on a block runs on the server. The click reaches the revive through the use-block hook, and
+    // the head is neither placed nor kept.
+    @GameTest
+    public void reviveOnBlockThroughUseItemOn(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
         BlockPos stone = new BlockPos(3, 1, 3);
         helper.setBlock(stone, Blocks.STONE);
         helper.setBlock(stone.above(), Blocks.AIR);
-        ServerPlayer user = TestPlayers.join(helper, "HookReviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "BlockReviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            user.setItemInHand(InteractionHand.MAIN_HAND, reviveHead(staticProfile(owner), 2));
-            BlockPos pos = helper.absolutePos(stone);
-            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos).add(0.0, 0.5, 0.0), Direction.UP, pos, false);
-            InteractionResult result = UseBlockCallback.EVENT.invoker().interact(user, user.level(), InteractionHand.MAIN_HAND, hit);
+            int mark = user.messages.size();
+            InteractionResult result = useOnTop(helper, user, reviveHead(staticProfile(owner), 2), stone);
             helper.assertTrue(result instanceof InteractionResult.Fail, "using a revive head on a block did not fail: " + result);
             helper.assertBlockPresent(Blocks.AIR, stone.above());
             helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
             helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost can come back now."), "replies");
         } finally {
             TestPlayers.leave(user);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // Two owners, so a use that took the off hand's head as well would revive the second one too
+    @GameTest
+    public void reviveHeadsInBothHandsUseOne(GameTestHelper helper) {
+        UUID mainOwner = lockedOut(helper);
+        UUID offOwner = lockedOut(helper);
+        ServerPlayer user = TestPlayers.join(helper, "TwoHands", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            ItemStack main = reviveHead(staticProfile(mainOwner), 1);
+            user.setItemInHand(InteractionHand.MAIN_HAND, main);
+            user.setItemInHand(InteractionHand.OFF_HAND, reviveHead(staticProfile(offOwner), 1));
+            user.gameMode.useItem(user, user.level(), main, InteractionHand.MAIN_HAND);
+            helper.assertTrue(user.getMainHandItem().isEmpty(), "the main hand's head was not used");
+            helper.assertValueEqual(user.getOffhandItem().getCount(), 1, "heads left in the off hand");
+            helper.assertTrue(DeathLockout.refusal(mainOwner, "Test") == null, "the main hand's owner is still locked out");
+            helper.assertTrue(DeathLockout.refusal(offOwner, "Test") != null, "the off hand's owner was revived as well");
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(mainOwner, "Test", "console");
+            DeathLockout.revive(offOwner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // A closed store makes every query throw. The lockout check lets everyone in then, so the owner reads as not dead,
+    // and the head stays for when the database works again. Without the failing store this would be a real revive.
+    @GameTest
+    public void reviveWithFailingStoreKeepsHead(GameTestHelper helper) throws IOException {
+        UUID owner = lockedOut(helper);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Unlucky", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        Path dir = Files.createTempDirectory("yolt-revive-store");
+        DeathStore broken = DeathStore.open(dir.resolve("broken.db"));
+        broken.close();
+        DeathStore real = DeathLockout.swapStoreForTesting(broken);
+        try {
+            ItemStack head = reviveHead(staticProfile(owner), 1);
+            user.setItemInHand(InteractionHand.MAIN_HAND, head);
+            int mark = user.messages.size();
+            user.gameMode.useItem(user, user.level(), head, InteractionHand.MAIN_HAND);
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost is not dead."), "replies");
+        } finally {
+            DeathLockout.swapStoreForTesting(real);
+            TestPlayers.leave(user);
+            DeathLockout.revive(owner, "Test", "console");
+            try (Stream<Path> files = Files.walk(dir)) {
+                for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
         }
         helper.succeed();
     }
@@ -299,6 +378,19 @@ public class ReviveGameTests {
     // Static, so nothing tries to look the owner up
     private static ResolvableProfile staticProfile(UUID owner) {
         return ResolvableProfile.createResolved(new GameProfile(owner, "Ghost"));
+    }
+
+    // A fresh owner with a death on record, so a head of theirs has someone to revive
+    private static UUID lockedOut(GameTestHelper helper) {
+        UUID owner = UUID.randomUUID();
+        DeathLockout.recordDeath(owner, "Ghost");
+        helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "owner is not locked out to begin with");
+        return owner;
+    }
+
+    // What the user was told since message number "from"
+    private static List<String> said(TestPlayers.Recording user, int from) {
+        return user.messages.subList(from, user.messages.size()).stream().map(Component::getString).toList();
     }
 
     private static InteractionResult useOnTop(GameTestHelper helper, ServerPlayer player, ItemStack stack, BlockPos relativePos) {

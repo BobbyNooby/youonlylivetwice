@@ -26,9 +26,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.BucketItem;
@@ -48,6 +51,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -156,6 +161,58 @@ public class GraveProtectionGameTests {
                 removeGraves(helper, List.of(grave));
             }
         }
+    }
+
+    // The dragon removes every block its body flies through itself, without an explosion. It only does that while
+    // flying its End fight, so the hooked method is called directly, over the grave and the stone beside it.
+    @GameTest
+    public void dragonCannotBreakGrave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.assertTrue(level.getGameRules().get(GameRules.MOB_GRIEFING), "mob griefing is off, so the dragon breaks nothing");
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        BlockPos stone = grave.pos().east();
+        try {
+            level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            EnderDragon dragon = EntityTypes.ENDER_DRAGON.create(level, EntitySpawnReason.COMMAND);
+            helper.assertTrue(dragon != null, "no dragon was made");
+            // Inside both blocks and no others, since the dragon takes every block the box's corners fall in
+            AABB box = new AABB(grave.pos().getX() + 0.1, grave.pos().getY() + 0.1, grave.pos().getZ() + 0.1,
+                    stone.getX() + 0.9, stone.getY() + 0.9, stone.getZ() + 0.9);
+            callHooked(EnderDragon.class, "checkWalls", new Class<?>[]{ServerLevel.class, AABB.class}, dragon, level, box);
+            helper.assertTrue(level.getBlockState(stone).isAir(), "the dragon did not break the stone beside the grave");
+            assertGraveIntact(helper, grave);
+        } finally {
+            level.setBlock(stone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    // A hurt Wither breaks the blocks round itself, without an explosion: a hit sets destroyBlocksTick, and the server
+    // step it counts down to zero in does the breaking. The Wither isn't added to the level, so it can't fly off or
+    // fight. The grave and the stone are either side of it.
+    @GameTest
+    public void witherCannotBreakGrave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.assertTrue(level.getGameRules().get(GameRules.MOB_GRIEFING), "mob griefing is off, so the Wither breaks nothing");
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 4));
+        BlockPos stone = grave.pos().east(2);
+        try {
+            level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            WitherBoss wither = EntityTypes.WITHER.create(level, EntitySpawnReason.COMMAND);
+            helper.assertTrue(wither != null, "no Wither was made");
+            wither.snapTo(Vec3.atBottomCenterOf(grave.pos().east()), 0.0F, 0.0F);
+            setField(WitherBoss.class, "destroyBlocksTick", wither, 1);
+            callHooked(WitherBoss.class, "customServerAiStep", new Class<?>[]{ServerLevel.class}, wither, level);
+            helper.assertTrue(level.getBlockState(stone).isAir(), "the Wither did not break the stone beside it");
+            assertGraveIntact(helper, grave);
+        } finally {
+            // The broken stone dropped as cobblestone
+            near(helper, EntityTypes.ITEM, stone, 2.0).forEach(Entity::discard);
+            level.setBlock(stone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
     }
 
     @GameTest
@@ -523,6 +580,27 @@ public class GraveProtectionGameTests {
         List<Grave> graves = gravesOf(helper, owner);
         helper.assertValueEqual(graves.size(), 1, "graves for the player");
         return graves.get(0);
+    }
+
+    // 26.3 keeps Mojang's names at runtime, so a private vanilla method our mixin hooks can be called by name
+    private static void callHooked(Class<?> owner, String name, Class<?>[] parameters, Object target, Object... arguments) {
+        try {
+            Method method = owner.getDeclaredMethod(name, parameters);
+            method.setAccessible(true);
+            method.invoke(target, arguments);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not call " + owner.getSimpleName() + "." + name, e);
+        }
+    }
+
+    private static void setField(Class<?> owner, String name, Object target, int value) {
+        try {
+            Field field = owner.getDeclaredField(name);
+            field.setAccessible(true);
+            field.setInt(target, value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Could not set " + owner.getSimpleName() + "." + name, e);
+        }
     }
 
     private static void removeGraves(GameTestHelper helper, List<Grave> graves) {
