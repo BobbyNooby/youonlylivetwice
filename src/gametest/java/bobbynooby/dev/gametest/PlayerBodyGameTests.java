@@ -257,7 +257,9 @@ public class PlayerBodyGameTests {
     // A body keeps carrying its owner's copy, so its marker only goes to holders who see the body
     @GameTest
     public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
-        ServerPlayer player = join(helper, "MapBody", ON_FLOOR);
+        ItemStack map = MapGameTests.newMap(helper);
+        BlockPos onMap = MapGameTests.onMap(helper, map, ON_FLOOR);
+        ServerPlayer player = join(helper, "MapBody", onMap);
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -268,13 +270,12 @@ public class PlayerBodyGameTests {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
             PlayerBody body = leaveBody(helper, player);
-            ServerPlayer stranger = join(helper, "MapStranger", ON_FLOOR);
+            ServerPlayer stranger = join(helper, "MapStranger", onMap);
             holders.add(stranger);
-            ServerPlayer watcher = join(helper, "MapWatcher", ON_FLOOR);
+            ServerPlayer watcher = join(helper, "MapWatcher", onMap);
             holders.add(watcher);
             // As if the watcher had started tracking the body
             PlayerVisibility.onPairingStart(watcher, body);
-            ItemStack map = MapGameTests.newMap(helper, body);
             MapGameTests.carry(helper, map, List.of(body, stranger, watcher));
 
             helper.assertValueEqual(MapGameTests.count(MapGameTests.sentTo(helper, map, stranger), MapDecorationTypes.PLAYER), 1,

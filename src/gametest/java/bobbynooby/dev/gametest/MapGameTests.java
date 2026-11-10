@@ -37,10 +37,10 @@ public class MapGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
-            ServerPlayer viewer = join(helper, joined, "mapview", BlockPos.ZERO);
-            ServerPlayer far = join(helper, joined, "mapfar", new BlockPos(1, 0, 0));
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapview", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapfar", onMap(helper, map, new BlockPos(1, 0, 0)));
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
-            ItemStack map = newMap(helper, viewer);
             carry(helper, map, List.of(viewer, far));
 
             helper.assertValueEqual(count(data(helper, map).getDecorations(), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
@@ -70,11 +70,11 @@ public class MapGameTests {
         try {
             hide.distantPlayers = false;
             hide.mapPlayers = true;
-            ServerPlayer viewer = join(helper, joined, "mapshownv", BlockPos.ZERO);
-            ServerPlayer far = join(helper, joined, "mapshownfar", new BlockPos(1, 0, 0));
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapshownv", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapshownfar", onMap(helper, map, new BlockPos(1, 0, 0)));
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
             helper.assertTrue(PlayerVisibility.known(viewer).contains(far.getUUID()), "the viewer's client has no entry for the far player");
-            ItemStack map = newMap(helper, viewer);
             carry(helper, map, List.of(viewer, far));
 
             List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
@@ -97,11 +97,11 @@ public class MapGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
-            ServerPlayer viewer = join(helper, joined, "mapnearv", BlockPos.ZERO);
-            ServerPlayer near = join(helper, joined, "mapnear", new BlockPos(3, 0, 0));
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapnearv", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer near = join(helper, joined, "mapnear", onMap(helper, map, new BlockPos(3, 0, 0)));
             // As if the viewer had started tracking the near player, and not the other way round
             PlayerVisibility.onPairingStart(viewer, near);
-            ItemStack map = newMap(helper, viewer);
             carry(helper, map, List.of(viewer, near));
 
             helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER), 2,
@@ -126,10 +126,10 @@ public class MapGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
-            ServerPlayer viewer = join(helper, joined, "mapgonev", BlockPos.ZERO);
-            ServerPlayer near = join(helper, joined, "mapgone", new BlockPos(3, 0, 0));
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapgonev", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer near = join(helper, joined, "mapgone", onMap(helper, map, new BlockPos(3, 0, 0)));
             PlayerVisibility.onPairingStart(viewer, near);
-            ItemStack map = newMap(helper, viewer);
             carry(helper, map, List.of(viewer, near));
             helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER), 2,
                     "player markers sent while the viewer sees the near player");
@@ -157,12 +157,12 @@ public class MapGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
-            admin = join(helper, joined, "mapadmin", BlockPos.ZERO);
-            ServerPlayer far = join(helper, joined, "mapadminfar", new BlockPos(1, 0, 0));
+            ItemStack map = newMap(helper);
+            admin = join(helper, joined, "mapadmin", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapadminfar", onMap(helper, map, new BlockPos(1, 0, 0)));
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
             TestPlayers.op(admin);
             AdminView.set(admin, true);
-            ItemStack map = newMap(helper, admin);
             carry(helper, map, List.of(admin, far));
 
             helper.assertValueEqual(count(sentTo(helper, map, admin), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
@@ -188,10 +188,10 @@ public class MapGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = false;
-            ServerPlayer viewer = join(helper, joined, "mapoff", BlockPos.ZERO);
-            ServerPlayer far = join(helper, joined, "mapofffar", new BlockPos(1, 0, 0));
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapoff", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapofffar", onMap(helper, map, new BlockPos(1, 0, 0)));
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
-            ItemStack map = newMap(helper, viewer);
             carry(helper, map, List.of(viewer, far));
 
             helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
@@ -204,9 +204,19 @@ public class MapGameTests {
         helper.succeed();
     }
 
-    // Unlimited tracking, like an explorer map, so even a far holder shows, pinned to the edge
-    static ItemStack newMap(GameTestHelper helper, ServerPlayer centre) {
-        return MapItem.create(helper.getLevel(), centre.getBlockX(), centre.getBlockZ(), (byte) 0, true, true);
+    // Unlimited tracking, like an explorer map, so even a far holder shows, pinned to the edge. Made at the test's
+    // origin, but its centre snaps to a 128 block grid, so holders go at onMap rather than at the origin.
+    static ItemStack newMap(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+        return MapItem.create(helper.getLevel(), origin.getX(), origin.getZ(), (byte) 0, true, true);
+    }
+
+    // A test position whose x and z count from the map's own centre, at the given position's height. A player shows
+    // on the map only within 63 blocks of that centre, and the test's origin can be 64 away from it.
+    static BlockPos onMap(GameTestHelper helper, ItemStack map, BlockPos fromCentre) {
+        MapItemSavedData data = data(helper, map);
+        int y = helper.absolutePos(fromCentre).getY();
+        return helper.relativePos(new BlockPos(data.centerX + fromCentre.getX(), y, data.centerZ + fromCentre.getZ()));
     }
 
     // What each copy's inventory tick does; test players and bodies here get no living tick
