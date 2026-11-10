@@ -2,8 +2,14 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,6 +17,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.SignableCommand;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -22,7 +31,10 @@ import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 // Each test flips the switch and restores it inside one tick, so no other test sees it
 public class CommandRestrictionGameTests {
@@ -142,6 +154,68 @@ public class CommandRestrictionGameTests {
         }
         helper.succeed();
     }
+
+    // Whether /w is in a restricted player's tree depends on the whisper switch, so a reload sends every player its
+    // tree again. It writes the config file and swaps the whole config object, so it runs with the other tests that do.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void reloadResendsCommandTree(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        ServerPlayer player = TestPlayers.join(helper, "Reload", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            // Both ways, so the tree from the join can't pass for a resent one
+            for (boolean whispers : new boolean[] {true, false}) {
+                Settings.get().restrictCommands = true;
+                Settings.get().chat.allowWhispers = whispers;
+                Settings.save();
+                run(server.createCommandSourceStack(), "yolt reload");
+                helper.assertValueEqual(lastTreeHasWhisper(helper, player), whispers,
+                        "/w in the tree resent after a reload with whispers " + (whispers ? "on" : "off"));
+            }
+        } finally {
+            // The settings go back before the player leaves
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The last command tree the server sent this player, read back the way the client reads it
+    private static boolean lastTreeHasWhisper(GameTestHelper helper, ServerPlayer player) {
+        ClientboundCommandsPacket last = null;
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundCommandsPacket commands) {
+                last = commands;
+            }
+        }
+        helper.assertTrue(last != null, "the player was never sent a command tree");
+        MinecraftServer server = helper.getLevel().getServer();
+        CommandBuildContext context = CommandBuildContext.simple(server.registryAccess(), server.getWorldData().enabledFeatures());
+        RootCommandNode<CommandSourceStack> root = last.getRoot(context, TREE_READER);
+        return root.getChild("w") != null;
+    }
+
+    private static final ClientboundCommandsPacket.NodeBuilder<CommandSourceStack> TREE_READER = new ClientboundCommandsPacket.NodeBuilder<>() {
+        @Override
+        public ArgumentBuilder<CommandSourceStack, ?> createLiteral(String id) {
+            return LiteralArgumentBuilder.literal(id);
+        }
+
+        @Override
+        public ArgumentBuilder<CommandSourceStack, ?> createArgument(String id, ArgumentType<?> type, Identifier suggestionId) {
+            RequiredArgumentBuilder<CommandSourceStack, ?> argument = RequiredArgumentBuilder.argument(id, type);
+            return argument;
+        }
+
+        @Override
+        public ArgumentBuilder<CommandSourceStack, ?> configure(ArgumentBuilder<CommandSourceStack, ?> input, boolean executable,
+                                                                 boolean restricted) {
+            return input;
+        }
+    };
 
     // What an op-placed sign runs its click command as (vanilla's SignBlockEntity)
     private static CommandSourceStack signSource(ServerPlayer player) {
