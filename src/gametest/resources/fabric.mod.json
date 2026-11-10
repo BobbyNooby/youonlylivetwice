@@ -42,6 +42,7 @@
 			"bobbynooby.dev.gametest.SwitchGameTests",
 			"bobbynooby.dev.gametest.TabHeaderGameTests",
 			"bobbynooby.dev.gametest.VisibilityGameTests",
+			"bobbynooby.dev.gametest.VoidGraveGameTests",
 			"bobbynooby.dev.gametest.WhisperGameTests"
 		],
 		"fabric-client-gametest": [
