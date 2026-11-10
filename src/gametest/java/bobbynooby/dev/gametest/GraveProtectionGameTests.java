@@ -742,7 +742,8 @@ public class GraveProtectionGameTests {
         helper.succeed();
     }
 
-    // Vanilla drops nothing for a dead spectator and gives everything back at respawn, so no grave either
+    // Vanilla drops nothing for a dead spectator and gives everything back at respawn, so no grave either. A death in
+    // spectator doesn't count, so no lockout.
     @GameTest
     public void offlineKillLeavesSpectatorsAlone(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -762,7 +763,7 @@ public class GraveProtectionGameTests {
         try {
             graves.enderChestOnDeath = YoltConfig.EnderChestMode.GRAVE;
             try {
-                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_UNCOUNTED, "kill result");
             } finally {
                 graves.enderChestOnDeath = mode;
             }
@@ -777,7 +778,7 @@ public class GraveProtectionGameTests {
             helper.assertTrue(gravesOf(helper, who.id()).isEmpty(), "a spectator got a grave");
             helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
             helper.assertTrue(near(helper, EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
-            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "offline kill did not start the lockout");
+            helper.assertTrue(DeathLockout.newestDeath(who.id()) == null, "a spectator's offline death was recorded");
         } finally {
             removeGraves(helper, gravesOf(helper, who.id()));
         }

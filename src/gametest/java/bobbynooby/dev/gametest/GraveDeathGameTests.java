@@ -882,7 +882,7 @@ public class GraveDeathGameTests {
         return helper.getLevel().getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
     }
 
-    private static void respawnBesideTest(GameTestHelper helper, ServerPlayer player) {
+    static void respawnBesideTest(GameTestHelper helper, ServerPlayer player) {
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                 LevelData.RespawnData.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(7, 1, 7)), 0.0F, 0.0F), true), false);
     }

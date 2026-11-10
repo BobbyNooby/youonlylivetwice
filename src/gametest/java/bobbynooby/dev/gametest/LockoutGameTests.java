@@ -5,20 +5,27 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.List;
 import java.util.UUID;
 
 // Uses fresh random uuids, so tests never collide
@@ -227,6 +234,129 @@ public class LockoutGameTests {
                 leaveIfOnline(player);
             }
         }
+    }
+
+    // A death in creative doesn't count: no grave, no death record and no lockout, and the respawn hands the items back
+    // the way keepInventory would, each of them once. All in one tick.
+    @GameTest
+    public void creativeDeathKeepsItemsNoLockout(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Creative", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        try {
+            helper.assertFalse(Settings.get().deathLockout.countCreativeAndSpectatorDeaths, "creative deaths count by default");
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            BlockPos at = player.blockPosition();
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the creative player did not die");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, uuid).isEmpty(), "a creative death made a grave");
+            helper.assertTrue(DeathLockout.newestDeath(uuid) == null, "a creative death was recorded");
+            helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "a creative death locked the player out");
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, at, 3.0), 0, "diamonds dropped");
+
+            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 3, "diamonds after the respawn");
+            helper.assertValueEqual(back.getInventory().countItem(Items.IRON_HELMET), 1, "helmets after the respawn");
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET), "the helmet is not worn after the respawn");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // Bug 4 of the edge-case analysis: a spectator below the world dies of the void's damage, which gets through a
+    // spectator's invulnerability. That death doesn't count, so they are not locked out, and vanilla gives the items back.
+    @GameTest
+    public void spectatorVoidDeathNoLockout(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Spectator", GameType.SPECTATOR, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            BlockPos column = helper.absolutePos(new BlockPos(1, 1, 1));
+            player.snapTo(column.getX() + 0.5, helper.getLevel().getMinY() - 70, column.getZ() + 0.5);
+            TestPlayers.markLoaded(player);
+            player.hurtServer(helper.getLevel(), helper.getLevel().damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+            helper.assertTrue(player.isDeadOrDying(), "the spectator did not die in the void");
+            helper.assertTrue(DeathLockout.newestDeath(uuid) == null, "a spectator's death was recorded");
+            helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "a spectator's death locked them out");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, uuid).isEmpty(), "a spectator's death made a grave");
+
+            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 2, "diamonds after the respawn");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // With the switch on, a creative death counts like any other: the items go into the grave and the lockout starts.
+    // The switch goes back in the same tick, and the player leaves before the kick comes.
+    @GameTest
+    public void countCreativeDeathsSwitchOn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Counted", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean countBefore = lockout.countCreativeAndSpectatorDeaths;
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            TestPlayers.markLoaded(player);
+            lockout.countCreativeAndSpectatorDeaths = true;
+            try {
+                player.kill(player.level());
+            } finally {
+                lockout.countCreativeAndSpectatorDeaths = countBefore;
+            }
+            helper.assertTrue(player.isDeadOrDying(), "the creative player did not die");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, uuid, Items.DIAMOND), 2, "diamonds in the graves");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 0, "diamonds left on the player");
+            helper.assertTrue(refusedForLockout(DeathLockout.refusal(uuid, "Test")), "the counted death did not lock the player out");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // /yolt kill of a player who logged out in creative: dead in the save with the items still there, no grave and no
+    // record, and the reply says why. Their rejoin loads that save, and the respawn hands the items back.
+    @GameTest
+    public void offlineCreativeKillKeepsItems(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "AwayCreative", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        GameProfile profile = player.getGameProfile();
+        UUID uuid = player.getUUID();
+        String name = profile.name();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 4));
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            // Saved with the diamonds and the respawn point
+            TestPlayers.leave(player);
+            helper.assertValueEqual(SkinGameTests.console(server, "yolt kill " + name),
+                    List.of("Killed " + name + ". They were in creative or spectator mode, so the death doesn't count."), "command output");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), name), Items.DIAMOND), 4,
+                    "diamonds in the save");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, uuid).isEmpty(), "the kill made a grave");
+            helper.assertTrue(DeathLockout.newestDeath(uuid) == null, "the kill was recorded");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.CREATIVE, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
+            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(respawned.getInventory().countItem(Items.DIAMOND), 4, "diamonds after the respawn");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
     }
 
     // Graves are off for the death and back on in the same tick: these players carry nothing, and the tests are

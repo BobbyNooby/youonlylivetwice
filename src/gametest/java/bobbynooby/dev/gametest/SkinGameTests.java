@@ -512,16 +512,21 @@ public class SkinGameTests {
     }
 
     // As the player's client sends a typed command, so it is read against the tree that player has
-    private static void type(ServerPlayer player, String command) {
+    static void type(ServerPlayer player, String command) {
         player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));
     }
 
-    private static List<String> texts(TestPlayers.Recording player) {
+    static List<String> texts(TestPlayers.Recording player) {
         return player.messages.stream().map(Component::getString).toList();
     }
 
     // Runs the command as the console and returns every line it sent back
-    private static List<String> console(MinecraftServer server, String command) {
+    static List<String> console(MinecraftServer server, String command) {
+        return console(server.createCommandSourceStack(), command);
+    }
+
+    // The same from a console source moved somewhere, as for a selector that measures distance
+    static List<String> console(CommandSourceStack source, String command) {
         List<String> output = new ArrayList<>();
         CommandSource capture = new CommandSource() {
             @Override
@@ -544,7 +549,7 @@ public class SkinGameTests {
                 return false;
             }
         };
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(capture), command);
+        source.getServer().getCommands().performPrefixedCommand(source.withSource(capture), command);
         return output;
     }
 
