@@ -330,6 +330,76 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // The same, with the save failing after the chestplate dropped: a non-empty folder where the old save gets moved
+    // makes the swap fail. The drop is taken back, so the chestplate is only on the body, and the retry drops it once.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void failedExpirySaveTakesBackTheDrop(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "SaveFails", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            OfflineGameTests.fillInventory(player);
+            Mannequin body = leaveBody(helper, player);
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            CompoundTag chest = unreadableChest(server, player);
+            expiredLogout(helper, owner);
+            around = new AABB(body.blockPosition()).inflate(2.0);
+            Path file = saveFile(helper, owner);
+            byte[] saveBefore = Files.readAllBytes(file);
+            Path blocker = file.resolveSibling(owner + ".dat_old");
+            Path blockerContent = blocker.resolve("blocker");
+            Files.deleteIfExists(blocker);
+            Files.createDirectories(blocker);
+            Files.writeString(blockerContent, "");
+            try {
+                BodyExpiry.tick(server);
+            } finally {
+                Files.delete(blockerContent);
+                Files.delete(blocker);
+            }
+
+            helper.assertFalse(body.isRemoved(), "body removed although its save failed");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record dropped although the save failed");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(file), saveBefore), "owner's save changed");
+            ItemStack worn = body.getItemBySlot(EquipmentSlot.CHEST);
+            helper.assertTrue(worn.is(Items.IRON_CHESTPLATE) && worn.getDamageValue() == 7, "body's chestplate: " + worn);
+            helper.assertValueEqual(chestplatesIn(helper, around).size(), 0, "chestplates dropped by the failed expiry");
+
+            // A record out of the running for one pass loses its wait, so the retry doesn't wait out the minutes
+            BodyStore store = store(helper);
+            BodyRecord record = store.byOwner(owner).orElseThrow();
+            store.put(record.withPendingRemoval(true));
+            BodyExpiry.tick(server);
+            store.put(record);
+            BodyExpiry.tick(server);
+
+            helper.assertTrue(body.isRemoved(), "body still in the world after the retry");
+            helper.assertTrue(store.byOwner(owner).isEmpty(), "body record kept after the retry");
+            List<ItemEntity> drops = chestplatesIn(helper, around);
+            helper.assertValueEqual(drops.size(), 1, "chestplates dropped by the retry");
+            helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
+            Map<Integer, ItemStack> stored = OfflineGameTests.savedInventory(helper, saved);
+            helper.assertTrue(stored.size() == Inventory.INVENTORY_SIZE && stored.values().stream().allMatch(item -> item.is(Items.DIRT)),
+                    "saved inventory: " + stored);
+        } finally {
+            if (around != null) {
+                chestplatesIn(helper, around).forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    private static List<ItemEntity> chestplatesIn(GameTestHelper helper, AABB area) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, area,
+                drop -> drop.isAlive() && drop.getItem().is(Items.IRON_CHESTPLATE));
+    }
+
     // Puts an entry that doesn't read back into the chest slot of the player's save, and returns it
     private static CompoundTag unreadableChest(MinecraftServer server, ServerPlayer player) {
         CompoundTag tag = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
