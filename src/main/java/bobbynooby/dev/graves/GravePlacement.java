@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -27,6 +28,8 @@ public final class GravePlacement {
     private static final int UP_SEARCH = 8;
     private static final int RING_RADIUS = 3;
     private static final int RING_UP = 3;
+    // How far out a new grave looks for firm ground when nothing close is safe, such as in the middle of a lava lake
+    private static final int WIDE_RADIUS = 16;
     // An item is a quarter block wide, so one dropped at a block's centre with no push falls straight down this column
     private static final VoxelShape ITEM_COLUMN = Block.column(4.0, 0.0, 16.0);
     // The replaceable blocks that drop themselves, or sticks, when broken by hand; a head set over one deletes that
@@ -37,13 +40,15 @@ public final class GravePlacement {
     private GravePlacement() {
     }
 
-    /** Where a new grave goes. Always inside the world border. */
+    /** Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it. */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {
         BlockPos start = start(level, deathPos);
-        return search(level, start, store).orElseGet(() -> lastResort(level, start, store));
+        return search(level, start, store)
+                .or(() -> wideSearch(level, start, store))
+                .orElseGet(() -> lastResort(level, start, store));
     }
 
-    /** The spot find would pick near pos, or nothing when only its last resort is left. */
+    /** The spot find would pick near pos, or nothing when only its wider search or last resort is left. */
     static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store) {
         return search(level, start(level, pos), store);
     }
@@ -53,9 +58,14 @@ public final class GravePlacement {
      * could be blocked by the head, and items dropped there last.
      */
     static boolean fits(ServerLevel level, BlockPos pos, GraveStore store) {
+        return free(level, pos, store) && safeForItems(level, pos, store);
+    }
+
+    // Everything fits asks except whether dropped items would last
+    private static boolean free(ServerLevel level, BlockPos pos, GraveStore store) {
         BlockState state = level.getBlockState(pos);
         return state.canBeReplaced() && !state.hasBlockEntity() && !DROPS_ITEMS.contains(state.getBlock())
-                && !onBlockEntity(level, pos.below(), store) && safeForItems(level, pos, store);
+                && !destroysItems(state) && !onBlockEntity(level, pos.below(), store);
     }
 
     // A head right on top of a block entity can be in its way, for example it keeps a shulker box's lid shut. Another
@@ -106,9 +116,17 @@ public final class GravePlacement {
         return isVoidColumn(level, start) ? reachableSpotNear(level, start) : start;
     }
 
+    // The highest block a grave may take. With a roof, such as the Nether's bedrock, that is under the roof, where the
+    // owner can dig to it, unless the death itself was up on top. Vanilla's portal search stops at the same height.
+    private static int topY(ServerLevel level, int fromY) {
+        int top = level.getMaxY() - 1;
+        int roof = level.getMinY() + level.getLogicalHeight() - 1;
+        return fromY <= roof ? Math.min(top, roof) : top;
+    }
+
     private static Optional<BlockPos> search(ServerLevel level, BlockPos start, GraveStore store) {
         int minY = level.getMinY();
-        int topY = level.getMaxY() - 1;
+        int topY = topY(level, start.getY());
         if (usable(level, start, store)) {
             return Optional.of(start);
         }
@@ -128,9 +146,11 @@ public final class GravePlacement {
             }
         }
 
+        // The surface above whatever blocks the death spot. Under a roof the heightmap is the roof's own top, which the
+        // cap leaves out.
         int surface = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, start.getX(), start.getZ()), minY);
         for (int y = surface; y <= topY; y++) {
-            BlockPos pos = new BlockPos(start.getX(), y, start.getZ());
+            BlockPos pos = start.atY(y);
             if (usable(level, pos, store)) {
                 return Optional.of(pos);
             }
@@ -138,14 +158,54 @@ public final class GravePlacement {
         return Optional.empty();
     }
 
-    // Nothing free: replace the block at the start spot, but never an existing grave, and never lava or fire
-    private static BlockPos lastResort(ServerLevel level, BlockPos start, GraveStore store) {
-        int topY = level.getMaxY() - 1;
-        BlockPos pos = start;
-        while ((store.at(level.dimension(), pos).isPresent() || destroysItems(level.getBlockState(pos))) && pos.getY() < topY) {
-            pos = pos.above();
+    // Further rings out, from the start's height to a few blocks above it, for the shore of a lava lake or sea
+    private static Optional<BlockPos> wideSearch(ServerLevel level, BlockPos start, GraveStore store) {
+        int topY = topY(level, start.getY());
+        for (int r = RING_RADIUS + 1; r <= WIDE_RADIUS; r++) {
+            for (int dy = 0; dy <= UP_SEARCH && start.getY() + dy <= topY; dy++) {
+                for (BlockPos pos : ring(start.above(dy), r)) {
+                    if (usable(level, pos, store)) {
+                        return Optional.of(pos);
+                    }
+                }
+            }
         }
+        return Optional.empty();
+    }
+
+    // Nothing near is safe. A safe spot anywhere up the start column comes first, such as a cave above a lava sea.
+    // Failing that the first free block of the column, which can be over lava: the grave keeps its items, and
+    // removal won't drop them there. Never another grave, never in lava or fire, and never a block that matters.
+    private static BlockPos lastResort(ServerLevel level, BlockPos start, GraveStore store) {
+        int topY = topY(level, start.getY());
+        for (int y = start.getY(); y <= topY; y++) {
+            BlockPos pos = start.atY(y);
+            if (usable(level, pos, store)) {
+                return pos;
+            }
+        }
+        BlockPos pos = firstFree(level, start, topY, store).orElseThrow(() -> new IllegalStateException(
+                "No free block for a grave in the column at " + level.dimension().identifier() + " " + start));
+        Yolt.LOGGER.warn("No spot near {} {} keeps a grave's items safe, so the grave goes at {}, over something that "
+                + "would destroy them if they were dropped", level.dimension().identifier(), start, pos);
         return pos;
+    }
+
+    // Up the column from the start, then down from just below it
+    private static Optional<BlockPos> firstFree(ServerLevel level, BlockPos start, int topY, GraveStore store) {
+        for (int y = start.getY(); y <= topY; y++) {
+            BlockPos pos = start.atY(y);
+            if (free(level, pos, store) && store.at(level.dimension(), pos).isEmpty()) {
+                return Optional.of(pos);
+            }
+        }
+        for (int y = start.getY() - 1; y >= level.getMinY(); y--) {
+            BlockPos pos = start.atY(y);
+            if (free(level, pos, store) && store.at(level.dimension(), pos).isEmpty()) {
+                return Optional.of(pos);
+            }
+        }
+        return Optional.empty();
     }
 
     // Past the border nobody could reach the grave to open it

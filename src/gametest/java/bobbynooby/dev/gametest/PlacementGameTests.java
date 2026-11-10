@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -21,6 +22,9 @@ import java.util.List;
 import java.util.UUID;
 
 public class PlacementGameTests {
+    // The middle of the wide lava pool
+    private static final BlockPos LAVA_DEATH = new BlockPos(3, 0, 3);
+
     private static GraveStore store(GameTestHelper helper) {
         return GraveStore.get(helper.getLevel().getServer());
     }
@@ -164,6 +168,76 @@ public class PlacementGameTests {
         helper.succeed();
     }
 
+    // In the middle of a lava pool wider than the first rings, the grave goes on the rim, not in the air over lava
+    @GameTest(skyAccess = true)
+    public void wideLavaPoolGraveOnFirmGround(GameTestHelper helper) {
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            BlockPos result = findInWideLavaPool(helper, placed);
+            assertOnFirmGround(helper, result);
+        } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // The same pool under a roof like the Nether's bedrock: the heightmap is the roof's top, which nobody can reach in
+    // survival, so the grave must stay under it
+    @GameTest(dimension = "minecraft:the_nether", skyAccess = true)
+    public void netherLavaDeathGraveStaysUnderRoof(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        int roofY = level.getMinY() + level.getLogicalHeight() - 1;
+        BlockPos roof = helper.absolutePos(LAVA_DEATH).atY(roofY);
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            level.setBlock(roof, Blocks.BEDROCK.defaultBlockState(), Block.UPDATE_ALL);
+            BlockPos result = findInWideLavaPool(helper, placed);
+            helper.assertTrue(result.getY() < roofY, "grave on top of the roof at " + result);
+            assertOnFirmGround(helper, result);
+        } finally {
+            level.setBlock(roof, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // The border is one column wide. That column holds a lava cauldron, two graves on it and a cobweb, so no spot is
+    // safe and the last resort climbs past the graves and the cobweb, which is no block to replace. Set and put back in
+    // this tick.
+    @GameTest(skyAccess = true)
+    public void lastResortNeverReturnsAGrave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = store(helper);
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos floor = new BlockPos(3, 0, 3);
+        BlockPos death = helper.absolutePos(floor.above());
+        Grave lower = graveAt(death);
+        Grave upper = graveAt(death.above());
+        try {
+            helper.setBlock(floor, Blocks.LAVA_CAULDRON);
+            helper.setBlock(floor.above(3), Blocks.COBWEB);
+            store.put(lower);
+            store.put(upper);
+            border.setCenter(death.getX() + 0.5, death.getZ() + 0.5);
+            border.setSize(1);
+            BlockPos result = GravePlacement.find(level, death, store);
+            helper.assertTrue(store.at(level.dimension(), result).isEmpty(), "grave placed on another grave at " + result);
+            helper.assertFalse(level.getBlockState(result).is(Blocks.COBWEB), "grave placed over the cobweb at " + result);
+            helper.assertValueEqual(result, death.above(3), "grave position");
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            store.remove(lower.id());
+            store.remove(upper.id());
+            helper.setBlock(floor.above(3), Blocks.AIR);
+            helper.setBlock(floor, Blocks.AIR);
+        }
+        helper.succeed();
+    }
+
     // Broken by hand, leaf litter drops itself, so a head set over it would delete that item
     @GameTest
     public void leafLitterIsNotReplaced(GameTestHelper helper) {
@@ -180,6 +254,24 @@ public class PlacementGameTests {
             helper.setBlock(ground, Blocks.AIR);
         }
         helper.succeed();
+    }
+
+    // A 7 by 7 lava pool, held by a stone rim on the open sides and the barrier walls on the others. Every spot the first
+    // rings look at is over lava. The death is in the middle of it.
+    private static BlockPos findInWideLavaPool(GameTestHelper helper, List<BlockPos> placed) {
+        for (int x = 0; x <= 7; x++) {
+            for (int z = 0; z <= 7; z++) {
+                place(helper, placed, new BlockPos(x, 0, z), x == 7 || z == 7 ? Blocks.STONE : Blocks.LAVA);
+            }
+        }
+        return GravePlacement.find(helper.getLevel(), helper.absolutePos(LAVA_DEATH), store(helper));
+    }
+
+    private static void assertOnFirmGround(GameTestHelper helper, BlockPos result) {
+        ServerLevel level = helper.getLevel();
+        BlockPos below = result.below();
+        helper.assertFalse(level.getFluidState(below).is(FluidTags.LAVA), "grave over lava at " + result);
+        helper.assertFalse(level.getBlockState(below).getCollisionShape(level, below).isEmpty(), "nothing solid under the grave at " + result);
     }
 
     // Placed blocks are noted first, so finally clears even the ones placed before a failure
