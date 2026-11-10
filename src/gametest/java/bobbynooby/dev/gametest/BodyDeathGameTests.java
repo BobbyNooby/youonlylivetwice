@@ -31,6 +31,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -196,13 +197,25 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
-    // The body wears copies of the saved gear, so anything it dropped would exist twice
+    // The body wears copies of the saved gear, so anything it dropped would exist twice. Vanilla's mannequin drops
+    // nothing, so the test datapack gives mannequins a diamond, and a plain one dies first to show the loot is there.
     @GameTest
     public void bodyDeathDropsNothing(GameTestHelper helper) {
         ServerPlayer player = join(helper, "NoDrops");
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = useDefaultBodies();
+        Mannequin plain = null;
         try {
+            plain = helper.spawn(EntityTypes.MANNEQUIN, new BlockPos(5, 1, 5));
+            AABB aroundPlain = new AABB(plain.blockPosition()).inflate(2.0);
+            plain.kill(helper.getLevel());
+            List<ItemEntity> loot = helper.getLevel().getEntities(EntityTypes.ITEM, aroundPlain, Entity::isAlive);
+            helper.assertValueEqual(loot.size(), 1, "item entities the plain mannequin dropped");
+            helper.assertTrue(ItemStack.matches(loot.get(0).getItem(), new ItemStack(Items.DIAMOND)),
+                    "the plain mannequin's drop: " + loot.get(0).getItem());
+            // Gone before the body dies, so the check below sees only the body's drops
+            loot.forEach(Entity::discard);
+
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             // The main hand is the selected hotbar slot, so the diamond goes in after it
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
@@ -223,6 +236,11 @@ public class BodyDeathGameTests {
             helper.assertValueEqual(GraveAsserts.count(saved, Items.DIAMOND), 0, "diamonds left in the save");
             helper.assertValueEqual(GraveAsserts.count(saved, Items.IRON_CHESTPLATE), 0, "chestplates left in the save");
         } finally {
+            if (plain != null) {
+                helper.getLevel().getEntities(EntityTypes.ITEM, new AABB(plain.blockPosition()).inflate(2.0), Entity::isAlive)
+                        .forEach(Entity::discard);
+                plain.discard();
+            }
             cleanUp(helper, owner, before);
         }
         helper.succeed();
