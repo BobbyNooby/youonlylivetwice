@@ -83,7 +83,8 @@ public final class Bodies {
         level.getChunkAt(BlockPos.containing(pos));
         try {
             for (ItemStack item : items) {
-                ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, item);
+                // Without vanilla's random push, which could slide it off the body's block into lava or the void
+                ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, item, 0.0, 0.0, 0.0);
                 entity.setUnlimitedLifetime();
                 if (!level.addFreshEntity(entity)) {
                     throw new IllegalStateException("Could not drop " + item + " at " + pos);
