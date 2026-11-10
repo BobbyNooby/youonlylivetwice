@@ -95,7 +95,19 @@ public class ReviveGameTests {
     // so the book and the anvil work.
     @GameTest
     public void anvilRefusesVanishingOnReviveHead(GameTestHelper helper) {
-        ServerPlayer player = TestPlayers.join(helper, "Anvil", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        assertAnvilRefusesVanishing(helper, "Anvil", reviveHead(staticProfile(UUID.randomUUID()), 1));
+        helper.succeed();
+    }
+
+    // The same for a grave head, which goes to the grave too
+    @GameTest
+    public void anvilRefusesVanishingOnGraveHead(GameTestHelper helper) {
+        assertAnvilRefusesVanishing(helper, "AnvilGrave", GraveItems.graveHead(staticProfile(UUID.randomUUID())));
+        helper.succeed();
+    }
+
+    private static void assertAnvilRefusesVanishing(GameTestHelper helper, String playerName, ItemStack head) {
+        ServerPlayer player = TestPlayers.join(helper, playerName, GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
             Holder<Enchantment> vanishing = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
                     .getOrThrow(Enchantments.VANISHING_CURSE);
@@ -110,7 +122,7 @@ public class ReviveGameTests {
             helper.assertTrue(plain.is(Items.PLAYER_HEAD) && EnchantmentHelper.has(plain, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP),
                     "a plain head got no curse: " + plain);
 
-            menu.getSlot(AnvilMenu.INPUT_SLOT).set(reviveHead(staticProfile(UUID.randomUUID()), 1));
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(head);
             helper.assertTrue(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().isEmpty(),
                     "the anvil made " + menu.getSlot(AnvilMenu.RESULT_SLOT).getItem());
             helper.assertValueEqual(menu.getCost(), 0, "anvil cost");
@@ -125,7 +137,6 @@ public class ReviveGameTests {
         } finally {
             TestPlayers.leave(player);
         }
-        helper.succeed();
     }
 
     @GameTest
