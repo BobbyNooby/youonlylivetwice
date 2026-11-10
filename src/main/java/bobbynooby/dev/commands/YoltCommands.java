@@ -16,15 +16,18 @@ import java.util.function.Predicate;
 
 /** The /yolt admin commands. Every reply and log line works from the console too, which has no player. */
 public final class YoltCommands {
-    private static final Predicate<CommandSourceStack> GAMEMASTER = Commands.hasPermission(Commands.LEVEL_GAMEMASTERS);
+    // Each subcommand needs it, apart from /yolt skin for a player's own skin
+    static final Predicate<CommandSourceStack> GAMEMASTER = Commands.hasPermission(Commands.LEVEL_GAMEMASTERS);
 
     private YoltCommands() {}
 
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
             LiteralArgumentBuilder<CommandSourceStack> yolt = Commands.literal("yolt")
-                    // Commands are registered before any server exists, so single-player is checked on each use
-                    .requires(source -> Settings.active() && GAMEMASTER.test(source));
+                    // Commands are registered before any server exists, so single-player is checked on each use. A
+                    // non-op may use it for /yolt skin. Vanilla sends a player only the nodes they can use, so they
+                    // see nothing else of it.
+                    .requires(source -> Settings.active() && (GAMEMASTER.test(source) || SkinCommands.playersMayPick()));
             // The order the subcommands are sent to clients and listed by /help in
             BorderCommands.register(yolt);
             LockoutCommands.register(yolt);

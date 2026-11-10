@@ -21,6 +21,7 @@ final class GraveCommands {
 
     static void register(LiteralArgumentBuilder<CommandSourceStack> yolt) {
         yolt.then(Commands.literal("grave")
+                .requires(YoltCommands.GAMEMASTER)
                 .then(Commands.literal("list")
                         .executes(c -> graveList(c.getSource())))
                 .then(Commands.literal("remove")

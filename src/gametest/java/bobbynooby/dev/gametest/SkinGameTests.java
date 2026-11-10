@@ -15,9 +15,13 @@ import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.SkinTextures;
 import bobbynooby.dev.skins.Skins;
 import com.mojang.authlib.GameProfile;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
+import com.mojang.brigadier.tree.CommandNode;
+import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
@@ -357,6 +361,85 @@ public class SkinGameTests {
             MOJANG.forget(account);
         }
         helper.succeed();
+    }
+
+    // With the command filter off a non-op gets vanilla's tree, cut down to the nodes they may use: of /yolt, only
+    // their own skin. Typed, their commands are read against the full tree, where the requirements stop the rest.
+    @GameTest
+    public void nonOpPicksOwnSkinWithFilterOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        int diameterBefore = config.worldBorder.diameter;
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Unfiltered", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer other = TestPlayers.join(helper, "Unpicked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String otherName = other.nameAndId().name();
+        SkinStore store = SkinStore.get(server);
+        try {
+            config.restrictCommands = false;
+            config.skins.allowPlayerChoice = true;
+            helper.assertFalse(CommandRestriction.restricted(player), "the test player is held to the non-op tree");
+            server.getCommands().sendCommands(player);
+            helper.assertValueEqual(yoltPaths(CommandRestrictionGameTests.lastTree(helper, player)),
+                    List.of("yolt", "yolt skin", "yolt skin set", "yolt skin set <mojangName>", "yolt skin clear"),
+                    "the /yolt a non-op is sent");
+
+            type(player, "yolt skin set " + account);
+            assertEqual(helper, store.choice(player.getUUID()), account, "the non-op's own pick");
+            helper.assertTrue(texts(player).contains("Your skin is now " + account + "'s. Rejoin to see it."),
+                    "no reply to the pick: " + texts(player));
+
+            type(player, "yolt skin set " + otherName + " " + account);
+            assertEqual(helper, store.choice(other.getUUID()), null, "a non-op picked another player's skin");
+            store.choose(other.getUUID(), account);
+            type(player, "yolt skin clear " + otherName);
+            assertEqual(helper, store.choice(other.getUUID()), account, "a non-op cleared another player's pick");
+            type(player, "yolt border 5000");
+            helper.assertValueEqual(config.worldBorder.diameter, diameterBefore, "the border diameter after a non-op's /yolt border");
+
+            player.messages.clear();
+            type(player, "yolt skin clear");
+            assertEqual(helper, store.choice(player.getUUID()), null, "the non-op's own pick after clearing");
+            helper.assertValueEqual(texts(player), List.of("Your skin is back to the default. Rejoin to see it."), "reply to clearing");
+
+            // With player choice off a non-op is sent no /yolt, and can't run it
+            config.skins.allowPlayerChoice = false;
+            server.getCommands().sendCommands(player);
+            helper.assertValueEqual(yoltPaths(CommandRestrictionGameTests.lastTree(helper, player)), List.of(),
+                    "the /yolt a non-op is sent with player choice off");
+            type(player, "yolt skin set " + account);
+            assertEqual(helper, store.choice(player.getUUID()), null, "a pick with player choice off");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(player.getUUID());
+            store.clearChoice(other.getUUID());
+            TestPlayers.leave(player);
+            TestPlayers.leave(other);
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // Every path under /yolt in a tree, as the dump writes them
+    private static List<String> yoltPaths(RootCommandNode<CommandSourceStack> root) {
+        List<String> paths = new ArrayList<>();
+        CommandNode<CommandSourceStack> yolt = root.getChild("yolt");
+        if (yolt != null) {
+            addPaths(yolt, "", paths);
+        }
+        return paths;
+    }
+
+    private static void addPaths(CommandNode<CommandSourceStack> node, String parent, List<String> paths) {
+        String path = parent + (node instanceof ArgumentCommandNode<?, ?> ? "<" + node.getName() + ">" : node.getName());
+        paths.add(path);
+        for (CommandNode<CommandSourceStack> child : node.getChildren()) {
+            addPaths(child, path + " ", paths);
+        }
     }
 
     // Clearing goes back to the account with the player's own name

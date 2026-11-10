@@ -1,5 +1,6 @@
 package bobbynooby.dev.commands;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.Skins;
@@ -22,7 +23,7 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /**
  * /yolt skin: a player wears the skin of a real Mojang account from their next join on, over every other skin. A
- * non-op may set and clear only their own (CommandRestriction); ops and the console anyone's.
+ * non-op may set and clear only their own, in the full tree and in CommandRestriction's; ops and the console anyone's.
  */
 public final class SkinCommands {
     // What a Mojang account name can be made of. Anything else can't be one, so Mojang isn't asked about it.
@@ -30,18 +31,27 @@ public final class SkinCommands {
 
     private SkinCommands() {}
 
+    /** True when non-ops may pick their own skin. */
+    static boolean playersMayPick() {
+        return Settings.get().skins.allowPlayerChoice;
+    }
+
     static void register(LiteralArgumentBuilder<CommandSourceStack> yolt) {
         yolt.then(Commands.literal("skin")
+                .requires(source -> YoltCommands.GAMEMASTER.test(source) || playersMayPick())
                 .then(Commands.literal("set")
                         .then(Commands.argument("mojangName", StringArgumentType.word())
                                 .executes(c -> setOwn(c.getSource(), StringArgumentType.getString(c, "mojangName"))))
+                        // Another player's skin is for ops and the console
                         .then(Commands.argument("player", StringArgumentType.string())
+                                .requires(YoltCommands.GAMEMASTER)
                                 .then(Commands.argument("mojangName", StringArgumentType.word())
                                         .executes(c -> setOther(c.getSource(), StringArgumentType.getString(c, "player"),
                                                 StringArgumentType.getString(c, "mojangName"))))))
                 .then(Commands.literal("clear")
                         .executes(c -> clearOwn(c.getSource()))
                         .then(Commands.argument("player", StringArgumentType.string())
+                                .requires(YoltCommands.GAMEMASTER)
                                 .executes(c -> clearOther(c.getSource(), StringArgumentType.getString(c, "player"))))));
     }
 

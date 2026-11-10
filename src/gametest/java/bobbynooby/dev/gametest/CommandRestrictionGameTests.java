@@ -195,7 +195,7 @@ public class CommandRestrictionGameTests {
     }
 
     // The last command tree the server sent this player, read back the way the client reads it
-    private static RootCommandNode<CommandSourceStack> lastTree(GameTestHelper helper, ServerPlayer player) {
+    static RootCommandNode<CommandSourceStack> lastTree(GameTestHelper helper, ServerPlayer player) {
         ClientboundCommandsPacket last = null;
         for (Packet<?> packet : TestPlayers.sentPackets(player)) {
             if (packet instanceof ClientboundCommandsPacket commands) {

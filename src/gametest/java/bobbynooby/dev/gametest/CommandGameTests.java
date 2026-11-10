@@ -738,35 +738,35 @@ public class CommandGameTests {
         Yolt.LOGGER.info("Command trees:\n{}", tree);
         helper.assertValueEqual(tree, """
                 root order: yolt, w
-                yolt | literal | level 2
-                yolt border | literal | level 0
+                yolt | literal | level 0
+                yolt border | literal | level 2
                 yolt border <diameter> | brigadier:integer {"min":1,"max":59999968} | level 0 | runs
                 yolt border <diameter> confirm | literal | level 0 | runs
-                yolt center | literal | level 0
+                yolt center | literal | level 2
                 yolt center <pos> | minecraft:vec2 | level 0 | runs
                 yolt center <pos> confirm | literal | level 0 | runs
-                yolt endscaling | literal | level 0
+                yolt endscaling | literal | level 2
                 yolt endscaling <scaling> | brigadier:double | level 0 | runs
                 yolt endscaling <scaling> confirm | literal | level 0 | runs
-                yolt respawncooldown | literal | level 0
+                yolt respawncooldown | literal | level 2
                 yolt respawncooldown <days> | brigadier:integer {"min":0} | level 0 | runs
-                yolt kill | literal | level 0
+                yolt kill | literal | level 2
                 yolt kill <player> | brigadier:string {"type":"phrase"} | level 0 | runs
-                yolt unkill | literal | level 0
+                yolt unkill | literal | level 2
                 yolt unkill <player> | brigadier:string {"type":"phrase"} | level 0 | runs
-                yolt grave | literal | level 0
+                yolt grave | literal | level 2
                 yolt grave list | literal | level 0 | runs
                 yolt grave remove | literal | level 0
                 yolt grave remove <pos> | minecraft:block_pos | level 0 | runs
-                yolt adminview | literal | level 0 | runs
-                yolt reload | literal | level 0 | runs
+                yolt adminview | literal | level 2 | runs
+                yolt reload | literal | level 2 | runs
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0
                 yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
-                yolt skin set <player> | brigadier:string {"type":"phrase"} | level 0
+                yolt skin set <player> | brigadier:string {"type":"phrase"} | level 2
                 yolt skin set <player> <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
                 yolt skin clear | literal | level 0 | runs
-                yolt skin clear <player> | brigadier:string {"type":"phrase"} | level 0 | runs
+                yolt skin clear <player> | brigadier:string {"type":"phrase"} | level 2 | runs
                 w | literal | level 0
                 w <target> | brigadier:string {"type":"word"} | level 0
                 w <target> <message> | minecraft:message | level 0 | runs

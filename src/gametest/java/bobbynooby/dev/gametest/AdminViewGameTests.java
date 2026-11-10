@@ -153,18 +153,22 @@ public class AdminViewGameTests {
     public void commandRequiresOp(GameTestHelper helper) {
         YoltConfig config = Settings.get();
         boolean restrictBefore = config.restrictCommands;
+        boolean skinChoiceBefore = config.skins.allowPlayerChoice;
         TestPlayers.Recording player = TestPlayers.joinRecording(helper, "avnonop", GameType.SURVIVAL, BlockPos.ZERO);
         try {
             // Off, so it is /yolt's own op check that refuses, not the command filter for non-ops
             config.restrictCommands = false;
+            config.skins.allowPlayerChoice = true;
             run(player, "yolt adminview");
-            // Compared as text, since a command failure arrives wrapped in another component
-            helper.assertTrue(said(player, Component.translatable("command.unknown.command").getString()),
+            // Compared as text, since a command failure arrives wrapped in another component. A non-op may use /yolt
+            // itself, for /yolt skin, so it is adminview that they can't use.
+            helper.assertTrue(said(player, Component.translatable("command.unknown.argument").getString()),
                     "a non-op's /yolt adminview was not refused");
             helper.assertFalse(said(player, "Admin view on."), "a non-op was told admin view is on");
             helper.assertFalse(player.hasAttached(AdminView.ATTACHMENT), "a non-op's command changed admin view");
         } finally {
             config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = skinChoiceBefore;
             AdminView.set(player, false);
             TestPlayers.leave(player);
         }

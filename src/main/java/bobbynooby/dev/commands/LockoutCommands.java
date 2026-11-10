@@ -23,12 +23,15 @@ final class LockoutCommands {
 
     static void register(LiteralArgumentBuilder<CommandSourceStack> yolt) {
         yolt.then(Commands.literal("respawncooldown")
+                        .requires(YoltCommands.GAMEMASTER)
                         .then(Commands.argument("days", IntegerArgumentType.integer(0))
                                 .executes(c -> respawnCooldown(c.getSource(), IntegerArgumentType.getInteger(c, "days")))))
                 .then(Commands.literal("kill")
+                        .requires(YoltCommands.GAMEMASTER)
                         .then(Commands.argument("player", StringArgumentType.string())
                                 .executes(c -> kill(c.getSource(), StringArgumentType.getString(c, "player")))))
                 .then(Commands.literal("unkill")
+                        .requires(YoltCommands.GAMEMASTER)
                         .then(Commands.argument("player", StringArgumentType.string())
                                 .executes(c -> unkill(c.getSource(), StringArgumentType.getString(c, "player")))));
     }

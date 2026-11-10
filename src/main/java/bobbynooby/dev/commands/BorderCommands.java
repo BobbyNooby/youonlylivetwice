@@ -46,17 +46,20 @@ final class BorderCommands {
     // Each takes an optional "confirm", needed only when the change would leave someone outside the border
     static void register(LiteralArgumentBuilder<CommandSourceStack> yolt) {
         yolt.then(Commands.literal("border")
+                        .requires(YoltCommands.GAMEMASTER)
                         .then(Commands.argument("diameter", IntegerArgumentType.integer(1, ConfigLoader.MAX_BORDER_DIAMETER))
                                 .executes(c -> border(c.getSource(), IntegerArgumentType.getInteger(c, "diameter"), false))
                                 .then(Commands.literal("confirm")
                                         .executes(c -> border(c.getSource(), IntegerArgumentType.getInteger(c, "diameter"), true)))))
                 .then(Commands.literal("center")
+                        .requires(YoltCommands.GAMEMASTER)
                         // false: a typed 100 stays 100 instead of moving to the block centre, so decimals are kept as typed
                         .then(Commands.argument("pos", Vec2Argument.vec2(false))
                                 .executes(c -> center(c.getSource(), centerArgument(c), false))
                                 .then(Commands.literal("confirm")
                                         .executes(c -> center(c.getSource(), centerArgument(c), true)))))
                 .then(Commands.literal("endscaling")
+                        .requires(YoltCommands.GAMEMASTER)
                         .then(Commands.argument("scaling", DoubleArgumentType.doubleArg())
                                 .executes(c -> endScaling(c.getSource(), DoubleArgumentType.getDouble(c, "scaling"), false))
                                 .then(Commands.literal("confirm")

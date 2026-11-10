@@ -23,8 +23,10 @@ final class AdminCommands {
 
     static void register(LiteralArgumentBuilder<CommandSourceStack> yolt) {
         yolt.then(Commands.literal("adminview")
+                        .requires(YoltCommands.GAMEMASTER)
                         .executes(c -> adminView(c.getSource())))
                 .then(Commands.literal("reload")
+                        .requires(YoltCommands.GAMEMASTER)
                         .executes(c -> reload(c.getSource())));
     }
 
