@@ -92,9 +92,10 @@ final class BodyDeath {
             throw new Kills.LoggedFailure("The body of " + record.ownerName() + " died, but they could not be killed");
         }
         BodySnapshot snapshot = record.snapshot();
-        // No entity, so no skin to keep: the grave head is built from the name. Nothing died, so no death message.
+        // No entity to copy a skin from: the grave head is built from the name, with the skin last known for them.
+        // Nothing died, so no death message.
         killOwner(server, record, snapshot.gear(), GlobalPos.of(snapshot.dimension(), BlockPos.containing(snapshot.pos())),
-                Profiles.of(record.who()), null);
+                Profiles.of(server, record.who()), null);
         return Kills.Result.KILLED_OFFLINE;
     }
 
@@ -103,7 +104,7 @@ final class BodyDeath {
     private static void killOwner(MinecraftServer server, BodyRecord record, LivingEntity body) {
         ResolvableProfile profile = body instanceof PlayerBody playerBody ? playerBody.ownerProfile()
                 : body instanceof Avatar avatar ? avatar.getProfile()
-                : Profiles.of(record.who());
+                : Profiles.of(server, record.who());
         killOwner(server, record, BodySnapshot.of(body).gear(), GlobalPos.of(body.level().dimension(), body.blockPosition()),
                 profile, DeathMessages.ofBody(body, record.ownerName()));
     }

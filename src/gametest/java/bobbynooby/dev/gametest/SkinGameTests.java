@@ -2,8 +2,13 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.SkinTextures;
@@ -13,6 +18,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -20,11 +26,18 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -158,6 +171,44 @@ public class SkinGameTests {
             MOJANG.forget(name);
         }
         helper.succeed();
+    }
+
+    // /yolt kill of an offline player with no body builds the grave head from the name and id alone, so the skin
+    // comes from what YOLT saved for that name
+    @GameTest
+    public void nameOnlyHeadUsesCache(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Head", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        // Something to carry, so the death leaves a grave
+        player.getInventory().add(new ItemStack(Items.DIRT));
+        // Leaving saves the player, so the kill is an offline one
+        TestPlayers.leave(player);
+        SkinTextures skin = FakeSkinLookup.texturesOf(who.name());
+        SkinStore.get(server).putSkin(CachedSkin.found(who.name(), skin, System.currentTimeMillis()));
+        try {
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            List<Grave> graves = gravesOf(server, who.id());
+            helper.assertFalse(graves.isEmpty(), "the kill left no grave");
+            for (Grave grave : graves) {
+                assertEqual(helper, textures(grave.profile().partialProfile()), skin, "the grave head's textures");
+            }
+            ItemStack head = graves.getFirst().items().stream().filter(GraveItems::isGraveHead).findFirst().orElse(ItemStack.EMPTY);
+            ResolvableProfile headProfile = head.get(DataComponents.PROFILE);
+            helper.assertTrue(headProfile != null, "the grave holds no grave head item");
+            assertEqual(helper, textures(headProfile.partialProfile()), skin, "the grave head item's textures");
+        } finally {
+            for (Grave grave : gravesOf(server, who.id())) {
+                GraveStore.get(server).remove(grave.id());
+                helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            DeathLockout.revive(who.id(), who.name(), "console");
+        }
+        helper.succeed();
+    }
+
+    private static List<Grave> gravesOf(MinecraftServer server, UUID owner) {
+        return GraveStore.get(server).all().stream().filter(grave -> grave.owner().equals(owner)).toList();
     }
 
     // A current file loads as it was saved, and one from a newer YOLT still gives what this one can read

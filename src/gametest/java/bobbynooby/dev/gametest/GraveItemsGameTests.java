@@ -44,7 +44,7 @@ public class GraveItemsGameTests {
     @GameTest
     public void profileOfNameAndIdKeepsIdAndName(GameTestHelper helper) {
         UUID id = UUID.randomUUID();
-        ResolvableProfile profile = Profiles.of(new NameAndId(id, "Ghost"));
+        ResolvableProfile profile = Profiles.of(helper.getLevel().getServer(), new NameAndId(id, "Ghost"));
         helper.assertValueEqual(profile.partialProfile().id(), id, "profile id");
         helper.assertValueEqual(profile.name(), Optional.of("Ghost"), "profile name");
         helper.assertTrue(profile.partialProfile().properties().values().stream()

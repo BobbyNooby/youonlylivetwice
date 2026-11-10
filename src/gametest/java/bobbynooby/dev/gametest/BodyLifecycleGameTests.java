@@ -508,7 +508,7 @@ public class BodyLifecycleGameTests {
             MinecraftServer server = helper.getLevel().getServer();
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
-                    Profiles.of(player.nameAndId()), null);
+                    Profiles.of(server, player.nameAndId()), null);
             helper.assertTrue(gravesOf(helper, owner).stream().anyMatch(grave -> grave.items().stream()
                     .anyMatch(item -> item.is(Items.IRON_CHESTPLATE))), "no grave holds the chestplate");
 

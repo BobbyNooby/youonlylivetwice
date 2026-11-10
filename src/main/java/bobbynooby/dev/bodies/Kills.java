@@ -52,8 +52,9 @@ public final class Kills {
         if (body.isPresent()) {
             return BodyDeath.killBody(server, body.get());
         }
+        // No player or body to copy a skin from, so the grave head gets the one last known for them
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
-                Profiles.of(who), null);
+                Profiles.of(server, who), null);
         return Result.KILLED_OFFLINE;
     }
 }

@@ -10,6 +10,7 @@ import com.mojang.authlib.properties.PropertyMap;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.players.NameAndId;
 import org.jspecify.annotations.Nullable;
 
 import java.util.function.BooleanSupplier;
@@ -80,6 +81,24 @@ public final class Skins {
         properties.removeAll(TEXTURES);
         properties.put(TEXTURES, new Property(TEXTURES, textures.value(), textures.signature()));
         return new GameProfile(profile.id(), profile.name(), new PropertyMap(properties));
+    }
+
+    /**
+     * A profile from a name and id alone, as for a grave head with no player or body to copy. It gets the skin they last
+     * joined with, or else the one Mojang gave for their name. Nothing is asked of Mojang here.
+     */
+    public static GameProfile known(MinecraftServer server, NameAndId who) {
+        GameProfile bare = new GameProfile(who.id(), who.name());
+        if (!on()) {
+            return bare;
+        }
+        SkinStore store = SkinStore.get(server);
+        SkinTextures textures = store.applied(who.id());
+        if (textures == null) {
+            CachedSkin byName = store.skin(who.name());
+            textures = byName != null ? byName.textures() : null;
+        }
+        return textures != null ? withTextures(bare, textures) : bare;
     }
 
     /**
