@@ -11,9 +11,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -114,9 +116,17 @@ public final class BodyExpiry {
         // An owner already dead (say killed offline after a crash lost this record's removal) keeps the save they
         // have. Health 0 without a death would respawn them and drop their inventory.
         if (!OfflinePlayerData.isDead(tag) && snapshot.health() > 0.0F) {
-            BodySaves.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects, server.registryAccess(),
-                    record.ownerName());
-            OfflinePlayerData.save(server, record.owner(), tag);
+            List<ItemStack> unplaced = BodySaves.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects,
+                    server.registryAccess(), record.ownerName());
+            // A body item the save had no room for drops where the body stands. It is taken back if the save fails,
+            // so the retry can't drop it twice.
+            Runnable undoDrop = Bodies.dropForGood(server, snapshot.dimension(), snapshot.pos(), unplaced);
+            try {
+                OfflinePlayerData.save(server, record.owner(), tag);
+            } catch (RuntimeException e) {
+                undoDrop.run();
+                throw e;
+            }
         }
         // The record goes first, so the discard's unload no longer counts this as a body. One that isn't loaded
         // goes when it next loads, since no record points at it.

@@ -30,13 +30,16 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -45,6 +48,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -198,7 +202,8 @@ public class BodyBehaviourGameTests {
     }
 
     // As after the mod or datapack that added them went: the save's chest and main-hand entries don't read back, while
-    // the body wears a chestplate and holds a sword. The pass runs over every body, so this has the expiry batch.
+    // the body wears a chestplate and holds a sword. Those can't be written over the entries, so they go to free
+    // inventory slots. The pass runs over every body, so this has the expiry batch.
     @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
     public void unreadableGearSlotIsNotOverwritten(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Unreadable", new BlockPos(1, 1, 1));
@@ -228,7 +233,12 @@ public class BodyBehaviourGameTests {
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
-            helper.assertValueEqual(saved.getListOrEmpty("Inventory"), inventory, "saved inventory");
+            helper.assertTrue(saved.getListOrEmpty("Inventory").contains(held), "saved main-hand entry gone: " + saved.get("Inventory"));
+            Map<Integer, ItemStack> stored = OfflineGameTests.savedInventory(helper, saved);
+            helper.assertValueEqual(stored.size(), 2, "inventory items that read back: " + stored);
+            helper.assertTrue(stored.values().stream().anyMatch(item -> item.is(Items.IRON_SWORD)), "sword not in the inventory: " + stored);
+            helper.assertTrue(stored.values().stream().anyMatch(item -> item.is(Items.IRON_CHESTPLATE)),
+                    "chestplate not in the inventory: " + stored);
             // The rest of the body's gear still carries over
             ItemStack helmet = OfflinePlayerData.readGear(saved, server.registryAccess()).items()
                     .getOrDefault(EquipmentSlot.HEAD, ItemStack.EMPTY);
@@ -242,6 +252,97 @@ public class BodyBehaviourGameTests {
             cleanUp(helper, owner, before);
         }
         helper.succeed();
+    }
+
+    // The save's chest entry doesn't read back, and a dispenser put a chestplate into the body's empty chest slot. It
+    // can't go over the entry, so it goes into the first free inventory slot.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void bodyItemOverUnreadableSlotGoesToFreeSlot(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Dispensed", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            CompoundTag chest = unreadableChest(server, player);
+            expiredLogout(helper, owner);
+
+            List<String> log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server));
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
+            Map<Integer, ItemStack> stored = OfflineGameTests.savedInventory(helper, saved);
+            helper.assertValueEqual(stored.size(), 1, "inventory items: " + stored);
+            ItemStack kept = stored.values().iterator().next();
+            helper.assertTrue(kept.is(Items.IRON_CHESTPLATE) && kept.getDamageValue() == 7, "inventory item: " + kept);
+            String line = "Keeping " + name + "'s unreadable item in slot chest ";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(line) && entry.contains("goes into inventory slot"))
+                    .count(), 1L, "warnings for the chest entry: " + log);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // The same, with every inventory slot of the save taken: the chestplate drops where the body stood, for good
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void bodyItemWithNoFreeSlotDropsAtBody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "NoRoom", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            ListTag full = OfflineGameTests.fullInventory(helper);
+            CompoundTag tag = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            tag.put("Inventory", full.copy());
+            OfflinePlayerData.save(server, owner, tag);
+            CompoundTag chest = unreadableChest(server, player);
+            expiredLogout(helper, owner);
+            around = new AABB(body.blockPosition()).inflate(2.0);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
+            helper.assertValueEqual(saved.getListOrEmpty("Inventory"), full, "saved inventory");
+            List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
+                    drop -> drop.getItem().is(Items.IRON_CHESTPLATE));
+            helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the body");
+            helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
+            // ItemEntity.setUnlimitedLifetime sets this age, which the item's tick never counts up from
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped chestplate's age");
+        } finally {
+            if (around != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_CHESTPLATE))
+                        .forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Puts an entry that doesn't read back into the chest slot of the player's save, and returns it
+    private static CompoundTag unreadableChest(MinecraftServer server, ServerPlayer player) {
+        CompoundTag tag = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+        CompoundTag chest = OfflineGameTests.unreadableItem();
+        CompoundTag equipment = tag.getCompoundOrEmpty("equipment");
+        equipment.put("chest", chest.copy());
+        tag.put("equipment", equipment);
+        OfflinePlayerData.save(server, player.getUUID(), tag);
+        return chest;
+    }
+
+    private static ItemStack damaged(Item item, int damage) {
+        ItemStack stack = new ItemStack(item);
+        stack.setDamageValue(damage);
+        return stack;
     }
 
     // The save only lists the attributes the player has used, so an effect gained on the body may need one it lacks

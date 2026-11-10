@@ -32,6 +32,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -268,6 +269,39 @@ public class BodyDeathGameTests {
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, item -> item.getItem().is(Items.IRON_HELMET))
                     .isEmpty(), "helmet dropped");
             helper.assertValueEqual(count(savedItems(helper, player), Items.IRON_HELMET), 0, "helmets left in the save");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // The save's chest entry doesn't read back and every inventory slot is taken, while a dispenser put a chestplate
+    // into the body's empty chest slot. The chestplate can't go over the entry or into the save, so it joins the grave.
+    @GameTest
+    public void bodyItemWithNoFreeSlotGoesToGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Crowded");
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            ItemStack dispensed = new ItemStack(Items.IRON_CHESTPLATE);
+            dispensed.setDamageValue(7);
+            body.setItemSlot(EquipmentSlot.CHEST, dispensed);
+            CompoundTag tag = save(helper, player);
+            tag.put("Inventory", OfflineGameTests.fullInventory(helper));
+            CompoundTag chest = OfflineGameTests.unreadableItem();
+            CompoundTag equipment = tag.getCompoundOrEmpty("equipment");
+            equipment.put("chest", chest.copy());
+            tag.put("equipment", equipment);
+            OfflinePlayerData.save(server, owner, tag);
+            body.kill(helper.getLevel());
+
+            List<Grave> graves = gravesOf(helper, owner);
+            helper.assertTrue(graves.stream().flatMap(grave -> grave.items().stream())
+                    .anyMatch(item -> item.is(Items.IRON_CHESTPLATE) && item.getDamageValue() == 7), "no grave holds the chestplate");
+            helper.assertValueEqual(countInGraves(graves, Items.DIRT), Inventory.INVENTORY_SIZE, "dirt in the graves");
+            helper.assertValueEqual(save(helper, player).getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
         } finally {
             cleanUp(helper, owner, before);
         }

@@ -1,10 +1,12 @@
 package bobbynooby.dev.bodies;
 
+import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -21,6 +23,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 /** Writes what a body went through into its owner's save. Only for a body that is being removed. */
 public final class BodySaves {
@@ -30,19 +33,23 @@ public final class BodySaves {
      * Carries what happened to a body's gear over to the gear in the save, by GearSync's rules. Only for a body
      * that is being removed, or its copies would exist twice. An entry in the save that doesn't read back is the
      * owner's own item, from a mod or datapack removed since, so nothing is ever written over it.
+     * <p>
+     * A body item headed for such a slot can't be a copy of it, since the copy wouldn't read back either: a dispenser
+     * put it on the body. It goes into a free inventory slot of the save instead. Returns the ones that found no free
+     * slot; the caller has to put them somewhere, so no item is ever written nowhere.
      */
-    public static void applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear,
-                                     HolderLookup.Provider registries, String owner) {
+    public static List<ItemStack> applyBodyGear(CompoundTag tag, Map<EquipmentSlot, ItemStack> bodyGear,
+                                                HolderLookup.Provider registries, String owner) {
         OfflinePlayerData.Gear saved = OfflinePlayerData.readGear(tag, registries);
         Map<EquipmentSlot, ItemStack> changed = new EnumMap<>(EquipmentSlot.class);
         GearSync.applyBodyGear(bodyGear, slot -> saved.items().getOrDefault(slot, ItemStack.EMPTY), changed::put);
-        saved.unreadable().forEach((slot, entry) -> {
+        Map<EquipmentSlot, ItemStack> kept = new EnumMap<>(EquipmentSlot.class);
+        for (EquipmentSlot slot : saved.unreadable().keySet()) {
             ItemStack bodyItem = changed.remove(slot);
             if (bodyItem != null) {
-                Yolt.LOGGER.warn("Keeping {}'s unreadable item in slot {} in their save file instead of the body's {}: {}",
-                        owner, slot.getName(), bodyItem, entry);
+                kept.put(slot, bodyItem);
             }
-        });
+        }
         // One that reads back in part counts as the item, as in vanilla's own load, and the raw entry goes in the log
         saved.partlyRead().forEach((slot, entry) -> {
             if (changed.containsKey(slot)) {
@@ -51,14 +58,31 @@ public final class BodySaves {
             }
         });
         OfflinePlayerData.writeGear(tag, changed, registries);
+        // After the write, so a main hand it just filled counts as taken
+        List<ItemStack> unplaced = new ArrayList<>();
+        kept.forEach((slot, bodyItem) -> {
+            Tag entry = saved.unreadable().get(slot);
+            String item = Stacks.saved(bodyItem, registries);
+            OptionalInt free = OfflinePlayerData.addToInventory(tag, bodyItem, registries);
+            if (free.isPresent()) {
+                Yolt.LOGGER.warn("Keeping {}'s unreadable item in slot {} in their save file: {}. The body's item for that "
+                        + "slot goes into inventory slot {} instead: {}", owner, slot.getName(), entry, free.getAsInt(), item);
+            } else {
+                Yolt.LOGGER.warn("Keeping {}'s unreadable item in slot {} in their save file: {}. The body's item for that "
+                        + "slot has no free inventory slot there, so it goes elsewhere: {}", owner, slot.getName(), entry, item);
+                unplaced.add(bodyItem);
+            }
+        });
+        return unplaced;
     }
 
     /**
      * Writes a body's state into its owner's save, as a login would have taken it over: where it stands, its
      * health, fall, fire and air, its effects when copyEffects is on, and its gear. Only for a body being removed.
+     * Returns the body's items that found no place in the save, as applyBodyGear does.
      */
-    public static void applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects,
-                                     HolderLookup.Provider registries, String owner) {
+    public static List<ItemStack> applySnapshot(CompoundTag tag, BodySnapshot snapshot, boolean copyEffects,
+                                                HolderLookup.Provider registries, String owner) {
         // The body only keeps which way it faces, so the saved pitch stays
         OfflinePlayerData.writePosition(tag, snapshot.dimension(), snapshot.pos(), snapshot.yRot());
         tag.putFloat(OfflinePlayerData.HEALTH, snapshot.health());
@@ -72,7 +96,7 @@ public final class BodySaves {
             OfflinePlayerData.writeAttributes(tag, swapEffectModifiers(attributes, before, snapshot.effects()), registries);
             OfflinePlayerData.writeEffects(tag, snapshot.effects(), registries);
         }
-        applyBodyGear(tag, snapshot.gear(), registries, owner);
+        return applyBodyGear(tag, snapshot.gear(), registries, owner);
     }
 
     // An effect's attribute modifiers are saved with the attributes and loading doesn't add them again, so the old

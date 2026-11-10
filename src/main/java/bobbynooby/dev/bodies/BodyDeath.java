@@ -19,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -114,9 +115,10 @@ final class BodyDeath {
         CompoundTag tag = OfflinePlayerData.loadOrThrow(server, who);
         // Already dead, say after a crash before the record's removal was saved: a second death would restart the lockout
         if (!OfflinePlayerData.isDead(tag)) {
-            // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore
-            BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess(), who.name());
-            OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage);
+            // What happened to the body's gear goes onto the save first, so the grave holds what the body really wore.
+            // A body item the save had no room for goes into the grave with the rest.
+            List<ItemStack> unplaced = BodySaves.applyBodyGear(tag, bodyGear, server.registryAccess(), who.name());
+            OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage, unplaced);
         }
         BodyStore.get(server).remove(record.owner());
     }

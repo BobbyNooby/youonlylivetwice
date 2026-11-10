@@ -13,12 +13,17 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -38,7 +43,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
@@ -424,6 +431,26 @@ public class OfflineGameTests {
         item.putString("id", "you-only-live-twice-gametest:no_such_item");
         item.putInt("count", 1);
         return item;
+    }
+
+    // A main inventory with every slot taken, by one dirt each
+    static ListTag fullInventory(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        ListTag inventory = new ListTag();
+        for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+            inventory.add(ItemStackWithSlot.CODEC.encodeStart(ops, new ItemStackWithSlot(slot, new ItemStack(Items.DIRT))).getOrThrow());
+        }
+        return inventory;
+    }
+
+    // The save's main inventory entries that read back, by slot
+    static Map<Integer, ItemStack> savedInventory(GameTestHelper helper, CompoundTag save) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        Map<Integer, ItemStack> items = new HashMap<>();
+        for (Tag entry : save.getListOrEmpty("Inventory")) {
+            ItemStackWithSlot.CODEC.parse(ops, entry).result().ifPresent(read -> items.put(read.slot(), read.stack()));
+        }
+        return items;
     }
 
     private static Grave onlyGrave(GameTestHelper helper, UUID owner) {

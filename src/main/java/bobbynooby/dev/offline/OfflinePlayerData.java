@@ -22,6 +22,7 @@ import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -35,10 +36,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
 import java.util.UUID;
 
 /** Reads and edits the save file of a player who is not online. Key names follow vanilla's Player save code. */
@@ -277,6 +281,32 @@ public final class OfflinePlayerData {
         } else {
             tag.put(EQUIPMENT, equipment);
         }
+    }
+
+    /**
+     * Puts the stack into the lowest main-inventory slot that no entry of the save uses, and returns that slot. Empty
+     * when every one is taken, or when the inventory key isn't a list, which would be written over.
+     */
+    public static OptionalInt addToInventory(CompoundTag tag, ItemStack stack, HolderLookup.Provider registries) {
+        Tag saved = tag.get(INVENTORY);
+        if (saved != null && !(saved instanceof ListTag)) {
+            return OptionalInt.empty();
+        }
+        ListTag entries = saved instanceof ListTag list ? list : new ListTag();
+        Set<Integer> used = new HashSet<>();
+        for (Tag entry : entries) {
+            if (entry instanceof CompoundTag item) {
+                used.add(slotOf(item));
+            }
+        }
+        for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+            if (!used.contains(slot)) {
+                entries.add(ItemStackWithSlot.CODEC.encodeStart(ops(registries), new ItemStackWithSlot(slot, stack)).getOrThrow());
+                tag.put(INVENTORY, entries);
+                return OptionalInt.of(slot);
+            }
+        }
+        return OptionalInt.empty();
     }
 
     /** The saved effects; none when the key is missing. */

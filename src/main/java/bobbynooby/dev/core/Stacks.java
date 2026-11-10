@@ -1,5 +1,7 @@
 package bobbynooby.dev.core;
 
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
@@ -20,6 +22,13 @@ public final class Stacks {
             }
         }
         return kept;
+    }
+
+    /** The stack's whole data as it is saved, for a log line that must hold all of it, not just the count and id. */
+    public static String saved(ItemStack stack, HolderLookup.Provider registries) {
+        return ItemStack.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), stack).result()
+                .map(Object::toString)
+                .orElseGet(stack::toString);
     }
 
     /** Copies of the non-empty stacks, in a new list. */

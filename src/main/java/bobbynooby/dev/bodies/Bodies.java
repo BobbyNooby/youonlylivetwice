@@ -5,10 +5,20 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
 public final class Bodies {
@@ -55,5 +65,35 @@ public final class Bodies {
     /** The record's body in any dimension, or null when it isn't loaded. */
     static @Nullable Entity entityOf(MinecraftServer server, BodyRecord record) {
         return server.overworld().getEntityInAnyDimension(record.bodyEntity());
+    }
+
+    /**
+     * Drops a body's items that have nowhere else to go where it stands, never to despawn, as a grave removal's drops
+     * are. Every one or none: if one can't be added, the others are taken back and this throws. Returns the undo.
+     */
+    static Runnable dropForGood(MinecraftServer server, ResourceKey<Level> dimension, Vec3 pos, List<ItemStack> items) {
+        List<Entity> added = new ArrayList<>();
+        Runnable undo = () -> added.forEach(Entity::discard);
+        if (items.isEmpty()) {
+            return undo;
+        }
+        ServerLevel found = server.getLevel(dimension);
+        ServerLevel level = found != null ? found : server.overworld();
+        // Entities added to a chunk that isn't loaded sit in limbo until it is
+        level.getChunkAt(BlockPos.containing(pos));
+        try {
+            for (ItemStack item : items) {
+                ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, item);
+                entity.setUnlimitedLifetime();
+                if (!level.addFreshEntity(entity)) {
+                    throw new IllegalStateException("Could not drop " + item + " at " + pos);
+                }
+                added.add(entity);
+            }
+        } catch (RuntimeException e) {
+            undo.run();
+            throw e;
+        }
+        return undo;
     }
 }

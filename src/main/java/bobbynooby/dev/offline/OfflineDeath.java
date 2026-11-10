@@ -40,6 +40,17 @@ public final class OfflineDeath {
      */
     public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where,
                                          ResolvableProfile profile, @Nullable String bodyDeathMessage) {
+        applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage, List.of());
+    }
+
+    /**
+     * The same death, with items of the player's that have no place in the save, such as a body's item that found no
+     * free slot there. Nothing else holds them, so they go into the grave, or onto the ground with graves off, whatever
+     * the game mode or keepInventory.
+     */
+    public static void applyOfflineDeath(MinecraftServer server, NameAndId who, CompoundTag tag, GlobalPos where,
+                                         ResolvableProfile profile, @Nullable String bodyDeathMessage,
+                                         List<ItemStack> unplaced) {
         // Prepare: wipe the tag and write it to a temp file before anything in the world changes
         ServerLevel level = levelFor(server, where);
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
@@ -68,6 +79,7 @@ public final class OfflineDeath {
                 }
             }
         }
+        items.addAll(unplaced);
         OfflinePlayerData.markDead(tag, where);
         Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 
@@ -75,8 +87,8 @@ public final class OfflineDeath {
         // Graves are already on disk when deposit returns, so a crash before the commit can duplicate, never lose.
         List<Runnable> undo = new ArrayList<>();
         try {
-            // An online spectator's death never reaches the grave hook either
-            if (!spectator) {
+            // An online spectator's death never reaches the grave hook either, but unplaced items have to go somewhere
+            if (!spectator || !unplaced.isEmpty()) {
                 undo.add(deposit(server, who, items, where, profile));
             }
             undo.add(dropExperience(level, where, experience));
