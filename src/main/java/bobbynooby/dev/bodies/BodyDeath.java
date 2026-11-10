@@ -81,13 +81,8 @@ final class BodyDeath {
         if (Bodies.entityOf(server, record) instanceof LivingEntity body
                 && !body.isDeadOrDying() && body.level() instanceof ServerLevel level) {
             body.kill(level);
-            Optional<BodyRecord> left = BodyStore.get(server).byOwner(record.owner());
-            if (left.isEmpty()) {
+            if (BodyStore.get(server).byOwner(record.owner()).isEmpty()) {
                 return Kills.Result.KILLED_OFFLINE;
-            }
-            // Taken over meanwhile: the death handler skips a stale body and logs nothing
-            if (left.get().pendingRemoval()) {
-                return Kills.Result.NOT_KILLED;
             }
             if (!body.isDeadOrDying()) {
                 // Another mod stopped the death
