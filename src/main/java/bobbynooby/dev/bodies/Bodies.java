@@ -35,7 +35,10 @@ public final class Bodies {
             Guard.run(() -> BodyChunks.onBodyUnload(entity), "Could not save the state of the body {} as it unloaded",
                     entity.getUUID());
         });
-        ServerEntityEvents.ENTITY_LOAD.register(BodyChunks::onBodyLoad);
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            Guard.run(() -> BodyChunks.onBodyLoad(entity, level), "Could not check the body {} as it loaded",
+                    entity.getUUID());
+        });
         BodyMobs.init();
         // Fires inside die() for every death, after the death drops, which the body never has. A throw would break
         // off that death.
