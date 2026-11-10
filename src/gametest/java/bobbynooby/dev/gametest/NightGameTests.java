@@ -5,8 +5,11 @@ import bobbynooby.dev.config.YoltConfig;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.SleepStatus;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -32,12 +35,14 @@ public class NightGameTests {
         try {
             sleep.noNightSkip = true;
             long asleepAt = goToSleep(helper, sleeper, head);
+            helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night would not skip anyway");
             helper.runAfterDelay(DEEP_SLEEP_TICKS + 10, () -> {
                 try {
-                    helper.assertTrue(sleeper.isSleepingLongEnough(), "the sleeper has not slept long enough for the night to skip");
-                    helper.assertTrue(sleeper.isSleeping(), "the sleeper was woken up");
                     long moved = SleepGameTests.clockTicks(helper) - asleepAt;
                     helper.assertTrue(moved < 200, "the clock moved " + moved + " ticks while everyone slept, so the night skipped");
+                    helper.assertTrue(sleeper.isSleeping(), "the sleeper was woken up");
+                    helper.assertTrue(sleeper.isSleepingLongEnough(), "the sleeper has not slept long enough for the night to skip");
+                    helper.assertTrue(enoughAsleepForVanilla(helper, true), "vanilla would not skip the night now either, so nothing was tested");
                 } finally {
                     cleanUp.run();
                 }
@@ -63,6 +68,7 @@ public class NightGameTests {
         try {
             sleep.noNightSkip = false;
             long asleepAt = goToSleep(helper, sleeper, head);
+            helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night can't skip");
             helper.runBeforeTestEnd(cleanUp);
             helper.succeedWhen(() -> {
                 long now = SleepGameTests.clockTicks(helper);
@@ -92,6 +98,23 @@ public class NightGameTests {
             }
         });
         return SleepGameTests.clockTicks(helper);
+    }
+
+    // Vanilla's own check of whether enough of the level's players are in bed (deep: and have slept long enough), with
+    // YOLT's night block out of the way for the call. Anyone else awake in the overworld makes it false.
+    private static boolean enoughAsleepForVanilla(GameTestHelper helper, boolean deep) {
+        ServerLevel level = helper.getLevel();
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean before = sleep.noNightSkip;
+        sleep.noNightSkip = false;
+        try {
+            SleepStatus status = new SleepStatus();
+            status.update(level.players());
+            int percentage = level.getGameRules().get(GameRules.PLAYERS_SLEEPING_PERCENTAGE);
+            return status.areEnoughSleeping(percentage) && (!deep || status.areEnoughDeepSleeping(percentage, level.players()));
+        } finally {
+            sleep.noNightSkip = before;
+        }
     }
 
     // Puts the switch back and the sleeper out, once only, at the test's end or just before its timeout
