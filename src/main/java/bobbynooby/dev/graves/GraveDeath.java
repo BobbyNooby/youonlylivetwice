@@ -44,6 +44,8 @@ public final class GraveDeath {
             player.getInventory().clearContent();
             return true;
         }
+        // Before the switch too: a death that makes no grave must not be told about an older one at the respawn
+        GraveNotice.forget(player.getUUID());
         if (!Settings.on(c -> c.graves.enabled)) {
             return false;
         }
@@ -55,6 +57,7 @@ public final class GraveDeath {
 
         // Until the graves exist, any failure drops everything instead
         List<ItemStack> fromMenus = new ArrayList<>();
+        List<Grave> graves;
         try {
             ResolvableProfile profile = Profiles.of(player);
             // The head comes first and is always there: it is the revive token
@@ -70,7 +73,7 @@ public final class GraveDeath {
             if (enderMode == YoltConfig.EnderChestMode.GRAVE) {
                 addStacks(items, enderChest);
             }
-            Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
+            graves = Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
             // With keepInventory no menu was closed, vanilla drops nothing, and the inventory stays
@@ -94,6 +97,7 @@ public final class GraveDeath {
         if (enderMode == YoltConfig.EnderChestMode.GRAVE || enderMode == YoltConfig.EnderChestMode.WIPE) {
             enderChest.clearContent();
         }
+        GraveNotice.tellAtRespawn(player.getUUID(), graves.get(0).id());
         // A death with no kick would wait for the next autosave, and a crash before it would bring the items back
         // beside their graves. Only once the graves are on disk, or that crash would lose them instead.
         if (gravesOnDisk && !deathKicks()) {

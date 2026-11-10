@@ -95,24 +95,28 @@ public final class DeathLockout {
 
     /** Null when the player may join. */
     public static @Nullable Component refusal(UUID uuid, String name) {
-        String text = refusalText(uuid, name);
-        return text == null ? null : Component.literal(text);
+        LockedOut locked = lockedOut(uuid, name);
+        return locked == null ? null : Component.literal(locked.text());
     }
 
     /**
-     * The same, and where the player's grave is when graves.tellLocation says to tell them: what the login refusal and
+     * The same, and where that death's grave is when graves.tellLocation says to tell them: what the login refusal and
      * the death's kick say. Only the dead player sees either.
      */
     public static @Nullable Component refusal(MinecraftServer server, UUID uuid, String name) {
-        String text = refusalText(uuid, name);
-        if (text == null) {
+        LockedOut locked = lockedOut(uuid, name);
+        if (locked == null) {
             return null;
         }
-        String grave = GraveNotice.line(server, uuid);
-        return Component.literal(grave == null ? text : text + "\n" + grave);
+        String grave = GraveNotice.line(server, uuid, locked.death().deathTimeMillis());
+        return Component.literal(grave == null ? locked.text() : locked.text() + "\n" + grave);
     }
 
-    private static @Nullable String refusalText(UUID uuid, String name) {
+    // The death that keeps the player out, and what they are told about it
+    private record LockedOut(DeathLog death, String text) {
+    }
+
+    private static @Nullable LockedOut lockedOut(UUID uuid, String name) {
         DeathStore open = store;
         if (open == null || !Settings.get().deathLockout.enabled) {
             return null;
@@ -132,7 +136,7 @@ public final class DeathLockout {
         if (remaining <= 0) {
             return null;
         }
-        return Cooldown.refusal(log.get().deathMessage(), remaining);
+        return new LockedOut(log.get(), Cooldown.refusal(log.get().deathMessage(), remaining));
     }
 
     /**
