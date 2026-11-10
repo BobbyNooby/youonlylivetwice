@@ -1,15 +1,19 @@
 package bobbynooby.dev.bodies;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.graves.LastGround;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -55,11 +59,27 @@ public final class Bodies {
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
             Guard.run(() -> BodyDeath.onBodyDeath(entity), "Could not handle the death of {}", BodyDeath.logName(entity));
         });
+        // Where each loaded body stands, so its owner's grave goes back there if the body is pushed into the void.
+        // With bodies switched off too, like the death above.
+        ServerTickEvents.END_SERVER_TICK.register(Bodies::noteGround);
         ServerLifecycleEvents.SERVER_STARTED.register(BodyRestart::restorePlayerBodies);
         ServerLifecycleEvents.SERVER_STOPPING.register(BodyRestart::snapshotBodies);
         // Every save too, autosaves included, so after a crash a player body comes back as last saved, not as it logged out
         ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> BodyRestart.snapshotBodies(server));
         BodyExpiry.init();
+    }
+
+    private static void noteGround(MinecraftServer server) {
+        // Only a grave reads it
+        if (!Settings.on(c -> c.graves.enabled)) {
+            return;
+        }
+        for (BodyRecord record : BodyStore.get(server).all()) {
+            // A pending record's body was taken over already
+            if (!record.pendingRemoval() && entityOf(server, record) instanceof LivingEntity body) {
+                LastGround.update(record.owner(), body);
+            }
+        }
     }
 
     /** The record's body in any dimension, or null when it isn't loaded. */

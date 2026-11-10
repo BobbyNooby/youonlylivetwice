@@ -19,6 +19,7 @@ import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,9 +47,17 @@ public final class GravePlacement {
     private GravePlacement() {
     }
 
-    /** Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it. */
+    /** Where a new grave goes, for a death with no known last ground. */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {
-        BlockPos start = start(level, deathPos, store);
+        return find(level, deathPos, null, store);
+    }
+
+    /**
+     * Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it.
+     * lastGround is where the owner last stood in this dimension: a death over the void starts from there.
+     */
+    public static BlockPos find(ServerLevel level, BlockPos deathPos, @Nullable BlockPos lastGround, GraveStore store) {
+        BlockPos start = start(level, deathPos, lastGround, store);
         return search(level, start, store)
                 .or(() -> wideSearch(level, start, store))
                 .orElseGet(() -> lastResort(level, start, store));
@@ -56,7 +65,7 @@ public final class GravePlacement {
 
     /** The spot find would pick near pos, or nothing when only its wider search or last resort is left. */
     static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store) {
-        return search(level, start(level, pos, store), store);
+        return search(level, start(level, pos, null, store), store);
     }
 
     /**
@@ -136,11 +145,21 @@ public final class GravePlacement {
                 || state.is(Blocks.CACTUS) || state.is(Blocks.END_PORTAL);
     }
 
-    // Clamped into the world and inside the border, and moved off a column with nothing below to stand on: to the nearest
-    // land, else to a fixed spot
-    private static BlockPos start(ServerLevel level, BlockPos pos, GraveStore store) {
+    // Clamped into the world and inside the border. A spot with nothing below to stand on moves to the owner's last
+    // ground, else to the nearest land, else to a fixed spot.
+    private static BlockPos start(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
         BlockPos start = clamped(level, pos);
-        return isVoidColumn(level, start) ? nearestLand(level, start, store).orElseGet(() -> fallback(level, start)) : start;
+        if (!isVoidColumn(level, start)) {
+            return start;
+        }
+        if (lastGround != null) {
+            BlockPos ground = clamped(level, lastGround);
+            // The block they stood on may be gone since
+            if (!isVoidColumn(level, ground)) {
+                return ground;
+            }
+        }
+        return nearestLand(level, start, store).orElseGet(() -> fallback(level, start));
     }
 
     private static BlockPos clamped(ServerLevel level, BlockPos pos) {

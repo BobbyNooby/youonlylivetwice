@@ -43,6 +43,7 @@ public final class Graves {
         PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) -> !isGrave(level, pos));
         ServerChunkEvents.CHUNK_LOAD.register(GraveBlocks::onChunkLoad);
         GraveMenus.init();
+        LastGround.init();
     }
 
     /** True for the head block of a grave while graves are on. Every protection hook asks this. */
@@ -76,6 +77,8 @@ public final class Graves {
         List<ItemStack> stacks = Stacks.nonEmpty(items);
         int rotation = RotationSegment.convertToSegment(ownerYaw(level, owner));
         long now = System.currentTimeMillis();
+        // Only a death over the void uses it, and only the first grave can be over the void
+        BlockPos lastGround = LastGround.in(owner, level.dimension()).orElse(null);
 
         List<Grave> created = new ArrayList<>();
         List<Runnable> undo = new ArrayList<>();
@@ -86,7 +89,7 @@ public final class Graves {
             int start = 0;
             do {
                 List<ItemStack> part = stacks.subList(start, Math.min(start + SLOTS_PER_GRAVE, stacks.size()));
-                BlockPos pos = GravePlacement.find(level, from, store);
+                BlockPos pos = GravePlacement.find(level, from, lastGround, store);
                 Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now);
                 BlockState previous = level.getBlockState(pos);
                 undo.add(() -> {
