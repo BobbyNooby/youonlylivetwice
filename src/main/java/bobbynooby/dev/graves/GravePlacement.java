@@ -53,7 +53,8 @@ public final class GravePlacement {
     }
 
     /**
-     * Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it.
+     * Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it
+     * or, for a death over the void, nothing near the fixed spot it falls back on is open under the roof.
      * lastGround is where the owner last stood in this dimension: a death over the void starts from there.
      */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, @Nullable BlockPos lastGround, GraveStore store) {
@@ -159,7 +160,7 @@ public final class GravePlacement {
                 return landing(level, ground);
             }
         }
-        return nearestLand(level, start, store).orElseGet(() -> fallback(level, start));
+        return nearestLand(level, start, store).orElseGet(() -> fallback(level, start, store));
     }
 
     private static BlockPos clamped(ServerLevel level, BlockPos pos) {
@@ -391,18 +392,32 @@ public final class GravePlacement {
         return open(level, pos) ? landingBelow(level, pos) : Optional.empty();
     }
 
-    // No ground near, so one fixed column, whose chunk may be loaded for it. That is the world spawn in the overworld,
-    // unless the spawn was set in another dimension; the main island beside the exit portal in the End; else 0, 0.
-    private static BlockPos fallback(ServerLevel level, BlockPos from) {
+    // No ground near, so a fixed column: the world spawn in the overworld, unless the spawn was set in another dimension;
+    // the main island beside the exit portal in the End; else 0, 0. The chunks a search from it reads are loaded for it,
+    // 2 by 2 at most, and the nearest ground there that items last on comes first, under the roof as for the void.
+    private static BlockPos fallback(ServerLevel level, BlockPos from, GraveStore store) {
         BlockPos column = insideBorder(level, fallbackColumn(level).atY(from.getY()));
         int x = column.getX();
         int z = column.getZ();
-        level.getChunk(column);
-        return groundIn(level, x, z, topY(level, from.getY())).orElseGet(() -> {
-            // Not even room under the roof, so the column's top as before, roof or not
-            int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z), level.getMinY() + 1);
-            return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
-        });
+        loadAround(level, x, z);
+        return nearestLand(level, column, store)
+                // Nothing there keeps items, so the column's own ground, which the last resort may have to take
+                .or(() -> groundIn(level, x, z, topY(level, from.getY())))
+                .orElseGet(() -> {
+                    // Not even room under the roof, so the column's top as before, roof or not
+                    int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z), level.getMinY() + 1);
+                    return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
+                });
+    }
+
+    // Every chunk loadedAround asks for
+    private static void loadAround(ServerLevel level, int x, int z) {
+        int reach = RING_RADIUS + 1;
+        for (int cx = SectionPos.blockToSectionCoord(x - reach); cx <= SectionPos.blockToSectionCoord(x + reach); cx++) {
+            for (int cz = SectionPos.blockToSectionCoord(z - reach); cz <= SectionPos.blockToSectionCoord(z + reach); cz++) {
+                level.getChunk(cx, cz);
+            }
+        }
     }
 
     private static BlockPos fallbackColumn(ServerLevel level) {
