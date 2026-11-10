@@ -69,7 +69,7 @@ public class GraveProtectionGameTests {
 
     @GameTest
     public void playerCannotBreakGrave(GameTestHelper helper) {
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         ServerPlayer player = TestPlayers.join(helper, "Breaker", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
             helper.assertFalse(player.gameMode.destroyBlock(grave.pos()), "survival player broke the grave");
@@ -86,7 +86,7 @@ public class GraveProtectionGameTests {
 
     @GameTest
     public void explosionLeavesGrave(GameTestHelper helper) {
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         try {
             Vec3 above = Vec3.atBottomCenterOf(grave.pos().above());
             helper.getLevel().explode(null, above.x, above.y, above.z, 4.0F, Level.ExplosionInteraction.TNT);
@@ -100,7 +100,7 @@ public class GraveProtectionGameTests {
     // Player buckets, dispensers and fish buckets all empty through this one method, and a head gives way to any fluid
     @GameTest
     public void bucketCannotReplaceGrave(GameTestHelper helper) {
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         try {
             ServerLevel level = helper.getLevel();
             helper.assertFalse(((BucketItem) Items.WATER_BUCKET).emptyContents(null, level, grave.pos(), null),
@@ -118,11 +118,11 @@ public class GraveProtectionGameTests {
     // A piston pops a head that sits right in front of it, so this is the case that must be blocked
     @GameTest(maxTicks = 20)
     public void pistonCannotPushGrave(GameTestHelper helper) {
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         boolean waiting = false;
         try {
-            helper.setBlock(new BlockPos(2, 1, 3), Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
-            helper.setBlock(new BlockPos(1, 1, 3), Blocks.REDSTONE_BLOCK);
+            helper.setBlock(new BlockPos(2, 0, 3), Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+            helper.setBlock(new BlockPos(1, 0, 3), Blocks.REDSTONE_BLOCK);
             // Pistons move in block events at the end of the tick, so check a few ticks later
             helper.runAfterDelay(5, () -> {
                 try {
@@ -251,7 +251,7 @@ public class GraveProtectionGameTests {
     public void dragonCannotBreakGrave(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         helper.assertTrue(level.getGameRules().get(GameRules.MOB_GRIEFING), "mob griefing is off, so the dragon breaks nothing");
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         BlockPos stone = grave.pos().east();
         try {
             level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
@@ -277,7 +277,7 @@ public class GraveProtectionGameTests {
     public void witherCannotBreakGrave(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         helper.assertTrue(level.getGameRules().get(GameRules.MOB_GRIEFING), "mob griefing is off, so the Wither breaks nothing");
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 4));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 4));
         BlockPos stone = grave.pos().east(2);
         try {
             level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
@@ -299,7 +299,7 @@ public class GraveProtectionGameTests {
 
     @GameTest
     public void missingHeadRestoredOnChunkLoad(GameTestHelper helper) {
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         try {
             ServerLevel level = helper.getLevel();
             level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
@@ -326,7 +326,7 @@ public class GraveProtectionGameTests {
     private static void restoreLeavesContainer(GameTestHelper helper, Block block) {
         ServerLevel level = helper.getLevel();
         GraveStore store = GraveStore.get(level.getServer());
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         BlockPos spot = grave.pos();
         YoltConfig.GravesSection graves = Settings.get().graves;
         boolean before = graves.enabled;
@@ -369,8 +369,8 @@ public class GraveProtectionGameTests {
         MinecraftServer server = level.getServer();
         GraveStore store = GraveStore.get(server);
         ResolvableProfile stranger = ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Stranger"));
-        Grave restored = makeGrave(helper, new BlockPos(3, 1, 3));
-        Grave removed = makeGrave(helper, new BlockPos(5, 1, 5));
+        Grave restored = makeGrave(helper, new BlockPos(3, 0, 3));
+        Grave removed = makeGrave(helper, new BlockPos(5, 0, 5));
         BlockPos spot = restored.pos();
         try {
             setHead(level, spot, stranger);
@@ -619,7 +619,8 @@ public class GraveProtectionGameTests {
         helper.succeed();
     }
 
-    // A static profile, so the head never looks anything up
+    // A static profile, so the head never looks anything up. The spot must be on something: in open air the grave
+    // would drop to the floor.
     private static Grave makeGrave(GameTestHelper helper, BlockPos relativePos) {
         UUID owner = UUID.randomUUID();
         ResolvableProfile profile = ResolvableProfile.createResolved(new GameProfile(owner, "Ghost"));

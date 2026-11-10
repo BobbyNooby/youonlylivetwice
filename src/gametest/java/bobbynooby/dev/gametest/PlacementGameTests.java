@@ -58,11 +58,27 @@ public class PlacementGameTests {
                 Level.OVERWORLD, pos, List.of(new ItemStack(Items.DIAMOND)), 1L);
     }
 
-    @GameTest
-    public void openAirUsesDeathSpot(GameTestHelper helper) {
-        BlockPos death = helper.absolutePos(new BlockPos(1, 1, 1));
-        BlockPos result = GravePlacement.find(helper.getLevel(), death, store(helper));
-        helper.assertValueEqual(result, death, "grave position");
+    // A pool two deep, walled in with stone, and a death ten blocks over it. Items would float on the water, so the
+    // grave goes on the air just over it.
+    @GameTest(skyAccess = true)
+    public void midAirDeathOverWaterGraveOnSurface(GameTestHelper helper) {
+        BlockPos pool = new BlockPos(3, 0, 3);
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            for (int dy = 0; dy <= 1; dy++) {
+                for (Direction side : Direction.Plane.HORIZONTAL) {
+                    place(helper, placed, pool.above(dy).relative(side), Blocks.STONE);
+                }
+                place(helper, placed, pool.above(dy), Blocks.WATER);
+            }
+            ServerLevel level = helper.getLevel();
+            BlockPos result = GravePlacement.find(level, helper.absolutePos(pool.above(10)), store(helper));
+            helper.assertValueEqual(result, helper.absolutePos(pool.above(2)), "grave position");
+            helper.assertTrue(level.getFluidState(result).isEmpty(), "grave in the water at " + result);
+            helper.assertTrue(level.getFluidState(result.below()).is(FluidTags.WATER), "no water under the grave at " + result);
+        } finally {
+            clear(helper, placed);
+        }
         helper.succeed();
     }
 

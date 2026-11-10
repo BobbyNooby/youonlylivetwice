@@ -439,6 +439,24 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // Killed twenty blocks up, as when shot while gliding: the grave goes where the items would land, on the floor
+    @GameTest(skyAccess = true)
+    public void midAirDeathGraveLandsOnFloor(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Glider", GameType.SURVIVAL, new BlockPos(3, 20, 3));
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "grave position");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 2, "diamonds in the grave");
+            assertHeadBlock(helper, grave);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
     // Counts the item across the item entities near an absolute position. Absolute, since vanilla's relativePos turns
     // an unrotated test's position half round.
     static int itemsNear(GameTestHelper helper, Item item, BlockPos absolutePos, double distance) {

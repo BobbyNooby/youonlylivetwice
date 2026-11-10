@@ -127,7 +127,7 @@ public class GraveCommandGameTests {
     // Burning takes a few ticks, so the count waits two seconds. No ceiling, which the search would take as a floor.
     @GameTest(maxTicks = 60, skyAccess = true)
     public void graveRemoveNeverDropsIntoLava(GameTestHelper helper) {
-        Grave grave = makeGrave(helper);
+        Grave grave = makeGraveOverPool(helper);
         List<BlockPos> pool = new ArrayList<>();
         boolean waiting = false;
         try {
@@ -170,7 +170,7 @@ public class GraveCommandGameTests {
     // Lava covers the floor as far as the search looks, with the barrier walls and a stone rim around it
     @GameTest(skyAccess = true)
     public void graveRemoveRefusesWhenNoSpotIsSafe(GameTestHelper helper) {
-        Grave grave = makeGrave(helper);
+        Grave grave = makeGraveOverPool(helper);
         List<BlockPos> pool = new ArrayList<>();
         try {
             for (int x = 0; x <= 6; x++) {
@@ -208,6 +208,12 @@ public class GraveCommandGameTests {
     private static Grave makeGrave(GameTestHelper helper) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
         return makeGrave(helper, GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
+    }
+
+    // Made on a block that the pool then replaces, since a grave made in open air would drop to the floor
+    private static Grave makeGraveOverPool(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(2, 0, 2), Blocks.STONE);
+        return makeGrave(helper);
     }
 
     private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
