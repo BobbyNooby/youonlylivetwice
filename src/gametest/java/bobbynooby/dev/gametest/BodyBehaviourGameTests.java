@@ -32,6 +32,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -297,12 +298,9 @@ public class BodyBehaviourGameTests {
         AABB around = null;
         try {
             Settings.get().bodies.duration = new BodyDuration(1);
+            OfflineGameTests.fillInventory(player);
             Mannequin body = leaveBody(helper, player);
             body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
-            ListTag full = OfflineGameTests.fullInventory(helper);
-            CompoundTag tag = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
-            tag.put("Inventory", full.copy());
-            OfflinePlayerData.save(server, owner, tag);
             CompoundTag chest = unreadableChest(server, player);
             expiredLogout(helper, owner);
             around = new AABB(body.blockPosition()).inflate(2.0);
@@ -311,7 +309,9 @@ public class BodyBehaviourGameTests {
             helper.assertTrue(body.isRemoved(), "body still in the world");
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             helper.assertValueEqual(saved.getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
-            helper.assertValueEqual(saved.getListOrEmpty("Inventory"), full, "saved inventory");
+            Map<Integer, ItemStack> stored = OfflineGameTests.savedInventory(helper, saved);
+            helper.assertTrue(stored.size() == Inventory.INVENTORY_SIZE && stored.values().stream().allMatch(item -> item.is(Items.DIRT)),
+                    "saved inventory: " + stored);
             List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
                     drop -> drop.getItem().is(Items.IRON_CHESTPLATE));
             helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the body");

@@ -433,14 +433,12 @@ public class OfflineGameTests {
         return item;
     }
 
-    // A main inventory with every slot taken, by one dirt each
-    static ListTag fullInventory(GameTestHelper helper) {
-        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
-        ListTag inventory = new ListTag();
+    // Every main inventory slot taken, by one dirt each. The hand too, so a body made from the player holds a dirt as
+    // well: a hand the save has and the body lacks reads as used up on the body.
+    static void fillInventory(ServerPlayer player) {
         for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
-            inventory.add(ItemStackWithSlot.CODEC.encodeStart(ops, new ItemStackWithSlot(slot, new ItemStack(Items.DIRT))).getOrThrow());
+            player.getInventory().setItem(slot, new ItemStack(Items.DIRT));
         }
-        return inventory;
     }
 
     // The save's main inventory entries that read back, by slot

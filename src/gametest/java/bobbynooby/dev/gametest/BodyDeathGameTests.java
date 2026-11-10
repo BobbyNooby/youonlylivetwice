@@ -284,12 +284,12 @@ public class BodyDeathGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.BodiesSection before = useDefaultBodies();
         try {
+            OfflineGameTests.fillInventory(player);
             Mannequin body = leaveBody(helper, player);
             ItemStack dispensed = new ItemStack(Items.IRON_CHESTPLATE);
             dispensed.setDamageValue(7);
             body.setItemSlot(EquipmentSlot.CHEST, dispensed);
             CompoundTag tag = save(helper, player);
-            tag.put("Inventory", OfflineGameTests.fullInventory(helper));
             CompoundTag chest = OfflineGameTests.unreadableItem();
             CompoundTag equipment = tag.getCompoundOrEmpty("equipment");
             equipment.put("chest", chest.copy());
