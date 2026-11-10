@@ -28,6 +28,7 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -761,6 +762,37 @@ public class GraveDeathGameTests {
         } finally {
             graves.tellLocationDistance = distanceBefore;
             made.forEach(grave -> store.remove(grave.id()));
+        }
+        helper.succeed();
+    }
+
+    // An owner killed while away is told in chat at the respawn once they are back, as after an online death: here a
+    // body killed with the lockout off. Always tells, since the grave is where the body stood. The whole test runs in
+    // one tick, and both switches go back in it.
+    @GameTest
+    public void offlineDeathTellsInChatAtTheRespawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        YoltConfig.TellLocation modeBefore = config.graves.tellLocation;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        ServerPlayer player = TestPlayers.join(helper, "AwayTold", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        try {
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            config.deathLockout.enabled = false;
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            body.kill(helper.getLevel());
+            Grave grave = onlyGrave(helper, player);
+            ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the owner did not come back dead");
+            respawnBesideTest(helper, back);
+            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(graveLines(respawned), List.of(graveLine(grave)), "chat at the respawn");
+        } finally {
+            config.graves.tellLocation = modeBefore;
+            config.deathLockout.enabled = lockoutBefore;
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
         }
         helper.succeed();
     }
