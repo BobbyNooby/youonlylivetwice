@@ -47,6 +47,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 // Other tests share the server, so these check who is in a set, never the whole set.
 // Test players have no client, so the waiting tests drive chunk tracking themselves (TestPlayers.driveTracking).
 public class VisibilityGameTests {
+    // For the tests that keep two players online and read the packets they got across ticks, which another test's
+    // player or a reload would add to
+    private static final String VISIBILITY_NEAR = "you-only-live-twice-gametest:visibility_near";
+    private static final String VISIBILITY_FORGET = "you-only-live-twice-gametest:visibility_forget";
+
     @GameTest
     public void joinerDoesNotKnowFarPlayers(GameTestHelper helper) {
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -75,7 +80,7 @@ public class VisibilityGameTests {
         helper.succeed();
     }
 
-    @GameTest(maxTicks = 20)
+    @GameTest(maxTicks = 20, environment = VISIBILITY_NEAR)
     public void nearPlayersBecomeKnown(GameTestHelper helper) {
         ServerPlayer a = TestPlayers.join(helper, "visneara", GameType.SURVIVAL, BlockPos.ZERO);
         ServerPlayer b = TestPlayers.join(helper, "visnearb", GameType.SURVIVAL, new BlockPos(5, 0, 0));
@@ -113,7 +118,7 @@ public class VisibilityGameTests {
         }
     }
 
-    @GameTest(maxTicks = 60)
+    @GameTest(maxTicks = 60, environment = VISIBILITY_FORGET)
     public void farPlayersAreForgotten(GameTestHelper helper) {
         ServerPlayer a = TestPlayers.join(helper, "visgonea", GameType.SURVIVAL, BlockPos.ZERO);
         ServerPlayer b = TestPlayers.join(helper, "visgoneb", GameType.SURVIVAL, new BlockPos(5, 0, 0));

@@ -25,6 +25,10 @@ import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
 // Other tests share the server, so these check who is in a team, never the whole team
 public class NameTagGameTests {
     private static final String TEAM_REFILL = "you-only-live-twice-gametest:team_refill";
+    // For the tests that keep two players online and read the team packets they got across ticks, which another test's
+    // player or a reload would add to
+    private static final String NAMETAG_NEAR = "you-only-live-twice-gametest:nametag_near";
+    private static final String NAMETAG_FORGET = "you-only-live-twice-gametest:nametag_forget";
 
     @GameTest
     public void farPlayerNameNotInAnyTeamPacket(GameTestHelper helper) {
@@ -59,7 +63,7 @@ public class NameTagGameTests {
     }
 
     // Relies on hide.distantPlayers and hide.nametags being on, as they are by default
-    @GameTest(maxTicks = 20)
+    @GameTest(maxTicks = 20, environment = NAMETAG_NEAR)
     public void nearPlayerAddedToViewersTeam(GameTestHelper helper) {
         ServerPlayer a = TestPlayers.join(helper, "tagneara", GameType.SURVIVAL, BlockPos.ZERO);
         ServerPlayer b = TestPlayers.join(helper, "tagnearb", GameType.SURVIVAL, new BlockPos(5, 0, 0));
@@ -120,7 +124,7 @@ public class NameTagGameTests {
     }
 
     // The client drops the connection when told to remove a name it doesn't have, so a forgotten name leaves exactly once
-    @GameTest(maxTicks = 60)
+    @GameTest(maxTicks = 60, environment = NAMETAG_FORGET)
     public void forgottenPlayerLeavesTeamOnce(GameTestHelper helper) {
         ServerPlayer a = TestPlayers.join(helper, "tagonea", GameType.SURVIVAL, BlockPos.ZERO);
         ServerPlayer b = TestPlayers.join(helper, "tagoneb", GameType.SURVIVAL, new BlockPos(5, 0, 0));
