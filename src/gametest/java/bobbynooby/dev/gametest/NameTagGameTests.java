@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -13,6 +14,7 @@ import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Team;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +24,8 @@ import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
 
 // Other tests share the server, so these check who is in a team, never the whole team
 public class NameTagGameTests {
+    private static final String TEAM_REFILL = "you-only-live-twice-gametest:team_refill";
+
     @GameTest
     public void farPlayerNameNotInAnyTeamPacket(GameTestHelper helper) {
         YoltConfig.HideSection hide = Settings.get().hide;
@@ -224,6 +228,54 @@ public class NameTagGameTests {
             leaveAll(joined);
         }
         helper.succeed();
+    }
+
+    // With another rule, vanilla sends death messages to the team itself and they skip the game-message hide
+    @GameTest
+    public void teamDeathMessageRuleForcedOn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        PlayerTeam team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+        helper.assertTrue(team != null, "there is no " + TEAM_NAME + " team");
+        Team.Visibility before = team.getDeathMessageVisibility();
+        try {
+            team.setDeathMessageVisibility(Team.Visibility.HIDE_FOR_OTHER_TEAMS);
+            NameTagTeam.apply(server);
+            helper.assertValueEqual(team.getDeathMessageVisibility(), Team.Visibility.ALWAYS, "death message rule after apply");
+        } finally {
+            team.setDeathMessageVisibility(before);
+        }
+        helper.succeed();
+    }
+
+    // What /team remove and then /yolt reload do. Removing the team takes every player out of it, so this runs on its own.
+    @GameTest(environment = TEAM_REFILL)
+    public void removedTeamRefilledOnApply(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        ServerPlayer player = TestPlayers.join(helper, "tagrefill", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(TEAM_NAME));
+            NameTagTeam.apply(server);
+            PlayerTeam team = scoreboard.getPlayerTeam(TEAM_NAME);
+            helper.assertTrue(team != null, "apply did not make the team again");
+            helper.assertTrue(team.getPlayers().contains(player.getScoreboardName()), "an online player is not in the remade team");
+        } finally {
+            restoreTeam(server);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    /** Puts our team back with every online player in it, as joining would have, after a test removed it. */
+    static void restoreTeam(MinecraftServer server) {
+        NameTagTeam.apply(server);
+        ServerScoreboard scoreboard = server.getScoreboard();
+        PlayerTeam team = scoreboard.getPlayerTeam(TEAM_NAME);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getTeam() == null) {
+                scoreboard.addPlayerToTeam(player.getScoreboardName(), team);
+            }
+        }
     }
 
     // The name must not reach the client before the entry, and the nametag must be hidden from the first frame

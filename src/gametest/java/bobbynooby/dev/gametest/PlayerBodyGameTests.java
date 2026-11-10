@@ -32,6 +32,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
@@ -78,6 +79,8 @@ public class PlayerBodyGameTests {
     static final String BODY_RESTART = "you-only-live-twice-gametest:body_restart";
     // For the test that brings back and expires every body at once, where another test's record would take a turn
     private static final String BODY_EXPIRY = "you-only-live-twice-gametest:body_expiry";
+    // For the test that brings back every body with the nametag team removed
+    private static final String BODY_TEAM = "you-only-live-twice-gametest:body_team";
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
 
     @GameTest
@@ -245,6 +248,35 @@ public class PlayerBodyGameTests {
             helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
         } finally {
             cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A start with no team, after /team remove: the bodies come back before anything else makes it. Bringing back
+    // every body and removing the team both reach other tests, so this runs on its own.
+    @GameTest(environment = BODY_TEAM)
+    public void bodyJoinsTeamEvenWhenTeamWasRemoved(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "TeamBody", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            BodyRestart.snapshotBodies(server);
+            body.discard();
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record went with the body");
+            scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(NameTagTeam.TEAM_NAME));
+
+            BodyRestart.restorePlayerBodies(server);
+            Entity restored = helper.getLevel().getEntity(body.getUUID());
+            helper.assertTrue(restored instanceof PlayerBody && restored != body, "no player body brought back");
+            PlayerTeam team = scoreboard.getPlayerTeam(NameTagTeam.TEAM_NAME);
+            helper.assertTrue(team != null && team.getPlayers().contains(restored.getScoreboardName()),
+                    "the restored body is not in the nametag team");
+        } finally {
+            cleanUp(helper, owner, before);
+            NameTagGameTests.restoreTeam(server);
         }
         helper.succeed();
     }
