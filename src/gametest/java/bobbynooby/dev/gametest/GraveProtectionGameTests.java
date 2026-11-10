@@ -192,35 +192,34 @@ public class GraveProtectionGameTests {
     }
 
     // Vanilla never pulls a head itself (heads pop rather than move), but a pulled slime block drags the block on top
-    // of it along, and that block crushes whatever head is in its way. The grave sits above the piston's arm, where the
-    // stone on the slime would land. The piston starts out extended, so taking its power away makes it pull at once.
+    // of it along, and that block crushes whatever head is in its way. The grave sits above one piston's arm, where the
+    // stone on the slime would land; the twin piston beside it has no grave and shows the pull does happen. Both start
+    // out extended, so taking their power away makes them pull at once.
     @GameTest(maxTicks = 20)
     public void stickyPistonCannotPullBlockOntoGrave(GameTestHelper helper) {
-        BlockPos power = new BlockPos(0, 1, 3);
-        BlockPos piston = new BlockPos(1, 1, 3);
-        BlockPos arm = new BlockPos(2, 1, 3);
-        BlockPos slime = new BlockPos(3, 1, 3);
-        helper.setBlock(power, Blocks.REDSTONE_BLOCK);
-        helper.setBlock(piston, Blocks.STICKY_PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST)
-                .setValue(PistonBaseBlock.EXTENDED, true));
-        helper.setBlock(arm, Blocks.PISTON_HEAD.defaultBlockState().setValue(PistonHeadBlock.FACING, Direction.EAST)
-                .setValue(PistonHeadBlock.TYPE, PistonType.STICKY));
-        helper.setBlock(slime, Blocks.SLIME_BLOCK);
-        helper.setBlock(slime.above(), Blocks.STONE);
-        Grave grave = makeGrave(helper, arm.above());
+        int withGrave = 3;
+        int twin = 6;
+        stickyRig(helper, withGrave);
+        stickyRig(helper, twin);
+        Grave grave = makeGrave(helper, new BlockPos(2, 2, withGrave));
         boolean waiting = false;
         try {
-            helper.setBlock(power, Blocks.AIR);
+            helper.setBlock(new BlockPos(0, 1, withGrave), Blocks.AIR);
+            helper.setBlock(new BlockPos(0, 1, twin), Blocks.AIR);
             // Pistons move in block events at the end of the tick, and a moved block settles two ticks later
             helper.runAfterDelay(5, () -> {
                 try {
-                    // The piston did pull back, so it did try to pull the slime
-                    BlockState base = helper.getBlockState(piston);
-                    helper.assertTrue(base.is(Blocks.STICKY_PISTON) && !base.getValue(PistonBaseBlock.EXTENDED),
-                            "the piston did not pull back: " + base);
-                    helper.assertBlockPresent(Blocks.AIR, arm);
-                    helper.assertBlockPresent(Blocks.SLIME_BLOCK, slime);
-                    helper.assertBlockPresent(Blocks.STONE, slime.above());
+                    for (int z : List.of(withGrave, twin)) {
+                        BlockState base = helper.getBlockState(new BlockPos(1, 1, z));
+                        helper.assertTrue(base.is(Blocks.STICKY_PISTON) && !base.getValue(PistonBaseBlock.EXTENDED),
+                                "the piston at z " + z + " did not pull back: " + base);
+                    }
+                    helper.assertBlockPresent(Blocks.SLIME_BLOCK, new BlockPos(2, 1, twin));
+                    helper.assertBlockPresent(Blocks.STONE, new BlockPos(2, 2, twin));
+                    helper.assertBlockPresent(Blocks.AIR, new BlockPos(3, 1, twin));
+                    helper.assertBlockPresent(Blocks.AIR, new BlockPos(2, 1, withGrave));
+                    helper.assertBlockPresent(Blocks.SLIME_BLOCK, new BlockPos(3, 1, withGrave));
+                    helper.assertBlockPresent(Blocks.STONE, new BlockPos(3, 2, withGrave));
                     assertGraveIntact(helper, grave);
                 } finally {
                     removeGraves(helper, List.of(grave));
@@ -233,6 +232,17 @@ public class GraveProtectionGameTests {
                 removeGraves(helper, List.of(grave));
             }
         }
+    }
+
+    // An extended sticky piston at x 1 facing east, powered from x 0, holding a slime block at x 3 with a stone on top
+    private static void stickyRig(GameTestHelper helper, int z) {
+        helper.setBlock(new BlockPos(0, 1, z), Blocks.REDSTONE_BLOCK);
+        helper.setBlock(new BlockPos(1, 1, z), Blocks.STICKY_PISTON.defaultBlockState()
+                .setValue(PistonBaseBlock.FACING, Direction.EAST).setValue(PistonBaseBlock.EXTENDED, true));
+        helper.setBlock(new BlockPos(2, 1, z), Blocks.PISTON_HEAD.defaultBlockState()
+                .setValue(PistonHeadBlock.FACING, Direction.EAST).setValue(PistonHeadBlock.TYPE, PistonType.STICKY));
+        helper.setBlock(new BlockPos(3, 1, z), Blocks.SLIME_BLOCK);
+        helper.setBlock(new BlockPos(3, 2, z), Blocks.STONE);
     }
 
     // The dragon removes every block its body flies through itself, without an explosion. It only does that while
