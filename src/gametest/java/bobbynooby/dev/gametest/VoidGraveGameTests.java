@@ -32,6 +32,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -676,6 +677,52 @@ public class VoidGraveGameTests {
             helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, onLedge, 1.0), 3, "diamonds on the ledge");
             helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, belowWorld(level, shaft), 3.0), 0,
                     "diamonds below the world");
+        } finally {
+            if (player != null) {
+                cleanUp(level, player);
+            }
+            level.getEntitiesOfClass(ItemEntity.class, new AABB(onLedge).inflate(3.0)).forEach(Entity::discard);
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // The same failure with a full inventory, sticks in the crafting grid and gold on the broken menu's cursor. Handed
+    // back, the menu items would find no room and drop at the player, below the world; left in the grid and on the
+    // cursor, they would drop there when the player is removed. Every stack ends on the ledge, once.
+    @GameTest(skyAccess = true)
+    public void failedGraveDropsMenuItemsOnLastGroundToo(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player = TestPlayers.join(helper, "Overfull", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+                player.getInventory().setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+            }
+            player.inventoryMenu.getSlot(InventoryMenu.CRAFT_SLOT_START).set(new ItemStack(Items.STICK, 2));
+            standOnGround(player);
+            BrokenMenu menu = new BrokenMenu();
+            menu.setCarried(new ItemStack(Items.GOLD_INGOT, 3));
+            player.containerMenu = menu;
+
+            dieBelowWorld(helper, level, player, shaft);
+            helper.assertTrue(gravesOf(level, player.getUUID()).isEmpty(), "a grave was made though its menu failed");
+            helper.assertTrue(player.getInventory().isEmpty(), "items left in the inventory");
+            helper.assertFalse(player.inventoryMenu.getSlot(InventoryMenu.CRAFT_SLOT_START).hasItem(), "sticks left in the crafting grid");
+            helper.assertTrue(menu.getCarried().isEmpty(), "gold left on the broken menu's cursor");
+            Map<Item, Integer> expected = Map.of(Items.COBBLESTONE, Inventory.INVENTORY_SIZE * 64, Items.STICK, 2, Items.GOLD_INGOT, 3);
+            for (Map.Entry<Item, Integer> entry : expected.entrySet()) {
+                String what = entry.getKey().toString();
+                helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, entry.getKey(), onLedge, 1.0), entry.getValue(),
+                        what + " on the ledge");
+                helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, entry.getKey(), belowWorld(level, shaft), 3.0), 0,
+                        what + " below the world");
+            }
         } finally {
             if (player != null) {
                 cleanUp(level, player);
