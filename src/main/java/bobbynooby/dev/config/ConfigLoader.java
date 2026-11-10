@@ -27,7 +27,7 @@ public final class ConfigLoader {
     /**
      * unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to
      * write defaults. borderProblem, when not null, says why the worldBorder values are fallbacks rather than the file's
-     * own: the whole file, or a worldBorder key that was refused.
+     * own: the whole file, or a worldBorder key that was refused or unknown.
      */
     public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem) {}
 
@@ -104,9 +104,10 @@ public final class ConfigLoader {
 
         YoltConfig fallback = base != null ? base : new YoltConfig();
         String fallbackName = base != null ? "the current value" : "default";
-        // The keys that fell back, so a startup can tell whether the border values are the file's own
-        List<String> fellBack = new ArrayList<>();
-        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, fellBack);
+        // The keys the file gave but the config doesn't use (fallbacks and unknown keys), so a startup can tell whether
+        // the border values are the file's own
+        List<String> refused = new ArrayList<>();
+        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused);
 
         YoltConfig config;
         String borderProblem = null;
@@ -118,9 +119,9 @@ public final class ConfigLoader {
             warnings.add(borderProblem + ", using defaults");
             config = new YoltConfig();
         }
-        fellBack.addAll(ConfigChecks.validate(config, fallback, warnings, fallbackName));
+        refused.addAll(ConfigChecks.validate(config, fallback, warnings, fallbackName));
         if (borderProblem == null) {
-            borderProblem = borderProblem(fellBack);
+            borderProblem = borderProblem(refused);
         }
         // What is held is this build's layout, whatever the file said, so a save says so
         config.configVersion = currentVersion;
@@ -134,8 +135,8 @@ public final class ConfigLoader {
     }
 
     // Null when every worldBorder value is the file's own
-    private static @Nullable String borderProblem(List<String> fellBack) {
-        List<String> border = fellBack.stream()
+    private static @Nullable String borderProblem(List<String> refused) {
+        List<String> border = refused.stream()
                 .filter(path -> path.equals(BORDER_SECTION) || path.startsWith(BORDER_SECTION + "."))
                 .toList();
         return border.isEmpty() ? null : "the config has a bad " + String.join(" and ", border);
@@ -191,7 +192,7 @@ public final class ConfigLoader {
     }
 
     private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName,
-                                    List<String> fellBack) {
+                                    List<String> refused) {
         JsonObject result = new JsonObject();
         for (Map.Entry<String, JsonElement> entry : defaults.entrySet()) {
             String key = entry.getKey();
@@ -203,10 +204,10 @@ public final class ConfigLoader {
                 result.add(key, def);
             } else if (def.isJsonObject()) {
                 if (value.isJsonObject()) {
-                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, fellBack));
+                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, refused));
                 } else {
                     result.add(key, def);
-                    fellBack.add(path);
+                    refused.add(path);
                     warnings.add(path + ": expected an object, using " + fallbackName);
                 }
             } else if (def.isJsonArray()) {
@@ -214,7 +215,7 @@ public final class ConfigLoader {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
-                    fellBack.add(path);
+                    refused.add(path);
                     warnings.add(path + ": expected a list of strings, using " + fallbackName);
                 }
             } else {
@@ -223,13 +224,15 @@ public final class ConfigLoader {
                     result.add(key, value);
                 } else {
                     result.add(key, def);
-                    fellBack.add(path);
+                    refused.add(path);
                     warnings.add(path + ": " + problem + ", using " + fallbackName);
                 }
             }
         }
         for (String key : user.keySet()) {
             if (!defaults.has(key)) {
+                // Most likely a misspelling, whose real key then quietly takes its default
+                refused.add(prefix + key);
                 warnings.add(prefix + key + ": unknown key, ignored");
             }
         }

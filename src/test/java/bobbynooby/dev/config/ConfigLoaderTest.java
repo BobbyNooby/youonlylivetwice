@@ -216,6 +216,9 @@ class ConfigLoaderTest {
         assertEquals("the config has a bad worldBorder.diameter and worldBorder.endScale",
                 loadJson("{\"worldBorder\":{\"diameter\":\"x\",\"endScale\":-1}}").borderProblem());
         assertEquals("the config has a bad worldBorder", loadJson("{\"worldBorder\":5}").borderProblem());
+        // A misspelt key leaves the real one at its default, so it counts too; one outside worldBorder doesn't
+        assertEquals("the config has a bad worldBorder.diamter", loadJson("{\"worldBorder\":{\"diamter\":20000}}").borderProblem());
+        assertNull(loadJson("{\"chat\":{\"radus\":30}}").borderProblem());
 
         // A bad key elsewhere, the End cap, a missing key and a first start with no file all keep the file's own border
         assertNull(loadJson("{\"chat\":{\"radius\":\"x\"}}").borderProblem());
