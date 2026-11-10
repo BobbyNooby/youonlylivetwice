@@ -86,10 +86,11 @@ public final class Bodies {
                 // Without vanilla's random push, which could slide it off the body's block into lava or the void
                 ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, item, 0.0, 0.0, 0.0);
                 entity.setUnlimitedLifetime();
+                // Listed before the add, so the undo still takes it back if a load listener throws once it is in
+                added.add(entity);
                 if (!level.addFreshEntity(entity)) {
                     throw new IllegalStateException("Could not drop " + item + " at " + pos);
                 }
-                added.add(entity);
             }
         } catch (RuntimeException e) {
             undo.run();
