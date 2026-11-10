@@ -1,6 +1,7 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.mixin.SetPlayerTeamPacketInvoker;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -56,6 +57,14 @@ public final class NameTagTeam {
         // Everyone shares this team, so seeing invisible teammates would show every invisible player
         team.setSeeFriendlyInvisibles(false);
         team.setNameTagVisibility(Settings.get().hide.nametags ? Team.Visibility.NEVER : Team.Visibility.ALWAYS);
+        // Any other rule sends death messages straight to team members, past the game-message hide
+        team.setDeathMessageVisibility(Team.Visibility.ALWAYS);
+        // Joining is the only other way in, so a team removed with /team remove is refilled here
+        for (ServerPlayer player : StandIn.without(server.getPlayerList().getPlayers())) {
+            if (player.getTeam() != team) {
+                server.getScoreboard().addPlayerToTeam(player.getScoreboardName(), team);
+            }
+        }
     }
 
     public static void init() {

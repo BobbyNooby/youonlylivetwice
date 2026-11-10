@@ -217,16 +217,17 @@ public class AdminViewGameTests {
             scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(TEAM_NAME));
             scoreboard.addPlayerTeam(TEAM_NAME);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after the team was made again");
-            // A reload puts our settings back on the new team
-            NameTagTeam.apply(server);
-            helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after a reload");
-            helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, "normal player's nametag rule after a reload");
 
-            // The new team has no names on any client, so forgetting a player must not send a LEAVE
+            // The new team has no names on any client yet, so forgetting a player must not send a LEAVE
             int mark = TestPlayers.sentPackets(other).size();
             hide.distantPlayers = true;
             PlayerVisibility.onPairingStop(other, admin);
             helper.assertValueEqual(NameTagGameTests.moves(other, admin, mark), List.of(), "team changes after the team was made again");
+
+            // A reload puts our settings and the online players back on the new team
+            NameTagTeam.apply(server);
+            helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after a reload");
+            helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, "normal player's nametag rule after a reload");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.nametags = nametagsBefore;
