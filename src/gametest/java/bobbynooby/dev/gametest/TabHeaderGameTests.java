@@ -19,6 +19,7 @@ import java.util.UUID;
 
 public class TabHeaderGameTests {
     private static final String TAB_HEADER = "you-only-live-twice-gametest:tab_header";
+    private static final String TAB_HEADER_OFF = "you-only-live-twice-gametest:tab_header_off";
 
     @GameTest
     public void headerEntryRemovedOnLeave(GameTestHelper helper) {
@@ -80,8 +81,9 @@ public class TabHeaderGameTests {
         }
     }
 
-    // The switch is restored and applied again in the same tick, so other tests never see it off
-    @GameTest
+    // A batch of its own: applying the live settings reaches every online player, and not tab_header, where it would
+    // send that test's player a second header
+    @GameTest(environment = TAB_HEADER_OFF)
     public void headerClearedWhenSwitchedOff(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.HideSection hide = Settings.get().hide;
