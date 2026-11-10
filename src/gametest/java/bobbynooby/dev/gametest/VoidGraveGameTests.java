@@ -628,7 +628,7 @@ public class VoidGraveGameTests {
     }
 
     // A grave for a death at pos, made the way a death makes one. A static profile, so the head never looks anything up.
-    private static Grave graveFor(ServerLevel level, BlockPos death) {
+    static Grave graveFor(ServerLevel level, BlockPos death) {
         UUID owner = UUID.randomUUID();
         ResolvableProfile profile = ResolvableProfile.createResolved(new GameProfile(owner, "Ghost"));
         List<Grave> made = Graves.create(level, death, profile, owner, "Ghost",

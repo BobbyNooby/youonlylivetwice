@@ -2,11 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
-import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
-import bobbynooby.dev.graves.Graves;
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -96,7 +93,7 @@ public class PlacementGameTests {
         Grave grave = null;
         try {
             EndPlatformFeature.createEndPlatform(end, origin, false);
-            grave = endGrave(end, origin);
+            grave = VoidGraveGameTests.graveFor(end, origin);
             helper.assertFalse(platform.isInside(grave.pos()), "new grave in the arrival platform at " + grave.pos());
             EndPlatformFeature.createEndPlatform(end, origin, true);
             assertHeadKept(helper, end, grave);
@@ -121,7 +118,7 @@ public class PlacementGameTests {
             new EndPodiumFeature(false).place(end, end.getChunkSource().getGenerator(), RandomSource.create(), portal);
             BlockPos rim = portal.east(3);
             helper.assertTrue(end.getBlockState(rim).is(Blocks.BEDROCK), "no rim at " + rim);
-            grave = endGrave(end, rim.above());
+            grave = VoidGraveGameTests.graveFor(end, rim.above());
             helper.assertTrue(VoidGraveGameTests.flatDistanceSqr(grave.pos(), podium) >= 13,
                     "new grave inside the exit portal's ring at " + grave.pos());
             new EndPodiumFeature(true).place(end, end.getChunkSource().getGenerator(), RandomSource.create(), portal);
@@ -146,7 +143,7 @@ public class PlacementGameTests {
         Grave grave = null;
         try {
             end.setBlock(top.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
-            grave = endGrave(end, top);
+            grave = VoidGraveGameTests.graveFor(end, top);
             BlockPos at = grave.pos();
             helper.assertFalse(Math.abs(at.getX() - top.getX()) <= 10 && Math.abs(at.getZ() - top.getZ()) <= 10
                     && Math.abs(at.getY() - top.getY()) <= 10, "new grave within 10 of the pillar's top at " + at);
@@ -178,7 +175,7 @@ public class PlacementGameTests {
         Grave grave = null;
         try {
             end.setBlock(top.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
-            grave = VoidGraveGameTests.withoutLastResort(helper, () -> endGrave(end, top));
+            grave = VoidGraveGameTests.withoutLastResort(helper, () -> VoidGraveGameTests.graveFor(end, top));
             BlockPos at = grave.pos();
             helper.assertValueEqual(VoidGraveGameTests.flatDistanceSqr(at, top), 11 * 11,
                     "grave's distance from the pillar's centre, squared, at " + at);
@@ -200,7 +197,7 @@ public class PlacementGameTests {
         Grave grave = null;
         try {
             end.setBlock(gateway.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
-            grave = endGrave(end, gateway);
+            grave = VoidGraveGameTests.graveFor(end, gateway);
             helper.assertFalse(box.isInside(grave.pos()), "new grave in the gateway's box at " + grave.pos());
             EndGatewayFeature.delayedExitSearch().place(end, end.getChunkSource().getGenerator(), RandomSource.create(), gateway);
             assertHeadKept(helper, end, grave);
@@ -223,14 +220,6 @@ public class PlacementGameTests {
             before.put(pos.immutable(), level.getBlockState(pos));
         }
         return before;
-    }
-
-    // A grave made the way a death makes one. A static profile, so the head never looks anything up.
-    private static Grave endGrave(ServerLevel end, BlockPos death) {
-        UUID owner = UUID.randomUUID();
-        ResolvableProfile profile = ResolvableProfile.createResolved(new GameProfile(owner, "Ghost"));
-        return Graves.create(end, death, profile, owner, "Ghost", List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND)))
-                .getFirst();
     }
 
     // The rebuild deletes a head in its way without a sound, so the grave's own head being there is the check
