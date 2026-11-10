@@ -88,6 +88,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
         body.setYHeadRot(snapshot.yRot());
         body.setYBodyRot(snapshot.yRot());
         snapshot.gear().forEach((slot, stack) -> body.setItemSlot(slot, stack.copy()));
+        BodySpawn.applyGearModifiers(body);
         // Its effects are its own, from when it was made
         snapshot.applyTo(body, true);
         return body.addToWorld(level) ? body : null;

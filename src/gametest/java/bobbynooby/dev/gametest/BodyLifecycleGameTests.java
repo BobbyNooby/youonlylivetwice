@@ -22,16 +22,21 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -177,6 +182,31 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(bodies.get(0) == second, "the body left is not the newest");
             helper.assertValueEqual(store(helper).byOwner(player.getUUID()).map(BodyRecord::bodyEntity),
                     Optional.of(second.getUUID()), "record's body");
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
+    // A test player never ticks, so its chestplate's modifier goes on by hand, as the player's first tick would put it
+    @GameTest
+    public void healthAboveBaseMaxKeptWithGearModifier(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Hearty", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            ItemStack chest = new ItemStack(Items.IRON_CHESTPLATE);
+            chest.set(DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.builder().add(Attributes.MAX_HEALTH,
+                    new AttributeModifier(Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "hearty"), 10.0,
+                            AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.CHEST).build());
+            player.setItemSlot(EquipmentSlot.CHEST, chest);
+            chest.forEachModifier(EquipmentSlot.CHEST,
+                    (attribute, modifier) -> player.getAttribute(attribute).addTransientModifier(modifier));
+            player.setHealth(28.0F);
+            helper.assertValueEqual(player.getHealth(), 28.0F, "player health");
+
+            Mannequin body = logOut(helper, player);
+            helper.assertValueEqual(body.getMaxHealth(), 30.0F, "body max health");
+            helper.assertValueEqual(body.getHealth(), 28.0F, "body health");
         } finally {
             cleanUp(helper, player, before);
         }

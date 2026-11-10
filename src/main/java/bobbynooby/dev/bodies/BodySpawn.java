@@ -7,6 +7,7 @@ import net.minecraft.world.entity.Avatar;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 
@@ -34,12 +35,34 @@ final class BodySpawn {
             }
             body.setItemSlot(slot, copy);
         }
+        applyGearModifiers(body);
         if (cfg.copyEffects) {
             body.getAttribute(Attributes.MAX_HEALTH).setBaseValue(player.getAttributeBaseValue(Attributes.MAX_HEALTH));
         }
         // Logging out mid-fall, on fire or under water doesn't get the player out of it. Without the effects, the
         // health is clamped to the body's own maximum and there is no absorption cap to keep any.
         BodySnapshot.of(player).applyTo(body, cfg.copyEffects);
+    }
+
+    /**
+     * Puts the attribute modifiers of the body's gear on it now rather than at its first tick, since setting the
+     * health clamps it to the maximum: a chestplate's extra health would be cut off.
+     */
+    static void applyGearModifiers(LivingEntity body) {
+        for (EquipmentSlot slot : GearSync.SLOTS) {
+            ItemStack stack = body.getItemBySlot(slot);
+            if (stack.isEmpty() || stack.isBroken()) {
+                continue;
+            }
+            // As vanilla's equipment check adds them, so that check at the first tick finds them already on
+            stack.forEachModifier(slot, (attribute, modifier) -> {
+                AttributeInstance instance = body.getAttribute(attribute);
+                if (instance != null) {
+                    instance.removeModifier(modifier.id());
+                    instance.addTransientModifier(modifier);
+                }
+            });
+        }
     }
 
     static Pose pose(YoltConfig.BodyPose pose) {
