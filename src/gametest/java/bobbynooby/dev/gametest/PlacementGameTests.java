@@ -111,6 +111,8 @@ public class PlacementGameTests {
     public void endExitPortalGetsNoNewGrave(GameTestHelper helper) {
         ServerLevel end = end(helper);
         BlockPos podium = EnderDragonFight.getPodiumLocation(BlockPos.ZERO);
+        // A chunk that isn't loaded reads as the bottom of the world in the heightmap
+        end.getChunk(podium);
         // Where the fight puts the portal the first time it builds one
         BlockPos portal = end.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, podium).below();
         Map<BlockPos, BlockState> before = remembered(end, BlockPos.betweenClosed(portal.offset(-4, -1, -4), portal.offset(4, 32, 4)));
