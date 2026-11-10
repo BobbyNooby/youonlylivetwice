@@ -113,6 +113,28 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void graveKeysOutOfRangeFallBack() throws IOException {
+        ConfigLoader.Result bad = loadJson("{\"graves\":{\"recheckSeconds\":-1,\"tellLocation\":\"sometimes\",\"tellLocationDistance\":-1}}");
+        YoltConfig.GravesSection graves = bad.config().graves;
+        assertEquals(5, graves.recheckSeconds);
+        assertEquals(YoltConfig.TellLocation.WHEN_MOVED, graves.tellLocation);
+        assertEquals(16, graves.tellLocationDistance);
+        for (String key : List.of("graves.recheckSeconds", "graves.tellLocation", "graves.tellLocationDistance")) {
+            assertTrue(bad.warnings().stream().anyMatch(w -> w.startsWith(key + ":")), "no warning for " + key);
+        }
+
+        // 0 turns the re-check off, and a distance of 0 tells of any move at all
+        YoltConfig.GravesSection edges = loadJson("{\"graves\":{\"recheckSeconds\":0,\"tellLocation\":\"never\",\"tellLocationDistance\":0}}")
+                .config().graves;
+        assertEquals(0, edges.recheckSeconds);
+        assertEquals(YoltConfig.TellLocation.NEVER, edges.tellLocation);
+        assertEquals(0, edges.tellLocationDistance);
+        assertEquals(YoltConfig.TellLocation.ALWAYS, loadJson("{\"graves\":{\"tellLocation\":\"always\"}}").config().graves.tellLocation);
+        assertEquals(YoltConfig.TellLocation.WHEN_MOVED,
+                loadJson("{\"graves\":{\"tellLocation\":\"whenMoved\"}}").config().graves.tellLocation);
+    }
+
+    @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");
         JsonObject written = JsonParser.parseString(Files.readString(dir.resolve("config.json"))).getAsJsonObject();
