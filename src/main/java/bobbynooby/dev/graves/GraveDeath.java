@@ -3,6 +3,7 @@ package bobbynooby.dev.graves;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
@@ -10,6 +11,7 @@ import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.PlayerInvoker;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
@@ -25,6 +27,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /** Moves a dying player's items into graves, the ones in their open menus included. */
@@ -80,8 +83,8 @@ public final class GraveDeath {
             return !keepInventory && dropWhereTheyLast(player, level, name, fromMenus);
         }
 
-        // The lockout kick right after a death saves the emptied player at once, so the graves must reach the
-        // disk first. This runs inside the death, so a failed write only logs; the next save tries again.
+        // The emptied player is saved right after the death, by the lockout's kick or below, so the graves must reach
+        // the disk first. This runs inside the death, so a failed write only logs; the next save tries again.
         boolean gravesOnDisk = true;
         try {
             GraveStore.get(level.getServer()).saveNow(level.getServer());
@@ -98,21 +101,24 @@ public final class GraveDeath {
             enderChest.clearContent();
         }
         GraveNotice.tellAtRespawn(player.getUUID(), graves.get(0).id());
-        // A death with no kick would wait for the next autosave, and a crash before it would bring the items back
-        // beside their graves. Only once the graves are on disk, or that crash would lose them instead.
-        if (gravesOnDisk && !deathKicks()) {
-            Guard.run(() -> ((PlayerListInvoker) level.getServer().getPlayerList()).yoltSave(player),
-                    "Could not save {} after their death, so their items are in their save until the next one", name);
-        }
+        afterTheKick(level.getServer(), player.getUUID(), name, gravesOnDisk);
         return true;
     }
 
-    /**
-     * True when a death now locks the player out and so kicks them: the lockout is on and has days to wait. The kick
-     * saves the player and tells them where their grave is.
-     */
-    static boolean deathKicks() {
-        return Settings.on(c -> c.deathLockout.enabled) && Settings.get().deathLockout.cooldownDays > 0;
+    // Queued from a task, so it runs after the lockout's kick, which the death queues after this. A player gone by then
+    // was saved as they left, and a kick told them about the grave. One still here would wait for the next autosave,
+    // and a crash before it would bring the items back beside their graves, so they are saved now; but only once the
+    // graves are on disk, or that crash would lose the items instead.
+    private static void afterTheKick(MinecraftServer server, UUID id, String name, boolean gravesOnDisk) {
+        Later.afterTick(server, () -> Later.afterTick(server, () -> {
+            ServerPlayer current = server.getPlayerList().getPlayer(id);
+            if (current == null) {
+                GraveNotice.forget(id);
+            } else if (gravesOnDisk) {
+                Guard.run(() -> ((PlayerListInvoker) server.getPlayerList()).yoltSave(current),
+                        "Could not save {} after their death, so their items are in their save until the next one", name);
+            }
+        }));
     }
 
     /** Called by the menu and drop hooks. True when the stack was taken for a dying player's grave instead. */

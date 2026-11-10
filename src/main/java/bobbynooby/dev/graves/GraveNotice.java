@@ -35,8 +35,8 @@ public final class GraveNotice {
 
     static void init() {
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
-            // alive is a way back from the End, not a death. A death that kicks tells in the kick and at login instead.
-            if (alive || GraveDeath.deathKicks()) {
+            // alive is a way back from the End, not a death
+            if (alive) {
                 return;
             }
             UUID graveId = AT_RESPAWN.remove(newPlayer.getUUID());
@@ -58,7 +58,7 @@ public final class GraveNotice {
         AT_RESPAWN.put(owner, graveId);
     }
 
-    /** At their respawn, the owner is told nothing: their death made no grave. */
+    /** At their respawn, the owner is told nothing: their death made no grave, or its kick told them. */
     static void forget(UUID owner) {
         AT_RESPAWN.remove(owner);
     }
