@@ -974,6 +974,33 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // An account id or an op mark that can't be read reads as missing, so the answer and the pick stay
+    @GameTest
+    public void skinStoreReadsBadFieldsAsMissing(GameTestHelper helper) {
+        UUID player = UUID.randomUUID();
+        CompoundTag data = new CompoundTag();
+        data.putInt("format", SkinStore.FORMAT);
+        ListTag skins = new ListTag();
+        CompoundTag notch = skinTag("Notch", new SkinTextures("notch value", "notch signature"), 123L);
+        notch.putString("id", "not an id");
+        skins.add(notch);
+        data.put("skins", skins);
+        ListTag choices = new ListTag();
+        CompoundTag choice = new CompoundTag();
+        choice.put("player", UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, player).getOrThrow());
+        choice.putString("name", "Notch");
+        choice.putString("by_op", "not a mark");
+        choices.add(choice);
+        data.put("choices", choices);
+
+        SkinStore loaded = SkinStore.TYPE.codec().parse(NbtOps.INSTANCE, data).getOrThrow();
+        assertEqual(helper, loaded.skin("Notch"), CachedSkin.found("Notch", new SkinTextures("notch value", "notch signature"), 123L),
+                "Notch's skin");
+        assertEqual(helper, loaded.choice(player), "Notch", "the picked account");
+        helper.assertFalse(loaded.pickedByOp(player), "an unreadable mark read as an op's pick");
+        helper.succeed();
+    }
+
     private static void assertStore(GameTestHelper helper, SkinStore store, UUID player, String what) {
         assertEqual(helper, store.skin("NOTCH"), CachedSkin.found("Notch", NOTCH_ID, new SkinTextures("notch value", "notch signature"), 123L),
                 "Notch's skin, " + what);
