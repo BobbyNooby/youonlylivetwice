@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -142,8 +143,9 @@ public final class Graves {
     /**
      * Admin removal: drops everything at the grave, clears the head and deletes the record. When the spot would now
      * destroy dropped items, for example lava has flowed under it, they drop at the nearest safe spot instead. With no
-     * such spot, or no loaded dimension, the grave is left as it was. The container leaves OPEN before any menu
-     * closes, so nothing can save the grave back or drop an item twice.
+     * such spot, or no loaded dimension, the grave is left as it was, and so it is if the world refuses a drop, which
+     * then throws. The container leaves OPEN before any menu closes, so nothing can save the grave back or drop an item
+     * twice.
      */
     public static Removal removeAndDrop(MinecraftServer server, Grave grave) {
         ServerLevel level = server.getLevel(grave.dimension());
@@ -175,17 +177,37 @@ public final class Graves {
             container.clearContent();
             container.closeMenus();
         }
-        Vec3 centre = Vec3.atCenterOf(dropAt.get());
-        for (ItemStack stack : items) {
-            // No push, so every stack falls straight down the column that was checked
-            ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0);
-            // Removing a grave must never delete its items, so they don't despawn after five minutes
-            item.setUnlimitedLifetime();
-            level.addFreshEntity(item);
-        }
+        // The record still holds every item, so a drop that fails leaves the grave whole
+        dropForGood(level, dropAt.get(), items);
         GraveBlocks.clearHead(level, grave);
         store.remove(grave.id());
         return new Removal.Dropped(items.size());
+    }
+
+    /**
+     * Drops the stacks at the centre of spot, where a grave would have kept them: with no push, so each falls straight
+     * down the column that was checked, and never to despawn. Every one or none: if the world refuses one, or adding it
+     * throws, the ones dropped are taken back and this throws.
+     */
+    static void dropForGood(ServerLevel level, BlockPos spot, List<ItemStack> stacks) {
+        // Entities added to a chunk that isn't loaded sit in limbo until it is
+        level.getChunkAt(spot);
+        Vec3 centre = Vec3.atCenterOf(spot);
+        List<ItemEntity> added = new ArrayList<>();
+        try {
+            for (ItemStack stack : stacks) {
+                ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0);
+                item.setUnlimitedLifetime();
+                // Listed before the add, so it is still taken back if a load listener throws once it is in
+                added.add(item);
+                if (!level.addFreshEntity(item)) {
+                    throw new IllegalStateException("Could not drop " + stack + " at " + level.dimension().identifier() + " " + spot);
+                }
+            }
+        } catch (RuntimeException e) {
+            added.forEach(Entity::discard);
+            throw e;
+        }
     }
 
     // Only an online owner has a facing, so graves for offline owners face the default way

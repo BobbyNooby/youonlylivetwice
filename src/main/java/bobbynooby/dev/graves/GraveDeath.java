@@ -14,7 +14,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -22,7 +21,6 @@ import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.gamerules.GameRules;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -130,31 +128,18 @@ public final class GraveDeath {
     // vanishing destroyed, the rest out of the inventory. False if that fails too, so vanilla drops them after all.
     private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name) {
         Inventory inventory = player.getInventory();
-        List<ItemEntity> added = new ArrayList<>();
         BlockPos spot;
         try {
             ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
             spot = GravePlacement.dropSpot(level, player.blockPosition(),
                     LastGround.in(player.getUUID(), level.dimension()).orElse(null), GraveStore.get(level.getServer()));
-            // Entities added to a chunk that isn't loaded sit in limbo
-            level.getChunkAt(spot);
-            Vec3 centre = Vec3.atCenterOf(spot);
+            // Copies, so a drop that fails leaves every item in the inventory for vanilla to drop
+            List<ItemStack> stacks = new ArrayList<>();
             for (int i = 0; i < inventory.getContainerSize(); i++) {
-                ItemStack stack = inventory.getItem(i);
-                if (stack.isEmpty()) {
-                    continue;
-                }
-                // No push, so each falls straight down the column that was checked. Like a grave's, they never despawn.
-                ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack.copy(), 0.0, 0.0, 0.0);
-                item.setUnlimitedLifetime();
-                if (!level.addFreshEntity(item)) {
-                    throw new IllegalStateException("Could not add " + stack + " to the world");
-                }
-                added.add(item);
+                stacks.add(inventory.getItem(i));
             }
+            Graves.dropForGood(level, spot, Stacks.nonEmptyCopies(stacks));
         } catch (RuntimeException e) {
-            // Copies, so taking them back leaves every item in the inventory for vanilla to drop
-            added.forEach(Entity::discard);
             Yolt.LOGGER.error("Could not drop {}'s items where they would last either, so they drop where {} died", name, name, e);
             return false;
         }
