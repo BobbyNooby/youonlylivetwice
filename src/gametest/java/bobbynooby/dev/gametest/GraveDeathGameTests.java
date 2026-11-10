@@ -871,7 +871,8 @@ public class GraveDeathGameTests {
         boolean waiting = false;
         try {
             assertDefaultTelling(helper);
-            BlockPos at = new BlockPos(30000, 70, 30000);
+            // Held across ticks, so at a spot of its own: other tests expect 30000, 70, 30000 to be free
+            BlockPos at = new BlockPos(-30448, 70, 30448);
             Grave grave = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(100)),
                     System.currentTimeMillis());
             GraveNotice.tellAtRespawn(owner, grave.id());
