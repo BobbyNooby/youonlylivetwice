@@ -40,10 +40,25 @@ public final class GravePlacement {
         return search(level, start(level, pos), store);
     }
 
-    /** True when a head can go at pos: the block there gives way and holds nothing, and items dropped there last. */
+    /**
+     * True when a head can go at pos: the block there gives way and holds nothing, nothing below it could be blocked
+     * by the head, and items dropped there last.
+     */
     static boolean fits(ServerLevel level, BlockPos pos, GraveStore store) {
         BlockState state = level.getBlockState(pos);
-        return state.canBeReplaced() && !state.hasBlockEntity() && safeForItems(level, pos, store);
+        return state.canBeReplaced() && !state.hasBlockEntity() && !onBlockEntity(level, pos.below(), store)
+                && safeForItems(level, pos, store);
+    }
+
+    // A head right on top of a block entity can be in its way, for example it keeps a shulker box's lid shut. Another
+    // grave is fine, so the graves of one death still stack.
+    private static boolean onBlockEntity(ServerLevel level, BlockPos floor, GraveStore store) {
+        BlockState state = level.getBlockState(floor);
+        return state.hasBlockEntity() && !isGrave(level, floor, state, store);
+    }
+
+    private static boolean isGrave(ServerLevel level, BlockPos pos, BlockState state, GraveStore store) {
+        return state.is(Blocks.PLAYER_HEAD) && store.at(level.dimension(), pos.immutable()).isPresent();
     }
 
     /**
@@ -62,7 +77,7 @@ public final class GravePlacement {
             }
             // A grave's head goes when the grave does, so it is no floor
             if (Shapes.joinIsNotEmpty(state.getCollisionShape(level, below), ITEM_COLUMN, BooleanOp.AND)
-                    && !(state.is(Blocks.PLAYER_HEAD) && store.at(level.dimension(), below.immutable()).isPresent())) {
+                    && !isGrave(level, below, state, store)) {
                 return true;
             }
         }

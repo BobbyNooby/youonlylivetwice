@@ -201,6 +201,8 @@ public class GraveProtectionGameTests {
             Grave moved = store.byId(grave.id()).orElse(null);
             helper.assertTrue(moved != null, "grave record is gone");
             helper.assertFalse(moved.pos().equals(spot), "grave record still points at the taken spot");
+            // A head right on top would keep a shulker box's lid shut
+            helper.assertFalse(moved.pos().equals(spot.above()), "grave moved right on top of the " + name);
             assertGraveIntact(helper, moved);
             helper.assertTrue(ItemStack.listMatches(moved.items(), grave.items()), "grave items changed: " + moved.items());
         } finally {
