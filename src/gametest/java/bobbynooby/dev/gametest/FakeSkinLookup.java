@@ -4,8 +4,10 @@ import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinLookup;
 import bobbynooby.dev.skins.SkinTextures;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,10 +36,20 @@ public final class FakeSkinLookup implements SkinLookup {
         return new SkinTextures("textures of " + name, "signature of " + name);
     }
 
+    // A made-up account id for the name, the same each time
+    public static UUID idOf(String name) {
+        return UUID.nameUUIDFromBytes(("account " + key(name)).getBytes(StandardCharsets.UTF_8));
+    }
+
     // The account exists, and Mojang answers at once
     public void answer(String name) {
+        answer(name, idOf(name));
+    }
+
+    // The same, with the account's id given
+    public void answer(String name, UUID id) {
         answers.put(key(name), () -> CompletableFuture.completedFuture(
-                CachedSkin.found(name, texturesOf(name), System.currentTimeMillis())));
+                CachedSkin.found(name, id, texturesOf(name), System.currentTimeMillis())));
     }
 
     // Mojang never answers about this name

@@ -47,6 +47,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +62,7 @@ import java.util.function.BooleanSupplier;
 // player, and vanilla refuses a login to a full server. Every test puts back what it changes in the same tick.
 public class SkinGameTests {
     private static final FakeSkinLookup MOJANG = FakeSkinLookup.INSTANCE;
+    private static final UUID NOTCH_ID = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
 
     // The skin goes into the profile the player is made from, so the player has it, and so does the body they leave
     @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
@@ -456,8 +458,8 @@ public class SkinGameTests {
     }
 
     // The skin of a player who has joined this server is refused, whatever the case it is typed in, though Mojang has the
-    // account; a non-op's own name is not. With the switch off the same pick goes through. Every switch goes back in the
-    // same tick.
+    // account. A non-op's own name never is, even while another player has picked it. With the switch off the same
+    // pick goes through. Every switch goes back in the same tick.
     @GameTest
     public void skinOfServerMemberRefused(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -473,6 +475,8 @@ public class SkinGameTests {
         String ownName = player.nameAndId().name();
         MOJANG.answer(memberName);
         MOJANG.answer(ownName);
+        // Away, with the copier's own name picked
+        UUID borrower = UUID.randomUUID();
         SkinStore store = SkinStore.get(server);
         try {
             helper.assertTrue(refuseBefore, "known players' skins are not refused by default");
@@ -480,12 +484,13 @@ public class SkinGameTests {
             config.skins.allowPlayerChoice = true;
             player.messages.clear();
             type(player, "yolt skin set " + memberName.toLowerCase(Locale.ROOT));
-            helper.assertValueEqual(texts(player), List.of("Someone on this server already has " + memberName
-                    + "'s skin. Pick another."), "reply to a server member's skin");
+            helper.assertValueEqual(texts(player), List.of("You can't use " + memberName + "'s skin. Pick another."),
+                    "reply to a server member's skin");
             assertEqual(helper, store.choice(player.getUUID()), null, "the pick after the refusal");
 
+            store.choose(borrower, ownName);
             type(player, "yolt skin set " + ownName);
-            assertEqual(helper, store.choice(player.getUUID()), ownName, "the pick of their own name");
+            assertEqual(helper, store.choice(player.getUUID()), ownName, "the pick of their own name while it is borrowed");
 
             config.skins.refuseKnownPlayers = false;
             type(player, "yolt skin set " + memberName);
@@ -495,6 +500,7 @@ public class SkinGameTests {
             config.skins.allowPlayerChoice = choiceBefore;
             config.skins.refuseKnownPlayers = refuseBefore;
             store.clearChoice(player.getUUID());
+            store.clearChoice(borrower);
             TestPlayers.leave(player);
             MOJANG.forget(memberName);
             MOJANG.forget(ownName);
@@ -521,8 +527,8 @@ public class SkinGameTests {
             store.choose(wearer, account);
             player.messages.clear();
             type(player, "yolt skin set " + account);
-            helper.assertValueEqual(texts(player), List.of("Someone on this server already has " + account
-                    + "'s skin. Pick another."), "reply to a skin another player wears");
+            helper.assertValueEqual(texts(player), List.of("You can't use " + account + "'s skin. Pick another."),
+                    "reply to a skin another player wears");
             assertEqual(helper, store.choice(player.getUUID()), null, "the pick after the refusal");
 
             store.clearChoice(wearer);
@@ -599,6 +605,58 @@ public class SkinGameTests {
                 store.clearChoice(given);
             }
             MOJANG.forget(owner.name());
+        }
+        helper.succeed();
+    }
+
+    // A member from before YOLT kept its record of joins: only their save in players/data says they played here. It
+    // counts under the account's own id, as on an online-mode server, and under the id an offline-mode server gives the
+    // name. Neither id joined in this run. Without the saves the same picks go through. One tick, and the saves go again.
+    @GameTest
+    public void skinOfPastMemberRefused(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        String onlineName = uniqueName("Past");
+        UUID onlineId = UUID.randomUUID();
+        String offlineName = uniqueName("Past");
+        MOJANG.answer(onlineName, onlineId);
+        MOJANG.answer(offlineName);
+        Path saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        Path onlineSave = saves.resolve(onlineId + ".dat");
+        Path offlineSave = saves.resolve(UUIDUtil.createOfflinePlayerUUID(offlineName) + ".dat");
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Newcomer", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            Files.createDirectories(saves);
+            NbtIo.writeCompressed(new CompoundTag(), onlineSave);
+            NbtIo.writeCompressed(new CompoundTag(), offlineSave);
+            for (String name : List.of(onlineName, offlineName)) {
+                player.messages.clear();
+                type(player, "yolt skin set " + name);
+                helper.assertValueEqual(texts(player), List.of("You can't use " + name + "'s skin. Pick another."),
+                        "reply to the skin of " + name);
+                assertEqual(helper, store.choice(player.getUUID()), null, "the pick after the refusal of " + name);
+            }
+
+            Files.delete(onlineSave);
+            Files.delete(offlineSave);
+            type(player, "yolt skin set " + onlineName);
+            assertEqual(helper, store.choice(player.getUUID()), onlineName, "the pick with the account's save gone");
+            type(player, "yolt skin set " + offlineName);
+            assertEqual(helper, store.choice(player.getUUID()), offlineName, "the pick with the name's offline save gone");
+        } finally {
+            Files.deleteIfExists(onlineSave);
+            Files.deleteIfExists(offlineSave);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(onlineName);
+            MOJANG.forget(offlineName);
         }
         helper.succeed();
     }
@@ -819,7 +877,9 @@ public class SkinGameTests {
         CompoundTag data = new CompoundTag();
         data.putInt("format", SkinStore.FORMAT);
         ListTag skins = new ListTag();
-        skins.add(skinTag("Notch", new SkinTextures("notch value", "notch signature"), 123L));
+        CompoundTag notch = skinTag("Notch", new SkinTextures("notch value", "notch signature"), 123L);
+        notch.put("id", UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, NOTCH_ID).getOrThrow());
+        skins.add(notch);
         skins.add(skinTag("Nobody", null, 456L));
         data.put("skins", skins);
         ListTag applied = new ListTag();
@@ -835,6 +895,12 @@ public class SkinGameTests {
         choice.putBoolean("by_op", true);
         choices.add(choice);
         data.put("choices", choices);
+        ListTag joined = new ListTag();
+        CompoundTag join = new CompoundTag();
+        join.put("player", UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, player).getOrThrow());
+        join.putString("name", "Joiner");
+        joined.add(join);
+        data.put("joined", joined);
 
         SkinStore loaded = SkinStore.TYPE.codec().parse(NbtOps.INSTANCE, data).getOrThrow();
         assertStore(helper, loaded, player, "loaded");
@@ -853,12 +919,13 @@ public class SkinGameTests {
     }
 
     private static void assertStore(GameTestHelper helper, SkinStore store, UUID player, String what) {
-        assertEqual(helper, store.skin("NOTCH"), CachedSkin.found("Notch", new SkinTextures("notch value", "notch signature"), 123L),
+        assertEqual(helper, store.skin("NOTCH"), CachedSkin.found("Notch", NOTCH_ID, new SkinTextures("notch value", "notch signature"), 123L),
                 "Notch's skin, " + what);
         assertEqual(helper, store.skin("nobody"), CachedSkin.noAccount("Nobody", 456L), "the no-account answer, " + what);
         assertEqual(helper, store.applied(player), new SkinTextures("applied value", null), "the applied skin, " + what);
         assertEqual(helper, store.choice(player), "Notch", "the picked account, " + what);
         helper.assertTrue(store.pickedByOp(player), "the pick is not an op's, " + what);
+        helper.assertTrue(store.joined(player) && store.joinedAs("joiner", UUID.randomUUID()), "the join is not recorded, " + what);
     }
 
     private static CompoundTag skinTag(String name, @Nullable SkinTextures textures, long fetchedAt) {
