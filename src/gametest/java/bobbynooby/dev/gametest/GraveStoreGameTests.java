@@ -220,6 +220,30 @@ public class GraveStoreGameTests {
         helper.succeed();
     }
 
+    // A death spot that can't be read is only a hint lost: the grave loads whole with its items, without the hint and
+    // with a warning, and the file needs no copy kept
+    @GameTest
+    public void unreadableDeathSpotLoadsGraveWithoutIt(GameTestHelper helper) throws IOException {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        Grave grave = new Grave(UUID.randomUUID(), UUID.randomUUID(), "Alex", ResolvableProfile.createUnresolved("Alex"),
+                Level.OVERWORLD, new BlockPos(8, 64, 8), List.of(new ItemStack(Items.DIAMOND, 2)), 1234L,
+                GlobalPos.of(Level.NETHER, new BlockPos(1, 2, 3)));
+        CompoundTag tag = (CompoundTag) Grave.CODEC.encodeStart(ops, grave).getOrThrow();
+        helper.assertTrue(tag.contains("death_pos"), "the death spot was not saved");
+        tag.putString("death_pos", "nowhere");
+
+        List<GraveStore> loaded = new ArrayList<>();
+        List<String> log = OfflineGameTests.yoltLog(() -> loaded.add(GraveStore.TYPE.codec().parse(ops, storeData(tag)).getOrThrow()));
+        Grave back = loaded.get(0).byId(grave.id()).orElse(null);
+        helper.assertTrue(back != null, "the grave with an unreadable death spot was not loaded");
+        helper.assertTrue(back.items().size() == 1 && back.items().get(0).is(Items.DIAMOND) && back.items().get(0).getCount() == 2,
+                "the grave's items changed: " + back.items());
+        helper.assertTrue(back.deathPos() == null, "an unreadable death spot read as " + back.deathPos());
+        helper.assertTrue(log.stream().anyMatch(line -> line.contains("unreadable death spot")), "no warning in " + log);
+        assertFileNotCopied(helper, loaded.get(0)::checkFile, storeData(tag));
+        helper.succeed();
+    }
+
     // A grave file's data part, with the version fields at today's values so no fixer runs
     private static CompoundTag storeData(Tag... graves) {
         ListTag list = new ListTag();
