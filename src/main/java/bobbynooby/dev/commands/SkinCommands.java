@@ -73,6 +73,11 @@ public final class SkinCommands {
     }
 
     private static int setOther(CommandSourceStack source, String name, String mojangName) {
+        // First: finding the player can ask Mojang about a name vanilla hasn't cached, which skins off must never do
+        Optional<String> off = Skins.offReason();
+        if (off.isPresent()) {
+            return YoltCommands.fail(source, off.get());
+        }
         Optional<NameAndId> who = YoltCommands.lookup(source.getServer(), name);
         if (who.isEmpty()) {
             return YoltCommands.fail(source, "Player " + name + " not found.");

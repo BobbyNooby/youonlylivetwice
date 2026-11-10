@@ -160,6 +160,10 @@ public class SkinGameTests {
             helper.assertTrue(told.isPresent(), "the login did not go through");
             helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked");
             assertEqual(helper, textures(told.get()), null, "textures with skins off");
+            // Refused before the player is even looked up
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + name), List.of("Skins are turned off."),
+                    "reply to a pick with skins off");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked after the pick");
         } finally {
             skins.mode = before;
             MOJANG.forget(name);
