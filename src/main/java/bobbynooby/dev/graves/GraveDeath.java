@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
@@ -21,6 +22,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /** Moves a dying player's items into graves, the ones in their open menus included. */
 public final class GraveDeath {
@@ -148,8 +150,29 @@ public final class GraveDeath {
     // Each stack on its own, so one that can't go back doesn't keep the rest from being dropped
     private static void handBack(ServerPlayer player, List<ItemStack> stacks) {
         for (ItemStack stack : stacks) {
-            Guard.run(() -> player.getInventory().placeItemBackInInventory(stack, Prediction.SERVER_ONLY),
-                    "Could not hand {} back to {}", stack, player.nameAndId().name());
+            putBackOrDrop(player, stack, s -> player.getInventory().placeItemBackInInventory(s, Prediction.SERVER_ONLY));
+        }
+    }
+
+    /**
+     * Hands the stack to putBack. If that throws, what is left in the stack drops at the player as an item, so it is
+     * never lost. A put-back that took part of the stack before it threw has already shrunk it, so nothing doubles.
+     */
+    public static void putBackOrDrop(ServerPlayer player, ItemStack stack, Consumer<ItemStack> putBack) {
+        try {
+            putBack.accept(stack);
+        } catch (RuntimeException e) {
+            String name = player.nameAndId().name();
+            if (stack.isEmpty()) {
+                Yolt.LOGGER.error("Could not hand an item back to {}, but all of it went back before the error", name, e);
+                return;
+            }
+            Yolt.LOGGER.error("Could not hand {} back to {}, so it drops at them instead", stack, name, e);
+            Guard.run(() -> {
+                ItemEntity item = new ItemEntity(player.level(), player.getX(), player.getEyeY() - 0.3, player.getZ(), stack);
+                item.setDefaultPickUpDelay();
+                player.level().addFreshEntity(item);
+            }, "Could not drop {} at {} either, so it is lost", stack, name);
         }
     }
 }

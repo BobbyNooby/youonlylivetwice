@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -15,7 +16,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.BeaconMenu;
@@ -32,6 +35,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -339,6 +343,31 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // A put-back that throws drops what is left of the stack at the player: all of a stack it never took, and only the
+    // rest of one it took part of before it threw
+    @GameTest
+    public void failedPutBackDropsTheStack(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "PutBack");
+        BlockPos at = player.blockPosition();
+        try {
+            GraveDeath.putBackOrDrop(player, new ItemStack(Items.DIAMOND, 5), stack -> {
+                throw new IllegalStateException("a put-back that fails, for this test");
+            });
+            GraveDeath.putBackOrDrop(player, new ItemStack(Items.EMERALD, 4), stack -> {
+                player.getInventory().add(stack.split(1));
+                throw new IllegalStateException("a put-back that fails halfway, for this test");
+            });
+
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, at, 3.0), 5, "diamonds dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.EMERALD, at, 3.0), 3, "emeralds dropped");
+            helper.assertValueEqual(player.getInventory().countItem(Items.EMERALD), 1, "emeralds put back");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(at).inflate(3.0)).forEach(ItemEntity::discard);
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
     // A 3x3 lava pool with a stone rim, so the lava has nowhere to flow; the player dies in the middle of it.
     // No ceiling, which the search would take as a floor.
     @GameTest(skyAccess = true)
@@ -391,6 +420,16 @@ public class GraveDeathGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // Counts the item across the item entities near an absolute position. Absolute, since vanilla's relativePos turns
+    // an unrotated test's position half round.
+    static int itemsNear(GameTestHelper helper, Item item, BlockPos absolutePos, double distance) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(absolutePos).inflate(distance), Entity::isAlive).stream()
+                .map(ItemEntity::getItem)
+                .filter(stack -> stack.is(item))
+                .mapToInt(ItemStack::getCount)
+                .sum();
     }
 
     private static ServerPlayer join(GameTestHelper helper, String name) {
