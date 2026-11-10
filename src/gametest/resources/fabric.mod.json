@@ -25,6 +25,7 @@
 			"bobbynooby.dev.gametest.GraveProtectionGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
 			"bobbynooby.dev.gametest.LockoutGameTests",
+			"bobbynooby.dev.gametest.LogoutStateGameTests",
 			"bobbynooby.dev.gametest.MapGameTests",
 			"bobbynooby.dev.gametest.MigrationGameTests",
 			"bobbynooby.dev.gametest.NameTagGameTests",
