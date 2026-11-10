@@ -136,8 +136,7 @@ public final class SkinCommands {
         }
         if (heldToRules(source, own) && Settings.get().skins.refuseKnownPlayers
                 && SkinOwners.taken(source.getServer(), skin.name(), who.id())) {
-            return YoltCommands.fail(source, "Someone on this server already has " + skin.name()
-                    + "'s skin. Pick another.");
+            return YoltCommands.fail(source, "You can't use " + skin.name() + "'s skin. Pick another.");
         }
         store.choose(who.id(), skin.name());
         saveNow(source, who);
