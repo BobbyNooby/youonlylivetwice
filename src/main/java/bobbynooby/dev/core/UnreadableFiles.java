@@ -59,6 +59,31 @@ public final class UnreadableFiles {
         return Optional.of(copy);
     }
 
+    /**
+     * A store that left out part of its file, a record or an item it couldn't read, would drop that part for good on
+     * its next save. So a copy is kept next to the file first, unless one with the same bytes is already there: a
+     * restart before the store is saved again finds the same file. Returns the copy, if one was made.
+     */
+    public static Optional<Path> keepPartlyReadCopy(Path file, String what) {
+        String prefix = file.getFileName() + ".unreadable-";
+        Optional<Path> kept = sameCopy(file, prefix);
+        if (kept.isPresent()) {
+            Yolt.LOGGER.warn("Part of the {} file {} could not be read; a copy of it is already kept at {}", what, file, kept.get());
+            return Optional.empty();
+        }
+        Path copy = file.resolveSibling(prefix + System.currentTimeMillis());
+        try {
+            Files.copy(file, copy);
+        } catch (IOException e) {
+            Yolt.LOGGER.error("Part of the {} file {} could not be read, and the file could not be copied to {}; the next "
+                    + "save drops that part", what, file, copy, e);
+            return Optional.empty();
+        }
+        Yolt.LOGGER.warn("Part of the {} file {} could not be read and was left out, so a copy of it is kept at {} before "
+                + "it is saved over", what, file, copy);
+        return Optional.of(copy);
+    }
+
     // A copy that can't be compared counts as missing, since one copy too many is the safe side
     private static Optional<Path> sameCopy(Path file, String prefix) {
         try (Stream<Path> siblings = Files.list(file.toAbsolutePath().getParent())) {

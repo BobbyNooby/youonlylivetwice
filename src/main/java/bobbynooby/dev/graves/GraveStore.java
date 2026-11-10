@@ -42,9 +42,9 @@ public final class GraveStore extends SavedData {
     // A broken grave record is logged and skipped; failing here would make the storage start empty and overwrite the file
     private static final Codec<GraveStore> CODEC = StoreVersions.codec("grave", FORMAT, STEPS,
                     (data, fix) -> StoreVersions.eachInList(data, "graves", grave -> StoreVersions.eachInList(grave, "items", fix)),
-                    LenientCodecs.list(Grave.CODEC, "grave").fieldOf("graves"))
-            .xmap(loaded -> new GraveStore(loaded.records(), loaded.fromNewer()),
-                    store -> new StoreVersions.Loaded<>(List.copyOf(store.graves.values()), false));
+                    LenientCodecs.read(Grave.CODEC, "grave").fieldOf("graves"))
+            .xmap(loaded -> new GraveStore(loaded.records().values(), loaded.fromNewer(), !loaded.records().complete()),
+                    store -> new StoreVersions.Loaded<>(new LenientCodecs.Read<>(List.copyOf(store.graves.values()), true), false));
 
     // The storage runs this fixer on every load and fails on null, which would lose the graves after a restart.
     // The command-storage fixers don't touch our data and only run when the data version is older.
@@ -56,16 +56,20 @@ public final class GraveStore extends SavedData {
     private final boolean fromDisk;
     // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
     private final boolean fromNewer;
+    // True when a grave, or an item or part of one, in the file couldn't be read, so the next save would drop it
+    private final boolean partlyRead;
     private boolean fileChecked;
 
     private GraveStore() {
         fromDisk = false;
         fromNewer = false;
+        partlyRead = false;
     }
 
-    private GraveStore(List<Grave> loaded, boolean fromNewer) {
+    private GraveStore(List<Grave> loaded, boolean fromNewer, boolean partlyRead) {
         fromDisk = true;
         this.fromNewer = fromNewer;
+        this.partlyRead = partlyRead;
         for (Grave grave : loaded) {
             graves.put(grave.id(), grave);
         }
@@ -77,12 +81,23 @@ public final class GraveStore extends SavedData {
         // and chunk loads can fetch the graves before that
         if (!store.fileChecked) {
             store.fileChecked = true;
-            UnreadableFiles.keepCopy(file(server), store.fromDisk, "grave");
-            if (store.fromNewer) {
-                UnreadableFiles.keepNewerCopy(file(server), "grave");
-            }
+            store.checkFile(file(server));
         }
         return store;
+    }
+
+    /**
+     * Keeps a copy of the file this store was loaded from whenever the store doesn't hold all of it, so the next save
+     * can't lose the rest: the file couldn't be read at all, it came from a newer version, or part of it was skipped.
+     */
+    public void checkFile(Path file) {
+        UnreadableFiles.keepCopy(file, fromDisk, "grave");
+        if (fromNewer) {
+            UnreadableFiles.keepNewerCopy(file, "grave");
+        } else if (partlyRead) {
+            // A newer file's copy already holds whatever this version skipped
+            UnreadableFiles.keepPartlyReadCopy(file, "grave");
+        }
     }
 
     /** Where the storage keeps the graves. */

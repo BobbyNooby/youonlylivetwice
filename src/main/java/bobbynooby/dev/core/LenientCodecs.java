@@ -1,10 +1,14 @@
 package bobbynooby.dev.core;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.Decoder;
 import com.mojang.serialization.Dynamic;
+import com.mojang.serialization.Encoder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Codecs that read what they can from a file instead of failing on the first bad part. */
 public final class LenientCodecs {
@@ -25,5 +29,33 @@ public final class LenientCodecs {
             }
             return loaded;
         }));
+    }
+
+    /** The elements a lenient list read, and whether every one of them was read whole. */
+    public record Read<T>(List<T> values, boolean complete) {
+    }
+
+    /**
+     * Like list, and it also tells whether anything was left out, so a store can keep a copy of its file before the
+     * next save drops that part for good. An element its codec could read only in part (an error that still carries
+     * a value) is kept as read, and that codec logs what it left out.
+     */
+    public static <T> Codec<Read<T>> read(Codec<T> element, String what) {
+        Encoder<Read<T>> encoder = element.listOf().comap(Read::values);
+        Decoder<Read<T>> decoder = Codec.PASSTHROUGH.listOf().map(entries -> {
+            List<T> loaded = new ArrayList<>();
+            boolean complete = true;
+            for (Dynamic<?> entry : entries) {
+                DataResult<T> parsed = element.parse(entry);
+                complete &= parsed.isSuccess();
+                Optional<T> value = parsed.resultOrPartial();
+                if (value.isEmpty()) {
+                    parsed.error().ifPresent(error -> Yolt.LOGGER.error("Skipping unreadable {} record: {}", what, error.message()));
+                }
+                value.ifPresent(loaded::add);
+            }
+            return new Read<>(loaded, complete);
+        });
+        return Codec.of(encoder, decoder);
     }
 }

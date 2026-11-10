@@ -46,7 +46,8 @@ public record Grave(
             Codec.LONG.fieldOf("created_at").forGetter(Grave::createdAt)
     ).apply(i, Grave::new));
 
-    // Same fields, but items stay undecoded so one bad stack can be skipped instead of failing the grave
+    // Same fields, but items stay undecoded so one bad stack can be skipped instead of failing the grave. A grave that
+    // left out an item, or part of one, comes back as an error that still carries it, so its store knows.
     private record Raw(UUID id, UUID owner, String ownerName, ResolvableProfile profile,
                        ResourceKey<Level> dimension, BlockPos pos, List<Dynamic<?>> items, long createdAt) {
         static final Codec<Raw> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -60,22 +61,30 @@ public record Grave(
                 Codec.LONG.fieldOf("created_at").forGetter(Raw::createdAt)
         ).apply(i, Raw::new));
 
-        Grave toGrave() {
+        DataResult<Grave> toGrave() {
             List<ItemStack> stacks = new ArrayList<>();
+            int unread = 0;
             for (Dynamic<?> entry : items) {
                 DataResult<ItemStack> parsed = ItemStack.CODEC.parse(entry);
+                if (parsed.isError()) {
+                    unread++;
+                }
                 parsed.resultOrPartial(error -> Yolt.LOGGER.error(
                         "Skipping unreadable item in grave of {} at {} {}: {}", ownerName, dimension.identifier(), pos, error))
                         .ifPresent(stacks::add);
             }
-            return new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt);
+            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt);
+            int left = unread;
+            return left == 0 ? DataResult.success(grave)
+                    : DataResult.error(() -> left + " items in the grave of " + ownerName + " could not be read whole", grave);
         }
     }
 
     public static final Codec<Grave> CODEC = Codec.of(STRICT_CODEC, new com.mojang.serialization.Decoder<>() {
         @Override
         public <T> DataResult<Pair<Grave, T>> decode(DynamicOps<T> ops, T input) {
-            return Raw.CODEC.decode(ops, input).map(pair -> pair.mapFirst(Raw::toGrave));
+            return Raw.CODEC.decode(ops, input)
+                    .flatMap(pair -> pair.getFirst().toGrave().map(grave -> Pair.of(grave, pair.getSecond())));
         }
     });
 
