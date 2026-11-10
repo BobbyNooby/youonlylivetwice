@@ -38,6 +38,8 @@ public class YoltConfig {
     public static class GravesSection {
         public boolean enabled = true;
         public EnderChestMode enderChestOnDeath = EnderChestMode.KEEP;
+        // How often graves in loaded chunks get a missing head put back; 0 turns that off
+        public int recheckSeconds = 5;
     }
 
     public static class ReviveSection {

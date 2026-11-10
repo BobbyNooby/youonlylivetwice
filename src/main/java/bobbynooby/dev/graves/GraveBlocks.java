@@ -54,46 +54,57 @@ public final class GraveBlocks {
     /**
      * Puts back the head of every grave in the chunk whose block went missing, for example to /setblock. A spot that
      * something else has taken since, another head included, is left alone, and the grave moves to the nearest free
-     * spot instead.
+     * spot instead. So does one the End builds over, or the next rebuild would take the head again.
      */
     public static void restoreChunk(ServerLevel level, LevelChunk chunk) {
         GraveStore store = GraveStore.get(level.getServer());
         for (Grave grave : store.inChunk(level.dimension(), chunk.getPos())) {
-            if (isOwnHead(level, grave.pos(), grave)) {
-                continue;
+            if (!isOwnHead(level, grave.pos(), grave)) {
+                restore(level, store, grave, false);
             }
-            // Setting the head over a chest would spill it, over a shulker box would delete what it holds
-            Optional<BlockPos> pos = GravePlacement.fits(level, grave.pos(), store)
-                    ? Optional.of(grave.pos()) : GravePlacement.nearestSafe(level, grave.pos(), store);
-            if (pos.isEmpty()) {
+        }
+    }
+
+    /**
+     * Puts back one grave's missing head, the way restoreChunk does. From the re-check, only loaded chunks are read, and
+     * a failure is logged once per grave, since the re-check tries again every few seconds.
+     */
+    static void restore(ServerLevel level, GraveStore store, Grave grave, boolean recheck) {
+        // Setting the head over a chest would spill it, over a shulker box would delete what it holds
+        Optional<BlockPos> pos = GravePlacement.keeps(level, grave.pos(), store) ? Optional.of(grave.pos())
+                : recheck ? GravePlacement.nearestSafeLoaded(level, grave.pos(), store) : GravePlacement.nearestSafe(level, grave.pos(), store);
+        if (pos.isEmpty()) {
+            if (!recheck || GraveRecheck.firstFailure(grave)) {
                 Yolt.LOGGER.warn("Could not put back the head of {}'s grave at {} {}: its spot is taken or unsafe, and "
                         + "there is no free spot near it", grave.ownerName(), level.dimension().identifier(), grave.pos());
-                continue;
             }
-            BlockPos at = pos.get();
-            boolean moved = !at.equals(grave.pos());
-            if (moved) {
-                // The moved record reaches the disk before the head goes down. Otherwise a crash could leave the
-                // record at the old spot and a head at the new one that nothing protects.
-                store.put(grave.withPos(at));
-                try {
-                    store.saveNow(level.getServer());
-                } catch (RuntimeException e) {
-                    store.put(grave);
+            return;
+        }
+        BlockPos at = pos.get();
+        boolean moved = !at.equals(grave.pos());
+        if (moved) {
+            // The moved record reaches the disk before the head goes down. Otherwise a crash could leave the
+            // record at the old spot and a head at the new one that nothing protects.
+            store.put(grave.withPos(at));
+            try {
+                store.saveNow(level.getServer());
+            } catch (RuntimeException e) {
+                store.put(grave);
+                if (!recheck || GraveRecheck.firstFailure(grave)) {
                     Yolt.LOGGER.error("Could not save {}'s grave at its new spot {}, so it stays at {} {} without a head for now",
                             grave.ownerName(), at, level.dimension().identifier(), grave.pos(), e);
-                    continue;
                 }
+                return;
             }
-            // The record doesn't keep the facing, so a restored head faces the default way
-            placeHead(level, at, grave, 0);
-            if (moved) {
-                Yolt.LOGGER.info("Moved {}'s grave in {} from {} to {}, since its old spot is taken or unsafe",
-                        grave.ownerName(), level.dimension().identifier(), grave.pos(), at);
-            } else {
-                Yolt.LOGGER.info("Put back the missing head of {}'s grave at {} {}",
-                        grave.ownerName(), level.dimension().identifier(), grave.pos());
-            }
+        }
+        // The record doesn't keep the facing, so a restored head faces the default way
+        placeHead(level, at, grave, 0);
+        if (moved) {
+            Yolt.LOGGER.info("Moved {}'s grave in {} from {} to {}, since its old spot is taken or unsafe",
+                    grave.ownerName(), level.dimension().identifier(), grave.pos(), at);
+        } else {
+            Yolt.LOGGER.info("Put back the missing head of {}'s grave at {} {}",
+                    grave.ownerName(), level.dimension().identifier(), grave.pos());
         }
     }
 

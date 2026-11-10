@@ -58,6 +58,10 @@ final class ConfigChecks {
             c.graves.enderChestOnDeath = fallback.graves.enderChestOnDeath;
             fellBack.accept("graves.enderChestOnDeath", "unknown value");
         }
+        if (c.graves.recheckSeconds < 0) {
+            c.graves.recheckSeconds = fallback.graves.recheckSeconds;
+            fellBack.accept("graves.recheckSeconds", "must be 0 or more");
+        }
         if (c.chat.mode == null) {
             c.chat.mode = fallback.chat.mode;
             fellBack.accept("chat.mode", "unknown value");

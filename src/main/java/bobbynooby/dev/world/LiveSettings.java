@@ -1,5 +1,6 @@
 package bobbynooby.dev.world;
 
+import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import bobbynooby.dev.visibility.TabHeaders;
@@ -25,6 +26,7 @@ public final class LiveSettings {
         GameRuleSwitches.applyLocatorBar(server);
         GameRuleSwitches.applyGlobalSounds(server);
         TabHeaders.applyAll(server);
+        GraveRecheck.apply(server);
         // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
         // and which players their client knows about depends on the hide switches
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {

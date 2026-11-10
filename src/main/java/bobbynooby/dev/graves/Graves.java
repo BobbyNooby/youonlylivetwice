@@ -44,6 +44,7 @@ public final class Graves {
         ServerChunkEvents.CHUNK_LOAD.register(GraveBlocks::onChunkLoad);
         GraveMenus.init();
         LastGround.init();
+        GraveRecheck.init();
     }
 
     /** True for the head block of a grave. Every protection hook asks this. */

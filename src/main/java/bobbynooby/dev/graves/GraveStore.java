@@ -152,6 +152,16 @@ public final class GraveStore extends SavedData {
         return List.copyOf(graves.values());
     }
 
+    public List<Grave> inDimension(ResourceKey<Level> dim) {
+        List<Grave> found = new ArrayList<>();
+        for (Grave grave : graves.values()) {
+            if (grave.dimension().equals(dim)) {
+                found.add(grave);
+            }
+        }
+        return found;
+    }
+
     public List<Grave> inChunk(ResourceKey<Level> dim, ChunkPos chunk) {
         List<Grave> found = new ArrayList<>();
         for (Grave grave : graves.values()) {

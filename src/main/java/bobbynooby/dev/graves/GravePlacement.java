@@ -70,6 +70,25 @@ public final class GravePlacement {
     }
 
     /**
+     * Like nearestSafe, but reading loaded chunks only, so it never loads one. Nothing when the chunks round pos aren't
+     * loaded, or pos is over the void with no loaded land near, where nearestSafe would load its fixed spot.
+     */
+    static Optional<BlockPos> nearestSafeLoaded(ServerLevel level, BlockPos pos, GraveStore store) {
+        BlockPos from = clamped(level, pos);
+        if (!loadedAround(level, from.getX(), from.getZ())) {
+            return Optional.empty();
+        }
+        Optional<BlockPos> landed = isVoidColumn(level, from) ? nearestLand(level, from, store) : Optional.of(landing(level, from));
+        // Every start these give is a column whose chunks round it are loaded, which is all a search reads
+        return landed.map(start -> besideSpike(level, start, store)).flatMap(start -> search(level, start, store));
+    }
+
+    /** True when a restored head can stay at pos: it fits, and the End doesn't build over that spot. */
+    static boolean keeps(ServerLevel level, BlockPos pos, GraveStore store) {
+        return fits(level, pos, store) && !EndRebuilds.wipes(level, pos);
+    }
+
+    /**
      * True when a head can go at pos: the block there gives way, holds nothing and drops nothing, the head would be
      * in the way of no block entity, and items dropped there last.
      */
@@ -405,7 +424,7 @@ public final class GravePlacement {
     }
 
     // The column's chunk and every chunk the search from it reads: its rings and the blocks beside them
-    private static boolean loadedAround(ServerLevel level, int x, int z) {
+    static boolean loadedAround(ServerLevel level, int x, int z) {
         int reach = RING_RADIUS + 1;
         for (int cx = SectionPos.blockToSectionCoord(x - reach); cx <= SectionPos.blockToSectionCoord(x + reach); cx++) {
             for (int cz = SectionPos.blockToSectionCoord(z - reach); cz <= SectionPos.blockToSectionCoord(z + reach); cz++) {
