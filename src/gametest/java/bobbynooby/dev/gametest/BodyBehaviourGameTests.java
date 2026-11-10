@@ -670,7 +670,7 @@ public class BodyBehaviourGameTests {
     }
 
     // As if the owner logged out 61 seconds ago, so a one-minute body is due
-    private static void expiredLogout(GameTestHelper helper, UUID owner) {
+    static void expiredLogout(GameTestHelper helper, UUID owner) {
         BodyStore store = store(helper);
         BodyRecord record = store.byOwner(owner).orElseThrow();
         store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),

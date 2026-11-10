@@ -1,6 +1,8 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.Kills;
+import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
@@ -282,7 +284,8 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
-    // Tracked on a ledge, then saved over the void: the logout forgets the ledge, so the kill starts from the save
+    // Tracked on a ledge, then saved over the void. The test server keeps bodies off, so the logout leaves no body and
+    // forgets the ledge, and the kill starts from the save.
     @GameTest(skyAccess = true)
     public void offlineKillInVoidGoesToLand(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -469,6 +472,98 @@ public class VoidGraveGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // Tracked on a ledge, then out in mid-air over a shaft: the body keeps the ledge though it never stands anywhere, so
+    // its death in the void below puts the grave there. The ledge goes with the body.
+    @GameTest(skyAccess = true)
+    public void logoutMidFallHandsLastGroundToBody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = TestPlayers.join(helper, "Falling", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            standOnGround(player);
+            player.setOnGround(false);
+            player.snapTo(shaft.getX() + 0.5, shaft.getY() + 3, shaft.getZ() + 0.5);
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            Settings.get().bodies = bodiesBefore;
+            helper.assertValueEqual(LastGround.in(owner, level.dimension()), Optional.of(onLedge), "body's last ground");
+
+            body.snapTo(shaft.getX() + 0.5, belowWorld(level, shaft).getY(), shaft.getZ() + 0.5);
+            body.hurtServer(level, level.damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            List<Grave> made = BodyTestKit.gravesOf(helper, owner);
+            helper.assertValueEqual(made.size(), 1, "graves for the owner");
+            helper.assertValueEqual(made.get(0).pos(), onLedge, "grave position");
+            helper.assertValueEqual(GraveAsserts.countInGraves(made, Items.DIAMOND), 3, "diamonds in the grave");
+            helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(), "the body's death kept its last ground");
+        } finally {
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
+            LastGround.forget(owner);
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // The body keeps its owner's ledge until the owner comes back and takes it over
+    @GameTest(skyAccess = true)
+    public void ownerLoginForgetsBodyLastGround(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = TestPlayers.join(helper, "Back", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        try {
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            standOnGround(player);
+            BodyTestKit.leaveBody(helper, player);
+            helper.assertValueEqual(LastGround.in(owner, level.dimension()), Optional.of(onLedge), "body's last ground");
+
+            TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            helper.assertTrue(BodyTestKit.store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(), "the login kept the body's last ground");
+        } finally {
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
+            LastGround.forget(owner);
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // The same, with the body's time up instead. The expiry runs over every body, so the test runs apart.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, skyAccess = true)
+    public void bodyExpiryForgetsLastGround(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = TestPlayers.join(helper, "Expired", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            standOnGround(player);
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            helper.assertValueEqual(LastGround.in(owner, level.dimension()), Optional.of(onLedge), "body's last ground");
+            BodyBehaviourGameTests.expiredLogout(helper, owner);
+
+            BodyExpiry.tick(level.getServer());
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(), "the expiry kept the body's last ground");
+        } finally {
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
+            LastGround.forget(owner);
+            putBack(level, before);
+        }
+        helper.succeed();
     }
 
     // Notes each block before it goes, so putBack can set back exactly what was there
