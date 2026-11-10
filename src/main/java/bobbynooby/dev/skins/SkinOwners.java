@@ -58,17 +58,13 @@ public final class SkinOwners {
         }
         for (UUID borrower : borrowers) {
             store.clearChoice(borrower);
-            // The skin they wear now stays until they rejoin, like any other change of skin
-            ServerPlayer online = server.getPlayerList().getPlayer(borrower);
-            if (online != null) {
-                online.sendSystemMessage(Component.literal(RESET));
-            } else {
-                store.noteReset(borrower);
-            }
+            // Told at their next join, when the skin really changes. Told now, an online borrower would learn that the
+            // owner just came online.
+            store.noteReset(borrower);
         }
         Yolt.LOGGER.info("{} joined, so {} skin {} of their name went back to the default", name, borrowers.size(),
                 borrowers.size() == 1 ? "pick" : "picks");
-        // On disk at once, as a pick from the command is, so a crash can't bring back a pick a player was told is gone
+        // On disk at once, as a pick from the command is, so a crash can't bring back a pick that was reset
         try {
             store.saveNow(server);
         } catch (RuntimeException e) {

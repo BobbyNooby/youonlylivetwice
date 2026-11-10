@@ -109,7 +109,7 @@ public final class SkinStore extends SavedData {
     private final Map<UUID, String> choices = new LinkedHashMap<>();
     // The name each player last joined with
     private final Map<UUID, String> joined = new LinkedHashMap<>();
-    // Players whose pick was reset while they were away, until they are told at their next join
+    // Players whose pick was reset because its owner joined, until they are told at their next join
     private final Set<UUID> resets = new LinkedHashSet<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
@@ -264,7 +264,7 @@ public final class SkinStore extends SavedData {
         }
     }
 
-    /** True once for a player whose pick was reset while they were away. */
+    /** True once for a player whose pick was reset, at the join that tells them. */
     public boolean takeReset(UUID player) {
         boolean had = resets.remove(player);
         if (had) {
