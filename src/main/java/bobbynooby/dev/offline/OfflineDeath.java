@@ -127,7 +127,7 @@ public final class OfflineDeath {
         List<ItemStack> stacks = new ArrayList<>();
         stacks.add(GraveItems.graveHead(profile));
         stacks.addAll(items);
-        Graves.Created created = Graves.createUndoable(level, where.pos(), profile, who.id(), who.name(), stacks);
+        Graves.Created created = Graves.createUndoable(level, where.pos(), where, profile, who.id(), who.name(), stacks);
         try {
             // The wiped save is only committed after this, so a crash in between can't lose the items
             GraveStore.get(server).saveNow(server);

@@ -40,6 +40,9 @@ public class YoltConfig {
         public EnderChestMode enderChestOnDeath = EnderChestMode.KEEP;
         // How often graves in loaded chunks get a missing head put back; 0 turns that off
         public int recheckSeconds = 5;
+        public TellLocation tellLocation = TellLocation.WHEN_MOVED;
+        // How far from the death spot, in blocks, a grave must be for whenMoved to tell the dead player
+        public int tellLocationDistance = 16;
     }
 
     public static class ReviveSection {
@@ -98,6 +101,13 @@ public class YoltConfig {
         @SerializedName("keep") KEEP,
         @SerializedName("grave") GRAVE,
         @SerializedName("wipe") WIPE
+    }
+
+    // Whether the dead player is told where their grave is
+    public enum TellLocation {
+        @SerializedName("never") NEVER,
+        @SerializedName("whenMoved") WHEN_MOVED,
+        @SerializedName("always") ALWAYS
     }
 
     public enum ChatMode {

@@ -5,6 +5,7 @@ import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.GraveNotice;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -94,6 +95,24 @@ public final class DeathLockout {
 
     /** Null when the player may join. */
     public static @Nullable Component refusal(UUID uuid, String name) {
+        String text = refusalText(uuid, name);
+        return text == null ? null : Component.literal(text);
+    }
+
+    /**
+     * The same, and where the player's grave is when graves.tellLocation says to tell them: what the login refusal and
+     * the death's kick say. Only the dead player sees either.
+     */
+    public static @Nullable Component refusal(MinecraftServer server, UUID uuid, String name) {
+        String text = refusalText(uuid, name);
+        if (text == null) {
+            return null;
+        }
+        String grave = GraveNotice.line(server, uuid);
+        return Component.literal(grave == null ? text : text + "\n" + grave);
+    }
+
+    private static @Nullable String refusalText(UUID uuid, String name) {
         DeathStore open = store;
         if (open == null || !Settings.get().deathLockout.enabled) {
             return null;
@@ -113,7 +132,7 @@ public final class DeathLockout {
         if (remaining <= 0) {
             return null;
         }
-        return Component.literal(Cooldown.refusal(log.get().deathMessage(), remaining));
+        return Cooldown.refusal(log.get().deathMessage(), remaining);
     }
 
     /**
@@ -136,7 +155,7 @@ public final class DeathLockout {
         Later.afterTick(server, () -> {
             // By uuid: they may have left already, or respawned as a new player object
             ServerPlayer current = server.getPlayerList().getPlayer(uuid);
-            Component reason = current == null ? null : refusal(uuid, current.nameAndId().name());
+            Component reason = current == null ? null : refusal(server, uuid, current.nameAndId().name());
             if (reason != null) {
                 current.connection.disconnect(reason);
             }

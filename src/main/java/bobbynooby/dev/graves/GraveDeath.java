@@ -93,6 +93,14 @@ public final class GraveDeath {
         return true;
     }
 
+    /**
+     * True when a death now locks the player out and so kicks them: the lockout is on and has days to wait. The kick
+     * saves the player and tells them where their grave is.
+     */
+    static boolean deathKicks() {
+        return Settings.on(c -> c.deathLockout.enabled) && Settings.get().deathLockout.cooldownDays > 0;
+    }
+
     /** Called by the menu and drop hooks. True when the stack was taken for a dying player's grave instead. */
     public static boolean takeReturnedItem(Player player, ItemStack stack) {
         if (collectingFor == null || player != collectingFor) {

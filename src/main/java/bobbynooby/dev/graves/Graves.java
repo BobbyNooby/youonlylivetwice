@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -45,6 +46,7 @@ public final class Graves {
         GraveMenus.init();
         LastGround.init();
         GraveRecheck.init();
+        GraveNotice.init();
     }
 
     /** True for the head block of a grave. Every protection hook asks this. */
@@ -76,6 +78,15 @@ public final class Graves {
     /** Same as create, for callers that can still fail after the graves exist and must then take them back. */
     public static Created createUndoable(ServerLevel level, BlockPos near, ResolvableProfile profile, UUID owner,
                                          String ownerName, List<ItemStack> items) {
+        return createUndoable(level, near, GlobalPos.of(level.dimension(), near), profile, owner, ownerName, items);
+    }
+
+    /**
+     * The same, for a death at died, whose graves go near the spot near in level. They differ only when the death's
+     * own dimension isn't loaded, and the graves go to another one.
+     */
+    public static Created createUndoable(ServerLevel level, BlockPos near, GlobalPos died, ResolvableProfile profile,
+                                         UUID owner, String ownerName, List<ItemStack> items) {
         GraveStore store = GraveStore.get(level.getServer());
         List<ItemStack> stacks = Stacks.nonEmpty(items);
         int rotation = RotationSegment.convertToSegment(ownerYaw(level, owner));
@@ -93,7 +104,7 @@ public final class Graves {
             do {
                 List<ItemStack> part = stacks.subList(start, Math.min(start + SLOTS_PER_GRAVE, stacks.size()));
                 BlockPos pos = GravePlacement.find(level, from, lastGround, store);
-                Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now);
+                Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now, died);
                 BlockState previous = level.getBlockState(pos);
                 undo.add(() -> {
                     // The record goes first, so a block that can't be put back still leaves no grave holding items

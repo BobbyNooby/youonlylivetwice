@@ -62,6 +62,14 @@ final class ConfigChecks {
             c.graves.recheckSeconds = fallback.graves.recheckSeconds;
             fellBack.accept("graves.recheckSeconds", "must be 0 or more");
         }
+        if (c.graves.tellLocation == null) {
+            c.graves.tellLocation = fallback.graves.tellLocation;
+            fellBack.accept("graves.tellLocation", "unknown value");
+        }
+        if (c.graves.tellLocationDistance < 0) {
+            c.graves.tellLocationDistance = fallback.graves.tellLocationDistance;
+            fellBack.accept("graves.tellLocationDistance", "must be 0 or more");
+        }
         if (c.chat.mode == null) {
             c.chat.mode = fallback.chat.mode;
             fellBack.accept("chat.mode", "unknown value");
