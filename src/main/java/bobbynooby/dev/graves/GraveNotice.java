@@ -25,7 +25,7 @@ import java.util.UUID;
  */
 public final class GraveNotice {
     // A death's graves are made just before the death is recorded, in the same call; a minute covers a slow disk in
-    // between. A grave made before that is an earlier death's.
+    // between. A grave made before that is an earlier death's, and one made after it a later one's.
     private static final long SAME_DEATH_MILLIS = 60_000L;
     // The first grave of each dead player's death, told at their respawn. Server thread only.
     private static final Map<UUID, UUID> AT_RESPAWN = new HashMap<>();
@@ -90,13 +90,14 @@ public final class GraveNotice {
         return "Your grave is at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " in " + dimensionName(grave.dimension()) + ".";
     }
 
-    // The first grave of the death: one made no earlier than the death allows, the newest such. One death's graves share
-    // a time, and the store keeps them in the order made.
+    // The first grave of the death: one made within the minute before it, the newest such. One death's graves share a
+    // time, and the store keeps them in the order made.
     private static @Nullable Grave madeAt(MinecraftServer server, UUID owner, long deathMillis) {
         Grave found = null;
         for (Grave grave : GraveStore.get(server).all()) {
-            if (grave.owner().equals(owner) && grave.createdAt() >= deathMillis - SAME_DEATH_MILLIS
-                    && (found == null || grave.createdAt() > found.createdAt())) {
+            long made = grave.createdAt();
+            if (grave.owner().equals(owner) && made <= deathMillis && made >= deathMillis - SAME_DEATH_MILLIS
+                    && (found == null || made > found.createdAt())) {
                 found = grave;
             }
         }
