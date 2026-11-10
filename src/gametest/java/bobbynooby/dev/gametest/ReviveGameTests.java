@@ -295,6 +295,29 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
+    // An adventure-mode client can't place the head, so one click on a block sends a use on the block and then a use
+    // in the air, both handled in the same tick. Two heads, so the hand still holds one when the use in the air comes.
+    @GameTest
+    public void reviveInAdventureMessagesOnce(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        BlockPos stone = new BlockPos(3, 1, 3);
+        helper.setBlock(stone, Blocks.STONE);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Adventurer", GameType.ADVENTURE, new BlockPos(1, 1, 1));
+        try {
+            ItemStack heads = reviveHead(staticProfile(owner), 2);
+            int mark = user.messages.size();
+            useOnTop(helper, user, heads, stone);
+            user.gameMode.useItem(user, user.level(), heads, InteractionHand.MAIN_HAND);
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 1, "heads left");
+            helper.assertValueEqual(said(user, mark), List.of("Ghost can come back now."), "replies to one click");
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
     // Two owners, so a use that took the off hand's head as well would revive the second one too
     @GameTest
     public void reviveHeadsInBothHandsUseOne(GameTestHelper helper) {

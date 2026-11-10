@@ -21,8 +21,10 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 /** Using a revive head ends its owner's death lockout. */
 public final class Revive {
@@ -34,6 +36,10 @@ public final class Revive {
         // The store refused the change, so the head is kept
         FAILED
     }
+
+    // The server tick each player's last click on a block was answered in. Weak keys, since a respawn or a relog
+    // makes a new player object. Server thread only.
+    private static final Map<ServerPlayer, Integer> BLOCK_USE_TICKS = new WeakHashMap<>();
 
     private Revive() {
     }
@@ -95,6 +101,12 @@ public final class Revive {
         if (!GraveItems.isReviveHead(stack)) {
             return InteractionResult.PASS;
         }
+        // In adventure mode a client can't place a head, so after the click on a block it sends a use in the air too.
+        // That is the same click, and it was answered already.
+        Integer answered = BLOCK_USE_TICKS.get(user);
+        if (answered != null && answered == user.level().getServer().getTickCount()) {
+            return InteractionResult.FAIL;
+        }
         // The client saw no use for a head, so it didn't swing; the server swings for it
         return tryUse(user, stack) == Outcome.REVIVED ? InteractionResult.SUCCESS_SERVER : InteractionResult.FAIL;
     }
@@ -110,6 +122,7 @@ public final class Revive {
             return InteractionResult.PASS;
         }
         tryUse(user, stack);
+        BLOCK_USE_TICKS.put(user, user.level().getServer().getTickCount());
         // The client placed the head on its side and took it off the stack, so send it the real stack
         user.inventoryMenu.sendAllDataToRemote();
         return InteractionResult.FAIL;
