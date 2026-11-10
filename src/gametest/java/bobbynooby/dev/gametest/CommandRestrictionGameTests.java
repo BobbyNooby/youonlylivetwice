@@ -1,12 +1,15 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandBuildContext;
@@ -35,9 +38,13 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 // Each test flips the switch and restores it inside one tick, so no other test sees it
 public class CommandRestrictionGameTests {
+    private static final String LEVEL_ONE_OP = "you-only-live-twice-gametest:level_one_op";
+
     @GameTest
     public void restrictedHelpGetsReply(GameTestHelper helper) {
         TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Help", GameType.SURVIVAL, new BlockPos(1, 1, 1));
@@ -183,8 +190,12 @@ public class CommandRestrictionGameTests {
         helper.succeed();
     }
 
-    // The last command tree the server sent this player, read back the way the client reads it
     private static boolean lastTreeHasWhisper(GameTestHelper helper, ServerPlayer player) {
+        return lastTree(helper, player).getChild("w") != null;
+    }
+
+    // The last command tree the server sent this player, read back the way the client reads it
+    private static RootCommandNode<CommandSourceStack> lastTree(GameTestHelper helper, ServerPlayer player) {
         ClientboundCommandsPacket last = null;
         for (Packet<?> packet : TestPlayers.sentPackets(player)) {
             if (packet instanceof ClientboundCommandsPacket commands) {
@@ -194,8 +205,15 @@ public class CommandRestrictionGameTests {
         helper.assertTrue(last != null, "the player was never sent a command tree");
         MinecraftServer server = helper.getLevel().getServer();
         CommandBuildContext context = CommandBuildContext.simple(server.registryAccess(), server.getWorldData().enabledFeatures());
-        RootCommandNode<CommandSourceStack> root = last.getRoot(context, TREE_READER);
-        return root.getChild("w") != null;
+        return last.getRoot(context, TREE_READER);
+    }
+
+    private static List<String> childNames(RootCommandNode<CommandSourceStack> root) {
+        List<String> names = new ArrayList<>();
+        for (CommandNode<CommandSourceStack> child : root.getChildren()) {
+            names.add(child.getName());
+        }
+        return names;
     }
 
     private static final ClientboundCommandsPacket.NodeBuilder<CommandSourceStack> TREE_READER = new ClientboundCommandsPacket.NodeBuilder<>() {
@@ -216,6 +234,42 @@ public class CommandRestrictionGameTests {
             return input;
         }
     };
+
+    // A level 1 op can't run gamemaster commands, so the restriction holds them like a non-op: what they may run and the
+    // tree they are sent. A batch of its own, since it changes the op list and the switch.
+    @GameTest(environment = LEVEL_ONE_OP)
+    public void levelOneOpIsRestricted(GameTestHelper helper) {
+        Scoreboard scoreboard = helper.getLevel().getServer().getScoreboard();
+        ServerPlayer player = TestPlayers.join(helper, "Moderator", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        Objective objective = null;
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            // Opping sends the player its command tree again
+            TestPlayers.op(player, LevelBasedPermissionSet.MODERATOR);
+            helper.assertTrue(CommandRestriction.restricted(player), "a level 1 op is not restricted");
+            helper.assertValueEqual(childNames(lastTree(helper, player)), List.of("help"), "commands in the tree sent to a level 1 op");
+
+            objective = scoreboard.addObjective("yolt_t", ObjectiveCriteria.TRIGGER, Component.literal("yolt_t"),
+                    ObjectiveCriteria.RenderType.INTEGER, false, null);
+            ScoreAccess score = scoreboard.getOrCreatePlayerScore(player, objective);
+            score.unlock();
+            run(player, "trigger yolt_t set 1");
+            helper.assertValueEqual(score.get(), 0, "score after a level 1 op's typed trigger");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            TestPlayers.deop(player);
+            if (objective != null) {
+                scoreboard.removeObjective(objective);
+            }
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
 
     // What an op-placed sign runs its click command as (vanilla's SignBlockEntity)
     private static CommandSourceStack signSource(ServerPlayer player) {
