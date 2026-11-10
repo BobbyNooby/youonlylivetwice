@@ -85,6 +85,8 @@ public class YoltConfig {
         public boolean totems = true;
         public boolean armourWears = true;
         public boolean copyEffects = true;
+        // Vanilla /kill leaves bodies standing; /yolt kill <player> is the way to kill one on purpose
+        public boolean ignoreVanillaKill = true;
     }
 
     public static class ServerListSection {

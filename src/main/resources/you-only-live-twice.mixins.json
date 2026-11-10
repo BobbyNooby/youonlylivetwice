@@ -51,6 +51,7 @@
     "SleepAnnounceMixin",
     "SleepStatusMixin",
     "TargetGoalAccessor",
+    "VanillaKillMixin",
     "VisibilityPairingMixin"
   ],
   "injectors": {
