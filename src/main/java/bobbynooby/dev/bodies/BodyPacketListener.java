@@ -17,6 +17,9 @@ import java.util.function.Consumer;
  * and as a viewer of what is around it; with no client they go nowhere. Fabric's own fake players use the untracked
  * marker, so Fabric's networking doesn't keep the listener for good or announce it as a new connection.
  * Lives outside PlayerBody, where Connection would mean the waypoint interface a player inherits.
+ * <p>
+ * The marker is internal to Fabric API (its impl package), so any Fabric API update may move or drop it. That is why
+ * fabric.mod.json asks for at least the version this was built against; check the marker again on each update.
  */
 final class BodyPacketListener extends ServerGamePacketListenerImpl implements UntrackedPacketListener {
     BodyPacketListener(ServerPlayer body) {
