@@ -339,6 +339,21 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // Vanilla /kill that hits no body says nothing more than vanilla does, with the switch on
+    @GameTest
+    public void vanillaKillWithoutBodiesGivesNoHint(GameTestHelper helper) {
+        Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(1, 1, 1));
+        try {
+            helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies by default");
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill @e[distance=..0.5]"),
+                    List.of("Killed " + zombie.getDisplayName().getString()), "output of /kill");
+            helper.assertTrue(zombie.isDeadOrDying(), "the zombie /kill hit is alive");
+        } finally {
+            zombie.discard();
+        }
+        helper.succeed();
+    }
+
     // With the switch off, vanilla /kill kills a body like anything else, and its owner dies with it
     @GameTest
     public void vanillaKillSwitchOffKillsBodies(GameTestHelper helper) {
