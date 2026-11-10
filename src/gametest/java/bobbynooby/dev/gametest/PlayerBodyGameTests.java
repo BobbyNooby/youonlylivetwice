@@ -49,7 +49,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -194,8 +193,8 @@ public class PlayerBodyGameTests {
             List<Grave> graves = gravesOf(helper, owner);
             helper.assertValueEqual(graves.size(), 1, "graves for the owner");
             helper.assertValueEqual(graves.get(0).pos(), at, "grave position");
-            helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the grave");
-            helper.assertValueEqual(countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the grave");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.DIAMOND), 1, "diamonds in the grave");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the grave");
             // The revive token has to name the owner, not the body
             helper.assertValueEqual(GraveItems.ownerId(graves.get(0).items().get(0)), Optional.of(owner), "grave head's owner");
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, Entity::isAlive).isEmpty(), "items dropped");
@@ -839,18 +838,6 @@ public class PlayerBodyGameTests {
         return GraveStore.get(helper.getLevel().getServer()).all().stream()
                 .filter(grave -> grave.owner().equals(owner))
                 .toList();
-    }
-
-    private static int countInGraves(List<Grave> graves, Item item) {
-        int total = 0;
-        for (Grave grave : graves) {
-            for (ItemStack stack : grave.items()) {
-                if (stack.is(item)) {
-                    total += stack.getCount();
-                }
-            }
-        }
-        return total;
     }
 
     // The switches go back first, so a player still online leaves without making another body.

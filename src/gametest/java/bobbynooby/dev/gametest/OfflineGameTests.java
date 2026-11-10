@@ -339,7 +339,7 @@ public class OfflineGameTests {
             helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
             List<ItemStack> items = onlyGrave(helper, who.id()).items();
             helper.assertValueEqual(items.size(), 2, "grave item count");
-            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            helper.assertTrue(ItemStack.matches(items.get(1), new ItemStack(Items.DIAMOND)), "second item: " + items.get(1));
             ListTag expected = new ListTag();
             expected.add(unreadable);
             helper.assertValueEqual(OfflinePlayerData.load(server, who).orElseThrow().getListOrEmpty("Inventory"), expected,

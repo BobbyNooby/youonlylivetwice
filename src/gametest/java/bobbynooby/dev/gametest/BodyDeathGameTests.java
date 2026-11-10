@@ -33,7 +33,6 @@ import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -170,7 +169,7 @@ public class BodyDeathGameTests {
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "yolt kill " + name);
 
             helper.assertTrue(body.isDeadOrDying(), "body still alive");
-            helper.assertValueEqual(countInGraves(gravesOf(helper, owner), Items.DIAMOND), 1, "diamonds in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.DIAMOND), 1, "diamonds in the graves");
             helper.assertTrue(gravesOf(helper, owner).stream().allMatch(grave -> grave.pos().closerThan(body.blockPosition(), 2.0)),
                     "grave not at the body");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
@@ -217,12 +216,12 @@ public class BodyDeathGameTests {
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, around, Entity::isAlive).isEmpty(),
                     "XP dropped");
             List<Grave> graves = gravesOf(helper, owner);
-            helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");
-            helper.assertValueEqual(countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the graves");
-            helper.assertValueEqual(countInGraves(graves, Items.IRON_SWORD), 1, "swords in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.IRON_CHESTPLATE), 1, "chestplates in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.IRON_SWORD), 1, "swords in the graves");
             List<ItemStack> saved = savedItems(helper, player);
-            helper.assertValueEqual(count(saved, Items.DIAMOND), 0, "diamonds left in the save");
-            helper.assertValueEqual(count(saved, Items.IRON_CHESTPLATE), 0, "chestplates left in the save");
+            helper.assertValueEqual(GraveAsserts.count(saved, Items.DIAMOND), 0, "diamonds left in the save");
+            helper.assertValueEqual(GraveAsserts.count(saved, Items.IRON_CHESTPLATE), 0, "chestplates left in the save");
         } finally {
             cleanUp(helper, owner, before);
         }
@@ -265,10 +264,12 @@ public class BodyDeathGameTests {
             AABB around = new AABB(body.blockPosition()).inflate(4.0);
             body.kill(helper.getLevel());
 
-            helper.assertValueEqual(countInGraves(gravesOf(helper, owner), Items.IRON_HELMET), 1, "helmets in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(helper.getLevel().getServer(), owner, Items.IRON_HELMET), 1,
+                    "helmets in the graves");
             helper.assertTrue(helper.getLevel().getEntities(EntityTypes.ITEM, around, item -> item.getItem().is(Items.IRON_HELMET))
                     .isEmpty(), "helmet dropped");
-            helper.assertValueEqual(count(savedItems(helper, player), Items.IRON_HELMET), 0, "helmets left in the save");
+            helper.assertValueEqual(GraveAsserts.count(savedItems(helper, player), Items.IRON_HELMET), 0,
+                    "helmets left in the save");
         } finally {
             cleanUp(helper, owner, before);
         }
@@ -300,7 +301,7 @@ public class BodyDeathGameTests {
             List<Grave> graves = gravesOf(helper, owner);
             helper.assertTrue(graves.stream().flatMap(grave -> grave.items().stream())
                     .anyMatch(item -> item.is(Items.IRON_CHESTPLATE) && item.getDamageValue() == 7), "no grave holds the chestplate");
-            helper.assertValueEqual(countInGraves(graves, Items.DIRT), Inventory.INVENTORY_SIZE, "dirt in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.DIRT), Inventory.INVENTORY_SIZE, "dirt in the graves");
             helper.assertValueEqual(save(helper, player).getCompoundOrEmpty("equipment").get("chest"), chest, "saved chest entry");
         } finally {
             cleanUp(helper, owner, before);
@@ -327,8 +328,8 @@ public class BodyDeathGameTests {
             helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.KILLED_OFFLINE,
                     "kill result");
             List<Grave> graves = gravesOf(helper, owner);
-            helper.assertValueEqual(countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");
-            helper.assertValueEqual(countInGraves(graves, Items.IRON_HELMET), 1, "helmets in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.DIAMOND), 1, "diamonds in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.IRON_HELMET), 1, "helmets in the graves");
             helper.assertTrue(graves.stream().allMatch(grave -> grave.pos().closerThan(at, 2.0)), "grave not at the body");
             helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "kill did not start the lockout");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
@@ -355,7 +356,7 @@ public class BodyDeathGameTests {
 
             List<Grave> graves = gravesOf(helper, owner);
             helper.assertFalse(graves.isEmpty(), "body death made no grave");
-            helper.assertValueEqual(countInGraves(graves, Items.TOTEM_OF_UNDYING), 0, "totems in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(graves, Items.TOTEM_OF_UNDYING), 0, "totems in the graves");
         } finally {
             cleanUp(helper, owner, before);
         }
@@ -429,7 +430,8 @@ public class BodyDeathGameTests {
             player.kill(player.level());
 
             helper.assertTrue(player.isDeadOrDying(), "player did not die");
-            helper.assertValueEqual(countInGraves(gravesOf(helper, owner), Items.DIAMOND), 1, "diamonds in the graves");
+            helper.assertValueEqual(GraveAsserts.countInGraves(helper.getLevel().getServer(), owner, Items.DIAMOND), 1,
+                    "diamonds in the graves");
         } finally {
             cleanUp(helper, owner, before);
         }
@@ -481,18 +483,6 @@ public class BodyDeathGameTests {
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {
         return helper.getLevel().getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(owner + ".dat");
-    }
-
-    private static int count(List<ItemStack> items, Item item) {
-        return items.stream().filter(stack -> stack.is(item)).mapToInt(ItemStack::getCount).sum();
-    }
-
-    private static int countInGraves(List<Grave> graves, Item item) {
-        int total = 0;
-        for (Grave grave : graves) {
-            total += count(grave.items(), item);
-        }
-        return total;
     }
 
     private static BodyStore store(GameTestHelper helper) {

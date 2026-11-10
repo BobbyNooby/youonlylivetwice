@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -56,7 +57,7 @@ public class GraveDeathGameTests {
             List<ItemStack> items = grave.items();
             helper.assertValueEqual(items.size(), 3, "grave item count");
             helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "grave head is not the first item");
-            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            helper.assertTrue(ItemStack.matches(items.get(1), new ItemStack(Items.DIAMOND)), "second item: " + items.get(1));
             helper.assertTrue(items.get(2).is(Items.IRON_SWORD), "third item is not the sword");
             helper.assertTrue(player.getInventory().isEmpty(), "player kept items");
             assertHeadBlock(helper, grave);
@@ -79,7 +80,7 @@ public class GraveDeathGameTests {
                     .filter(saved -> saved.id().equals(grave.id()))
                     .toList();
             helper.assertValueEqual(onDisk.size(), 1, "copies of the grave on disk");
-            helper.assertTrue(contains(onDisk.get(0), Items.DIAMOND), "grave on disk lacks the diamond");
+            helper.assertValueEqual(GraveAsserts.countInGraves(onDisk, Items.DIAMOND), 1, "diamonds in the grave on disk");
         } finally {
             cleanUp(helper, player);
         }
@@ -97,7 +98,8 @@ public class GraveDeathGameTests {
 
             Grave grave = onlyGrave(helper, player);
             worn.forEach((slot, item) -> {
-                helper.assertTrue(contains(grave, item), item + " from the " + slot + " slot missing from the grave");
+                helper.assertValueEqual(GraveAsserts.count(grave.items(), item), 1,
+                        "grave's " + item + " from the " + slot + " slot");
                 helper.assertTrue(player.getItemBySlot(slot).isEmpty(), slot + " slot still holds an item");
             });
         } finally {
@@ -137,7 +139,7 @@ public class GraveDeathGameTests {
                 rules.set(GameRules.KEEP_INVENTORY, before, server);
             }
 
-            helper.assertTrue(player.getInventory().contains(new ItemStack(Items.DIAMOND)), "player lost the diamond");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 1, "player's diamonds");
             Grave grave = onlyGrave(helper, player);
             helper.assertValueEqual(grave.items().size(), 1, "grave item count");
             helper.assertTrue(GraveItems.isGraveHead(grave.items().get(0)), "the only item is not the grave head");
@@ -159,8 +161,9 @@ public class GraveDeathGameTests {
             kill(helper, player);
 
             Grave grave = onlyGrave(helper, player);
-            helper.assertFalse(contains(grave, Items.IRON_HELMET), "cursed helmet went into the grave");
-            helper.assertTrue(contains(grave, Items.DIAMOND), "diamond missing from the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.IRON_HELMET), 0,
+                    "cursed helmets in the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 1, "diamonds in the grave");
             helper.assertTrue(player.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "cursed helmet stayed on the player");
             helper.assertValueEqual(itemsNear(helper, Items.IRON_HELMET, player.blockPosition(), 3.0), 0, "cursed helmets dropped");
         } finally {
@@ -173,13 +176,15 @@ public class GraveDeathGameTests {
     public void cursorAndCraftingGridItemsGoInTheGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Cursor");
         try {
-            player.containerMenu.setCarried(new ItemStack(Items.GOLD_INGOT));
-            player.inventoryMenu.getSlot(InventoryMenu.CRAFT_SLOT_START).set(new ItemStack(Items.STICK));
+            player.containerMenu.setCarried(new ItemStack(Items.GOLD_INGOT, 3));
+            player.inventoryMenu.getSlot(InventoryMenu.CRAFT_SLOT_START).set(new ItemStack(Items.STICK, 2));
             kill(helper, player);
 
             Grave grave = onlyGrave(helper, player);
-            helper.assertTrue(contains(grave, Items.GOLD_INGOT), "cursor item missing from the grave");
-            helper.assertTrue(contains(grave, Items.STICK), "crafting grid item missing from the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.GOLD_INGOT), 3,
+                    "cursor gold ingots in the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.STICK), 2,
+                    "crafting grid sticks in the grave");
             helper.assertTrue(player.containerMenu.getCarried().isEmpty(), "cursor still holds an item");
             assertNoItems(helper, player.inventoryMenu, InventoryMenu.CRAFT_SLOT_START, InventoryMenu.CRAFT_SLOT_END);
             BlockPos at = player.blockPosition();
@@ -223,13 +228,15 @@ public class GraveDeathGameTests {
             player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new CraftingMenu(id, inventory, access), Component.empty()));
             AbstractContainerMenu menu = player.containerMenu;
             helper.assertTrue(menu instanceof CraftingMenu, "crafting table menu did not open");
-            menu.setCarried(new ItemStack(Items.GOLD_INGOT));
-            menu.getSlot(1).set(new ItemStack(Items.FEATHER));
+            menu.setCarried(new ItemStack(Items.GOLD_INGOT, 3));
+            menu.getSlot(1).set(new ItemStack(Items.FEATHER, 4));
             kill(helper, player);
 
             Grave grave = onlyGrave(helper, player);
-            helper.assertTrue(contains(grave, Items.GOLD_INGOT), "cursor item missing from the grave");
-            helper.assertTrue(contains(grave, Items.FEATHER), "crafting table item missing from the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.GOLD_INGOT), 3,
+                    "cursor gold ingots in the grave");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.FEATHER), 4,
+                    "crafting table feathers in the grave");
             helper.assertTrue(player.containerMenu == player.inventoryMenu, "crafting table menu still open");
             helper.assertTrue(menu.getCarried().isEmpty(), "cursor still holds an item");
             assertNoItems(helper, menu, 1, 10);
@@ -249,8 +256,9 @@ public class GraveDeathGameTests {
             player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
             killWithEnderMode(helper, player, YoltConfig.EnderChestMode.KEEP);
 
-            helper.assertTrue(player.getEnderChestInventory().getItem(0).is(Items.EMERALD), "ender chest lost its emerald");
-            helper.assertFalse(contains(onlyGrave(helper, player), Items.EMERALD), "grave holds the ender chest emerald");
+            helper.assertValueEqual(player.getEnderChestInventory().countItem(Items.EMERALD), 1, "emeralds in the ender chest");
+            helper.assertValueEqual(GraveAsserts.count(onlyGrave(helper, player).items(), Items.EMERALD), 0,
+                    "emeralds in the grave");
         } finally {
             cleanUp(helper, player);
         }
@@ -261,10 +269,11 @@ public class GraveDeathGameTests {
     public void enderChestGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "EnderGrave");
         try {
-            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
+            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD, 5));
             killWithEnderMode(helper, player, YoltConfig.EnderChestMode.GRAVE);
 
-            helper.assertTrue(contains(onlyGrave(helper, player), Items.EMERALD), "grave lacks the ender chest emerald");
+            helper.assertValueEqual(GraveAsserts.count(onlyGrave(helper, player).items(), Items.EMERALD), 5,
+                    "emeralds in the grave");
             helper.assertTrue(player.getEnderChestInventory().isEmpty(), "ender chest still holds items");
         } finally {
             cleanUp(helper, player);
@@ -280,7 +289,8 @@ public class GraveDeathGameTests {
             killWithEnderMode(helper, player, YoltConfig.EnderChestMode.WIPE);
 
             helper.assertTrue(player.getEnderChestInventory().isEmpty(), "ender chest not wiped");
-            helper.assertFalse(contains(onlyGrave(helper, player), Items.EMERALD), "grave holds the wiped emerald");
+            helper.assertValueEqual(GraveAsserts.count(onlyGrave(helper, player).items(), Items.EMERALD), 0,
+                    "wiped emeralds in the grave");
             // Wiped means gone, not dropped
             helper.assertValueEqual(itemsNear(helper, Items.EMERALD, player.blockPosition(), 3.0), 0, "emeralds dropped");
         } finally {
@@ -303,7 +313,11 @@ public class GraveDeathGameTests {
                 graves.enabled = before;
             }
 
-            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, player.blockPosition(), 2.0), 1, "diamonds dropped");
+            // Every item entity in the test area, so a second drop beside vanilla's shows wherever it lands
+            List<ItemEntity> drops = helper.getEntities(EntityTypes.ITEM);
+            helper.assertValueEqual(drops.size(), 1, "item entities in the test area");
+            helper.assertTrue(ItemStack.matches(drops.get(0).getItem(), new ItemStack(Items.DIAMOND)),
+                    "dropped item: " + drops.get(0).getItem());
             helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "grave made with graves off");
         } finally {
             cleanUp(helper, player);
@@ -408,7 +422,7 @@ public class GraveDeathGameTests {
             List<ItemStack> items = grave.items();
             helper.assertValueEqual(items.size(), 3, "grave item count");
             helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "grave head is not the first item");
-            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            helper.assertTrue(ItemStack.matches(items.get(1), new ItemStack(Items.DIAMOND)), "second item: " + items.get(1));
             helper.assertTrue(items.get(2).is(Items.IRON_SWORD), "third item is not the sword");
             assertHeadBlock(helper, grave);
         } finally {
@@ -466,10 +480,6 @@ public class GraveDeathGameTests {
         List<Grave> graves = gravesOf(helper, player.getUUID());
         helper.assertValueEqual(graves.size(), 1, "graves for the player");
         return graves.get(0);
-    }
-
-    private static boolean contains(Grave grave, Item item) {
-        return grave.items().stream().anyMatch(stack -> stack.is(item));
     }
 
     private static void assertNoItems(GameTestHelper helper, AbstractContainerMenu menu, int fromSlot, int toSlot) {
