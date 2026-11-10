@@ -59,6 +59,7 @@ public final class GraveBlocks {
     public static void restoreChunk(ServerLevel level, LevelChunk chunk) {
         GraveStore store = GraveStore.get(level.getServer());
         for (Grave grave : store.inChunk(level.dimension(), chunk.getPos())) {
+            GraveRecheck.tryAgain(grave);
             if (!isOwnHead(level, grave.pos(), grave)) {
                 restore(level, store, grave, false);
             }
@@ -67,7 +68,7 @@ public final class GraveBlocks {
 
     /**
      * Puts back one grave's missing head, the way restoreChunk does. From the re-check, only loaded chunks are read, and
-     * a failure is logged once per grave and kind, since the re-check tries again every few seconds.
+     * a failure is logged once per grave and kind, and leaves the grave to its chunk's next load.
      */
     static void restore(ServerLevel level, GraveStore store, Grave grave, boolean recheck) {
         // Setting the head over a chest would spill it, over a shulker box would delete what it holds

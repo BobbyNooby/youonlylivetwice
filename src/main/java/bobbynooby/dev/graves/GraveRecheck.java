@@ -20,6 +20,9 @@ public final class GraveRecheck {
     private static final int TICKS_PER_SECOND = 20;
     // Server thread only, like the rest
     private static long ticksLeft;
+    // Graves whose restore failed since their chunk last loaded. Searching again would fail the same way until
+    // something round them changes, so a pass leaves them to that chunk's next load.
+    private static final Set<UUID> FAILING = new HashSet<>();
     // Each grave's failures logged since the server started, one line per kind
     private static final Set<Logged> LOGGED = new HashSet<>();
 
@@ -39,6 +42,7 @@ public final class GraveRecheck {
         ServerTickEvents.END_SERVER_TICK.register(GraveRecheck::tick);
         // Static, so it would outlive the server in a JVM that starts another one
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            FAILING.clear();
             LOGGED.clear();
             ticksLeft = 0;
         });
@@ -73,17 +77,24 @@ public final class GraveRecheck {
     /**
      * The pass's check of one grave in its own level: when its own head is gone, the head is put back, or the grave
      * moves if its spot is taken or the End builds over it. Never loads a chunk: a grave with one round it that isn't
-     * loaded waits for a later pass, or for its chunk's next load.
+     * loaded waits for a later pass, or for its chunk's next load. So does one whose restore failed already.
      */
     public static void recheck(ServerLevel level, GraveStore store, Grave grave) {
         BlockPos pos = grave.pos();
-        if (GravePlacement.loadedAround(level, pos.getX(), pos.getZ()) && !GraveBlocks.isOwnHead(level, pos, grave)) {
+        if (!FAILING.contains(grave.id()) && GravePlacement.loadedAround(level, pos.getX(), pos.getZ())
+                && !GraveBlocks.isOwnHead(level, pos, grave)) {
             GraveBlocks.restore(level, store, grave, true);
         }
     }
 
-    // True the first time this grave failed this way since the server started
+    // Leaves the grave to its chunk's next load. True the first time it failed this way since the server started.
     static boolean failed(Grave grave, Failure failure) {
+        FAILING.add(grave.id());
         return LOGGED.add(new Logged(grave.id(), failure));
+    }
+
+    // Its chunk loaded, so the passes try it again
+    static void tryAgain(Grave grave) {
+        FAILING.remove(grave.id());
     }
 }
