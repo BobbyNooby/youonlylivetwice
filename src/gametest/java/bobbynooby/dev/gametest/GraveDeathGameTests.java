@@ -11,6 +11,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,6 +37,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
@@ -45,6 +47,9 @@ import java.util.UUID;
 
 // Each kill runs inside one tick, so settings and game rules are restored before any other test runs
 public class GraveDeathGameTests {
+    // Holds graves.tellLocation across ticks, until a kick
+    private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:grave_notice";
+
     @GameTest
     public void deathCreatesGraveWithItemsAndHead(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Grave");
@@ -457,6 +462,93 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // Never says nothing even for a grave far below the death, and always tells even for one where the player died: in
+    // chat after the respawn while the lockout is off, and in the kick while it is on. The setting is held until the
+    // kick, so the test runs apart.
+    @GameTest(environment = GRAVE_NOTICE, skyAccess = true, maxTicks = 30)
+    public void tellLocationNeverAndAlways(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        YoltConfig config = Settings.get();
+        YoltConfig.TellLocation modeBefore = config.graves.tellLocation;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        ServerPlayer quiet = TestPlayers.join(helper, "Quiet", GameType.SURVIVAL, new BlockPos(3, 20, 3));
+        ServerPlayer told = TestPlayers.join(helper, "Told", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer kicked = TestPlayers.join(helper, "KickTold", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        List<UUID> owners = List.of(quiet.getUUID(), told.getUUID(), kicked.getUUID());
+        Runnable cleanUp = () -> {
+            config.graves.tellLocation = modeBefore;
+            config.deathLockout.enabled = lockoutBefore;
+            for (UUID owner : owners) {
+                ServerPlayer online = server.getPlayerList().getPlayer(owner);
+                if (online != null) {
+                    TestPlayers.leave(online);
+                }
+                removeGraves(helper, owner);
+            }
+        };
+        boolean waiting = false;
+        try {
+            config.deathLockout.enabled = false;
+            config.graves.tellLocation = YoltConfig.TellLocation.NEVER;
+            ServerPlayer quietBack = dieAndRespawn(helper, quiet);
+            Grave quietGrave = onlyGrave(helper, quiet);
+            helper.assertValueEqual(quietGrave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "quiet player's grave, 20 below the death");
+            helper.assertValueEqual(graveLines(quietBack), List.of(), "chat with never");
+
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            ServerPlayer toldBack = dieAndRespawn(helper, told);
+            Grave toldGrave = onlyGrave(helper, told);
+            helper.assertValueEqual(toldGrave.pos(), helper.absolutePos(new BlockPos(1, 0, 1)), "told player's grave, just below the death");
+            helper.assertValueEqual(graveLines(toldBack), List.of(graveLine(toldGrave)), "chat with always");
+
+            // On again, so this death kicks; always is held until the kick
+            config.deathLockout.enabled = lockoutBefore;
+            kill(helper, kicked);
+            Grave kickedGrave = onlyGrave(helper, kicked);
+            // A server running behind still runs queued tasks within 4 ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(kicked.getUUID()) == null, "the dead player was not kicked");
+                    String reason = LockoutGameTests.disconnectReason(kicked);
+                    helper.assertTrue(reason.startsWith("You died: ") && reason.endsWith("\n" + graveLine(kickedGrave)),
+                            "kick reason: " + reason);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Killed, then back through the death screen's respawn at a point set beside the test, so no random spot is searched
+    private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
+        ServerLevel level = helper.getLevel();
+        player.setRespawnPosition(new ServerPlayer.RespawnConfig(
+                LevelData.RespawnData.of(level.dimension(), helper.absolutePos(new BlockPos(7, 1, 7)), 0.0F, 0.0F), true), false);
+        kill(helper, player);
+        return level.getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+    }
+
+    // The grave lines a player was sent in chat, oldest first
+    private static List<String> graveLines(ServerPlayer player) {
+        return TestPlayers.sentPackets(player).stream()
+                .filter(packet -> packet instanceof ClientboundSystemChatPacket)
+                .map(packet -> ((ClientboundSystemChatPacket) packet).content().getString())
+                .filter(text -> text.startsWith("Your grave is at "))
+                .toList();
+    }
+
+    private static String graveLine(Grave grave) {
+        BlockPos pos = grave.pos();
+        return "Your grave is at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " in the Overworld.";
+    }
+
     // Counts the item across the item entities near an absolute position. Absolute, since vanilla's relativePos turns
     // an unrotated test's position half round.
     static int itemsNear(GameTestHelper helper, Item item, BlockPos absolutePos, double distance) {
@@ -516,8 +608,12 @@ public class GraveDeathGameTests {
     // Leaving first means the queued death kick finds nobody; the graves go too, so no test sees another's
     private static void cleanUp(GameTestHelper helper, ServerPlayer player) {
         TestPlayers.leave(player);
+        removeGraves(helper, player.getUUID());
+    }
+
+    private static void removeGraves(GameTestHelper helper, UUID owner) {
         GraveStore store = GraveStore.get(helper.getLevel().getServer());
-        for (Grave grave : gravesOf(helper, player.getUUID())) {
+        for (Grave grave : gravesOf(helper, owner)) {
             store.remove(grave.id());
             helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }

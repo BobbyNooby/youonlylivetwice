@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -607,6 +608,64 @@ public class VoidGraveGameTests {
             }
             helper.succeed();
         });
+    }
+
+    // A void death's grave goes to land far from where the player died, so the login refusal says where it is. A grave
+    // where its owner died says nothing, since the default only tells when the grave went far.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK, skyAccess = true)
+    public void refusalNamesGraveWhenMovedFar(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        BlockPos shaft = helper.absolutePos(new BlockPos(3, 0, 3));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        List<UUID> owners = new ArrayList<>();
+        try {
+            helper.assertValueEqual(Settings.get().graves.tellLocation, YoltConfig.TellLocation.WHEN_MOVED, "tellLocation");
+            helper.assertValueEqual(Settings.get().graves.tellLocationDistance, 16, "tellLocationDistance");
+            dig(level, shaft, before);
+            NameAndId far = savedAt(helper, "FarGrave", belowWorld(level, shaft), owners);
+            NameAndId near = savedAt(helper, "NearGrave", helper.absolutePos(new BlockPos(1, 0, 1)), owners);
+            helper.assertValueEqual(Kills.kill(server, far), Kills.Result.KILLED_OFFLINE, "far kill result");
+            helper.assertValueEqual(Kills.kill(server, near), Kills.Result.KILLED_OFFLINE, "near kill result");
+
+            BlockPos farGrave = onlyGrave(helper, level, far.id()).pos();
+            helper.assertFalse(sameColumn(farGrave, shaft), "grave in the shaft at " + farGrave);
+            // The wait in the middle line is CooldownTest's
+            String farText = loginRefusalText(server, far);
+            String[] farLines = farText.split("\n", -1);
+            helper.assertTrue(farLines.length == 3 && farLines[0].equals("You died: Killed while away")
+                            && farLines[1].startsWith("Try again in ") && farLines[2].equals("Your grave is at " + farGrave.getX() + ", "
+                            + farGrave.getY() + ", " + farGrave.getZ() + " in the Overworld."),
+                    "far grave's login refusal: " + farText);
+            BlockPos nearGrave = onlyGrave(helper, level, near.id()).pos();
+            helper.assertValueEqual(nearGrave, helper.absolutePos(new BlockPos(1, 0, 1)), "near grave's spot");
+            String nearText = loginRefusalText(server, near);
+            helper.assertTrue(nearText.startsWith("You died: Killed while away\nTry again in ") && !nearText.contains("Your grave"),
+                    "near grave's login refusal: " + nearText);
+        } finally {
+            owners.forEach(owner -> removeGraves(level, owner));
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // A player saved standing at pos and logged out, ready for an offline kill there
+    private static NameAndId savedAt(GameTestHelper helper, String name, BlockPos pos, List<UUID> owners) {
+        ServerPlayer player = TestPlayers.join(helper, name, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        owners.add(player.getUUID());
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            player.setOnGround(false);
+            player.snapTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        return player.nameAndId();
+    }
+
+    private static String loginRefusalText(MinecraftServer server, NameAndId who) {
+        Component refusal = LockoutGameTests.loginRefusal(server, who);
+        return refusal == null ? "" : refusal.getString();
     }
 
     // Notes each block before it goes, so putBack can set back exactly what was there

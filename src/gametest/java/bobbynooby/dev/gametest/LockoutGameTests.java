@@ -267,7 +267,7 @@ public class LockoutGameTests {
         }
     }
 
-    private static String disconnectReason(ServerPlayer player) {
+    static String disconnectReason(ServerPlayer player) {
         for (Packet<?> packet : TestPlayers.sentPackets(player)) {
             if (packet instanceof ClientboundDisconnectPacket disconnect) {
                 return disconnect.reason().getString();

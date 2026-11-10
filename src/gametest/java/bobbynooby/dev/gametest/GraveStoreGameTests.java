@@ -7,6 +7,7 @@ import bobbynooby.dev.graves.GraveStore;
 import com.mojang.serialization.DataResult;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -63,6 +64,13 @@ public class GraveStoreGameTests {
         helper.assertValueEqual(after.items().size(), 2, "item count");
         helper.assertTrue(after.items().get(0).is(Items.DIAMOND) && after.items().get(0).getCount() == 5, "diamonds changed");
         helper.assertTrue(after.items().get(1).is(Items.APPLE) && after.items().get(1).getCount() == 2, "apples changed");
+        helper.assertTrue(after.deathPos() == null, "a grave with no death spot came back with one: " + after.deathPos());
+
+        // The death spot goes into the file too, so a login after a restart can still tell how far the grave went
+        GlobalPos died = GlobalPos.of(Level.NETHER, new BlockPos(7, -70, -9));
+        Grave withDeath = new Grave(before.id(), before.owner(), before.ownerName(), before.profile(), before.dimension(), before.pos(),
+                before.items(), before.createdAt(), died);
+        helper.assertValueEqual(roundTrip(helper, withDeath).deathPos(), died, "death spot");
         helper.succeed();
     }
 
