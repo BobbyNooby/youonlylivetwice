@@ -49,6 +49,7 @@ import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.PistonType;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -139,60 +140,53 @@ public class GraveProtectionGameTests {
         }
     }
 
-    // A stone channel, so the water's only way out is into the head
     @GameTest(maxTicks = 60)
     public void waterFlowLeavesGrave(GameTestHelper helper) {
-        for (BlockPos stone : List.of(new BlockPos(2, 0, 3), new BlockPos(3, 0, 3), new BlockPos(1, 1, 3), new BlockPos(2, 1, 2),
-                new BlockPos(2, 1, 4), new BlockPos(3, 1, 2), new BlockPos(3, 1, 4), new BlockPos(4, 1, 3))) {
-            helper.setBlock(stone, Blocks.STONE);
-        }
-        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
-        boolean waiting = false;
-        try {
-            helper.setBlock(new BlockPos(2, 1, 3), Blocks.WATER);
-            helper.runAfterDelay(40, () -> {
-                try {
-                    assertGraveIntact(helper, grave);
-                } finally {
-                    removeGraves(helper, List.of(grave));
-                }
-                helper.succeed();
-            });
-            waiting = true;
-        } finally {
-            if (!waiting) {
-                removeGraves(helper, List.of(grave));
-            }
-        }
+        fluidFlowLeavesGrave(helper, Blocks.WATER, 40);
     }
 
-    // The same channel as the water's. Lava in the overworld spreads every 30 ticks, so this waits for two spreads.
+    // Lava in the overworld spreads every 30 ticks, so this waits for two spreads
     @GameTest(maxTicks = 100)
     public void lavaFlowLeavesGrave(GameTestHelper helper) {
-        for (BlockPos stone : List.of(new BlockPos(2, 0, 3), new BlockPos(3, 0, 3), new BlockPos(1, 1, 3), new BlockPos(2, 1, 2),
-                new BlockPos(2, 1, 4), new BlockPos(3, 1, 2), new BlockPos(3, 1, 4), new BlockPos(4, 1, 3))) {
+        fluidFlowLeavesGrave(helper, Blocks.LAVA, 70);
+    }
+
+    // A source with the grave on one side and an open cell on the other, walled in with stone on a stone floor. With no
+    // drop anywhere the fluid spreads into every cell it may, so reaching the open cell shows it did flow while the
+    // grave stayed.
+    private static void fluidFlowLeavesGrave(GameTestHelper helper, Block fluid, int waitTicks) {
+        BlockPos source = new BlockPos(2, 1, 3);
+        BlockPos open = new BlockPos(2, 1, 4);
+        for (BlockPos stone : List.of(new BlockPos(2, 0, 3), new BlockPos(3, 0, 3), new BlockPos(2, 0, 4),
+                new BlockPos(1, 1, 3), new BlockPos(2, 1, 2), new BlockPos(3, 1, 2), new BlockPos(3, 1, 4), new BlockPos(4, 1, 3),
+                new BlockPos(1, 1, 4), new BlockPos(2, 1, 5))) {
             helper.setBlock(stone, Blocks.STONE);
         }
         Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
-        BlockPos source = new BlockPos(2, 1, 3);
+        Fluid flows = fluid.defaultBlockState().getFluidState().getType();
+        // Lava left in the open would set fire to what is round it
+        Runnable cleanUp = () -> {
+            helper.setBlock(source, Blocks.AIR);
+            helper.setBlock(open, Blocks.AIR);
+            removeGraves(helper, List.of(grave));
+        };
         boolean waiting = false;
         try {
-            helper.setBlock(source, Blocks.LAVA);
-            helper.runAfterDelay(70, () -> {
+            helper.setBlock(source, fluid);
+            helper.runAfterDelay(waitTicks, () -> {
                 try {
+                    helper.assertTrue(helper.getLevel().getFluidState(helper.absolutePos(open)).getType().isSame(flows),
+                            fluid.getName().getString() + " never flowed into the open cell beside its source");
                     assertGraveIntact(helper, grave);
                 } finally {
-                    // Lava left in the open would set fire to what is round it
-                    helper.setBlock(source, Blocks.AIR);
-                    removeGraves(helper, List.of(grave));
+                    cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                helper.setBlock(source, Blocks.AIR);
-                removeGraves(helper, List.of(grave));
+                cleanUp.run();
             }
         }
     }
