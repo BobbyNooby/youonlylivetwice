@@ -3,6 +3,7 @@ package bobbynooby.dev.graves;
 import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
@@ -19,6 +20,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -37,13 +39,15 @@ public final class GravePlacement {
     // drop. Grass and ferns only now and then drop a seed, so they stay usable.
     private static final Set<Block> DROPS_ITEMS = Set.of(Blocks.RESIN_CLUMP, Blocks.LEAF_LITTER, Blocks.CRIMSON_ROOTS,
             Blocks.WARPED_ROOTS, Blocks.DEAD_BUSH, Blocks.RED_SHRUB);
+    // Every column the void search reaches, nearest first. The sort keeps the scan order for ties, so the pick never varies.
+    private static final List<BlockPos> NEAREST_FIRST = nearestFirst(VOID_SEARCH_RADIUS);
 
     private GravePlacement() {
     }
 
     /** Where a new grave goes. Always inside the world border, and below a dimension's roof unless the death was above it. */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {
-        BlockPos start = start(level, deathPos);
+        BlockPos start = start(level, deathPos, store);
         return search(level, start, store)
                 .or(() -> wideSearch(level, start, store))
                 .orElseGet(() -> lastResort(level, start, store));
@@ -51,7 +55,7 @@ public final class GravePlacement {
 
     /** The spot find would pick near pos, or nothing when only its wider search or last resort is left. */
     static Optional<BlockPos> nearestSafe(ServerLevel level, BlockPos pos, GraveStore store) {
-        return search(level, start(level, pos), store);
+        return search(level, start(level, pos, store), store);
     }
 
     /**
@@ -106,13 +110,23 @@ public final class GravePlacement {
                 return false;
             }
             // A grave's head goes when the grave does, so it is no floor
-            if (Shapes.joinIsNotEmpty(state.getCollisionShape(level, below), ITEM_COLUMN, BooleanOp.AND)
-                    && !isGrave(level, below, state, store)) {
+            if (holdsItems(level, below, state) && !isGrave(level, below, state, store)) {
                 return true;
             }
         }
         // Nothing to land on, so the items would fall out of the world
         return false;
+    }
+
+    // A falling item comes to rest on this block
+    private static boolean holdsItems(ServerLevel level, BlockPos pos, BlockState state) {
+        return Shapes.joinIsNotEmpty(state.getCollisionShape(level, pos), ITEM_COLUMN, BooleanOp.AND);
+    }
+
+    // Nothing there to bump into, and no fluid
+    private static boolean open(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        return state.getFluidState().isEmpty() && state.getCollisionShape(level, pos).isEmpty();
     }
 
     // Lava and fire burn an item, a cactus breaks it, and an end portal takes it to another dimension
@@ -121,11 +135,31 @@ public final class GravePlacement {
                 || state.is(Blocks.CACTUS) || state.is(Blocks.END_PORTAL);
     }
 
-    // Clamped into the world and inside the border, and moved off a column with nothing below to stand on
-    private static BlockPos start(ServerLevel level, BlockPos pos) {
+    // Clamped into the world and inside the border, and moved off a column with nothing below to stand on: to the nearest
+    // land, else to a fixed spot
+    private static BlockPos start(ServerLevel level, BlockPos pos, GraveStore store) {
+        BlockPos start = clamped(level, pos);
+        return isVoidColumn(level, start) ? nearestLand(level, start, store).orElseGet(() -> fallback(level, start)) : start;
+    }
+
+    private static BlockPos clamped(ServerLevel level, BlockPos pos) {
         int y = Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1);
-        BlockPos start = insideBorder(level, pos.atY(y));
-        return isVoidColumn(level, start) ? reachableSpotNear(level, start) : start;
+        return insideBorder(level, pos.atY(y));
+    }
+
+    // Down from an open spot to the first one over a block that holds items or over a fluid
+    private static Optional<BlockPos> landingBelow(ServerLevel level, BlockPos from) {
+        BlockPos.MutableBlockPos at = from.mutable();
+        BlockPos.MutableBlockPos below = new BlockPos.MutableBlockPos();
+        while (at.getY() > level.getMinY()) {
+            below.setWithOffset(at, Direction.DOWN);
+            BlockState state = level.getBlockState(below);
+            if (!state.getFluidState().isEmpty() || holdsItems(level, below, state)) {
+                return Optional.of(at.immutable());
+            }
+            at.move(Direction.DOWN);
+        }
+        return Optional.empty();
     }
 
     // The highest block a grave may take. With a roof, such as the Nether's bedrock, that is under the roof, where the
@@ -269,25 +303,85 @@ public final class GravePlacement {
         return true;
     }
 
-    private static BlockPos reachableSpotNear(ServerLevel level, BlockPos from) {
-        int minY = level.getMinY();
+    // The nearest column out to 16 blocks with ground to stand on that items would last on, its own column included.
+    // Only loaded chunks are read, since reading one that isn't would load it on the server thread: a column there
+    // counts as unknown.
+    private static Optional<BlockPos> nearestLand(ServerLevel level, BlockPos from, GraveStore store) {
         WorldBorder border = level.getWorldBorder();
-        for (int r = 1; r <= VOID_SEARCH_RADIUS; r++) {
-            for (BlockPos column : ring(from, r)) {
-                int x = column.getX();
-                int z = column.getZ();
-                int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
-                if (top > minY && border.isWithinBounds(column)) {
-                    return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
+        int cap = topY(level, from.getY());
+        for (BlockPos offset : NEAREST_FIRST) {
+            int x = from.getX() + offset.getX();
+            int z = from.getZ() + offset.getZ();
+            if (!border.isWithinBounds(x, z) || !loadedAround(level, x, z)) {
+                continue;
+            }
+            Optional<BlockPos> ground = groundIn(level, x, z, cap).filter(pos -> safeForItems(level, pos, store));
+            if (ground.isPresent()) {
+                return ground;
+            }
+        }
+        return Optional.empty();
+    }
+
+    // The column's chunk and every chunk the search from it reads: its rings and the blocks beside them
+    private static boolean loadedAround(ServerLevel level, int x, int z) {
+        int reach = RING_RADIUS + 1;
+        for (int cx = SectionPos.blockToSectionCoord(x - reach); cx <= SectionPos.blockToSectionCoord(x + reach); cx++) {
+            for (int cz = SectionPos.blockToSectionCoord(z - reach); cz <= SectionPos.blockToSectionCoord(z + reach); cz++) {
+                if (level.getChunkSource().getChunkNow(cx, cz) == null) {
+                    return false;
                 }
             }
         }
+        return true;
+    }
 
-        // Nobody has been near enough to load chunks here, so load the spawn column before reading it
-        BlockPos spawn = insideBorder(level, level.dimension() == Level.OVERWORLD ? level.getRespawnData().pos() : BlockPos.ZERO);
-        level.getChunk(spawn);
-        int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, spawn.getX(), spawn.getZ()), minY + 1);
-        return new BlockPos(spawn.getX(), Math.min(top, level.getMaxY() - 1), spawn.getZ());
+    // The highest spot in the column, at or under cap, where someone could stand: open, over a block that holds items or
+    // over a fluid. The heightmap skips the open sky, but under a roof it is the roof's own top, so the scan starts no
+    // higher than cap.
+    private static Optional<BlockPos> groundIn(ServerLevel level, int x, int z, int cap) {
+        int top = Math.min(level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z), cap);
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(x, top, z);
+        // Up past a block the heightmap leaves out though it can be stood on, such as deep snow or a head
+        while (pos.getY() < cap && !open(level, pos)) {
+            pos.move(Direction.UP);
+        }
+        if (!open(level, pos)) {
+            // At the cap and still in something, which is a roof: down out of it
+            pos.setY(top);
+            while (pos.getY() > level.getMinY() && !open(level, pos)) {
+                pos.move(Direction.DOWN);
+            }
+        }
+        return open(level, pos) ? landingBelow(level, pos) : Optional.empty();
+    }
+
+    // No ground near, so one fixed column, whose chunk may be loaded for it: the world spawn in the overworld, else 0, 0
+    private static BlockPos fallback(ServerLevel level, BlockPos from) {
+        BlockPos column = insideBorder(level, fallbackColumn(level).atY(from.getY()));
+        int x = column.getX();
+        int z = column.getZ();
+        level.getChunk(column);
+        return groundIn(level, x, z, topY(level, from.getY())).orElseGet(() -> {
+            // Not even room under the roof, so the column's top as before, roof or not
+            int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z), level.getMinY() + 1);
+            return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
+        });
+    }
+
+    private static BlockPos fallbackColumn(ServerLevel level) {
+        return level.dimension() == Level.OVERWORLD ? level.getRespawnData().pos() : BlockPos.ZERO;
+    }
+
+    private static List<BlockPos> nearestFirst(int radius) {
+        List<BlockPos> offsets = new ArrayList<>();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                offsets.add(new BlockPos(dx, 0, dz));
+            }
+        }
+        offsets.sort(Comparator.comparingInt((BlockPos offset) -> offset.getX() * offset.getX() + offset.getZ() * offset.getZ()));
+        return List.copyOf(offsets);
     }
 
     // Every block exactly r out from the centre on its layer, always in the same order
