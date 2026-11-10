@@ -32,6 +32,8 @@
     "LoginSkinMixin",
     "MapPlayersMixin",
     "MobAccessor",
+    "NameCacheAccessor",
+    "NameCacheEntryAccessor",
     "NearestAttackableTargetGoalAccessor",
     "NetherScaleMixin",
     "NoBedRespawnAnchorMixin",

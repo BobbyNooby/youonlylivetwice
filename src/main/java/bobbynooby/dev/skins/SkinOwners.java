@@ -3,18 +3,24 @@ package bobbynooby.dev.skins;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.mixin.NameCacheAccessor;
+import bobbynooby.dev.mixin.NameCacheEntryAccessor;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.CachedUserNameToIdResolver;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.UserNameToIdResolver;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,9 +56,10 @@ public final class SkinOwners {
 
     /**
      * True when a player other than this one has joined as the account: under its name or an id of it in YOLT's record
-     * of joins, or with a save in players/data. The ids tried are the account's own, for online mode, and the one an
-     * offline-mode server gives the name as asked and as Mojang spells it. Only a join writes a save, so a name vanilla
-     * merely looked up never counts, and every player from before the record is covered.
+     * of joins, or with a save in players/data. The ids tried are the account's own, for online mode, the one an
+     * offline-mode server gives the name as asked and as Mojang spells it, and the one vanilla's name cache holds for
+     * the name in any case. Only a join writes a save, so a name vanilla merely looked up never counts, and every player
+     * from before the record is covered.
      */
     static boolean owned(MinecraftServer server, String name, @Nullable UUID accountId, String asked, NameAndId by) {
         if (name.equalsIgnoreCase(by.name())) {
@@ -68,6 +75,9 @@ public final class SkinOwners {
         }
         ids.add(UUIDUtil.createOfflinePlayerUUID(asked));
         ids.add(UUIDUtil.createOfflinePlayerUUID(name));
+        UserNameToIdResolver names = server.services().nameToIdCache();
+        cachedId(names, asked).ifPresent(ids::add);
+        cachedId(names, name).ifPresent(ids::add);
         Path saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
         for (UUID id : ids) {
             if (!id.equals(by.id()) && (store.joined(id) || Files.exists(saves.resolve(id + ".dat")))) {
@@ -75,6 +85,18 @@ public final class SkinOwners {
             }
         }
         return false;
+    }
+
+    /**
+     * The id vanilla's name cache holds for the name, in any case, read straight from the cache: its own lookup asks
+     * Mojang on a miss, which would hold up the server thread. Empty for a cache of another kind.
+     */
+    public static Optional<UUID> cachedId(UserNameToIdResolver names, String name) {
+        if (!(names instanceof CachedUserNameToIdResolver cache)) {
+            return Optional.empty();
+        }
+        Object entry = ((NameCacheAccessor) cache).yoltProfilesByName().get(name.toLowerCase(Locale.ROOT));
+        return entry == null ? Optional.empty() : Optional.of(((NameCacheEntryAccessor) entry).yoltNameAndId().id());
     }
 
     /**
