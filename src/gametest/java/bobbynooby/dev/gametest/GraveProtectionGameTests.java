@@ -203,7 +203,7 @@ public class GraveProtectionGameTests {
             helper.assertTrue(level.getBlockState(spot).is(block), "the " + name + " was replaced");
             helper.assertTrue(level.getBlockEntity(spot) instanceof Container container && container.countItem(Items.DIAMOND) == 3,
                     "the " + name + " does not hold exactly 3 diamonds");
-            helper.assertItemEntityNotPresent(Items.DIAMOND, helper.relativePos(spot), 3.0);
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, spot, 3.0), 0, "diamonds spilled from the " + name);
             Grave moved = store.byId(grave.id()).orElse(null);
             helper.assertTrue(moved != null, "grave record is gone");
             helper.assertFalse(moved.pos().equals(spot), "grave record still points at the taken spot");
@@ -277,7 +277,7 @@ public class GraveProtectionGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "OffGrave", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
@@ -295,9 +295,9 @@ public class GraveProtectionGameTests {
             helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
             helper.assertTrue(items.get(2).is(Items.IRON_HELMET), "third item is not the iron helmet");
             assertGraveIntact(helper, grave);
-            helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped as well");
+            helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped as well");
             // XP still drops as orbs, as in an online death
-            helper.assertEntityPresent(EntityTypes.EXPERIENCE_ORB, last, 2.0);
+            helper.assertFalse(near(helper, EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "no XP dropped");
 
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
             helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
@@ -316,7 +316,7 @@ public class GraveProtectionGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "Undo", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             Inventory inventory = player.getInventory();
             for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
@@ -360,7 +360,7 @@ public class GraveProtectionGameTests {
         helper.assertValueEqual(onDisk.size(), 2, "graves on disk when the save swap failed");
         helper.assertTrue(left.isEmpty(), "graves left after the failed kill: " + left.size());
         assertNoHeadsNear(helper, last);
-        helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
+        helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
         CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
         helper.assertValueEqual(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).size(), Inventory.INVENTORY_SIZE,
                 "stacks left in the saved inventory");
@@ -375,7 +375,7 @@ public class GraveProtectionGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "OffKeep", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.giveExperienceLevels(30);
@@ -401,8 +401,8 @@ public class GraveProtectionGameTests {
             Grave grave = onlyGrave(helper, who.id());
             helper.assertValueEqual(grave.items().size(), 1, "grave item count");
             helper.assertTrue(GraveItems.isGraveHead(grave.items().get(0)), "the only item is not the grave head");
-            helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
-            helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
+            helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
+            helper.assertTrue(near(helper, EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
         } finally {
             removeGraves(helper, gravesOf(helper, who.id()));
         }
@@ -414,7 +414,7 @@ public class GraveProtectionGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "OffVanish", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             ItemStack helmet = new ItemStack(Items.IRON_HELMET);
             helmet.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
@@ -430,7 +430,7 @@ public class GraveProtectionGameTests {
             Grave grave = onlyGrave(helper, who.id());
             helper.assertFalse(contains(grave.items(), Items.IRON_HELMET), "cursed helmet went into the grave");
             helper.assertTrue(contains(grave.items(), Items.DIAMOND), "diamond missing from the grave");
-            helper.assertItemEntityNotPresent(Items.IRON_HELMET, last, 3.0);
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.IRON_HELMET, last, 3.0), 0, "cursed helmets dropped");
             CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
             helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).isEmpty(), "save still has items");
         } finally {
@@ -445,7 +445,7 @@ public class GraveProtectionGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = TestPlayers.join(helper, "OffSpec", GameType.SPECTATOR, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
-        BlockPos last = helper.relativePos(player.blockPosition());
+        BlockPos last = player.blockPosition();
         try {
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
@@ -472,8 +472,8 @@ public class GraveProtectionGameTests {
             helper.assertTrue(contains(OfflinePlayerData.takeEnderChest(saved, server.registryAccess(), who.name()), Items.EMERALD),
                     "save lost the ender chest emerald");
             helper.assertTrue(gravesOf(helper, who.id()).isEmpty(), "a spectator got a grave");
-            helper.assertTrue(helper.getEntities(EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
-            helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
+            helper.assertTrue(near(helper, EntityTypes.ITEM, last, 3.0).isEmpty(), "items were dropped");
+            helper.assertTrue(near(helper, EntityTypes.EXPERIENCE_ORB, last, 3.0).isEmpty(), "XP was dropped");
             helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "offline kill did not start the lockout");
         } finally {
             removeGraves(helper, gravesOf(helper, who.id()));
@@ -502,8 +502,7 @@ public class GraveProtectionGameTests {
     }
 
     // Graves for one death sit on or near the death spot
-    private static void assertNoHeadsNear(GameTestHelper helper, BlockPos relativePos) {
-        BlockPos center = helper.absolutePos(relativePos);
+    private static void assertNoHeadsNear(GameTestHelper helper, BlockPos center) {
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-4, -1, -4), center.offset(4, 10, 4))) {
             helper.assertFalse(helper.getLevel().getBlockState(pos).is(Blocks.PLAYER_HEAD), "player head left at " + pos);
         }

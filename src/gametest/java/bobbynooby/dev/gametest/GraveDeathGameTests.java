@@ -162,7 +162,7 @@ public class GraveDeathGameTests {
             helper.assertFalse(contains(grave, Items.IRON_HELMET), "cursed helmet went into the grave");
             helper.assertTrue(contains(grave, Items.DIAMOND), "diamond missing from the grave");
             helper.assertTrue(player.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "cursed helmet stayed on the player");
-            helper.assertItemEntityNotPresent(Items.IRON_HELMET, helper.relativePos(player.blockPosition()), 3.0);
+            helper.assertValueEqual(itemsNear(helper, Items.IRON_HELMET, player.blockPosition(), 3.0), 0, "cursed helmets dropped");
         } finally {
             cleanUp(helper, player);
         }
@@ -182,9 +182,9 @@ public class GraveDeathGameTests {
             helper.assertTrue(contains(grave, Items.STICK), "crafting grid item missing from the grave");
             helper.assertTrue(player.containerMenu.getCarried().isEmpty(), "cursor still holds an item");
             assertNoItems(helper, player.inventoryMenu, InventoryMenu.CRAFT_SLOT_START, InventoryMenu.CRAFT_SLOT_END);
-            BlockPos at = helper.relativePos(player.blockPosition());
-            helper.assertItemEntityNotPresent(Items.GOLD_INGOT, at, 3.0);
-            helper.assertItemEntityNotPresent(Items.STICK, at, 3.0);
+            BlockPos at = player.blockPosition();
+            helper.assertValueEqual(itemsNear(helper, Items.GOLD_INGOT, at, 3.0), 0, "gold ingots dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.STICK, at, 3.0), 0, "sticks dropped");
         } finally {
             cleanUp(helper, player);
         }
@@ -205,7 +205,7 @@ public class GraveDeathGameTests {
             Grave grave = onlyGrave(helper, player);
             int ingots = grave.items().stream().filter(stack -> stack.is(Items.IRON_INGOT)).mapToInt(ItemStack::getCount).sum();
             helper.assertValueEqual(ingots, 1, "iron ingots in the grave");
-            helper.assertItemEntityNotPresent(Items.IRON_INGOT, helper.relativePos(player.blockPosition()), 3.0);
+            helper.assertValueEqual(itemsNear(helper, Items.IRON_INGOT, player.blockPosition(), 3.0), 0, "iron ingots dropped");
         } finally {
             cleanUp(helper, player);
         }
@@ -233,9 +233,9 @@ public class GraveDeathGameTests {
             helper.assertTrue(player.containerMenu == player.inventoryMenu, "crafting table menu still open");
             helper.assertTrue(menu.getCarried().isEmpty(), "cursor still holds an item");
             assertNoItems(helper, menu, 1, 10);
-            BlockPos at = helper.relativePos(player.blockPosition());
-            helper.assertItemEntityNotPresent(Items.GOLD_INGOT, at, 3.0);
-            helper.assertItemEntityNotPresent(Items.FEATHER, at, 3.0);
+            BlockPos at = player.blockPosition();
+            helper.assertValueEqual(itemsNear(helper, Items.GOLD_INGOT, at, 3.0), 0, "gold ingots dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.FEATHER, at, 3.0), 0, "feathers dropped");
         } finally {
             cleanUp(helper, player);
         }
@@ -282,7 +282,7 @@ public class GraveDeathGameTests {
             helper.assertTrue(player.getEnderChestInventory().isEmpty(), "ender chest not wiped");
             helper.assertFalse(contains(onlyGrave(helper, player), Items.EMERALD), "grave holds the wiped emerald");
             // Wiped means gone, not dropped
-            helper.assertItemEntityNotPresent(Items.EMERALD, helper.relativePos(player.blockPosition()), 3.0);
+            helper.assertValueEqual(itemsNear(helper, Items.EMERALD, player.blockPosition(), 3.0), 0, "emeralds dropped");
         } finally {
             cleanUp(helper, player);
         }
@@ -303,7 +303,7 @@ public class GraveDeathGameTests {
                 graves.enabled = before;
             }
 
-            helper.assertItemEntityPresent(Items.DIAMOND, helper.relativePos(player.blockPosition()), 2.0);
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, player.blockPosition(), 2.0), 1, "diamonds dropped");
             helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "grave made with graves off");
         } finally {
             cleanUp(helper, player);
@@ -397,7 +397,10 @@ public class GraveDeathGameTests {
             helper.assertTrue(player.isDeadOrDying(), "player did not die");
 
             Grave grave = onlyGrave(helper, player);
-            helper.assertFalse(lava.contains(helper.relativePos(grave.pos())), "grave placed in the lava pool at " + grave.pos());
+            List<BlockPos> pool = lava.stream().map(helper::absolutePos).toList();
+            // The death spot is a pool block, so a grave left there, as before fix A1, fails the check after this one
+            helper.assertTrue(pool.contains(player.blockPosition()), "the death spot " + player.blockPosition() + " is not in the pool");
+            helper.assertFalse(pool.contains(grave.pos()), "grave placed in the lava pool at " + grave.pos());
             BlockPos below = grave.pos().below();
             helper.assertFalse(level.getFluidState(below).is(FluidTags.LAVA), "grave over lava at " + grave.pos());
             helper.assertFalse(level.getBlockState(below).getCollisionShape(level, below).isEmpty(),
