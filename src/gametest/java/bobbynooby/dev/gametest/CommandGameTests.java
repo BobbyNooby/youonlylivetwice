@@ -664,7 +664,8 @@ public class CommandGameTests {
             Files.writeString(path, typo);
             List<String> output = run(server, "yolt reload");
             helper.assertTrue(output.contains("World border still not applied, since the config has a bad worldBorder.diameter."
-                    + " Fix it, then reload again."), "command output: " + output);
+                    + " The reload saved the value in use over it, so set it again in the file, then reload. The file as it was"
+                    + " at startup is in you-only-live-twice.json.bak."), "command output: " + output);
             helper.assertTrue(Settings.borderHeld(), "border no longer held after a bad value");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 30000.0, "overworld border size after the bad value");
 
