@@ -3,7 +3,11 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.revive.Revive;
@@ -31,6 +35,7 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -314,6 +319,37 @@ public class ReviveGameTests {
         } finally {
             TestPlayers.leave(user);
             DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // Both use-block hooks want this click: the grave's runs first and takes it, so the grave opens and the revive
+    // never runs. The head's owner is locked out, so a revive that ran would show.
+    @GameTest
+    public void graveClickWithReviveHeadOpensGrave(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        ResolvableProfile ghost = staticProfile(UUID.randomUUID());
+        List<Grave> made = Graves.create(helper.getLevel(), helper.absolutePos(new BlockPos(3, 1, 3)), ghost, UUID.randomUUID(),
+                "Ghost", List.of(GraveItems.graveHead(ghost), new ItemStack(Items.DIAMOND)));
+        helper.assertValueEqual(made.size(), 1, "graves made");
+        Grave grave = made.get(0);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "GraveVisitor", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            ItemStack heads = reviveHead(staticProfile(owner), 2);
+            user.setItemInHand(InteractionHand.MAIN_HAND, heads);
+            int mark = user.messages.size();
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(grave.pos()), Direction.UP, grave.pos(), false);
+            InteractionResult result = user.gameMode.useItemOn(user, user.level(), heads, InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(result instanceof InteractionResult.Success, "clicking the grave did not succeed: " + result);
+            helper.assertTrue(user.containerMenu instanceof GraveMenu, "the grave did not open");
+            helper.assertValueEqual(user.getMainHandItem().getCount(), 2, "heads left");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "the head's owner was revived");
+            helper.assertTrue(said(user, mark).isEmpty(), "the user was told " + said(user, mark));
+        } finally {
+            TestPlayers.leave(user);
+            DeathLockout.revive(owner, "Test", "console");
+            GraveStore.get(helper.getLevel().getServer()).remove(grave.id());
+            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }
         helper.succeed();
     }
