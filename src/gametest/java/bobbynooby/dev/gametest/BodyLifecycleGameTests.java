@@ -145,6 +145,24 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // The old body stands in for a logout from before, as if the login had failed to take it over. The player has
+    // been online since, so it goes too, as it would for a new body.
+    @GameTest
+    public void creativeLogoutLeavesNoBody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Creative", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin old = logOut(helper, player);
+            player.setGameMode(GameType.CREATIVE);
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "creative player got a body");
+            helper.assertTrue(old.isRemoved(), "the old body still stands");
+            assertNoBody(helper, player);
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void onlyOneBodyPerPlayer(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Twice", GameType.SURVIVAL);

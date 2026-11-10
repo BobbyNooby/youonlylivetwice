@@ -20,14 +20,23 @@ public final class BodyLogout {
     public static Optional<Entity> onLogout(ServerPlayer player) {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
-        if (!Settings.on(c -> c.bodies.enabled) || player.isDeadOrDying() || player.isSpectator()
+        if (!Settings.on(c -> c.bodies.enabled) || player.isDeadOrDying()
                 || DeathLockout.refusal(player.getUUID(), player.nameAndId().name()) != null) {
             return Optional.empty();
         }
         MinecraftServer server = player.level().getServer();
         BodyStore store = BodyStore.get(server);
-        // Out again before the old body was taken back: it goes, so there is never a second one
+        // Out again before the old body was taken back. The player has been online since, so the old body no longer
+        // stands for them: it goes, and there is never a second one.
         Optional<BodyRecord> old = store.byOwner(player.getUUID());
+        // None in creative or spectator: the body could be killed while its owner can't be
+        if (player.isCreative() || player.isSpectator()) {
+            old.ifPresent(record -> {
+                store.remove(record.owner());
+                discard(server, record);
+            });
+            return Optional.empty();
+        }
 
         LivingEntity body = cfg.type == YoltConfig.BodyType.PLAYER
                 ? PlayerBody.spawn(player, cfg)
@@ -44,7 +53,7 @@ public final class BodyLogout {
     }
 
     // Any dimension, in case an admin moved it. One in an unloaded chunk isn't found, but once the record
-    // is replaced it no longer counts as a body.
+    // is replaced or removed it no longer counts as a body.
     private static void discard(MinecraftServer server, BodyRecord old) {
         Entity entity = Bodies.entityOf(server, old);
         if (entity != null) {
