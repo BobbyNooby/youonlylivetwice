@@ -39,6 +39,9 @@ final class EndRebuilds {
     // it (EndGatewayFeature.java:35). Which ones are left is the fight's own, so all 20 count.
     private static final List<BoundingBox> GATEWAYS = gateways();
 
+    /** The main island just south of the podium, outside every box: the far fallback for a grave in the End. */
+    static final BlockPos BESIDE_EXIT_PORTAL = PODIUM.south(4);
+
     private EndRebuilds() {
     }
 

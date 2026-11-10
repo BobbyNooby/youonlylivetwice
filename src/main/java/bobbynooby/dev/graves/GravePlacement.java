@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -365,7 +366,8 @@ public final class GravePlacement {
         return open(level, pos) ? landingBelow(level, pos) : Optional.empty();
     }
 
-    // No ground near, so one fixed column, whose chunk may be loaded for it: the world spawn in the overworld, else 0, 0
+    // No ground near, so one fixed column, whose chunk may be loaded for it. That is the world spawn in the overworld,
+    // unless the spawn was set in another dimension; the main island beside the exit portal in the End; else 0, 0.
     private static BlockPos fallback(ServerLevel level, BlockPos from) {
         BlockPos column = insideBorder(level, fallbackColumn(level).atY(from.getY()));
         int x = column.getX();
@@ -379,7 +381,11 @@ public final class GravePlacement {
     }
 
     private static BlockPos fallbackColumn(ServerLevel level) {
-        return level.dimension() == Level.OVERWORLD ? level.getRespawnData().pos() : BlockPos.ZERO;
+        if (level.dimension() == Level.END) {
+            return EndRebuilds.BESIDE_EXIT_PORTAL;
+        }
+        LevelData.RespawnData spawn = level.getRespawnData();
+        return level.dimension() == Level.OVERWORLD && spawn.dimension() == Level.OVERWORLD ? spawn.pos() : BlockPos.ZERO;
     }
 
     private static List<BlockPos> nearestFirst(int radius) {
