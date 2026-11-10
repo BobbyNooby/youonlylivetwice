@@ -52,7 +52,7 @@ public final class OfflineDeath {
         int experience = 0;
         if (dropsLoot) {
             // Vanilla destroys curse of vanishing items on death, but only those in the inventory
-            for (ItemStack item : OfflinePlayerData.takeInventory(tag, server.registryAccess())) {
+            for (ItemStack item : OfflinePlayerData.takeInventory(tag, server.registryAccess(), who.name())) {
                 if (!EnchantmentHelper.has(item, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP)) {
                     items.add(item);
                 }
@@ -62,8 +62,8 @@ public final class OfflineDeath {
         }
         if (!spectator && graves) {
             switch (Settings.get().graves.enderChestOnDeath) {
-                case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess()));
-                case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess());
+                case GRAVE -> items.addAll(OfflinePlayerData.takeEnderChest(tag, server.registryAccess(), who.name()));
+                case WIPE -> OfflinePlayerData.takeEnderChest(tag, server.registryAccess(), who.name());
                 case KEEP -> {
                 }
             }

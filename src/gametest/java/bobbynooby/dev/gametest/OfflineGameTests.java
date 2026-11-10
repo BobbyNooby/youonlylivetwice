@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -117,7 +118,7 @@ public class OfflineGameTests {
         helper.assertValueEqual(itemEntities(helper, Items.DIAMOND, last), 0, "diamond item entities");
         helper.assertTrue(helper.getEntities(EntityTypes.EXPERIENCE_ORB, last, 2.0).isEmpty(), "XP orbs left behind");
         CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
-        helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess()).stream().anyMatch(item -> item.is(Items.DIAMOND)),
+        helper.assertTrue(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()).stream().anyMatch(item -> item.is(Items.DIAMOND)),
                 "save lost the diamond");
         helper.assertValueEqual(saved.getIntOr("XpLevel", -1), 30, "saved XP level");
         helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "failed kill started the lockout");
@@ -273,6 +274,81 @@ public class OfflineGameTests {
         helper.succeed();
     }
 
+    // One worn item reads back and one doesn't, like an item from a mod or datapack that was removed since
+    @GameTest
+    public void unreadableWornItemStaysInSave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Worn", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        } finally {
+            TestPlayers.leave(player);
+        }
+        CompoundTag tag = OfflinePlayerData.load(server, who).orElseThrow();
+        tag.getCompound("equipment").orElseThrow().put("chest", unreadableItem());
+        OfflinePlayerData.save(server, who.id(), tag);
+
+        try {
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            List<ItemStack> items = onlyGrave(helper, who.id()).items();
+            helper.assertValueEqual(items.size(), 2, "grave item count");
+            helper.assertTrue(items.get(1).is(Items.IRON_HELMET), "second item is not the iron helmet");
+            CompoundTag expected = new CompoundTag();
+            expected.put("chest", unreadableItem());
+            helper.assertValueEqual(OfflinePlayerData.load(server, who).orElseThrow().getCompoundOrEmpty("equipment"), expected,
+                    "saved equipment");
+        } finally {
+            removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void unreadableInventoryEntryStaysInSave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Inv", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+        } finally {
+            TestPlayers.leave(player);
+        }
+        CompoundTag unreadable = unreadableItem();
+        unreadable.putByte("Slot", (byte) 5);
+        CompoundTag tag = OfflinePlayerData.load(server, who).orElseThrow();
+        tag.getList("Inventory").orElseThrow().add(unreadable.copy());
+        OfflinePlayerData.save(server, who.id(), tag);
+
+        try {
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            List<ItemStack> items = onlyGrave(helper, who.id()).items();
+            helper.assertValueEqual(items.size(), 2, "grave item count");
+            helper.assertTrue(items.get(1).is(Items.DIAMOND), "second item is not the diamond");
+            ListTag expected = new ListTag();
+            expected.add(unreadable);
+            helper.assertValueEqual(OfflinePlayerData.load(server, who).orElseThrow().getListOrEmpty("Inventory"), expected,
+                    "saved inventory");
+        } finally {
+            removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // No item has this id, so the entry can't be read back
+    private static CompoundTag unreadableItem() {
+        CompoundTag item = new CompoundTag();
+        item.putString("id", "you-only-live-twice-gametest:no_such_item");
+        item.putInt("count", 1);
+        return item;
+    }
+
+    private static Grave onlyGrave(GameTestHelper helper, UUID owner) {
+        List<Grave> graves = gravesOf(helper, owner);
+        helper.assertValueEqual(graves.size(), 1, "graves for the player");
+        return graves.get(0);
+    }
+
     // Entities, not items: checked in the same tick as the drop, before anything could merge
     private static int itemEntities(GameTestHelper helper, Item item, BlockPos relativePos) {
         AABB area = new AABB(helper.absolutePos(relativePos)).inflate(2.0);
@@ -286,7 +362,7 @@ public class OfflineGameTests {
     }
 
     private static List<ItemStack> enderChest(MinecraftServer server, NameAndId who) {
-        return OfflinePlayerData.takeEnderChest(OfflinePlayerData.load(server, who).orElseThrow(), server.registryAccess());
+        return OfflinePlayerData.takeEnderChest(OfflinePlayerData.load(server, who).orElseThrow(), server.registryAccess(), who.name());
     }
 
     private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {

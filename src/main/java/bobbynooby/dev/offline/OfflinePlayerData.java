@@ -19,7 +19,6 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.Util;
 import net.minecraft.world.ItemStackWithSlot;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.entity.EntityEquipment;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.item.ItemStack;
@@ -35,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -144,19 +144,43 @@ public final class OfflinePlayerData {
         }
     }
 
-    /** Main inventory plus every equipment slot (armour, offhand), which 26.x saves under its own key. */
-    public static List<ItemStack> takeInventory(CompoundTag tag, HolderLookup.Provider registries) {
+    /**
+     * Takes the main inventory plus every equipment slot (armour, offhand), which 26.x saves under its own key. An
+     * entry that doesn't read back stays in the save as it was and is logged, so its item is never lost.
+     */
+    public static List<ItemStack> takeInventory(CompoundTag tag, HolderLookup.Provider registries, String owner) {
         RegistryOps<Tag> ops = ops(registries);
-        List<ItemStack> items = takeSlots(tag, INVENTORY, ops);
-        tag.read(EQUIPMENT, EntityEquipment.CODEC, ops).ifPresent(equipment -> {
-            List<ItemStack> worn = new ArrayList<>();
-            for (EquipmentSlot slot : EquipmentSlot.values()) {
-                worn.add(equipment.get(slot));
-            }
-            items.addAll(Stacks.nonEmpty(worn));
-        });
-        tag.remove(EQUIPMENT);
+        List<ItemStack> items = takeSlots(tag, INVENTORY, ops, owner, "inventory");
+        items.addAll(takeEquipment(tag, ops, owner));
         return items;
+    }
+
+    // Read slot by slot, so one entry that doesn't read back keeps only itself in the save
+    private static List<ItemStack> takeEquipment(CompoundTag tag, RegistryOps<Tag> ops, String owner) {
+        Tag saved = tag.get(EQUIPMENT);
+        if (!(saved instanceof CompoundTag equipment)) {
+            if (saved != null) {
+                Yolt.LOGGER.warn("Keeping {}'s unreadable equipment in their save file: {}", owner, saved);
+            }
+            return List.of();
+        }
+        Map<EquipmentSlot, ItemStack> worn = new EnumMap<>(EquipmentSlot.class);
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            Tag entry = equipment.get(slot.getSerializedName());
+            if (entry != null) {
+                ItemStack.CODEC.parse(ops, entry).result().ifPresent(stack -> worn.put(slot, stack));
+            }
+        }
+        worn.keySet().forEach(slot -> equipment.remove(slot.getSerializedName()));
+        // What is left didn't read back, or names no slot
+        for (String key : equipment.keySet()) {
+            Yolt.LOGGER.warn("Keeping {}'s unreadable item in equipment slot {} in their save file: {}",
+                    owner, key, equipment.get(key));
+        }
+        if (equipment.isEmpty()) {
+            tag.remove(EQUIPMENT);
+        }
+        return Stacks.nonEmpty(worn.values());
     }
 
     /**
@@ -242,8 +266,9 @@ public final class OfflinePlayerData {
                 Optional.of(pos), Optional.of(new Vec2(yRot, xRot))));
     }
 
-    public static List<ItemStack> takeEnderChest(CompoundTag tag, HolderLookup.Provider registries) {
-        return takeSlots(tag, ENDER_ITEMS, ops(registries));
+    /** Takes the ender chest. Like takeInventory, an entry that doesn't read back stays in the save. */
+    public static List<ItemStack> takeEnderChest(CompoundTag tag, HolderLookup.Provider registries, String owner) {
+        return takeSlots(tag, ENDER_ITEMS, ops(registries), owner, "ender chest");
     }
 
     /** Falls back to the overworld origin only for a save with no position, which vanilla never writes. */
@@ -266,16 +291,40 @@ public final class OfflinePlayerData {
         return tag.getIntOr(SELECTED_SLOT, 0);
     }
 
-    // A missing Slot reads as 0, the same as vanilla's codec
     private static boolean isSlot(Tag entry, int slot) {
-        return entry instanceof CompoundTag item && Byte.toUnsignedInt(item.getByteOr(SLOT, (byte) 0)) == slot;
+        return entry instanceof CompoundTag item && slotOf(item) == slot;
     }
 
-    private static List<ItemStack> takeSlots(CompoundTag tag, String key, RegistryOps<Tag> ops) {
+    // A missing Slot reads as 0, the same as vanilla's codec
+    private static int slotOf(CompoundTag item) {
+        return Byte.toUnsignedInt(item.getByteOr(SLOT, (byte) 0));
+    }
+
+    // Read entry by entry, so one that doesn't read back keeps only itself in the save
+    private static List<ItemStack> takeSlots(CompoundTag tag, String key, RegistryOps<Tag> ops, String owner, String what) {
         List<ItemStack> items = new ArrayList<>();
-        tag.read(key, ItemStackWithSlot.CODEC.listOf(), ops).ifPresent(slots ->
-                items.addAll(Stacks.nonEmpty(slots.stream().map(ItemStackWithSlot::stack).toList())));
-        tag.remove(key);
-        return items;
+        Tag saved = tag.get(key);
+        if (!(saved instanceof ListTag entries)) {
+            if (saved != null) {
+                Yolt.LOGGER.warn("Keeping {}'s unreadable {} in their save file: {}", owner, what, saved);
+            }
+            return items;
+        }
+        Iterator<Tag> each = entries.iterator();
+        while (each.hasNext()) {
+            Tag entry = each.next();
+            Optional<ItemStackWithSlot> read = ItemStackWithSlot.CODEC.parse(ops, entry).result();
+            if (read.isPresent()) {
+                items.add(read.get().stack());
+                each.remove();
+            } else {
+                Object slot = entry instanceof CompoundTag item ? slotOf(item) : "?";
+                Yolt.LOGGER.warn("Keeping {}'s unreadable item in {} slot {} in their save file: {}", owner, what, slot, entry);
+            }
+        }
+        if (entries.isEmpty()) {
+            tag.remove(key);
+        }
+        return Stacks.nonEmpty(items);
     }
 }

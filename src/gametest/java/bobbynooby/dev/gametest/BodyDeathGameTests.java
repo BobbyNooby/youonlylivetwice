@@ -442,7 +442,7 @@ public class BodyDeathGameTests {
 
     // Main inventory, armour and offhand as saved
     private static List<ItemStack> savedItems(GameTestHelper helper, ServerPlayer player) {
-        return OfflinePlayerData.takeInventory(save(helper, player), helper.getLevel().registryAccess());
+        return OfflinePlayerData.takeInventory(save(helper, player), helper.getLevel().registryAccess(), player.nameAndId().name());
     }
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {
