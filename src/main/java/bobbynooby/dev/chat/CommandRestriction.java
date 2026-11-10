@@ -1,5 +1,6 @@
 package bobbynooby.dev.chat;
 
+import bobbynooby.dev.commands.SkinCommands;
 import bobbynooby.dev.config.Settings;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.RootCommandNode;
@@ -11,7 +12,10 @@ import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionSet;
 
-/** Holds non-op players to /help, plus /w when whispers are on: what they may run, are sent and get suggested. */
+/**
+ * Holds non-op players to /help, plus /w when whispers are on and /yolt skin when players may pick their skin: what they
+ * may run, are sent and get suggested.
+ */
 public final class CommandRestriction {
     private CommandRestriction() {}
 
@@ -33,19 +37,27 @@ public final class CommandRestriction {
         return Settings.on(c -> c.restrictCommands) && !Commands.LEVEL_GAMEMASTERS.check(permissions);
     }
 
-    public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers) {
+    public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers, boolean allowSkinChoice) {
         RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
         // help is answered in blocks(), so its body never runs
         root.addChild(Commands.literal("help").executes(c -> 1).build());
         if (allowWhispers) {
             root.addChild(Whispers.command().build());
         }
+        // Only the part for the player's own skin, so read against this tree nothing else of /yolt parses
+        if (allowSkinChoice) {
+            root.addChild(SkinCommands.ownSkinCommand().build());
+        }
         return root;
     }
 
     /** The tree a restricted player's client was sent, to read its commands and suggestions against. */
     public static CommandDispatcher<CommandSourceStack> nonOpDispatcher() {
-        return new CommandDispatcher<>(nonOpTree(Settings.get().chat.allowWhispers));
+        return new CommandDispatcher<>(liveNonOpTree());
+    }
+
+    private static RootCommandNode<CommandSourceStack> liveNonOpTree() {
+        return nonOpTree(Settings.get().chat.allowWhispers, Settings.get().skins.allowPlayerChoice);
     }
 
     /** True when a typed command must not run; a restricted player's /help gets its answer here. */
@@ -65,6 +77,11 @@ public final class CommandRestriction {
             source.sendFailure(Component.literal(Whispers.TURNED_OFF));
         }
 
+        // A restricted player's command was read against their own tree, whose /yolt holds only their own skin
+        if (commandRoot.equals("yolt") && Settings.get().skins.allowPlayerChoice) {
+            return false;
+        }
+
         if (commandRoot.equals("help")) {
             player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
         }
@@ -75,8 +92,7 @@ public final class CommandRestriction {
     /** Sends a restricted player the non-op tree in place of vanilla's; false when the player gets vanilla's. */
     public static boolean sendNonOpTree(ServerPlayer player, ClientboundCommandsPacket.NodeInspector<CommandSourceStack> inspector) {
         if (restricted(player)) {
-            player.connection.send(new ClientboundCommandsPacket(
-                    nonOpTree(Settings.get().chat.allowWhispers), inspector));
+            player.connection.send(new ClientboundCommandsPacket(liveNonOpTree(), inspector));
             return true;
         }
         return false;

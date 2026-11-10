@@ -729,10 +729,10 @@ public class CommandGameTests {
         lines.add("root order: " + String.join(", ", ours));
         dump(dispatcher, dispatcher.getRoot().getChild("yolt"), "", lines);
         dump(dispatcher, dispatcher.getRoot().getChild("w"), "", lines);
-        lines.add("non-op tree, whispers off:");
-        dumpChildren(CommandRestriction.nonOpTree(false), lines);
-        lines.add("non-op tree, whispers on:");
-        dumpChildren(CommandRestriction.nonOpTree(true), lines);
+        lines.add("non-op tree, whispers and skin choice off:");
+        dumpChildren(CommandRestriction.nonOpTree(false, false), lines);
+        lines.add("non-op tree, whispers and skin choice on:");
+        dumpChildren(CommandRestriction.nonOpTree(true, true), lines);
 
         String tree = String.join("\n", lines);
         Yolt.LOGGER.info("Command trees:\n{}", tree);
@@ -760,16 +760,28 @@ public class CommandGameTests {
                 yolt grave remove <pos> | minecraft:block_pos | level 0 | runs
                 yolt adminview | literal | level 0 | runs
                 yolt reload | literal | level 0 | runs
+                yolt skin | literal | level 0
+                yolt skin set | literal | level 0
+                yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
+                yolt skin set <player> | brigadier:string {"type":"phrase"} | level 0
+                yolt skin set <player> <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
+                yolt skin clear | literal | level 0 | runs
+                yolt skin clear <player> | brigadier:string {"type":"phrase"} | level 0 | runs
                 w | literal | level 0
                 w <target> | brigadier:string {"type":"word"} | level 0
                 w <target> <message> | minecraft:message | level 0 | runs
-                non-op tree, whispers off:
+                non-op tree, whispers and skin choice off:
                 help | literal | level 0 | runs
-                non-op tree, whispers on:
+                non-op tree, whispers and skin choice on:
                 help | literal | level 0 | runs
                 w | literal | level 0
                 w <target> | brigadier:string {"type":"word"} | level 0
-                w <target> <message> | minecraft:message | level 0 | runs""", "command trees");
+                w <target> <message> | minecraft:message | level 0 | runs
+                yolt | literal | level 0
+                yolt skin | literal | level 0
+                yolt skin set | literal | level 0
+                yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
+                yolt skin clear | literal | level 0 | runs""", "command trees");
         helper.succeed();
     }
 

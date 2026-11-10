@@ -46,13 +46,13 @@ public class WhisperGameTests {
     // The reply a restricted player's /w gets with whispers off is checked in whisperOffReplyIsSameWhenRestricted
     @GameTest
     public void treeHasOnlyHelpWhenWhispersOff(GameTestHelper helper) {
-        helper.assertValueEqual(childNames(CommandRestriction.nonOpTree(false)), List.of("help"), "non-op commands");
+        helper.assertValueEqual(childNames(CommandRestriction.nonOpTree(false, false)), List.of("help"), "non-op commands");
         helper.succeed();
     }
 
     @GameTest
     public void treeHasWhisperWhenOn(GameTestHelper helper) {
-        RootCommandNode<CommandSourceStack> root = CommandRestriction.nonOpTree(true);
+        RootCommandNode<CommandSourceStack> root = CommandRestriction.nonOpTree(true, false);
         helper.assertValueEqual(childNames(root), List.of("help", "w"), "non-op commands");
 
         CommandNode<CommandSourceStack> target = root.getChild("w").getChild("target");
@@ -93,7 +93,7 @@ public class WhisperGameTests {
 
         // Vanilla's /w refused these names after the client had signed them, which broke the sender's chat
         CommandSourceStack source = server.createCommandSourceStack();
-        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true));
+        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true, false));
         for (String command : List.of("w  hi", "w NameLongerThan16Chars hi")) {
             helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
             helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");

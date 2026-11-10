@@ -89,6 +89,7 @@ public class YoltConfig {
         public SkinMode mode = SkinMode.AUTO;
         public int lookupTimeoutSeconds = 5;
         public int refreshHours = 24;
+        public boolean allowPlayerChoice = true;
     }
 
     public enum EnderChestMode {

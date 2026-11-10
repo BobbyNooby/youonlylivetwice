@@ -13,12 +13,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 /**
  * Skins on offline-mode servers. An offline login profile has no skin, so YOLT asks Mojang for the skin of the account
- * with the player's name and puts it in the profile before the player exists. The player, their body and their grave
- * and revive heads all copy that profile, so they all show it.
+ * with the player's name, or of the account they picked with /yolt skin, and puts it in the profile before the player
+ * exists. The player, their body and their grave and revive heads all copy that profile, so they all show it.
  */
 public final class Skins {
     static final String TEXTURES = "textures";
@@ -61,6 +64,29 @@ public final class Skins {
         return Settings.on(c -> c.skins.mode == YoltConfig.SkinMode.AUTO) && !skinModLoaded.getAsBoolean();
     }
 
+    /** Why YOLT gives no skins right now, for a command's reply, or empty while it does. */
+    public static Optional<String> offReason() {
+        if (!Settings.on(c -> c.skins.mode == YoltConfig.SkinMode.AUTO)) {
+            return Optional.of("Skins are turned off.");
+        }
+        if (skinModLoaded.getAsBoolean()) {
+            return Optional.of("Skins are left to the other skin mod on this server.");
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * What Mojang says about an account name, for a command: the saved answer while it is fresh, else Mojang's own,
+     * failing after skins.lookupTimeoutSeconds. A command waits in no tick, so the timeout is plain time.
+     */
+    public static CompletableFuture<CachedSkin> lookUp(MinecraftServer server, String name) {
+        CachedSkin cached = SkinStore.get(server).skin(name);
+        if (cached != null && cached.fresh(System.currentTimeMillis(), Settings.get().skins.refreshHours)) {
+            return CompletableFuture.completedFuture(cached);
+        }
+        return lookup().find(name).orTimeout(Settings.get().skins.lookupTimeoutSeconds, TimeUnit.SECONDS);
+    }
+
     static SkinLookup lookup() {
         SkinLookup current = lookup;
         if (current == null) {
@@ -84,8 +110,9 @@ public final class Skins {
     }
 
     /**
-     * A profile from a name and id alone, as for a grave head with no player or body to copy. It gets the skin they last
-     * joined with, or else the one Mojang gave for their name. Nothing is asked of Mojang here.
+     * A profile from a name and id alone, as for a grave head with no player or body to copy. It gets the skin of the
+     * account they picked, else the one they last joined with, else the one Mojang gave for their name. Nothing is
+     * asked of Mojang here.
      */
     public static GameProfile known(MinecraftServer server, NameAndId who) {
         GameProfile bare = new GameProfile(who.id(), who.name());
@@ -93,7 +120,12 @@ public final class Skins {
             return bare;
         }
         SkinStore store = SkinStore.get(server);
-        SkinTextures textures = store.applied(who.id());
+        String chosen = store.choice(who.id());
+        CachedSkin picked = chosen != null ? store.skin(chosen) : null;
+        SkinTextures textures = picked != null ? picked.textures() : null;
+        if (textures == null) {
+            textures = store.applied(who.id());
+        }
         if (textures == null) {
             CachedSkin byName = store.skin(who.name());
             textures = byName != null ? byName.textures() : null;

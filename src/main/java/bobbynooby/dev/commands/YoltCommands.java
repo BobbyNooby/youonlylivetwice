@@ -30,6 +30,7 @@ public final class YoltCommands {
             LockoutCommands.register(yolt);
             GraveCommands.register(yolt);
             AdminCommands.register(yolt);
+            SkinCommands.register(yolt);
             dispatcher.register(yolt);
         });
     }

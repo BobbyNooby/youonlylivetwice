@@ -14,9 +14,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * One joining player's skin, worked out as vanilla starts checking their login. When Mojang has to be asked, the login
- * waits for the answer, a tick at a time, for up to skins.lookupTimeoutSeconds. A login never fails because of a skin:
- * a slow or failing Mojang means the skin saved before, or none.
+ * One joining player's skin, worked out as vanilla starts checking their login: the account they picked, else the
+ * skin they came with, else the account with their name. When Mojang has to be asked, the login waits for the answer,
+ * a tick at a time, for up to skins.lookupTimeoutSeconds. A login never fails because of a skin: a slow or failing
+ * Mojang means the skin saved before, or none.
  */
 public final class LoginSkins {
     private final MinecraftServer server;
@@ -63,12 +64,15 @@ public final class LoginSkins {
         if (!Skins.on()) {
             return new LoginSkins(server, profile);
         }
+        SkinStore store = SkinStore.get(server);
+        // The account the player picked wins over everything, a skin they came with included
+        String chosen = store.choice(profile.id());
         // Online mode, a forwarding proxy or another mod has given the skin already
-        if (Skins.textures(profile) != null) {
+        if (chosen == null && Skins.textures(profile) != null) {
             return new LoginSkins(server, Skins.settle(server, profile, null));
         }
-        String name = profile.name();
-        CachedSkin earlier = SkinStore.get(server).skin(name);
+        String name = chosen != null ? chosen : profile.name();
+        CachedSkin earlier = store.skin(name);
         if (earlier != null && earlier.fresh(System.currentTimeMillis(), Settings.get().skins.refreshHours)) {
             return new LoginSkins(server, Skins.settle(server, profile, earlier));
         }

@@ -27,8 +27,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The skins YOLT knows, saved with the world's data: what Mojang said about each account name, and the skin each
- * player last joined with. Only the server thread reads or writes it.
+ * The skins YOLT knows, saved with the world's data: what Mojang said about each account name, the skin each player
+ * last joined with, and the account each player picked with /yolt skin. Only the server thread reads or writes it.
  */
 public final class SkinStore extends SavedData {
     /** The layout of the skin file's own fields. */
@@ -55,9 +55,17 @@ public final class SkinStore extends SavedData {
         ).apply(i, Applied::new));
     }
 
-    private record Contents(LenientCodecs.Read<CachedSkin> skins, LenientCodecs.Read<Applied> applied) {
+    private record Choice(UUID player, String name) {
+        static final Codec<Choice> CODEC = RecordCodecBuilder.create(i -> i.group(
+                UUIDUtil.CODEC.fieldOf("player").forGetter(Choice::player),
+                Codec.STRING.fieldOf("name").forGetter(Choice::name)
+        ).apply(i, Choice::new));
+    }
+
+    private record Contents(LenientCodecs.Read<CachedSkin> skins, LenientCodecs.Read<Applied> applied,
+                            LenientCodecs.Read<Choice> choices) {
         boolean complete() {
-            return skins.complete() && applied.complete();
+            return skins.complete() && applied.complete() && choices.complete();
         }
     }
 
@@ -66,7 +74,9 @@ public final class SkinStore extends SavedData {
             LenientCodecs.read(SKIN_CODEC, "skin").optionalFieldOf("skins", new LenientCodecs.Read<>(List.of(), true))
                     .forGetter(Contents::skins),
             LenientCodecs.read(Applied.CODEC, "applied skin").optionalFieldOf("applied", new LenientCodecs.Read<>(List.of(), true))
-                    .forGetter(Contents::applied)
+                    .forGetter(Contents::applied),
+            LenientCodecs.read(Choice.CODEC, "skin choice").optionalFieldOf("choices", new LenientCodecs.Read<>(List.of(), true))
+                    .forGetter(Contents::choices)
     ).apply(i, Contents::new));
 
     private static final Codec<SkinStore> CODEC = StoreVersions.codec("skin", FORMAT, STEPS, CONTENTS)
@@ -79,6 +89,8 @@ public final class SkinStore extends SavedData {
     // Keyed by the name in lower case, since Mojang's names ignore case
     private final Map<String, CachedSkin> skins = new LinkedHashMap<>();
     private final Map<UUID, SkinTextures> applied = new LinkedHashMap<>();
+    // The Mojang account name each player picked
+    private final Map<UUID, String> choices = new LinkedHashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
     private final boolean fromNewer;
@@ -101,13 +113,18 @@ public final class SkinStore extends SavedData {
         for (Applied entry : loaded.applied().values()) {
             applied.put(entry.player(), entry.textures());
         }
+        for (Choice choice : loaded.choices().values()) {
+            choices.put(choice.player(), choice.name());
+        }
     }
 
     private StoreVersions.Loaded<Contents> contents() {
         List<Applied> appliedList = new ArrayList<>();
         applied.forEach((player, textures) -> appliedList.add(new Applied(player, textures)));
+        List<Choice> choiceList = new ArrayList<>();
+        choices.forEach((player, name) -> choiceList.add(new Choice(player, name)));
         return new StoreVersions.Loaded<>(new Contents(new LenientCodecs.Read<>(List.copyOf(skins.values()), true),
-                new LenientCodecs.Read<>(appliedList, true)), false);
+                new LenientCodecs.Read<>(appliedList, true), new LenientCodecs.Read<>(choiceList, true)), false);
     }
 
     public static SkinStore get(MinecraftServer server) {
@@ -155,6 +172,26 @@ public final class SkinStore extends SavedData {
         if (changed) {
             setDirty();
         }
+    }
+
+    /** The Mojang account name this player picked, or null if they haven't picked one. */
+    public @Nullable String choice(UUID player) {
+        return choices.get(player);
+    }
+
+    public void choose(UUID player, String name) {
+        if (!name.equals(choices.put(player, name))) {
+            setDirty();
+        }
+    }
+
+    /** False when the player had picked nothing. */
+    public boolean clearChoice(UUID player) {
+        boolean had = choices.remove(player) != null;
+        if (had) {
+            setDirty();
+        }
+        return had;
     }
 
     private static String key(String name) {

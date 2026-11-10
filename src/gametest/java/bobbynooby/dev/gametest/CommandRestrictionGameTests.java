@@ -244,10 +244,12 @@ public class CommandRestrictionGameTests {
         YoltConfig config = Settings.get();
         boolean restrictBefore = config.restrictCommands;
         boolean whispersBefore = config.chat.allowWhispers;
+        boolean skinChoiceBefore = config.skins.allowPlayerChoice;
         Objective objective = null;
         try {
             config.restrictCommands = true;
             config.chat.allowWhispers = false;
+            config.skins.allowPlayerChoice = false;
             // Opping sends the player its command tree again
             TestPlayers.op(player, LevelBasedPermissionSet.MODERATOR);
             helper.assertTrue(CommandRestriction.restricted(player), "a level 1 op is not restricted");
@@ -262,6 +264,7 @@ public class CommandRestrictionGameTests {
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;
+            config.skins.allowPlayerChoice = skinChoiceBefore;
             TestPlayers.deop(player);
             if (objective != null) {
                 scoreboard.removeObjective(objective);
