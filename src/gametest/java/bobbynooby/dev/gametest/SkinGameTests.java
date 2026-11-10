@@ -539,48 +539,66 @@ public class SkinGameTests {
         helper.succeed();
     }
 
-    // The owner of a skin joins: every other player's pick of it goes, a player online is told at once, and one who is
-    // away hears it when they next join, once. A pick of another account stays.
+    // The owner of a skin joins: every player's pick of it goes, but not one an op made, nor a pick of another account.
+    // Nobody is told then, since that would tell a borrower online the owner just came online. Each borrower hears it
+    // once, at their next join, whether they were online at the time or away.
     @GameTest
     public void ownerJoinResetsBorrowedSkin(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         String reset = "Your skin was reset because its owner joined this server.";
         GameProfile owner = new GameProfile(UUID.randomUUID(), uniqueName("Owner"));
+        GameProfile online = new GameProfile(UUID.randomUUID(), uniqueName("Online"));
         GameProfile away = new GameProfile(UUID.randomUUID(), uniqueName("Away"));
         UUID other = UUID.randomUUID();
         String otherAccount = uniqueName("Acct");
-        TestPlayers.Recording borrower = TestPlayers.joinRecording(helper, "Borrower", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        MOJANG.answer(owner.name());
         SkinStore store = SkinStore.get(server);
-        List<UUID> joined = new ArrayList<>(List.of(borrower.getUUID()));
+        List<UUID> joined = new ArrayList<>();
+        UUID given = null;
         try {
-            store.choose(borrower.getUUID(), owner.name());
+            joined.add(online.id());
+            ServerPlayer borrower = TestPlayers.join(helper, online, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            ServerPlayer opGiven = TestPlayers.join(helper, "OpGiven", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            given = opGiven.getUUID();
+            joined.add(given);
+            String givenName = opGiven.nameAndId().name();
+            store.choose(online.id(), owner.name());
             store.choose(away.id(), owner.name());
             store.choose(other, otherAccount);
-            borrower.messages.clear();
+            helper.assertValueEqual(console(server, "yolt skin set " + givenName + " " + owner.name()),
+                    List.of(givenName + "'s skin is now " + owner.name() + "'s. It shows once they rejoin."), "the op's pick");
+
             joined.add(owner.id());
             TestPlayers.join(helper, owner, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            assertEqual(helper, store.choice(borrower.getUUID()), null, "the online borrower's pick");
+            assertEqual(helper, store.choice(online.id()), null, "the online borrower's pick");
             assertEqual(helper, store.choice(away.id()), null, "the away borrower's pick");
             assertEqual(helper, store.choice(other), otherAccount, "a pick of another account");
-            helper.assertValueEqual(texts(borrower).stream().filter(reset::equals).count(), 1L,
-                    "times the online borrower was told");
+            assertEqual(helper, store.choice(given), owner.name(), "the pick an op made");
+            helper.assertValueEqual(chatLines(borrower, reset), 0, "times the online borrower was told at the owner's join");
 
+            TestPlayers.leave(borrower);
+            ServerPlayer onlineBack = TestPlayers.join(helper, online, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(chatLines(onlineBack, reset), 1, "times the online borrower was told at their next join");
             joined.add(away.id());
-            ServerPlayer back = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            helper.assertValueEqual(chatLines(back, reset), 1, "times the away borrower was told at their join");
-            TestPlayers.leave(back);
-            back = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
-            helper.assertValueEqual(chatLines(back, reset), 0, "times the away borrower was told at the next join");
+            ServerPlayer awayBack = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(chatLines(awayBack, reset), 1, "times the away borrower was told at their join");
+            TestPlayers.leave(awayBack);
+            awayBack = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(chatLines(awayBack, reset), 0, "times the away borrower was told at the join after");
         } finally {
             for (UUID id : joined) {
-                ServerPlayer online = server.getPlayerList().getPlayer(id);
-                if (online != null) {
-                    TestPlayers.leave(online);
+                ServerPlayer still = server.getPlayerList().getPlayer(id);
+                if (still != null) {
+                    TestPlayers.leave(still);
                 }
             }
-            store.clearChoice(borrower.getUUID());
+            store.clearChoice(online.id());
             store.clearChoice(away.id());
             store.clearChoice(other);
+            if (given != null) {
+                store.clearChoice(given);
+            }
+            MOJANG.forget(owner.name());
         }
         helper.succeed();
     }
@@ -814,6 +832,7 @@ public class SkinGameTests {
         CompoundTag choice = new CompoundTag();
         choice.put("player", UUIDUtil.CODEC.encodeStart(NbtOps.INSTANCE, player).getOrThrow());
         choice.putString("name", "Notch");
+        choice.putBoolean("by_op", true);
         choices.add(choice);
         data.put("choices", choices);
 
@@ -839,6 +858,7 @@ public class SkinGameTests {
         assertEqual(helper, store.skin("nobody"), CachedSkin.noAccount("Nobody", 456L), "the no-account answer, " + what);
         assertEqual(helper, store.applied(player), new SkinTextures("applied value", null), "the applied skin, " + what);
         assertEqual(helper, store.choice(player), "Notch", "the picked account, " + what);
+        helper.assertTrue(store.pickedByOp(player), "the pick is not an op's, " + what);
     }
 
     private static CompoundTag skinTag(String name, @Nullable SkinTextures textures, long fetchedAt) {
