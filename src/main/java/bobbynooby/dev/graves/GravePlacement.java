@@ -145,18 +145,18 @@ public final class GravePlacement {
                 || state.is(Blocks.CACTUS) || state.is(Blocks.END_PORTAL);
     }
 
-    // Clamped into the world and inside the border. A spot with nothing below to stand on moves to the owner's last
-    // ground, else to the nearest land, else to a fixed spot.
+    // Clamped into the world and inside the border, and dropped to where its items would land. A spot with nothing below
+    // to stand on moves to the owner's last ground, else to the nearest land, else to a fixed spot.
     private static BlockPos start(ServerLevel level, BlockPos pos, @Nullable BlockPos lastGround, GraveStore store) {
         BlockPos start = clamped(level, pos);
         if (!isVoidColumn(level, start)) {
-            return start;
+            return landing(level, start);
         }
         if (lastGround != null) {
             BlockPos ground = clamped(level, lastGround);
             // The block they stood on may be gone since
             if (!isVoidColumn(level, ground)) {
-                return ground;
+                return landing(level, ground);
             }
         }
         return nearestLand(level, start, store).orElseGet(() -> fallback(level, start));
@@ -165,6 +165,12 @@ public final class GravePlacement {
     private static BlockPos clamped(ServerLevel level, BlockPos pos) {
         int y = Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1);
         return insideBorder(level, pos.atY(y));
+    }
+
+    // A death in open air puts the grave where the items would have landed: on the first block below that holds them, or
+    // just over the first fluid, so never under water. A spot inside a block, or in water or lava, stays where it is.
+    private static BlockPos landing(ServerLevel level, BlockPos pos) {
+        return open(level, pos) ? landingBelow(level, pos).orElse(pos) : pos;
     }
 
     // Down from an open spot to the first one over a block that holds items or over a fluid
