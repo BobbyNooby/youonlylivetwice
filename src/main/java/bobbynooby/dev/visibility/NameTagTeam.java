@@ -10,7 +10,6 @@ import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 import org.jspecify.annotations.Nullable;
@@ -23,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.WeakHashMap;
 
 /**
@@ -203,17 +201,8 @@ public final class NameTagTeam {
     // The viewer's own name and the name of each player whose entry its client has
     private static Set<String> knownNames(ServerPlayer viewer) {
         Set<String> names = new HashSet<>();
-        names.add(viewer.getScoreboardName());
-        PlayerList playerList = viewer.level().getServer().getPlayerList();
-        for (UUID id : PlayerVisibility.known(viewer)) {
-            ServerPlayer player = playerList.getPlayer(id);
-            // Player bodies are players outside the player list, in the viewer's level when it knows them
-            if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {
-                player = body;
-            }
-            if (player != null) {
-                names.add(player.getScoreboardName());
-            }
+        for (ServerPlayer player : PlayerVisibility.knownPlayers(viewer)) {
+            names.add(player.getScoreboardName());
         }
         return names;
     }

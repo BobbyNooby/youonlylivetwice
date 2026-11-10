@@ -58,6 +58,7 @@ public class YoltConfig {
         public boolean distantPlayers = true;
         public boolean locatorBar = true;
         public boolean globalSounds = true;
+        public boolean mapPlayers = true;
     }
 
     public static class SleepSection {

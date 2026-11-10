@@ -17,6 +17,7 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.visibility.NameTagTeam;
+import bobbynooby.dev.visibility.PlayerVisibility;
 import com.google.common.collect.ImmutableMultimap;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
@@ -55,6 +56,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -248,6 +250,45 @@ public class PlayerBodyGameTests {
             helper.assertTrue(helper.getLevel().players().contains(restored), "restored body not among the level's players");
         } finally {
             cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A body keeps carrying its owner's copy, so its marker only goes to holders whose client knows the body
+    @GameTest
+    public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "MapBody", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> holders = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.mapPlayers = true;
+            PlayerBody body = leaveBody(helper, player);
+            ServerPlayer stranger = join(helper, "MapStranger", ON_FLOOR);
+            holders.add(stranger);
+            ServerPlayer watcher = join(helper, "MapWatcher", ON_FLOOR);
+            holders.add(watcher);
+            // As if the watcher had started tracking the body
+            PlayerVisibility.onPairingStart(watcher, body);
+            ItemStack map = MapGameTests.newMap(helper, body);
+            MapGameTests.carry(helper, map, List.of(body, stranger, watcher));
+
+            helper.assertValueEqual(MapGameTests.count(MapGameTests.sentTo(helper, map, stranger), MapDecorationTypes.PLAYER), 1,
+                    "player markers sent to a holder who doesn't know the body");
+            helper.assertValueEqual(MapGameTests.count(MapGameTests.sentTo(helper, map, watcher), MapDecorationTypes.PLAYER), 2,
+                    "player markers sent to a holder who knows the body");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            // The body switches go back first, so the holders leave without bodies of their own
+            cleanUp(helper, owner, before);
+            for (ServerPlayer holder : holders) {
+                TestPlayers.leave(holder);
+            }
         }
         helper.succeed();
     }

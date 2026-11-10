@@ -45,6 +45,24 @@ public final class PlayerVisibility {
         return state == null ? Set.of() : Collections.unmodifiableSet(state.known);
     }
 
+    /** The viewer and each player whose entry its client has, player bodies included. */
+    public static List<ServerPlayer> knownPlayers(ServerPlayer viewer) {
+        List<ServerPlayer> players = new ArrayList<>();
+        players.add(viewer);
+        PlayerList playerList = viewer.level().getServer().getPlayerList();
+        for (UUID id : known(viewer)) {
+            ServerPlayer player = playerList.getPlayer(id);
+            // Player bodies are players outside the player list, in the viewer's level when it knows them
+            if (player == null && viewer.level().getEntity(id) instanceof ServerPlayer body) {
+                player = body;
+            }
+            if (player != null) {
+                players.add(player);
+            }
+        }
+        return players;
+    }
+
     /** Vanilla sends a joiner everyone already online; this keeps only the ones the joiner may know about. */
     public static ClientboundPlayerInfoUpdatePacket joinPacket(ServerPlayer joiner, Collection<ServerPlayer> online) {
         // Everyone else reaches this client when tracking starts
