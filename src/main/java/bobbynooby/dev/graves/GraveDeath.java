@@ -17,6 +17,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -52,8 +53,8 @@ public final class GraveDeath {
         PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
         String name = player.nameAndId().name();
 
-        // Until the graves exist, any failure falls back to vanilla dropping everything
-        List<ItemStack> fromMenus = List.of();
+        // Until the graves exist, any failure drops everything instead
+        List<ItemStack> fromMenus = new ArrayList<>();
         try {
             ResolvableProfile profile = Profiles.of(player);
             // The head comes first and is always there: it is the revive token
@@ -61,7 +62,7 @@ public final class GraveDeath {
             items.add(GraveItems.graveHead(profile));
             if (!keepInventory) {
                 // Menus close first, so a menu that hands items back into the inventory is covered by the scan
-                fromMenus = takeMenuItems(player);
+                closeMenusInto(player, fromMenus);
                 ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
                 addStacks(items, inventory);
                 items.addAll(fromMenus);
@@ -71,11 +72,9 @@ public final class GraveDeath {
             }
             Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
-            // Only the menu items have left the player; put them back so they drop with the rest
             Yolt.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
-            handBack(player, fromMenus);
-            // With keepInventory vanilla drops nothing, and the inventory stays
-            return !keepInventory && dropWhereTheyLast(player, level, name);
+            // With keepInventory no menu was closed, vanilla drops nothing, and the inventory stays
+            return !keepInventory && dropWhereTheyLast(player, level, name, fromMenus);
         }
 
         // The lockout kick right after a death saves the emptied player at once, so the graves must reach the
@@ -123,24 +122,27 @@ public final class GraveDeath {
         return true;
     }
 
-    // Vanilla would drop them at the player, which over the void is below the world, where they are gone at once. So
-    // they drop where the grave would have gone, or on the last ground, the way vanilla's own death drops go: curse of
-    // vanishing destroyed, the rest out of the inventory. False if that fails too, so vanilla drops them after all.
-    private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name) {
+    // Vanilla would drop them at the player, which over the void is below the world, where they are gone at once. So the
+    // inventory and what the menus handed back drop where the grave would have gone, or on the last ground, the way
+    // vanilla's own death drops go: curse of vanishing destroyed, the rest out of the inventory. False if that fails
+    // too: the menu items go back into the inventory, and vanilla drops it all where the player died.
+    private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name, List<ItemStack> fromMenus) {
         Inventory inventory = player.getInventory();
         BlockPos spot;
         try {
             ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
             spot = GravePlacement.dropSpot(level, player.blockPosition(),
                     LastGround.in(player.getUUID(), level.dimension()).orElse(null), GraveStore.get(level.getServer()));
-            // Copies, so a drop that fails leaves every item in the inventory for vanilla to drop
+            // Copies, so a drop that fails leaves every item where it was
             List<ItemStack> stacks = new ArrayList<>();
             for (int i = 0; i < inventory.getContainerSize(); i++) {
                 stacks.add(inventory.getItem(i));
             }
+            stacks.addAll(fromMenus);
             Graves.dropForGood(level, spot, Stacks.nonEmptyCopies(stacks));
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not drop {}'s items where they would last either, so they drop where {} died", name, name, e);
+            handBack(player, fromMenus);
             return false;
         }
         inventory.clearContent();
@@ -157,37 +159,48 @@ public final class GraveDeath {
     }
 
     // Closes the menus with their own vanilla code, so any menu hands back its cursor and input items (crafting
-    // grids, anvil, loom, trades...). The hooks catch each item on its way to the inventory or the ground.
-    private static List<ItemStack> takeMenuItems(ServerPlayer player) {
-        List<ItemStack> taken = new ArrayList<>();
-        try {
-            closeMenusInto(player, taken);
-        } catch (RuntimeException e) {
-            // The items caught so far would go down with the grave, so they go back for vanilla to drop
-            handBack(player, taken);
-            throw e;
-        }
-        return taken;
-    }
-
-    // A menu's close code could kill another player and start their collection, so each call keeps its own list
-    // and restores the one before
+    // grids, anvil, loom, trades...). The hooks catch each item on its way to the inventory or the ground, and what
+    // they caught is in the list even when a close throws. A menu's close code could kill another player and start
+    // their collection, so each call keeps its own list and restores the one before.
     private static void closeMenusInto(ServerPlayer player, List<ItemStack> into) {
         ServerPlayer previousFor = collectingFor;
         List<ItemStack> previous = collected;
         collectingFor = player;
         collected = into;
         try {
-            if (player.containerMenu != player.inventoryMenu) {
-                // No close packet: the client already shows the death screen, and a close would swap it for one
-                // without the death message
-                player.doCloseContainer();
+            try {
+                if (player.containerMenu != player.inventoryMenu) {
+                    closeContainer(player, into);
+                }
+            } finally {
+                // The inventory menu is never closed, but this returns its cursor and 2x2 grid the same way. Also after
+                // a menu that threw, or they would drop where the player is removed, over the void below the world.
+                player.inventoryMenu.removed(player);
             }
-            // The inventory menu is never closed, but this returns its cursor and 2x2 grid the same way
-            player.inventoryMenu.removed(player);
         } finally {
             collectingFor = previousFor;
             collected = previous;
+        }
+    }
+
+    // No close packet: the client already shows the death screen, and a close would swap it for one without the
+    // death message
+    private static void closeContainer(ServerPlayer player, List<ItemStack> into) {
+        try {
+            player.doCloseContainer();
+        } catch (RuntimeException e) {
+            takeCursor(player.containerMenu, into);
+            throw e;
+        }
+    }
+
+    // A menu whose close threw may still hold its cursor stack. The close may have handed that very stack over before
+    // it threw, so it is only taken once.
+    private static void takeCursor(AbstractContainerMenu menu, List<ItemStack> into) {
+        ItemStack carried = menu.getCarried();
+        menu.setCarried(ItemStack.EMPTY);
+        if (!carried.isEmpty() && into.stream().noneMatch(taken -> taken == carried)) {
+            into.add(carried);
         }
     }
 
