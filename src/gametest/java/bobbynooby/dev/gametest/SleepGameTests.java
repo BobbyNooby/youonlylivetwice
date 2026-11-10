@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.authlib.GameProfile;
@@ -26,7 +27,11 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
@@ -36,6 +41,7 @@ import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -369,6 +375,108 @@ public class SleepGameTests {
         helper.succeed();
     }
 
+    // A client's disconnect wakes the sleeper before the logout, so the body lies where vanilla stands them up
+    @GameTest(skyAccess = true)
+    public void logoutWhileSleeping(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos head = placeBed(helper);
+        floorRoundBed(helper);
+        BlockPos headAt = helper.absolutePos(head);
+        BlockPos footAt = headAt.relative(Direction.NORTH);
+        ServerPlayer player = TestPlayers.join(helper, "BedLogout", GameType.SURVIVAL, NEXT_TO_BED);
+        UUID owner = player.getUUID();
+        long savedTicks = clockTicks(helper);
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            toMidnight(helper);
+            useBed(helper, player, head);
+            helper.assertTrue(player.isSleeping(), "the player could not get into the bed");
+            helper.assertTrue(player.getBoundingBox().intersects(new AABB(headAt)), "the sleeper is not in the bed");
+
+            Mannequin body = BodyTestKit.disconnectBody(helper, player);
+            AABB box = body.getBoundingBox();
+            helper.assertFalse(box.intersects(new AABB(headAt)) || box.intersects(new AABB(footAt)),
+                    "the body lies in the bed at " + body.position());
+            helper.assertTrue(level.noBlockCollision(body, box), "the body is inside a block at " + body.position());
+            helper.assertFalse(body.isInWall(), "the body is in a wall at " + body.position());
+            helper.assertFalse(level.getBlockState(headAt).getValue(BedBlock.OCCUPIED), "the bed is still taken");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, NEXT_TO_BED);
+            helper.assertFalse(back.isSleeping(), "the owner logged back in asleep");
+            helper.assertTrue(back.getSleepingPos().isEmpty(), "the owner still has a bed to sleep in");
+            helper.assertValueEqual(back.position(), body.position(), "the owner's spot after login");
+        } finally {
+            setClock(helper, savedTicks);
+            BodyTestKit.cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A normal death: the zombie wakes the sleeper as it hits, the grave goes where vanilla stood them up beside the
+    // bed, the lockout starts, and the bed left no point to bring them back to
+    @GameTest(skyAccess = true)
+    public void mobKillsSleepingPlayer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel level = helper.getLevel();
+        BlockPos head = placeBed(helper);
+        floorRoundBed(helper);
+        BlockPos headAt = helper.absolutePos(head);
+        BlockPos footAt = headAt.relative(Direction.NORTH);
+        ServerPlayer player = TestPlayers.join(helper, "Ambushed", GameType.SURVIVAL, NEXT_TO_BED);
+        UUID id = player.getUUID();
+        GameProfile profile = player.getGameProfile();
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean before = sleep.noBedRespawn;
+        long savedTicks = clockTicks(helper);
+        try {
+            toMidnight(helper);
+            sleep.noBedRespawn = true;
+            player.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 3));
+            useBed(helper, player, head);
+            helper.assertTrue(player.isSleeping(), "the player could not get into the bed");
+
+            TestPlayers.markLoaded(player);
+            // Never added to the world: the hit only needs someone to come from
+            player.hurtServer(level, level.damageSources().mobAttack(new Zombie(level)), Float.MAX_VALUE);
+            helper.assertTrue(player.isDeadOrDying(), "the zombie did not kill the sleeper");
+            helper.assertFalse(player.isSleeping(), "the player died in bed");
+
+            List<Grave> graves = GraveStore.get(server).all().stream().filter(grave -> grave.owner().equals(id)).toList();
+            helper.assertValueEqual(graves.size(), 1, "graves");
+            Grave grave = graves.get(0);
+            helper.assertValueEqual(grave.pos(), player.blockPosition(), "grave position");
+            helper.assertFalse(grave.pos().equals(headAt) || grave.pos().equals(footAt), "grave in the bed at " + grave.pos());
+            helper.assertTrue(grave.pos().closerThan(headAt, 2.5) || grave.pos().closerThan(footAt, 2.5),
+                    "grave at " + grave.pos() + ", away from the bed");
+            helper.assertValueEqual(grave.items().size(), 2, "grave stacks");
+            helper.assertTrue(GraveItems.isGraveHead(grave.items().get(0)), "the first grave item is not the grave head");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+            String refusal = LockoutGameTests.refusalText(id);
+            helper.assertTrue(refusal.startsWith("You died: " + profile.name() + " was slain by Zombie\n"), "lockout: " + refusal);
+            helper.assertTrue(player.getRespawnConfig() == null, "the bed set a respawn point");
+
+            // A real logout saves the dead player, and a revive lets them back in to respawn
+            TestPlayers.leave(player);
+            helper.assertValueEqual(DeathLockout.revive(id, "Test", "console"), DeathLockout.ReviveResult.REVIVED, "revive result");
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(4, 1, 4));
+            back.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+            ServerPlayer respawned = server.getPlayerList().getPlayer(id);
+            helper.assertTrue(respawned != null && respawned != back && respawned.isAlive(), "the player did not respawn");
+            helper.assertTrue(respawned.level() != level || respawned.position().distanceTo(Vec3.atCenterOf(headAt)) > 8.0,
+                    "respawned at " + respawned.blockPosition() + ", next to the bed");
+        } finally {
+            sleep.noBedRespawn = before;
+            setClock(helper, savedTicks);
+            ServerPlayer online = server.getPlayerList().getPlayer(id);
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+            DeathLockout.revive(id, "Test", "console");
+            removeGraves(server, id);
+        }
+        helper.succeed();
+    }
+
     // Older builds stored an unforced point at every bed used, even with the switch on
     @GameTest
     public void oldBedPointIsIgnored(GameTestHelper helper) {
@@ -441,6 +549,15 @@ public class SleepGameTests {
         helper.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
         helper.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD));
         return head;
+    }
+
+    // A floor round the bed, so vanilla has somewhere to stand a sleeper up
+    private static void floorRoundBed(GameTestHelper helper) {
+        for (int x = 0; x <= 2; x++) {
+            for (int z = 0; z <= 3; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
     }
 
     // What a right click on the bed runs on the server
