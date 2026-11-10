@@ -190,6 +190,39 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // The same in the Nether, with the fallback column at 0, 0 filled up to a bedrock roof, so it has no room under the
+    // roof. The columns beside it have, so the grave goes there and not up on the roof.
+    @GameTest
+    public void netherVoidFallbackStaysUnderRoof(GameTestHelper helper) {
+        ServerLevel nether = level(helper, Level.NETHER);
+        int roofY = nether.getMinY() + nether.getLogicalHeight() - 1;
+        ChunkPos chunk = new ChunkPos(312, 312);
+        BlockPos death = new BlockPos(chunk.getMiddleBlockX(), nether.getMinY() - 70, chunk.getMiddleBlockZ());
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        try {
+            emptyLoneChunk(helper, nether, chunk, before);
+            // A chunk that isn't loaded reads as the bottom of the world in the heightmap
+            nether.getChunk(BlockPos.ZERO);
+            int floorY = nether.getHeight(Heightmap.Types.MOTION_BLOCKING, 0, 0);
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    setRemembered(nether, new BlockPos(x, roofY, z), Blocks.BEDROCK, before);
+                }
+            }
+            for (int y = floorY; y < roofY; y++) {
+                setRemembered(nether, new BlockPos(0, y, 0), Blocks.STONE, before);
+            }
+            BlockPos result = withoutLastResort(helper, () -> GravePlacement.find(nether, death, store(nether)));
+            helper.assertTrue(result.getY() < roofY, "grave on or in the roof at " + result);
+            helper.assertValueEqual(flatDistanceSqr(result, BlockPos.ZERO), 1, "grave's distance from 0, 0, squared");
+            helper.assertValueEqual(result.getY(), floorY, "grave height");
+            assertOnSolid(helper, nether, result);
+        } finally {
+            putBack(nether, before);
+        }
+        helper.succeed();
+    }
+
     // The same, in the overworld, with the world spawn set in the Nether: those x and z mean nothing here. Set and put
     // back in this tick.
     @GameTest(environment = VOID_SPAWN)
