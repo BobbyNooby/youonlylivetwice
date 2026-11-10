@@ -13,7 +13,6 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
-import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.visibility.NameTagTeam;
@@ -54,7 +53,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.storage.LevelResource;
@@ -71,6 +69,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+
+import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
+import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
+import static bobbynooby.dev.gametest.BodyTestKit.leavePlayerBody;
+import static bobbynooby.dev.gametest.BodyTestKit.removeBodies;
+import static bobbynooby.dev.gametest.BodyTestKit.store;
+import static bobbynooby.dev.gametest.BodyTestKit.usePlayerBodies;
 
 // Like the other body tests: each one turns on the default body switches with the player type and puts the server's
 // own back in the same tick. A player body is a player to every mob, so a test that keeps one in the world across
@@ -129,7 +134,7 @@ public class PlayerBodyGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             ServerLevel level = helper.getLevel();
             helper.assertTrue(level.getChunkSource().chunkMap.getPlayersCloseForSpawning(body.chunkPosition()).contains(body),
                     "body doesn't count for spawning");
@@ -159,7 +164,7 @@ public class PlayerBodyGameTests {
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 5.0F);
 
             ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, ON_FLOOR);
@@ -185,7 +190,7 @@ public class PlayerBodyGameTests {
         try {
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             player.getInventory().add(new ItemStack(Items.DIAMOND));
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             BlockPos at = body.blockPosition();
             AABB around = new AABB(at).inflate(4.0);
             body.kill(helper.getLevel());
@@ -227,7 +232,7 @@ public class PlayerBodyGameTests {
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             // Different from the logout, so the values can only come from the stop's snapshot
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             body.setHealth(12.0F);
@@ -270,7 +275,7 @@ public class PlayerBodyGameTests {
         try {
             hide.distantPlayers = true;
             hide.mapPlayers = true;
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             ServerPlayer stranger = TestPlayers.join(server, "MapStranger", GameType.SURVIVAL, onMap);
             holders.add(stranger);
             ServerPlayer watcher = TestPlayers.join(server, "MapWatcher", GameType.SURVIVAL, onMap);
@@ -305,7 +310,7 @@ public class PlayerBodyGameTests {
         ServerScoreboard scoreboard = server.getScoreboard();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(NameTagTeam.TEAM_NAME));
             helper.assertTrue(body.getTeam() == null, "the body is still in a team");
 
@@ -330,7 +335,7 @@ public class PlayerBodyGameTests {
         ServerScoreboard scoreboard = server.getScoreboard();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             BodyRestart.snapshotBodies(server);
             body.discard();
             helper.assertTrue(store(helper).byOwner(owner).isPresent(), "record went with the body");
@@ -356,7 +361,7 @@ public class PlayerBodyGameTests {
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             body.setHealth(13.0F);
             // What every save runs first, without saving the whole world in a test
@@ -382,7 +387,7 @@ public class PlayerBodyGameTests {
         try {
             player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             // Never added to the world: a mob attack only needs someone to come from
             DamageSource attack = level.damageSources().mobAttack(new Zombie(level));
 
@@ -420,7 +425,7 @@ public class PlayerBodyGameTests {
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
             Settings.get().bodies.duration = new BodyDuration(1);
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             body.setHealth(9.0F);
             body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
             Vec3 at = body.position();
@@ -459,7 +464,7 @@ public class PlayerBodyGameTests {
             for (int i = 0; i < BodyExpiry.MAX_PER_PASS + 2; i++) {
                 ServerPlayer player = join(helper, "Crowd", ON_FLOOR);
                 owners.add(player);
-                PlayerBody body = leaveBody(helper, player);
+                PlayerBody body = leavePlayerBody(helper, player);
                 // Moved, so the save can only get this spot from the record
                 body.teleportTo(body.getX() + 2.0, body.getY(), body.getZ());
                 movedTo.put(player.getUUID(), body.position());
@@ -489,7 +494,7 @@ public class PlayerBodyGameTests {
         } finally {
             Settings.get().bodies = before;
             for (ServerPlayer owner : owners) {
-                removeBody(helper, owner.getUUID());
+                removeBodies(helper, owner.getUUID());
             }
         }
         helper.succeed();
@@ -502,7 +507,7 @@ public class PlayerBodyGameTests {
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             // Never added to the world: it only has to be the one looking
             Zombie zombie = new Zombie(helper.getLevel());
             helper.assertTrue(zombie.canAttack(body), "a zombie can't attack the body with the switch on");
@@ -525,7 +530,7 @@ public class PlayerBodyGameTests {
         boolean waiting = false;
         try {
             player.setHealth(10.0F);
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             int food = body.getFoodData().getFoodLevel();
             float saturation = body.getFoodData().getSaturationLevel();
             // Enough to cost a vanilla player food straight away
@@ -538,7 +543,7 @@ public class PlayerBodyGameTests {
                     helper.assertValueEqual(body.getFoodData().getFoodLevel(), food, "body food");
                     helper.assertValueEqual(body.getFoodData().getSaturationLevel(), saturation, "body saturation");
                 } finally {
-                    removeBody(helper, owner);
+                    removeBodies(helper, owner);
                 }
                 helper.succeed();
             });
@@ -560,7 +565,7 @@ public class PlayerBodyGameTests {
         YoltConfig.BodiesSection before = usePlayerBodies();
         boolean waiting = false;
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             Settings.get().bodies = before;
             ItemEntity diamond = new ItemEntity(helper.getLevel(), body.getX(), body.getY(), body.getZ(), new ItemStack(Items.DIAMOND));
             diamond.setNoPickUpDelay();
@@ -572,7 +577,7 @@ public class PlayerBodyGameTests {
                     helper.assertValueEqual(body.getInventory().countItem(Items.DIAMOND), 0, "diamonds the body holds");
                 } finally {
                     diamond.discard();
-                    removeBody(helper, owner);
+                    removeBodies(helper, owner);
                 }
                 helper.succeed();
             });
@@ -594,7 +599,7 @@ public class PlayerBodyGameTests {
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
             helper.assertTrue(waypoints.transmitters().contains(player), "the player sends no waypoint to begin with");
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             helper.assertFalse(waypoints.transmitters().contains(body), "body sends a waypoint");
             // Invisibility wearing off makes vanilla check the range again
             body.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 200));
@@ -613,7 +618,7 @@ public class PlayerBodyGameTests {
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
             helper.assertTrue(nether != null, "no nether to go to");
             // What a /tp into another dimension runs
@@ -635,7 +640,7 @@ public class PlayerBodyGameTests {
         UUID owner = player.getUUID();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             helper.assertTrue(body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 5.0F),
                     "body refused the damage");
             helper.assertValueEqual(body.getHealth(), 15.0F, "body health after the hit");
@@ -669,7 +674,7 @@ public class PlayerBodyGameTests {
                     "a normal player's death message did not reach the listener");
             listener.messages.clear();
 
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             // Off, so a death message would reach every player rather than only admins
             hide.gameMessages = false;
             body.kill(helper.getLevel());
@@ -715,7 +720,7 @@ public class PlayerBodyGameTests {
         boolean noSkipBefore = sleep.noNightSkip;
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             // On, it would always ask for more sleepers than there are
             sleep.noNightSkip = false;
             SleepStatus status = new SleepStatus();
@@ -737,7 +742,7 @@ public class PlayerBodyGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.BodiesSection before = usePlayerBodies();
         try {
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             UUID id = body.getUUID();
             helper.assertFalse(playerListMap(server, "stats").containsKey(id), "player list keeps the body's stats");
             helper.assertFalse(playerListMap(server, "advancements").containsKey(id), "player list keeps the body's advancements");
@@ -773,7 +778,7 @@ public class PlayerBodyGameTests {
         boolean waiting = false;
         try {
             Settings.get().bodies.movable = movable;
-            PlayerBody body = leaveBody(helper, player);
+            PlayerBody body = leavePlayerBody(helper, player);
             double startY = body.getY();
             Settings.get().bodies = before;
             helper.runAfterDelay(40, () -> {
@@ -790,7 +795,7 @@ public class PlayerBodyGameTests {
                     // Vanilla would have stood it up on its first tick
                     helper.assertValueEqual(body.getPose(), Pose.SWIMMING, "pose after ticking");
                 } finally {
-                    removeBody(helper, owner);
+                    removeBodies(helper, owner);
                 }
                 helper.succeed();
             });
@@ -805,25 +810,6 @@ public class PlayerBodyGameTests {
 
     private static ServerPlayer join(GameTestHelper helper, String name, BlockPos at) {
         return TestPlayers.join(helper, name, GameType.SURVIVAL, at);
-    }
-
-    // A fresh section has the default switches, with bodies on; the caller puts the returned one back
-    private static YoltConfig.BodiesSection usePlayerBodies() {
-        YoltConfig config = Settings.get();
-        YoltConfig.BodiesSection before = config.bodies;
-        config.bodies = new YoltConfig.BodiesSection();
-        config.bodies.type = YoltConfig.BodyType.PLAYER;
-        return before;
-    }
-
-    // A real logout: leaving fires the hook and saves the player
-    private static PlayerBody leaveBody(GameTestHelper helper, ServerPlayer player) {
-        TestPlayers.leave(player);
-        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
-        helper.assertTrue(record.isPresent(), "no body record");
-        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
-        helper.assertTrue(entity instanceof PlayerBody, "no player body for the record");
-        return (PlayerBody) entity;
     }
 
     private static boolean hasSkin(PropertyMap properties) {
@@ -841,46 +827,7 @@ public class PlayerBodyGameTests {
         return (Map<?, ?>) field.get(server.getPlayerList());
     }
 
-    private static BodyStore store(GameTestHelper helper) {
-        return BodyStore.get(helper.getLevel().getServer());
-    }
-
     private static int expiredOf(BodyStore store, List<ServerPlayer> owners) {
         return (int) owners.stream().filter(owner -> store.byOwner(owner.getUUID()).isEmpty()).count();
-    }
-
-    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
-        return GraveStore.get(helper.getLevel().getServer()).all().stream()
-                .filter(grave -> grave.owner().equals(owner))
-                .toList();
-    }
-
-    // The switches go back first, so a player still online leaves without making another body.
-    // Bodies, records and graves left behind would sit in another test's way.
-    private static void cleanUp(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
-        Settings.get().bodies = before;
-        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        removeBody(helper, owner);
-        GraveStore graves = GraveStore.get(helper.getLevel().getServer());
-        for (Grave grave : gravesOf(helper, owner)) {
-            graves.remove(grave.id());
-            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-        }
-    }
-
-    // A copy: discarding a body takes it out of the level's players
-    // Every dimension, since a test can move a body to another
-    private static void removeBody(GameTestHelper helper, UUID owner) {
-        for (ServerLevel level : helper.getLevel().getServer().getAllLevels()) {
-            for (ServerPlayer player : new ArrayList<>(level.players())) {
-                if (player instanceof PlayerBody body && body.owner().equals(owner)) {
-                    body.discard();
-                }
-            }
-        }
-        store(helper).remove(owner);
     }
 }

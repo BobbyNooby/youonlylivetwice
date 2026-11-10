@@ -3,14 +3,11 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyChunks;
 import bobbynooby.dev.bodies.BodyLogout;
-import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
-import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
-import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import com.google.common.collect.ImmutableMultimap;
@@ -45,7 +42,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
@@ -58,6 +54,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
+import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
+import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
+import static bobbynooby.dev.gametest.BodyTestKit.store;
+import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
 // Like BodyLifecycleGameTests: each test turns the default body switches on and puts the server's own back in
 // the same tick. Every logout is real, so the owner's save holds what they had.
@@ -110,7 +112,7 @@ public class BodyDeathGameTests {
             helper.assertTrue(player.isDeadOrDying(), name + " did not die");
             return LockoutGameTests.refusalText(owner);
         } finally {
-            cleanUp(helper, owner, Settings.get().bodies);
+            cleanUp(helper, owner);
         }
     }
 
@@ -500,24 +502,6 @@ public class BodyDeathGameTests {
         return TestPlayers.join(helper, name, GameType.SURVIVAL, new BlockPos(1, 1, 1));
     }
 
-    // A fresh section has the default switches, with bodies on; cleanUp puts the returned one back
-    private static YoltConfig.BodiesSection useDefaultBodies() {
-        YoltConfig config = Settings.get();
-        YoltConfig.BodiesSection before = config.bodies;
-        config.bodies = new YoltConfig.BodiesSection();
-        return before;
-    }
-
-    // A real logout: leaving fires the hook and saves the player
-    private static Mannequin leaveBody(GameTestHelper helper, ServerPlayer player) {
-        TestPlayers.leave(player);
-        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
-        helper.assertTrue(record.isPresent(), "no body record");
-        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
-        helper.assertTrue(entity instanceof Mannequin, "no mannequin for the record");
-        return (Mannequin) entity;
-    }
-
     private static ResolvableProfile texturedProfile(ServerPlayer player) {
         PropertyMap properties = new PropertyMap(ImmutableMultimap.of("textures", new Property("textures", "dGVzdA==")));
         return ResolvableProfile.createResolved(new GameProfile(player.getUUID(), player.getGameProfile().name(), properties));
@@ -539,33 +523,5 @@ public class BodyDeathGameTests {
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {
         return helper.getLevel().getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(owner + ".dat");
-    }
-
-    private static BodyStore store(GameTestHelper helper) {
-        return BodyStore.get(helper.getLevel().getServer());
-    }
-
-    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
-        return GraveStore.get(helper.getLevel().getServer()).all().stream()
-                .filter(grave -> grave.owner().equals(owner))
-                .toList();
-    }
-
-    // The switches go back first, so a player still online leaves without making another body.
-    // Bodies, records and graves left behind would sit in another test's way.
-    private static void cleanUp(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
-        Settings.get().bodies = before;
-        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> !body.isRemoved() && body.entityTags().contains(Bodies.TAG)
-                && owner.equals(body.getProfile().partialProfile().id())).forEach(Entity::discard);
-        store(helper).remove(owner);
-        GraveStore graves = GraveStore.get(helper.getLevel().getServer());
-        for (Grave grave : gravesOf(helper, owner)) {
-            graves.remove(grave.id());
-            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-        }
     }
 }

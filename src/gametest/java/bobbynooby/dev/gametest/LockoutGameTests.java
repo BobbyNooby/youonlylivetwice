@@ -1,6 +1,5 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -16,8 +15,6 @@ import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.level.GameType;
 
 import java.net.InetSocketAddress;
@@ -137,9 +134,8 @@ public class LockoutGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         UUID uuid = UUID.randomUUID();
         GameProfile profile = new GameProfile(uuid, "Late" + uuid.toString().substring(0, 8));
-        YoltConfig.BodiesSection before = Settings.get().bodies;
         // On until the kick's logout, so a body that logout wrongly left would show
-        Settings.get().bodies = new YoltConfig.BodiesSection();
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
         boolean waiting = false;
         try {
             DeathLockout.recordDeath(uuid, profile.name());
@@ -152,14 +148,14 @@ public class LockoutGameTests {
                     helper.assertTrue(server.getPlayerList().getPlayer(uuid) == null, "locked-out joiner was not kicked");
                     helper.assertTrue(BodyStore.get(server).byOwner(uuid).isEmpty(), "the kick left a body");
                 } finally {
-                    cleanUpJoiner(helper, uuid, before);
+                    BodyTestKit.cleanUp(helper, uuid, before);
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUpJoiner(helper, uuid, before);
+                BodyTestKit.cleanUp(helper, uuid, before);
             }
         }
     }
@@ -297,18 +293,5 @@ public class LockoutGameTests {
     static String refusalText(UUID uuid) {
         Component refusal = DeathLockout.refusal(uuid, "Test");
         return refusal == null ? "" : refusal.getString();
-    }
-
-    // The switches go back first, so a player still online leaves without making a body
-    private static void cleanUpJoiner(GameTestHelper helper, UUID uuid, YoltConfig.BodiesSection before) {
-        Settings.get().bodies = before;
-        MinecraftServer server = helper.getLevel().getServer();
-        ServerPlayer online = server.getPlayerList().getPlayer(uuid);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> body.entityTags().contains(Bodies.TAG)
-                && uuid.equals(body.getProfile().partialProfile().id())).forEach(Entity::discard);
-        BodyStore.get(server).remove(uuid);
     }
 }

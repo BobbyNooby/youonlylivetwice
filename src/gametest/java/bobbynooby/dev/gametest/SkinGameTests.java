@@ -1,7 +1,5 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.bodies.BodyRecord;
-import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
@@ -37,7 +35,6 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -70,8 +67,6 @@ public class SkinGameTests {
         String name = uniqueName("Skin");
         SkinTextures skin = FakeSkinLookup.texturesOf(name);
         MOJANG.answer(name);
-        YoltConfig.BodiesSection bodies = Settings.get().bodies;
-        boolean bodiesBefore = bodies.enabled;
         ServerPlayer player = null;
         try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
             login.tick();
@@ -84,18 +79,12 @@ public class SkinGameTests {
 
             player = TestPlayers.join(helper, login.profile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
             assertEqual(helper, textures(player.getGameProfile()), skin, "the joined player's textures");
-            bodies.enabled = true;
-            TestPlayers.leave(player);
-            BodyRecord record = BodyStore.get(server).byOwner(player.getUUID()).orElse(null);
-            helper.assertTrue(record != null, "no body at logout");
-            Entity body = helper.getLevel().getEntity(record.bodyEntity());
-            helper.assertTrue(body instanceof Mannequin, "the body is not a mannequin: " + body);
-            assertEqual(helper, textures(((Mannequin) body).getProfile().partialProfile()), skin, "the body's textures");
+            Mannequin body = BodyTestKit.leaveBodyWithDefaults(helper, player);
+            assertEqual(helper, textures(body.getProfile().partialProfile()), skin, "the body's textures");
         } finally {
-            bodies.enabled = bodiesBefore;
             MOJANG.forget(name);
             if (player != null) {
-                removeBody(helper, player);
+                BodyTestKit.cleanUp(helper, player.getUUID());
             }
         }
         helper.succeed();
@@ -639,22 +628,5 @@ public class SkinGameTests {
     // Short enough for a player name, and never one another test uses
     static String uniqueName(String prefix) {
         return prefix + UUID.randomUUID().toString().substring(0, 6);
-    }
-
-    // Bodies off first, so a player still online leaves without making another one
-    private static void removeBody(GameTestHelper helper, ServerPlayer player) {
-        MinecraftServer server = helper.getLevel().getServer();
-        ServerPlayer online = server.getPlayerList().getPlayer(player.getUUID());
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        BodyStore store = BodyStore.get(server);
-        store.byOwner(player.getUUID()).ifPresent(record -> {
-            Entity body = helper.getLevel().getEntity(record.bodyEntity());
-            if (body != null) {
-                body.discard();
-            }
-            store.remove(record.owner());
-        });
     }
 }

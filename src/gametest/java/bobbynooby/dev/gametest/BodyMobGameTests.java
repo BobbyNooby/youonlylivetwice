@@ -2,9 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyMobs;
-import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRules;
-import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -40,12 +38,13 @@ import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+
+import static bobbynooby.dev.gametest.BodyTestKit.leaveBodyWithDefaults;
 
 // The scenes stand on the structure's barrier floor. Bodies are only switched on while the body spawns, and
 // mobsAttack is on by default. A test that holds a switch or the world clock across ticks runs in a batch of its own.
@@ -98,7 +97,7 @@ public class BodyMobGameTests {
         try {
             ServerPlayer player = join(helper, "Spared");
             owner = player.getUUID();
-            Mannequin body = leaveBody(helper, player);
+            Mannequin body = leaveBodyWithDefaults(helper, player);
             Mob zombie = helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY);
             spawned.add(zombie);
             UUID bodyOwner = owner;
@@ -182,7 +181,7 @@ public class BodyMobGameTests {
         try {
             player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
-            Mannequin body = leaveBody(helper, player);
+            Mannequin body = leaveBodyWithDefaults(helper, player);
             TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
             helper.assertTrue(body.save(output), "body not saved");
 
@@ -239,7 +238,7 @@ public class BodyMobGameTests {
         ServerPlayer player = join(helper, "Scaled");
         UUID owner = player.getUUID();
         try {
-            Mannequin body = leaveBody(helper, player);
+            Mannequin body = leaveBodyWithDefaults(helper, player);
             Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, FOUR_AWAY);
             spawned.add(zombie);
             DamageSource attack = level.damageSources().mobAttack(zombie);
@@ -304,7 +303,7 @@ public class BodyMobGameTests {
         ServerPlayer owner = join(helper, "Dreamer");
         ServerPlayer awake = null;
         try {
-            Mannequin body = leaveBody(helper, owner);
+            Mannequin body = leaveBodyWithDefaults(helper, owner);
             awake = join(helper, "Awake");
             Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, ABOVE_BODY);
             spawned.add(phantom);
@@ -330,7 +329,7 @@ public class BodyMobGameTests {
         ServerPlayer owner = join(helper, "Sleepless");
         ServerPlayer awake = null;
         try {
-            leaveBody(helper, owner);
+            leaveBodyWithDefaults(helper, owner);
             awake = join(helper, "Chased");
             Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, ABOVE_BODY);
             spawned.add(phantom);
@@ -399,7 +398,7 @@ public class BodyMobGameTests {
         try {
             ServerPlayer player = join(helper, name);
             owner = player.getUUID();
-            Mannequin body = leaveBody(helper, player);
+            Mannequin body = leaveBodyWithDefaults(helper, player);
             Mob mob = spawnMob.apply(spawned);
             UUID bodyOwner = owner;
             helper.runBeforeTestEnd(() -> cleanUp(helper, bodyOwner, spawned));
@@ -425,7 +424,7 @@ public class BodyMobGameTests {
         try {
             ServerPlayer player = join(helper, name);
             owner = player.getUUID();
-            Mannequin body = leaveBody(helper, player);
+            Mannequin body = leaveBodyWithDefaults(helper, player);
             Mob mob = helper.spawn(type, at);
             spawned.add(mob);
             AtomicBoolean targeted = new AtomicBoolean();
@@ -458,40 +457,12 @@ public class BodyMobGameTests {
         return TestPlayers.join(helper, name, GameType.SURVIVAL, BODY_POS);
     }
 
-    // A real logout. The test server keeps bodies off, so the default switches go on just for it.
-    private static Mannequin leaveBody(GameTestHelper helper, ServerPlayer player) {
-        YoltConfig config = Settings.get();
-        YoltConfig.BodiesSection before = config.bodies;
-        config.bodies = new YoltConfig.BodiesSection();
-        try {
-            TestPlayers.leave(player);
-        } finally {
-            config.bodies = before;
-        }
-        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
-        helper.assertTrue(record.isPresent(), "no body record");
-        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
-        helper.assertTrue(entity instanceof Mannequin, "no mannequin for the record");
-        return (Mannequin) entity;
-    }
-
-    private static BodyStore store(GameTestHelper helper) {
-        return BodyStore.get(helper.getLevel().getServer());
-    }
-
-    // Anything left would sit in another test's way. Bodies are off again by now, so a player still online
-    // leaves without making another one.
+    // The mobs, then the owner and what they left. Bodies are off again by now, so an owner still online leaves without
+    // making another body.
     private static void cleanUp(GameTestHelper helper, UUID owner, List<Entity> spawned) {
         spawned.forEach(Entity::discard);
-        if (owner == null) {
-            return;
+        if (owner != null) {
+            BodyTestKit.cleanUp(helper, owner);
         }
-        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> !body.isRemoved() && body.entityTags().contains(Bodies.TAG)
-                && owner.equals(body.getProfile().partialProfile().id())).forEach(Entity::discard);
-        store(helper).remove(owner);
     }
 }

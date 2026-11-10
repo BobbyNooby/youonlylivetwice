@@ -1,6 +1,5 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRules;
@@ -54,6 +53,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
+import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
+import static bobbynooby.dev.gametest.BodyTestKit.removeBodies;
+import static bobbynooby.dev.gametest.BodyTestKit.store;
+import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
 // Like the other body tests: each one runs with the default body switches (bodies on) and puts the server's own
 // back in the same tick. The ones that wait only need the switches while the body spawns, or until its item drops.
@@ -642,7 +647,7 @@ public class BodyBehaviourGameTests {
                         helper.assertValueEqual(body.getY(), startY, "immovable body's height");
                     }
                 } finally {
-                    removeBody(helper, owner);
+                    removeBodies(helper, owner);
                 }
                 helper.succeed();
             });
@@ -657,24 +662,6 @@ public class BodyBehaviourGameTests {
 
     private static ServerPlayer join(GameTestHelper helper, String name, BlockPos at) {
         return TestPlayers.join(helper, name, GameType.SURVIVAL, at);
-    }
-
-    // A fresh section has the default switches, with bodies on; the caller puts the returned one back
-    private static YoltConfig.BodiesSection useDefaultBodies() {
-        YoltConfig config = Settings.get();
-        YoltConfig.BodiesSection before = config.bodies;
-        config.bodies = new YoltConfig.BodiesSection();
-        return before;
-    }
-
-    // A real logout: leaving fires the hook and saves the player
-    private static Mannequin leaveBody(GameTestHelper helper, ServerPlayer player) {
-        TestPlayers.leave(player);
-        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
-        helper.assertTrue(record.isPresent(), "no body record");
-        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
-        helper.assertTrue(entity instanceof Mannequin, "no mannequin for the record");
-        return (Mannequin) entity;
     }
 
     // Never added to the world: a mob attack only needs someone to come from
@@ -692,26 +679,5 @@ public class BodyBehaviourGameTests {
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {
         return helper.getLevel().getServer().getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(owner + ".dat");
-    }
-
-    private static BodyStore store(GameTestHelper helper) {
-        return BodyStore.get(helper.getLevel().getServer());
-    }
-
-    // The switches go back first, so a player still online leaves without making another body
-    private static void cleanUp(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
-        Settings.get().bodies = before;
-        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-        removeBody(helper, owner);
-    }
-
-    // A body or record left behind would sit in another test's way
-    private static void removeBody(GameTestHelper helper, UUID owner) {
-        helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> !body.isRemoved() && body.entityTags().contains(Bodies.TAG)
-                && owner.equals(body.getProfile().partialProfile().id())).forEach(Entity::discard);
-        store(helper).remove(owner);
     }
 }

@@ -1,19 +1,15 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyChunks;
 import bobbynooby.dev.bodies.BodyLogin;
 import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRestart;
 import bobbynooby.dev.bodies.BodyRules;
-import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
-import bobbynooby.dev.graves.Grave;
-import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
@@ -40,8 +36,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -54,6 +48,15 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import static bobbynooby.dev.gametest.BodyTestKit.bodiesOf;
+import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
+import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
+import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
+import static bobbynooby.dev.gametest.BodyTestKit.removeBodies;
+import static bobbynooby.dev.gametest.BodyTestKit.restore;
+import static bobbynooby.dev.gametest.BodyTestKit.store;
+import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
 // The test server keeps bodies off. Each test runs with the default body switches (bodies on) and puts the
 // server's own back in the same tick, before any other test runs. The tests that wait only wait for the
@@ -92,7 +95,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(saved.getBooleanOr("hide_description", false), "NPC label not hidden");
             helper.assertFalse(saved.getBooleanOr("immovable", true), "body immovable with movable on");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -106,7 +109,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "body made with bodies off");
             assertNoBody(helper, player);
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -135,7 +138,7 @@ public class BodyLifecycleGameTests {
         } finally {
             config.deathLockout.enabled = lockoutBefore;
             config.graves.enabled = gravesBefore;
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -148,7 +151,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "spectator got a body");
             assertNoBody(helper, player);
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -166,7 +169,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(old.isRemoved(), "the old body still stands");
             assertNoBody(helper, player);
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -183,7 +186,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(old.isRemoved(), "the old body still stands");
             assertNoBody(helper, player);
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -240,8 +243,8 @@ public class BodyLifecycleGameTests {
                 helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_CHESTPLATE))
                         .forEach(Entity::discard);
             }
-            cleanUp(helper, player, before);
-            cleanUp(helper, packed, before);
+            cleanUp(helper, player.getUUID(), before);
+            cleanUp(helper, packed.getUUID(), before);
         }
         helper.succeed();
     }
@@ -268,7 +271,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(store(helper).byOwner(player.getUUID()).map(BodyRecord::bodyEntity),
                     Optional.of(second.getUUID()), "record's body");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -283,7 +286,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(body.getMaxHealth(), 30.0F, "body max health");
             helper.assertValueEqual(body.getHealth(), 28.0F, "body health");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -301,7 +304,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(loaded.getMaxHealth(), 30.0F, "max health after the load");
             helper.assertValueEqual(loaded.getHealth(), 28.0F, "health after the load");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -334,7 +337,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(player.getItemBySlot(EquipmentSlot.OFFHAND).has(DataComponents.DEATH_PROTECTION),
                     "player's own totem was stripped");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -349,7 +352,7 @@ public class BodyLifecycleGameTests {
             Settings.get().bodies.pose = YoltConfig.BodyPose.SLEEPING;
             helper.assertValueEqual(logOut(helper, player).getPose(), Pose.SLEEPING, "sleeping pose");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -371,7 +374,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(bodiesOf(helper, owner).isEmpty(), "a body is left for the player");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -389,7 +392,7 @@ public class BodyLifecycleGameTests {
             ServerPlayer back = rejoin(helper, player);
             helper.assertValueEqual(back.position(), moved, "position after login");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -407,7 +410,7 @@ public class BodyLifecycleGameTests {
             ServerPlayer back = rejoin(helper, player);
             helper.assertTrue(back.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty(), "used totem came back");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -426,7 +429,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(chest.is(Items.IRON_CHESTPLATE), "chestplate lost");
             helper.assertValueEqual(chest.getOrDefault(DataComponents.DAMAGE, 0), 40, "chestplate damage");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -454,7 +457,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(back.getRemainingFireTicks(), 60, "fire ticks after login");
             helper.assertValueEqual(back.getAirSupply(), 90, "air after login");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -497,7 +500,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(body.isRemoved(), "dead body still in the world");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -528,8 +531,7 @@ public class BodyLifecycleGameTests {
             helper.assertTrue(body.isRemoved(), "body still in the world");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
         } finally {
-            cleanUp(helper, player, before);
-            removeGraves(helper, owner);
+            cleanUp(helper, owner, before);
         }
         helper.succeed();
     }
@@ -551,7 +553,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(record.get().snapshot().pos(), body.position(), "saved position");
             helper.assertValueEqual(record.get().snapshot().health(), 11.0F, "saved health");
         } finally {
-            cleanUp(helper, player, before);
+            cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
     }
@@ -634,28 +636,10 @@ public class BodyLifecycleGameTests {
         return TestPlayers.join(helper, name, mode, new BlockPos(1, 1, 1));
     }
 
-    // A fresh section has the default switches, with bodies on; the caller puts the returned one back
-    private static YoltConfig.BodiesSection useDefaultBodies() {
-        YoltConfig config = Settings.get();
-        YoltConfig.BodiesSection before = config.bodies;
-        config.bodies = new YoltConfig.BodiesSection();
-        return before;
-    }
-
     private static Mannequin logOut(GameTestHelper helper, ServerPlayer player) {
         Optional<Entity> body = BodyLogout.onLogout(player);
         helper.assertTrue(body.isPresent() && body.get() instanceof Mannequin, "no mannequin body");
         return (Mannequin) body.get();
-    }
-
-    // A real logout: leaving fires the hook and saves the player, so joining again reads that save
-    private static Mannequin leaveBody(GameTestHelper helper, ServerPlayer player) {
-        TestPlayers.leave(player);
-        Optional<BodyRecord> record = store(helper).byOwner(player.getUUID());
-        helper.assertTrue(record.isPresent(), "no body record");
-        Entity entity = helper.getLevel().getEntity(record.get().bodyEntity());
-        helper.assertTrue(entity instanceof Mannequin, "no mannequin for the record");
-        return (Mannequin) entity;
     }
 
     private static ServerPlayer rejoin(GameTestHelper helper, ServerPlayer player) {
@@ -678,58 +662,14 @@ public class BodyLifecycleGameTests {
         return body;
     }
 
-    private static BodyStore store(GameTestHelper helper) {
-        return BodyStore.get(helper.getLevel().getServer());
-    }
-
-    private static List<? extends Mannequin> bodiesOf(GameTestHelper helper, UUID owner) {
-        return helper.getLevel().getEntities(EntityTypes.MANNEQUIN, body -> !body.isRemoved()
-                && body.entityTags().contains(Bodies.TAG) && owner.equals(body.getProfile().partialProfile().id()));
-    }
-
     private static void assertNoBody(GameTestHelper helper, ServerPlayer player) {
         helper.assertTrue(store(helper).byOwner(player.getUUID()).isEmpty(), "body record made");
         helper.assertTrue(bodiesOf(helper, player.getUUID()).isEmpty(), "body in the world");
-    }
-
-    private static List<Grave> gravesOf(GameTestHelper helper, UUID owner) {
-        return GraveStore.get(helper.getLevel().getServer()).all().stream()
-                .filter(grave -> grave.owner().equals(owner))
-                .toList();
-    }
-
-    // A grave left behind would sit in another test's way
-    private static void removeGraves(GameTestHelper helper, UUID owner) {
-        GraveStore store = GraveStore.get(helper.getLevel().getServer());
-        for (Grave grave : gravesOf(helper, owner)) {
-            store.remove(grave.id());
-            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-        }
     }
 
     private static CompoundTag save(GameTestHelper helper, Entity entity) {
         TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
         entity.saveWithoutId(output);
         return output.buildResult();
-    }
-
-    private static void cleanUp(GameTestHelper helper, ServerPlayer player, YoltConfig.BodiesSection before) {
-        restore(helper, player.getUUID(), before);
-        removeBodies(helper, player.getUUID());
-    }
-
-    // The switches go back first, so a player still online leaves without making another body
-    private static void restore(GameTestHelper helper, UUID owner, YoltConfig.BodiesSection before) {
-        Settings.get().bodies = before;
-        // By uuid: after a relog the player online is a new object
-        ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(owner);
-        if (online != null) {
-            TestPlayers.leave(online);
-        }
-    }
-
-    private static void removeBodies(GameTestHelper helper, UUID owner) {
-        bodiesOf(helper, owner).forEach(Entity::discard);
-        store(helper).remove(owner);
     }
 }
