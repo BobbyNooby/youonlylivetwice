@@ -36,7 +36,7 @@ public final class SkinOwners {
     }
 
     /**
-     * True when the account is someone else's here, so a non-op can't pick it.
+     * True when the account is someone else's here, so a non-op can't pick it; a player's own name is always theirs.
      * Someone else's means another player picked it, or a player other than this one has joined as it: under its name
      * or its id in YOLT's record of joins, or with a save in players/data. A save is tried under the account's own id,
      * for online mode, and under the id an offline-mode server gives the name as asked and as Mojang spells it. Only a
@@ -44,6 +44,9 @@ public final class SkinOwners {
      * covered.
      */
     public static boolean taken(MinecraftServer server, CachedSkin skin, String asked, NameAndId by) {
+        if (skin.name().equalsIgnoreCase(by.name())) {
+            return false;
+        }
         SkinStore store = SkinStore.get(server);
         if (store.joinedAs(skin.name(), by.id()) || !store.pickedBy(skin.name(), by.id()).isEmpty()) {
             return true;
