@@ -171,6 +171,23 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // The same stale body as above, for a spectator
+    @GameTest
+    public void spectatorLogoutClearsStaleBody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Ghostly", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin old = logOut(helper, player);
+            player.setGameMode(GameType.SPECTATOR);
+            helper.assertTrue(BodyLogout.onLogout(player).isEmpty(), "spectator got a body");
+            helper.assertTrue(old.isRemoved(), "the old body still stands");
+            assertNoBody(helper, player);
+        } finally {
+            cleanUp(helper, player, before);
+        }
+        helper.succeed();
+    }
+
     // A stale body as above, whose empty chest slot a dispenser filled: that chestplate is real, so clearing the body
     // must not take it along. It goes into the owner's inventory, never the hand, or with no room drops where the body
     // stood, for good.
