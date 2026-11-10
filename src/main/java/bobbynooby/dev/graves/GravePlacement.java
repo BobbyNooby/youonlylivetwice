@@ -244,34 +244,43 @@ public final class GravePlacement {
                 return pos;
             }
         }
-        BlockPos pos = firstFree(level, start, topY, store).orElseThrow(() -> new IllegalStateException(
-                "No free block for a grave in the column at " + level.dimension().identifier() + " " + start));
+        // A column the End rebuilds all the way up still has to take the grave, so its blocks come last
+        BlockPos pos = firstFree(level, start, topY, store, true)
+                .or(() -> firstFree(level, start, topY, store, false))
+                .orElseThrow(() -> new IllegalStateException(
+                        "No free block for a grave in the column at " + level.dimension().identifier() + " " + start));
         Yolt.LOGGER.warn("No spot near {} {} keeps a grave's items safe, so the grave goes at {}, over something that "
                 + "would destroy them if they were dropped", level.dimension().identifier(), start, pos);
         return pos;
     }
 
     // Up the column from the start, then down from just below it
-    private static Optional<BlockPos> firstFree(ServerLevel level, BlockPos start, int topY, GraveStore store) {
+    private static Optional<BlockPos> firstFree(ServerLevel level, BlockPos start, int topY, GraveStore store,
+                                                boolean outOfRebuilds) {
         for (int y = start.getY(); y <= topY; y++) {
             BlockPos pos = start.atY(y);
-            if (free(level, pos, store) && store.at(level.dimension(), pos).isEmpty()) {
+            if (freeForNewGrave(level, pos, store, outOfRebuilds)) {
                 return Optional.of(pos);
             }
         }
         for (int y = start.getY() - 1; y >= level.getMinY(); y--) {
             BlockPos pos = start.atY(y);
-            if (free(level, pos, store) && store.at(level.dimension(), pos).isEmpty()) {
+            if (freeForNewGrave(level, pos, store, outOfRebuilds)) {
                 return Optional.of(pos);
             }
         }
         return Optional.empty();
     }
 
-    // Past the border nobody could reach the grave to open it
+    private static boolean freeForNewGrave(ServerLevel level, BlockPos pos, GraveStore store, boolean outOfRebuilds) {
+        return free(level, pos, store) && store.at(level.dimension(), pos).isEmpty()
+                && !(outOfRebuilds && EndRebuilds.wipes(level, pos));
+    }
+
+    // Past the border nobody could reach the grave to open it, and where the End rebuilds, its head would be deleted
     private static boolean usable(ServerLevel level, BlockPos pos, GraveStore store) {
         return level.getWorldBorder().isWithinBounds(pos) && fits(level, pos, store)
-                && store.at(level.dimension(), pos).isEmpty();
+                && store.at(level.dimension(), pos).isEmpty() && !EndRebuilds.wipes(level, pos);
     }
 
     // The nearest block the live border counts as inside: a block is inside when its low corner is at or past the
