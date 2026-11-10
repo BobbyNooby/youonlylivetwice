@@ -36,7 +36,7 @@ public final class LenientCodecs {
      * A list that decodes each element on its own: a bad element is logged ("what" names the kind) and skipped, so one
      * broken record can't make a whole store start empty. It also tells whether anything was left out, so a store can
      * keep a copy of its file before the next save drops that part for good. An element its codec could read only in
-     * part (an error that still carries a value) is kept as read, and that codec logs what it left out.
+     * part (an error that still carries a value) is kept as read, with a warning that says what was left out.
      */
     public static <T> Codec<Read<T>> read(Codec<T> element, String what) {
         Encoder<Read<T>> encoder = element.listOf().comap(Read::values);
@@ -49,6 +49,8 @@ public final class LenientCodecs {
                 Optional<T> value = parsed.resultOrPartial();
                 if (value.isEmpty()) {
                     parsed.error().ifPresent(error -> Yolt.LOGGER.error("Skipping unreadable {} record: {}", what, error.message()));
+                } else {
+                    parsed.error().ifPresent(error -> Yolt.LOGGER.warn("Reading only part of a {} record: {}", what, error.message()));
                 }
                 value.ifPresent(loaded::add);
             }

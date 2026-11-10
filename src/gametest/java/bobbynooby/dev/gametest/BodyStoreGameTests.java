@@ -284,6 +284,29 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // The chestplate's id is one no item has, as after the mod that added it went. The rest of the record still loads,
+    // and the log says it was read only in part.
+    @GameTest
+    public void partlyReadBodyRecordIsLogged(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyRecord record = record(Map.of(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET),
+                EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE)));
+        CompoundTag brokenTag = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, record).getOrThrow();
+        brokenTag.getCompoundOrEmpty("snapshot").getCompoundOrEmpty("gear").put("chest", OfflineGameTests.unreadableItem());
+
+        List<BodyStore> loaded = new ArrayList<>();
+        List<String> log = OfflineGameTests.yoltLog(
+                () -> loaded.add(BodyStore.TYPE.codec().parse(ops, storeData(brokenTag)).getOrThrow()));
+        Map<EquipmentSlot, ItemStack> gear = loaded.get(0).byOwner(record.owner())
+                .map(after -> after.snapshot().gear()).orElse(null);
+        helper.assertTrue(gear != null, "the record with an unknown item was dropped");
+        helper.assertTrue(gear.getOrDefault(EquipmentSlot.HEAD, ItemStack.EMPTY).is(Items.IRON_HELMET), "helmet lost");
+        helper.assertFalse(gear.containsKey(EquipmentSlot.CHEST), "the unknown chest item was read: " + gear);
+        long partial = log.stream().filter(line -> line.startsWith("Reading only part of a body record")).count();
+        helper.assertValueEqual(partial, 1L, "logged partial reads: " + log);
+        helper.succeed();
+    }
+
     // A body file's data part, with the version fields at today's values so no fixer runs
     private static CompoundTag storeData(Tag... bodies) {
         ListTag list = new ListTag();
