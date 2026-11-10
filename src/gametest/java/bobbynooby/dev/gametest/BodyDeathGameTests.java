@@ -292,13 +292,15 @@ public class BodyDeathGameTests {
     @GameTest
     public void vanillaKillSkipsBodiesWithHint(GameTestHelper helper) {
         ServerPlayer first = join(helper, "KillSkipM");
-        helper.setBlock(new BlockPos(3, 0, 1), Blocks.STONE);
-        ServerPlayer second = TestPlayers.join(helper, "KillSkipP", GameType.SURVIVAL, new BlockPos(3, 1, 1));
         UUID mannequinOwner = first.getUUID();
-        UUID playerBodyOwner = second.getUUID();
+        UUID playerBodyOwner = null;
         YoltConfig.BodiesSection before = useDefaultBodies();
-        Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(1, 1, 3));
+        Zombie zombie = null;
         try {
+            helper.setBlock(new BlockPos(3, 0, 1), Blocks.STONE);
+            ServerPlayer second = TestPlayers.join(helper, "KillSkipP", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+            playerBodyOwner = second.getUUID();
+            zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(1, 1, 3));
             helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies by default");
             Mannequin mannequin = leaveBody(helper, first);
             Settings.get().bodies.type = YoltConfig.BodyType.PLAYER;
@@ -322,10 +324,17 @@ public class BodyDeathGameTests {
                 helper.assertTrue(store(helper).byOwner(owner).isPresent(), "a body record went");
             }
         } finally {
-            zombie.discard();
-            cleanUp(helper, mannequinOwner, before);
-            BodyTestKit.removeBodies(helper, playerBodyOwner);
-            BodyTestKit.removeGraves(helper, playerBodyOwner);
+            if (zombie != null) {
+                zombie.discard();
+            }
+            try {
+                cleanUp(helper, mannequinOwner, before);
+            } finally {
+                // With the switches back, so a player still online leaves without a body
+                if (playerBodyOwner != null) {
+                    cleanUp(helper, playerBodyOwner);
+                }
+            }
         }
         helper.succeed();
     }
@@ -360,16 +369,16 @@ public class BodyDeathGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = join(helper, "VoidBody");
         UUID owner = player.getUUID();
-        YoltConfig.BodiesSection before = useDefaultBodies();
-        Mannequin body;
-        try {
-            player.getInventory().add(new ItemStack(Items.DIAMOND));
-            body = leaveBody(helper, player);
-        } finally {
-            Settings.get().bodies = before;
-        }
         boolean waiting = false;
         try {
+            YoltConfig.BodiesSection before = useDefaultBodies();
+            Mannequin body;
+            try {
+                player.getInventory().add(new ItemStack(Items.DIAMOND));
+                body = leaveBody(helper, player);
+            } finally {
+                Settings.get().bodies = before;
+            }
             helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies");
             body.setHealth(1.0F);
             body.teleportTo(body.getX(), helper.getLevel().getMinY() - 70, body.getZ());
