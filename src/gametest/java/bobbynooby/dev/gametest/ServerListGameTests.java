@@ -66,6 +66,9 @@ public class ServerListGameTests {
                 Settings.get().hide.serverPlayerCount = hidden;
                 helper.assertValueEqual(players.sample().stream().map(NameAndId::name).toList(),
                         List.of("First line, with spaces", "\u00a7cSecond line"), "sample names, count hidden " + hidden);
+                // Each ping reads the sample again, so the fake ids must not change between reads
+                helper.assertValueEqual(players.sample().stream().map(NameAndId::id).toList(),
+                        players.sample().stream().map(NameAndId::id).toList(), "sample ids from one ping to the next, count hidden " + hidden);
             }
         } finally {
             Settings.get().hide.serverPlayerCount = before;

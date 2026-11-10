@@ -6,6 +6,10 @@ import java.util.function.BiConsumer;
 
 /** Range checks on a loaded config. A value that fails is replaced by the fallback's. */
 final class ConfigChecks {
+    // Vanilla's own sample never has more than 12 names. Past these, a long list could push the status reply over its size limit.
+    static final int MAX_HOVER_LINES = 12;
+    static final int MAX_HOVER_LINE_LENGTH = 256;
+
     private ConfigChecks() {}
 
     /**
@@ -66,6 +70,26 @@ final class ConfigChecks {
             c.bodies.duration = fallback.bodies.duration;
             fellBack.accept("bodies.duration", "expected \"offline\" or minutes of 1 or more");
         }
+        // Like the End cap, what fits is kept rather than the whole list falling back
+        List<String> lines = c.serverList.hoverLines;
+        List<String> capped = new ArrayList<>();
+        for (String line : lines.subList(0, Math.min(lines.size(), MAX_HOVER_LINES))) {
+            capped.add(cut(line));
+        }
+        if (!capped.equals(lines)) {
+            c.serverList.hoverLines = capped;
+            warnings.add("serverList.hoverLines: at most " + MAX_HOVER_LINES + " lines of " + MAX_HOVER_LINE_LENGTH
+                    + " characters each, the rest was dropped");
+        }
         return reset;
+    }
+
+    // Never between the two halves of a character outside the basic range, such as an emoji
+    private static String cut(String line) {
+        if (line.length() <= MAX_HOVER_LINE_LENGTH) {
+            return line;
+        }
+        boolean split = Character.isHighSurrogate(line.charAt(MAX_HOVER_LINE_LENGTH - 1));
+        return line.substring(0, split ? MAX_HOVER_LINE_LENGTH - 1 : MAX_HOVER_LINE_LENGTH);
     }
 }

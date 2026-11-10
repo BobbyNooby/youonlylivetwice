@@ -1,6 +1,7 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.core.Migrations;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -403,6 +406,35 @@ class ConfigLoaderTest {
         ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":[\"one\",\"two\"]}}");
         assertEquals(List.of("one", "two"), r.config().serverList.hoverLines);
         assertEquals(List.of(), loadJson("{\"serverList\":{\"hoverLines\":[]}}").config().serverList.hoverLines);
+    }
+
+    // One warning however much is cut, and a list that fits is left alone
+    @Test
+    void hoverLinesAreCapped() throws IOException {
+        List<String> typed = new ArrayList<>();
+        for (int i = 0; i < 14; i++) {
+            typed.add(i == 1 ? "x".repeat(300) : "line" + i);
+        }
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":" + new Gson().toJson(typed) + "}}");
+        List<String> lines = r.config().serverList.hoverLines;
+        assertEquals(ConfigChecks.MAX_HOVER_LINES, lines.size());
+        assertEquals("line0", lines.get(0));
+        assertEquals("x".repeat(ConfigChecks.MAX_HOVER_LINE_LENGTH), lines.get(1));
+        assertEquals("line11", lines.get(11));
+        assertEquals(1, r.warnings().stream().filter(w -> w.startsWith("serverList.hoverLines")).count(), r.warnings().toString());
+
+        List<String> fits = Collections.nCopies(ConfigChecks.MAX_HOVER_LINES, "y".repeat(ConfigChecks.MAX_HOVER_LINE_LENGTH));
+        ConfigLoader.Result fitting = loadJson("{\"serverList\":{\"hoverLines\":" + new Gson().toJson(fits) + "}}");
+        assertEquals(fits, fitting.config().serverList.hoverLines);
+        assertTrue(fitting.warnings().isEmpty(), fitting.warnings().toString());
+    }
+
+    // A cut never leaves half of a character such as an emoji
+    @Test
+    void hoverLineCutKeepsWholeCharacters() throws IOException {
+        String line = "a".repeat(ConfigChecks.MAX_HOVER_LINE_LENGTH - 1) + "\uD83D\uDE00tail";
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"hoverLines\":" + new Gson().toJson(List.of(line)) + "}}");
+        assertEquals("a".repeat(ConfigChecks.MAX_HOVER_LINE_LENGTH - 1), r.config().serverList.hoverLines.get(0));
     }
 
     @Test

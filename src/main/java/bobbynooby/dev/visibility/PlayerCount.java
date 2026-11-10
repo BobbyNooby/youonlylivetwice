@@ -3,6 +3,7 @@ package bobbynooby.dev.visibility;
 import bobbynooby.dev.config.Settings;
 import net.minecraft.server.players.NameAndId;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,8 +34,9 @@ public final class PlayerCount {
     public static List<NameAndId> sample(List<NameAndId> real) {
         List<String> lines = Settings.get().serverList.hoverLines;
         if (Settings.active() && !lines.isEmpty()) {
-            // The client shows each entry's name as plain text, so a line is a fake player with a random id
-            return lines.stream().map(line -> new NameAndId(UUID.randomUUID(), line)).toList();
+            // The client shows each entry's name as plain text, so a line is a fake player. Its id comes from the text,
+            // so it stays the same from one ping to the next.
+            return lines.stream().map(line -> new NameAndId(UUID.nameUUIDFromBytes(line.getBytes(StandardCharsets.UTF_8)), line)).toList();
         }
         return hides() ? List.of() : real;
     }
