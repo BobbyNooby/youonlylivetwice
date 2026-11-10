@@ -31,6 +31,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -49,6 +50,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -451,6 +453,245 @@ public class SkinGameTests {
             MOJANG.forget(account);
         }
         helper.succeed();
+    }
+
+    // The skin of a player who has joined this server is refused, whatever the case it is typed in, though Mojang has the
+    // account; a non-op's own name is not. With the switch off the same pick goes through. Every switch goes back in the
+    // same tick.
+    @GameTest
+    public void skinOfServerMemberRefused(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean refuseBefore = config.skins.refuseKnownPlayers;
+        // Joined once, and away now
+        ServerPlayer member = TestPlayers.join(helper, "Member", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String memberName = member.nameAndId().name();
+        TestPlayers.leave(member);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Copier", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String ownName = player.nameAndId().name();
+        MOJANG.answer(memberName);
+        MOJANG.answer(ownName);
+        SkinStore store = SkinStore.get(server);
+        try {
+            helper.assertTrue(refuseBefore, "known players' skins are not refused by default");
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            player.messages.clear();
+            type(player, "yolt skin set " + memberName.toLowerCase(Locale.ROOT));
+            helper.assertValueEqual(texts(player), List.of("Someone on this server already has " + memberName
+                    + "'s skin. Pick another."), "reply to a server member's skin");
+            assertEqual(helper, store.choice(player.getUUID()), null, "the pick after the refusal");
+
+            type(player, "yolt skin set " + ownName);
+            assertEqual(helper, store.choice(player.getUUID()), ownName, "the pick of their own name");
+
+            config.skins.refuseKnownPlayers = false;
+            type(player, "yolt skin set " + memberName);
+            assertEqual(helper, store.choice(player.getUUID()), memberName, "the pick with the switch off");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.refuseKnownPlayers = refuseBefore;
+            store.clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(memberName);
+            MOJANG.forget(ownName);
+        }
+        helper.succeed();
+    }
+
+    // An account another player picked is taken while they wear it, and free once they clear it
+    @GameTest
+    public void skinWornByAnotherRefused(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        // A player who is away, so only the pick can make the account taken
+        UUID wearer = UUID.randomUUID();
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Second", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            store.choose(wearer, account);
+            player.messages.clear();
+            type(player, "yolt skin set " + account);
+            helper.assertValueEqual(texts(player), List.of("Someone on this server already has " + account
+                    + "'s skin. Pick another."), "reply to a skin another player wears");
+            assertEqual(helper, store.choice(player.getUUID()), null, "the pick after the refusal");
+
+            store.clearChoice(wearer);
+            type(player, "yolt skin set " + account);
+            assertEqual(helper, store.choice(player.getUUID()), account, "the pick once nobody wears it");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(wearer);
+            store.clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // The owner of a skin joins: every other player's pick of it goes, a player online is told at once, and one who is
+    // away hears it when they next join, once. A pick of another account stays.
+    @GameTest
+    public void ownerJoinResetsBorrowedSkin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String reset = "Your skin was reset because its owner joined this server.";
+        GameProfile owner = new GameProfile(UUID.randomUUID(), uniqueName("Owner"));
+        GameProfile away = new GameProfile(UUID.randomUUID(), uniqueName("Away"));
+        UUID other = UUID.randomUUID();
+        String otherAccount = uniqueName("Acct");
+        TestPlayers.Recording borrower = TestPlayers.joinRecording(helper, "Borrower", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        List<UUID> joined = new ArrayList<>(List.of(borrower.getUUID()));
+        try {
+            store.choose(borrower.getUUID(), owner.name());
+            store.choose(away.id(), owner.name());
+            store.choose(other, otherAccount);
+            borrower.messages.clear();
+            joined.add(owner.id());
+            TestPlayers.join(helper, owner, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            assertEqual(helper, store.choice(borrower.getUUID()), null, "the online borrower's pick");
+            assertEqual(helper, store.choice(away.id()), null, "the away borrower's pick");
+            assertEqual(helper, store.choice(other), otherAccount, "a pick of another account");
+            helper.assertValueEqual(texts(borrower).stream().filter(reset::equals).count(), 1L,
+                    "times the online borrower was told");
+
+            joined.add(away.id());
+            ServerPlayer back = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(chatLines(back, reset), 1, "times the away borrower was told at their join");
+            TestPlayers.leave(back);
+            back = TestPlayers.join(helper, away, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(chatLines(back, reset), 0, "times the away borrower was told at the next join");
+        } finally {
+            for (UUID id : joined) {
+                ServerPlayer online = server.getPlayerList().getPlayer(id);
+                if (online != null) {
+                    TestPlayers.leave(online);
+                }
+            }
+            store.clearChoice(borrower.getUUID());
+            store.clearChoice(away.id());
+            store.clearChoice(other);
+        }
+        helper.succeed();
+    }
+
+    // With the lock on, a non-op picks once: a second pick and a clear are both refused, and the skin stays. An op still
+    // changes it for them. With the lock off they change it again themselves. Every switch goes back in the same tick.
+    @GameTest
+    public void lockedSkinNeedsOp(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
+        String first = uniqueName("Acct");
+        String second = uniqueName("Acct");
+        MOJANG.answer(first);
+        MOJANG.answer(second);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Locked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        SkinStore store = SkinStore.get(server);
+        try {
+            helper.assertFalse(lockBefore, "skins lock after the first pick by default");
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.lockAfterFirstChoice = true;
+            type(player, "yolt skin set " + first);
+            assertEqual(helper, store.choice(player.getUUID()), first, "the first pick");
+
+            player.messages.clear();
+            type(player, "yolt skin set " + second);
+            helper.assertValueEqual(texts(player), List.of("Your skin is locked. Ask an op to change it."), "reply to a second pick");
+            assertEqual(helper, store.choice(player.getUUID()), first, "the pick after a second pick");
+            player.messages.clear();
+            type(player, "yolt skin clear");
+            helper.assertValueEqual(texts(player), List.of("Your skin is locked. Ask an op to change it."), "reply to a clear");
+            assertEqual(helper, store.choice(player.getUUID()), first, "the pick after a clear");
+
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + second),
+                    List.of(name + "'s skin is now " + second + "'s. It shows once they rejoin."), "an op's change");
+            assertEqual(helper, store.choice(player.getUUID()), second, "the pick an op changed");
+
+            config.skins.lockAfterFirstChoice = false;
+            type(player, "yolt skin set " + first);
+            assertEqual(helper, store.choice(player.getUUID()), first, "the pick with the lock off");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            store.clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(first);
+            MOJANG.forget(second);
+        }
+        helper.succeed();
+    }
+
+    // Neither rule holds an op or the console back: with both on, an op picks a server member's skin, then one another
+    // player wears, then clears it, all past the lock, and the console gives a player a member's skin. Every switch
+    // goes back in the same tick.
+    @GameTest
+    public void opCanSetAnySkin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean refuseBefore = config.skins.refuseKnownPlayers;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
+        ServerPlayer member = TestPlayers.join(helper, "OpMember", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String memberName = member.nameAndId().name();
+        TestPlayers.leave(member);
+        String worn = uniqueName("Acct");
+        UUID wearer = UUID.randomUUID();
+        MOJANG.answer(memberName);
+        MOJANG.answer(worn);
+        TestPlayers.Recording op = TestPlayers.joinRecording(helper, "SkinOp", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer target = TestPlayers.join(helper, "SkinTarget", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String targetName = target.nameAndId().name();
+        SkinStore store = SkinStore.get(server);
+        try {
+            TestPlayers.op(op);
+            config.skins.refuseKnownPlayers = true;
+            config.skins.lockAfterFirstChoice = true;
+            store.choose(wearer, worn);
+            type(op, "yolt skin set " + memberName);
+            assertEqual(helper, store.choice(op.getUUID()), memberName, "an op's pick of a member's skin");
+            type(op, "yolt skin set " + worn);
+            assertEqual(helper, store.choice(op.getUUID()), worn, "an op's locked pick of a worn skin");
+            type(op, "yolt skin clear");
+            assertEqual(helper, store.choice(op.getUUID()), null, "an op's locked pick after a clear");
+
+            helper.assertValueEqual(console(server, "yolt skin set " + targetName + " " + memberName),
+                    List.of(targetName + "'s skin is now " + memberName + "'s. It shows once they rejoin."), "the console's pick");
+            assertEqual(helper, store.choice(target.getUUID()), memberName, "the console's pick of a member's skin");
+        } finally {
+            config.skins.refuseKnownPlayers = refuseBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            store.clearChoice(wearer);
+            store.clearChoice(op.getUUID());
+            store.clearChoice(target.getUUID());
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+            TestPlayers.leave(target);
+            MOJANG.forget(memberName);
+            MOJANG.forget(worn);
+        }
+        helper.succeed();
+    }
+
+    // How many times this line came to the player in chat
+    private static int chatLines(ServerPlayer player, String line) {
+        return (int) TestPlayers.sentPackets(player).stream()
+                .filter(packet -> packet instanceof ClientboundSystemChatPacket chat && chat.content().getString().equals(line))
+                .count();
     }
 
     // Every path under /yolt in a tree, as the dump writes them
