@@ -81,16 +81,15 @@ public final class Bodies {
         ServerLevel level = found != null ? found : server.overworld();
         // Entities added to a chunk that isn't loaded sit in limbo until it is
         level.getChunkAt(BlockPos.containing(pos));
-        // A body at a ledge's edge or floating in the air has nothing under its feet, and a falling item could end in
-        // lava or the void, so it stays where the body stood
-        BlockPos below = BlockPos.containing(pos).below();
-        boolean noFloor = level.getBlockState(below).getCollisionShape(level, below).isEmpty();
         try {
             for (ItemStack item : items) {
                 // Without vanilla's random push, which could slide it off the body's block into lava or the void
                 ItemEntity entity = new ItemEntity(level, pos.x, pos.y, pos.z, item, 0.0, 0.0, 0.0);
                 entity.setUnlimitedLifetime();
-                entity.setNoGravity(noFloor);
+                // Held where the body stood unless a block is right under the item itself: past a ledge, beside a
+                // fence post or down a ladder it could fall into lava or the void. Blocks only, since an entity under
+                // it can move away.
+                entity.setNoGravity(level.noBlockCollision(entity, entity.getBoundingBox().move(0.0, -1.0E-6, 0.0)));
                 // Listed before the add, so the undo still takes it back if a load listener throws once it is in
                 added.add(entity);
                 if (!level.addFreshEntity(entity)) {
