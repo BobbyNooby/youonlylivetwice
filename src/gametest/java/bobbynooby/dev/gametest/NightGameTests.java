@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.saveddata.WeatherData;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -21,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class NightGameTests {
     private static final String NIGHT = "you-only-live-twice-gametest:night";
     private static final String NIGHT_SKIP = "you-only-live-twice-gametest:night_skip";
+    // Midnight in a thunderstorm
+    private static final String NIGHT_THUNDER = "you-only-live-twice-gametest:night_thunder";
     // Vanilla skips the night once everyone has slept this long
     private static final int DEEP_SLEEP_TICKS = 100;
 
@@ -77,6 +80,42 @@ public class NightGameTests {
                         "the clock is at " + now + ", " + (now - asleepAt) + " ticks after the sleeper got into bed, not the next morning");
                 helper.assertFalse(sleeper.isSleeping(), "the sleeper is still in bed");
                 cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Vanilla clears a storm as it skips the night, so with the skip blocked the thunder and rain stay
+    @GameTest(environment = NIGHT_THUNDER, maxTicks = 140, skyAccess = true)
+    public void sleepingThroughThunderDoesNotClearWeather(GameTestHelper helper) {
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer sleeper = TestPlayers.join(helper, "StormOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        WeatherData weather = helper.getLevel().getWeatherData();
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean before = sleep.noNightSkip;
+        Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
+        boolean waiting = false;
+        try {
+            sleep.noNightSkip = true;
+            helper.assertTrue(weather.isThundering() && weather.isRaining(), "no thunderstorm to sleep through");
+            helper.assertTrue(helper.getLevel().getGameRules().get(GameRules.ADVANCE_WEATHER),
+                    "the weather doesn't advance, so a night skip wouldn't clear it either");
+            goToSleep(helper, sleeper, head);
+            helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night would not skip anyway");
+            helper.runAfterDelay(DEEP_SLEEP_TICKS + 10, () -> {
+                try {
+                    helper.assertTrue(sleeper.isSleeping(), "the sleeper was woken up");
+                    helper.assertTrue(enoughAsleepForVanilla(helper, true), "vanilla would not skip the night now either, so nothing was tested");
+                    helper.assertTrue(weather.isThundering(), "the thunder stopped while everyone slept");
+                    helper.assertTrue(weather.isRaining(), "the rain stopped while everyone slept");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
             });
             waiting = true;
         } finally {
