@@ -56,7 +56,8 @@ public final class OfflineDeath {
         // Same as an online death: a spectator drops nothing and gets everything back at respawn, and with
         // keepInventory the inventory and XP stay. The ender chest setting still applies with keepInventory, but
         // only while graves are on, since an online death with graves off never reaches it. A death that doesn't
-        // count takes nothing either, and records nothing: the items stay in the save for the respawn to hand back.
+        // count takes nothing either, and records nothing: the items and XP stay in the save, marked for the respawn to
+        // hand back.
         GameType mode = OfflinePlayerData.gameType(tag);
         boolean uncounted = UncountedDeaths.uncounted(mode);
         boolean keepsAll = mode == GameType.SPECTATOR || uncounted;
@@ -85,6 +86,9 @@ public final class OfflineDeath {
         }
         items.addAll(unplaced);
         OfflinePlayerData.markDead(tag, where);
+        if (uncounted) {
+            OfflinePlayerData.addEntityTag(tag, UncountedDeaths.MARK);
+        }
         Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 
         // Deposit, then commit. A failed commit takes the deposit back, so the items never exist twice.

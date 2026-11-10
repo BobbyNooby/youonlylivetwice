@@ -49,9 +49,9 @@ public final class GraveDeath {
         }
         // Before the switch too: a death that makes no grave must not be told about an older one at the respawn
         GraveNotice.forget(player.getUUID());
-        // Before the switch as well: a death in creative drops nothing, graves or not. The items stay on the dead
-        // player for the respawn to hand back, so there is no emptied player to save at once either.
-        if (UncountedDeaths.uncounted(player)) {
+        // Before the switch as well: a death in creative drops nothing, graves or not, and no XP. The items stay on the
+        // dead player for the respawn to hand back, so there is no emptied player to save at once either.
+        if (UncountedDeaths.keepsDrops(player)) {
             return true;
         }
         if (!Settings.on(c -> c.graves.enabled)) {

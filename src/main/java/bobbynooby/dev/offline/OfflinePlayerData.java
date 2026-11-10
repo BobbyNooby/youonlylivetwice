@@ -2,6 +2,7 @@ package bobbynooby.dev.offline;
 
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Yolt;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -64,6 +65,7 @@ public final class OfflinePlayerData {
     private static final String XP_TOTAL = "XpTotal";
     private static final String XP_PROGRESS = "XpP";
     private static final String LAST_DEATH_LOCATION = "LastDeathLocation";
+    private static final String TAGS = "Tags";
 
     private OfflinePlayerData() {}
 
@@ -94,6 +96,15 @@ public final class OfflinePlayerData {
         tag.putInt(XP_TOTAL, 0);
         tag.putFloat(XP_PROGRESS, 0.0F);
         return level;
+    }
+
+    /** Adds an entity tag to the save, as /tag would, so the player has it once they are loaded. */
+    public static void addEntityTag(CompoundTag tag, String entityTag) {
+        List<String> tags = new ArrayList<>(tag.read(TAGS, Codec.STRING.listOf()).orElse(List.of()));
+        if (!tags.contains(entityTag)) {
+            tags.add(entityTag);
+            tag.store(TAGS, Codec.STRING.listOf(), tags);
+        }
     }
 
     /** Makes the save a dead player's, who died at where: no effects and no health. */
