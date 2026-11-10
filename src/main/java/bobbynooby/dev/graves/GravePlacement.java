@@ -17,6 +17,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Picks the block a grave head goes on: near the death spot, never on another grave, always reachable. */
 public final class GravePlacement {
@@ -26,6 +27,10 @@ public final class GravePlacement {
     private static final int RING_UP = 3;
     // An item is a quarter block wide, so one dropped at a block's centre with no push falls straight down this column
     private static final VoxelShape ITEM_COLUMN = Block.column(4.0, 0.0, 16.0);
+    // The replaceable blocks that drop themselves, or sticks, when broken by hand; a head set over one deletes that
+    // drop. Grass and ferns only now and then drop a seed, so they stay usable.
+    private static final Set<Block> DROPS_ITEMS = Set.of(Blocks.RESIN_CLUMP, Blocks.LEAF_LITTER, Blocks.CRIMSON_ROOTS,
+            Blocks.WARPED_ROOTS, Blocks.DEAD_BUSH, Blocks.RED_SHRUB);
 
     private GravePlacement() {
     }
@@ -41,13 +46,13 @@ public final class GravePlacement {
     }
 
     /**
-     * True when a head can go at pos: the block there gives way and holds nothing, nothing below it could be blocked
-     * by the head, and items dropped there last.
+     * True when a head can go at pos: the block there gives way, holds nothing and drops nothing, nothing below it
+     * could be blocked by the head, and items dropped there last.
      */
     static boolean fits(ServerLevel level, BlockPos pos, GraveStore store) {
         BlockState state = level.getBlockState(pos);
-        return state.canBeReplaced() && !state.hasBlockEntity() && !onBlockEntity(level, pos.below(), store)
-                && safeForItems(level, pos, store);
+        return state.canBeReplaced() && !state.hasBlockEntity() && !DROPS_ITEMS.contains(state.getBlock())
+                && !onBlockEntity(level, pos.below(), store) && safeForItems(level, pos, store);
     }
 
     // A head right on top of a block entity can be in its way, for example it keeps a shulker box's lid shut. Another

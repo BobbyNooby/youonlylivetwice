@@ -94,6 +94,24 @@ public class PlacementGameTests {
         helper.succeed();
     }
 
+    // Broken by hand, leaf litter drops itself, so a head set over it would delete that item
+    @GameTest
+    public void leafLitterIsNotReplaced(GameTestHelper helper) {
+        BlockPos ground = new BlockPos(1, 0, 1);
+        try {
+            helper.setBlock(ground, Blocks.STONE);
+            helper.setBlock(ground.above(), Blocks.LEAF_LITTER);
+            BlockPos death = helper.absolutePos(ground.above());
+            BlockPos result = GravePlacement.find(helper.getLevel(), death, store(helper));
+            helper.assertFalse(result.equals(death), "grave placed over the leaf litter");
+            helper.assertTrue(helper.getLevel().getBlockState(death).is(Blocks.LEAF_LITTER), "leaf litter is gone");
+        } finally {
+            helper.setBlock(ground.above(), Blocks.AIR);
+            helper.setBlock(ground, Blocks.AIR);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void secondDeathAtSameSpotFindsNewPosition(GameTestHelper helper) {
         GraveStore store = store(helper);
