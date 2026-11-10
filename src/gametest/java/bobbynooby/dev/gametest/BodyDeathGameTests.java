@@ -269,10 +269,13 @@ public class BodyDeathGameTests {
                 helper.getLevel().getEntities(EntityTypes.EXPERIENCE_ORB, aroundPlain, Entity::isAlive).forEach(Entity::discard);
                 plain.discard();
             }
-            cleanUp(helper, owner, before);
-            // After the switches went back, so this logout leaves no body
-            if (killer != null) {
-                TestPlayers.leave(killer);
+            try {
+                cleanUp(helper, owner, before);
+            } finally {
+                // After the switches went back, so this logout leaves no body
+                if (killer != null) {
+                    TestPlayers.leave(killer);
+                }
             }
         }
         helper.succeed();
