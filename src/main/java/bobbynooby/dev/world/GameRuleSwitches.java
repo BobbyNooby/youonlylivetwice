@@ -30,4 +30,16 @@ public final class GameRuleSwitches {
             server.getGameRules().set(GameRules.LOCATOR_BAR, false, server);
         }
     }
+
+    // Also run by /yolt reload. A wither spawning, the dragon dying or an End portal opening plays for every player,
+    // from the event's direction, so it tells who is active and where.
+    public static void applyGlobalSounds(MinecraftServer server) {
+        if (!Settings.active()) {
+            return;
+        }
+        // Saved with the world too, so with the switch off we leave whatever the admin set
+        if (Settings.get().hide.globalSounds) {
+            server.getGameRules().set(GameRules.GLOBAL_SOUND_EVENTS, false, server);
+        }
+    }
 }

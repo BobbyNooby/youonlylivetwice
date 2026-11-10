@@ -23,6 +23,7 @@ public final class LiveSettings {
         NameTagTeam.apply(server);
         GameRuleSwitches.applyImmediateRespawn(server);
         GameRuleSwitches.applyLocatorBar(server);
+        GameRuleSwitches.applyGlobalSounds(server);
         TabHeaders.applyAll(server);
         // Which commands a player sees depends on restrictCommands and chat.allowWhispers,
         // and which players their client knows about depends on the hide switches

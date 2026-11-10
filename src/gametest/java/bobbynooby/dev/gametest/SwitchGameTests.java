@@ -13,10 +13,14 @@ import net.minecraft.server.players.SleepStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.gamerules.GameRule;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 // Each test restores what it flips in a finally block, in the same tick, so other tests never see it
 public class SwitchGameTests {
@@ -128,27 +132,41 @@ public class SwitchGameTests {
         helper.succeed();
     }
 
-    // Each case starts with the rule on, as in a new world
     @GameTest
     public void locatorBarOffOnlyWithSwitch(GameTestHelper helper) {
+        ruleOffOnlyWithSwitch(helper, GameRules.LOCATOR_BAR, hide -> hide.locatorBar, (hide, on) -> hide.locatorBar = on,
+                GameRuleSwitches::applyLocatorBar);
+    }
+
+    @GameTest
+    public void globalSoundsOffOnlyWithSwitch(GameTestHelper helper) {
+        ruleOffOnlyWithSwitch(helper, GameRules.GLOBAL_SOUND_EVENTS, hide -> hide.globalSounds, (hide, on) -> hide.globalSounds = on,
+                GameRuleSwitches::applyGlobalSounds);
+    }
+
+    // Each case starts with the rule on, as in a new world
+    private static void ruleOffOnlyWithSwitch(GameTestHelper helper, GameRule<Boolean> rule,
+                                              Predicate<YoltConfig.HideSection> getSwitch,
+                                              BiConsumer<YoltConfig.HideSection, Boolean> setSwitch,
+                                              Consumer<MinecraftServer> apply) {
         MinecraftServer server = helper.getLevel().getServer();
         GameRules rules = server.getGameRules();
         YoltConfig.HideSection hide = Settings.get().hide;
-        boolean switchBefore = hide.locatorBar;
-        boolean ruleBefore = rules.get(GameRules.LOCATOR_BAR);
+        boolean switchBefore = getSwitch.test(hide);
+        boolean ruleBefore = rules.get(rule);
         try {
-            rules.set(GameRules.LOCATOR_BAR, true, server);
-            hide.locatorBar = true;
-            GameRuleSwitches.applyLocatorBar(server);
-            helper.assertFalse(rules.get(GameRules.LOCATOR_BAR), "switch on: the locator bar rule is still on");
+            rules.set(rule, true, server);
+            setSwitch.accept(hide, true);
+            apply.accept(server);
+            helper.assertFalse(rules.get(rule), "switch on: " + rule.id() + " is still on");
 
-            rules.set(GameRules.LOCATOR_BAR, true, server);
-            hide.locatorBar = false;
-            GameRuleSwitches.applyLocatorBar(server);
-            helper.assertTrue(rules.get(GameRules.LOCATOR_BAR), "switch off: the locator bar rule was changed");
+            rules.set(rule, true, server);
+            setSwitch.accept(hide, false);
+            apply.accept(server);
+            helper.assertTrue(rules.get(rule), "switch off: " + rule.id() + " was changed");
         } finally {
-            hide.locatorBar = switchBefore;
-            rules.set(GameRules.LOCATOR_BAR, ruleBefore, server);
+            setSwitch.accept(hide, switchBefore);
+            rules.set(rule, ruleBefore, server);
         }
         helper.succeed();
     }
