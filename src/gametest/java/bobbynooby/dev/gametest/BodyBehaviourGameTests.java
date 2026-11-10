@@ -54,7 +54,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 // Like the other body tests: each one runs with the default body switches (bodies on) and puts the server's own
-// back in the same tick. The two that wait only need the switches while the body spawns.
+// back in the same tick. The ones that wait only need the switches while the body spawns, or until its item drops.
 public class BodyBehaviourGameTests {
     @GameTest
     public void armourWearsWhenHit(GameTestHelper helper) {
@@ -399,19 +399,7 @@ public class BodyBehaviourGameTests {
     // drops stays at its feet rather than falling, since lava or the void could be under it.
     @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, maxTicks = 60)
     public void bodyItemOverAirStaysPut(GameTestHelper helper) {
-        ItemEntity drop = dropAtExpiry(helper, "Floating", new BlockPos(1, 3, 1), false);
-        Vec3 at = drop.position();
-        helper.assertTrue(drop.isNoGravity(), "the chestplate dropped over air has gravity");
-        helper.runAfterDelay(50, () -> {
-            try {
-                helper.assertTrue(drop.isAlive(), "the dropped chestplate is gone");
-                helper.assertTrue(drop.position().distanceTo(at) < 0.01, "the dropped chestplate moved from " + at
-                        + " to " + drop.position());
-            } finally {
-                drop.discard();
-            }
-            helper.succeed();
-        });
+        assertStaysPut(helper, dropAtExpiry(helper, "Floating", new BlockPos(1, 3, 1), false));
     }
 
     // On solid ground the item falls as vanilla's drops do, which only puts it on the floor
@@ -425,6 +413,31 @@ public class BodyBehaviourGameTests {
             drop.discard();
         }
         helper.succeed();
+    }
+
+    // The dropped item has no gravity and is still where it dropped 50 ticks on. It never despawns, so it goes
+    // either way.
+    private static void assertStaysPut(GameTestHelper helper, ItemEntity drop) {
+        Vec3 at = drop.position();
+        boolean waiting = false;
+        try {
+            helper.assertTrue(drop.isNoGravity(), "the dropped chestplate has gravity at " + at);
+            helper.runAfterDelay(50, () -> {
+                try {
+                    helper.assertTrue(drop.isAlive(), "the dropped chestplate is gone");
+                    helper.assertTrue(drop.position().distanceTo(at) < 0.01, "the dropped chestplate moved from " + at
+                            + " to " + drop.position());
+                } finally {
+                    drop.discard();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                drop.discard();
+            }
+        }
     }
 
     // The no-free-slot expiry above, for a body standing at the given spot. Returns the one chestplate it dropped; the
