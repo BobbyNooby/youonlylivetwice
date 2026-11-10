@@ -49,6 +49,9 @@ jobs:
           distribution: 'temurin'
       - name: setup gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # The action only saves its cache on the default branch (release) unless told, and every push here is to dev
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       - name: build
@@ -103,6 +106,8 @@ jobs:
           distribution: 'temurin'
       - name: setup gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       # OpenGL finds no GLX visual under xvfb, so the client falls back to Vulkan on Mesa's software driver
