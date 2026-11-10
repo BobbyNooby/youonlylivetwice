@@ -102,7 +102,8 @@ public final class GraveBlocks {
             return InteractionResult.PASS;
         }
         BlockPos pos = hit.getBlockPos();
-        if (Settings.get().graves.enabled && level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
+        // With graves off too: the switch only stops new graves, and an old one must still give back its items
+        if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
             Optional<Grave> grave = GraveStore.get(serverPlayer.level().getServer()).at(level.dimension(), pos)
                     .filter(found -> isOwnHead(level, pos, found));
             if (grave.isPresent()) {
@@ -123,9 +124,10 @@ public final class GraveBlocks {
     }
 
     // The event fires while the chunk is still being loaded, and setting a block in it then would wait on that
-    // same load. So the restore waits until the current tick is done.
+    // same load. So the restore waits until the current tick is done. Graves switched off are still restored: the
+    // switch only stops new ones.
     static void onChunkLoad(ServerLevel level, LevelChunk chunk, boolean generated) {
-        if (!Settings.on(c -> c.graves.enabled)) {
+        if (!Settings.active()) {
             return;
         }
         MinecraftServer server = level.getServer();
@@ -134,8 +136,8 @@ public final class GraveBlocks {
             return;
         }
         Later.afterTick(server, () -> {
-            // Graves may have been switched off meanwhile. If the chunk unloaded, its next load tries again.
-            if (Settings.on(c -> c.graves.enabled) && level.hasChunk(pos.x(), pos.z())) {
+            // If the chunk unloaded, its next load tries again
+            if (level.hasChunk(pos.x(), pos.z())) {
                 restoreChunk(level, chunk);
             }
         });

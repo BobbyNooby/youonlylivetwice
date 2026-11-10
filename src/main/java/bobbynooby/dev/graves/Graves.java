@@ -46,9 +46,11 @@ public final class Graves {
         LastGround.init();
     }
 
-    /** True for the head block of a grave while graves are on. Every protection hook asks this. */
+    /** True for the head block of a grave. Every protection hook asks this. */
     public static boolean isGrave(Level level, BlockPos pos) {
-        if (!Settings.on(c -> c.graves.enabled) || !(level instanceof ServerLevel serverLevel)) {
+        // Not graves.enabled: switching graves off only stops new ones, and the graves already out there still hold
+        // someone's items, so they stay protected
+        if (!Settings.active() || !(level instanceof ServerLevel serverLevel)) {
             return false;
         }
         // The block first: it is cheap, and the hooks run for many blocks that are never heads
