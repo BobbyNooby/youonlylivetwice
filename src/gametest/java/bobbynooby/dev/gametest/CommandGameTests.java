@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.chat.CommandRestriction;
+import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
@@ -33,6 +34,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.storage.LevelData;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -53,9 +55,15 @@ import java.util.stream.Stream;
 public class CommandGameTests {
     // A batch of its own: a reload swaps the whole config object, which a test holding the old one across ticks would miss
     static final String CONFIG_COMMAND = "you-only-live-twice-gametest:config_command";
+    private static final String SPAWN_NOTE = " The world spawn is outside the new border; move it with /setworldspawn.";
+    // Test structures, and the world spawn among them, sit within ±15 million blocks, so a border this wide around 0, 0
+    // holds them all, and BEYOND is past its edge
+    private static final int WIDE = 50_000_000;
+    private static final int BEYOND = 27_000_000;
 
     // The test server keeps YOLT's border off, so this turns it on just for the command. confirm, because the test
-    // structures and anything in them sit millions of blocks out, far outside a 3000 block border.
+    // structures and anything in them sit millions of blocks out, far outside a 3000 block border. The world spawn sits
+    // among them, so the reply notes it.
     @GameTest
     public void borderFromConsoleSucceeds(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -70,7 +78,8 @@ public class CommandGameTests {
 
         border.enabled = true;
         try {
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000."), "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000." + SPAWN_NOTE),
+                    "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 3000, "diameter setting");
             helper.assertTrue(Files.readString(Settings.path()).contains("\"diameter\": 3000"), "diameter not saved to the config file");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 3000.0, "overworld border size");
@@ -326,7 +335,10 @@ public class CommandGameTests {
             helper.assertValueEqual(overworld.getSize(), sizeBefore, "overworld border size after the refusal");
             helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
 
-            helper.assertValueEqual(run(server, "yolt border 2000 confirm"), List.of("World border diameter set to 2000."), "output with confirm");
+            // The world spawn sits among the test structures, so whether the reply notes it depends on where this one is
+            List<String> confirmed = run(server, "yolt border 2000 confirm");
+            helper.assertTrue(confirmed.size() == 1 && confirmed.get(0).startsWith("World border diameter set to 2000."),
+                    "output with confirm: " + confirmed);
             helper.assertValueEqual(overworld.getSize(), 2000.0, "overworld border size with confirm");
             helper.assertTrue(DeathLockout.refusal(player.getUUID(), "Test") == null, "a death was recorded for " + name);
         } finally {
@@ -335,6 +347,186 @@ public class CommandGameTests {
             restoreBorders(bordersBefore);
             Files.writeString(Settings.path(), fileBefore);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // With random spawn off a new player starts at the world spawn itself, so a border that leaves it outside kills them
+    // on their first join. The border holds every test; only the moved spawn is outside it.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderShrinkStrandingWorldSpawnNeedsConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean randomSpawnBefore = config.randomSpawn;
+        YoltConfig.WorldBorderSection border = config.worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        double endScaleBefore = border.endScale;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+
+        config.randomSpawn = false;
+        border.enabled = true;
+        border.endScale = 1.0;
+        try {
+            centreAll(server);
+            moveSpawn(server, BEYOND);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("This would leave the world spawn outside the world border. Add confirm to the command to do it anyway."),
+                    "refusal");
+            helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), bordersBefore.get(server.overworld())[2],
+                    "overworld border size after the refusal");
+
+            helper.assertValueEqual(run(server, "yolt border " + WIDE + " confirm"),
+                    List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE), "output with confirm");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size with confirm");
+        } finally {
+            config.randomSpawn = randomSpawnBefore;
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            border.endScale = endScaleBefore;
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // Random spawn puts a first join inside the border instead, so the same border only gets a note
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderLeavingSpawnOutsideOnlyNotesWithRandomSpawn(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean randomSpawnBefore = config.randomSpawn;
+        YoltConfig.WorldBorderSection border = config.worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        double endScaleBefore = border.endScale;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+
+        config.randomSpawn = true;
+        border.enabled = true;
+        border.endScale = 1.0;
+        try {
+            centreAll(server);
+            moveSpawn(server, BEYOND);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE),
+                    "command output");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
+        } finally {
+            config.randomSpawn = randomSpawnBefore;
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            border.endScale = endScaleBefore;
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // The world spawn is left where the test server put it, among the tests and inside the border, so no confirm is needed
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderKeepingSpawnInsideNeedsNoConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean randomSpawnBefore = config.randomSpawn;
+        YoltConfig.WorldBorderSection border = config.worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        double endScaleBefore = border.endScale;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+
+        config.randomSpawn = false;
+        border.enabled = true;
+        border.endScale = 1.0;
+        try {
+            centreAll(server);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "."), "command output");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
+        } finally {
+            config.randomSpawn = randomSpawnBefore;
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            border.endScale = endScaleBefore;
+            restoreBorders(bordersBefore);
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A player coming through an End portal lands by the platform at 100, 0 whatever the spawn settings, so an End
+    // border of 100 blocks around 0, 0 needs confirm. The overworld border is wide enough to hold every test.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void endScalingStrandingEndPlatformNeedsConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        double endScaleBefore = border.endScale;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        WorldBorder end = level(helper, Level.END).getWorldBorder();
+
+        border.enabled = true;
+        border.diameter = WIDE;
+        try {
+            centreAll(server);
+            double endSizeBefore = end.getSize();
+            List<String> refused = run(server, "yolt endscaling 0.000002");
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave the End's arrival platform")
+                    && refused.get(0).endsWith(" outside the world border. Add confirm to the command to do it anyway."), "refusal: " + refused);
+            helper.assertValueEqual(end.getSize(), endSizeBefore, "end border size after the refusal");
+            helper.assertValueEqual(border.endScale, endScaleBefore, "end scale setting after the refusal");
+
+            helper.assertValueEqual(run(server, "yolt endscaling 0.000002 confirm"),
+                    List.of("End world border scaling factor set to " + 0.000002 + "."), "output with confirm");
+            helper.assertValueEqual(end.getSize(), WIDE * 0.000002, "end border size with confirm");
+        } finally {
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            border.endScale = endScaleBefore;
+            restoreBorders(bordersBefore);
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // The same through a reload, which can't be confirmed, so the world's borders stay exactly as they are. Every border
+    // starts at vanilla's largest, which holds the moved spawn.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadStrandingWorldSpawnKeepsBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+        try {
+            centreAll(server);
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(ConfigLoader.MAX_BORDER_DIAMETER));
+            moveSpawn(server, BEYOND);
+            Files.writeString(path, "{\"randomSpawn\": false, \"worldBorder\": {\"enabled\": true, \"diameter\": " + WIDE
+                    + ", \"endScale\": 1.0}}");
+
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line -> line.startsWith(
+                    "World border kept as it was, since the config's border would leave the world spawn outside it.")),
+                    "command output: " + output);
+            for (ServerLevel level : server.getAllLevels()) {
+                helper.assertValueEqual(level.getWorldBorder().getSize(), (double) ConfigLoader.MAX_BORDER_DIAMETER,
+                        level.dimension().identifier() + " border size");
+            }
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.reload();
+            TestServerSetup.applyTestSettings();
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
         }
         helper.succeed();
     }
@@ -354,8 +546,10 @@ public class CommandGameTests {
         try {
             double size = overworld.getSize();
             overworld.lerpSizeBetween(size, size - 1000, 1_000_000L, server.overworld().getGameTime());
-            // confirm, because the test structures sit far outside a 3000 block border
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000."), "command output");
+            // confirm, because the test structures sit far outside a 3000 block border. So does the world spawn, which
+            // the reply notes.
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000." + SPAWN_NOTE),
+                    "command output");
             helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
             helper.assertValueEqual(overworld.getSize(), 3000.0, "overworld border size");
         } finally {
@@ -952,6 +1146,16 @@ public class CommandGameTests {
             level.getWorldBorder().setCenter(border[0], border[1]);
             level.getWorldBorder().setSize(border[2]);
         });
+    }
+
+    // Every border around 0, 0, so a WIDE one holds everything a test hasn't put past it
+    private static void centreAll(MinecraftServer server) {
+        server.getAllLevels().forEach(level -> level.getWorldBorder().setCenter(0, 0));
+    }
+
+    // The test server puts the world spawn among the tests; the caller puts back the spawn it saved
+    private static void moveSpawn(MinecraftServer server, int x) {
+        server.setRespawnData(LevelData.RespawnData.of(Level.OVERWORLD, new BlockPos(x, 64, 0), 0, 0));
     }
 
     private static ServerLevel level(GameTestHelper helper, ResourceKey<Level> dimension) {

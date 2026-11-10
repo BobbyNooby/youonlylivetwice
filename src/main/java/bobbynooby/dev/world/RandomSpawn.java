@@ -4,8 +4,10 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,6 +37,15 @@ public final class RandomSpawn {
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
         return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
+    }
+
+    /**
+     * True when a new player's first spot comes from here rather than the world spawn itself. Vanilla searches around the
+     * world spawn for that spot, and the hook answers the search in the overworld; in adventure mode vanilla skips the
+     * search and takes the spawn as it is.
+     */
+    public static boolean placesFirstJoins(MinecraftServer server, ServerLevel spawnLevel) {
+        return appliesTo(spawnLevel) && server.getWorldData().getGameType() != GameType.ADVENTURE;
     }
 
     /** A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn always exists. */

@@ -7,6 +7,7 @@ import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.world.RandomSpawn;
 import bobbynooby.dev.world.WorldBorders;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -19,6 +20,7 @@ import net.minecraft.commands.arguments.coordinates.Vec2Argument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
@@ -62,12 +64,20 @@ final class BorderCommands {
     }
 
     /**
-     * The online players, bodies and graves a border command would leave outside, where they take border damage or can't
-     * be reached. The command sets every size now, a moving border's too, and each level keeps its own centre. Empty
-     * while the border feature is off, since then YOLT changes no border. The switch is read from the live config, so a
-     * change to it is made before asking.
+     * What a border change would leave outside, where players take border damage and things can't be reached. names
+     * need confirm: the world spawn while new players start right on it, where players arrive in the end, and the online
+     * players, bodies and graves. spawnNote is for the reply when the world spawn ends up outside, and "" when it doesn't.
      */
-    static List<String> stranded(MinecraftServer server, int diameter, double endScale) {
+    record Outside(List<String> names, String spawnNote) {
+        static final Outside NONE = new Outside(List.of(), "");
+    }
+
+    /**
+     * What a border command would leave outside. The command sets every size now, a moving border's too, and each level
+     * keeps its own centre. Nothing while the border feature is off, since then YOLT changes no border. The switch is
+     * read from the live config, so a change to it is made before asking.
+     */
+    static Outside stranded(MinecraftServer server, int diameter, double endScale) {
         return stranded(server, sized(diameter, endScale, false), false);
     }
 
@@ -75,7 +85,7 @@ final class BorderCommands {
      * The same for a reload. A moving border is left to finish, so it isn't checked, and what is already outside a
      * level's border is left out, so a bigger border is never refused for it.
      */
-    static List<String> newlyStranded(MinecraftServer server, int diameter, double endScale) {
+    static Outside newlyStranded(MinecraftServer server, int diameter, double endScale) {
         return stranded(server, sized(diameter, endScale, true), true);
     }
 
@@ -88,25 +98,25 @@ final class BorderCommands {
     private static Proposal sized(int diameter, double endScale, boolean leaveMoving) {
         return (live, isEnd) -> leaveMoving && live.getStatus() != BorderStatus.STATIONARY
                 ? null
-                : border(live.getCenterX(), live.getCenterZ(), isEnd ? diameter * endScale : diameter);
+                : borderAt(live.getCenterX(), live.getCenterZ(), isEnd ? diameter * endScale : diameter);
     }
 
     // /yolt center moves the overworld and nether to the new centre and the end to 0, 0. Each keeps the size the world
     // has, which can differ from the config's: a held border, or a vanilla /worldborder change.
     private static Proposal centred(double centerX, double centerZ) {
-        return (live, isEnd) -> isEnd ? border(0, 0, live.getSize()) : border(centerX, centerZ, live.getSize());
+        return (live, isEnd) -> isEnd ? borderAt(0, 0, live.getSize()) : borderAt(centerX, centerZ, live.getSize());
     }
 
-    private static WorldBorder border(double centerX, double centerZ, double size) {
+    private static WorldBorder borderAt(double centerX, double centerZ, double size) {
         WorldBorder border = new WorldBorder();
         border.setCenter(centerX, centerZ);
         border.setSize(size);
         return border;
     }
 
-    private static List<String> stranded(MinecraftServer server, Proposal proposal, boolean newlyOnly) {
+    private static Outside stranded(MinecraftServer server, Proposal proposal, boolean newlyOnly) {
         if (!Settings.on(c -> c.worldBorder.enabled)) {
-            return List.of();
+            return Outside.NONE;
         }
         // Each level is checked against its own border as it is now. Vanilla's border answers "inside", so the edge is
         // the one border damage and block use go by.
@@ -118,8 +128,23 @@ final class BorderCommands {
             }
         });
 
-        // A set, since one player can have several graves
+        // The spawn points first, so the cap on listed names never hides them. A set, since one player can have several graves.
         Set<String> names = new LinkedHashSet<>();
+        String spawnNote = "";
+        // A first join starts at the world spawn as it is, not moved inside the border, unless random spawn picks the spot
+        ServerLevel spawnLevel = server.findRespawnDimension();
+        BlockPos spawn = server.getWorldData().overworldData().getRespawnData().pos();
+        if (strands(borders, spawnLevel.dimension(), spawn.getX(), spawn.getZ())) {
+            spawnNote = " The world spawn is outside the new border; move it with /setworldspawn.";
+            if (!RandomSpawn.placesFirstJoins(server, spawnLevel)) {
+                names.add("the world spawn");
+            }
+        }
+        // An End portal always puts a player on the platform vanilla builds here, whatever the spawn settings
+        Vec3 endArrival = Vec3.atBottomCenterOf(ServerLevel.END_SPAWN_POINT);
+        if (strands(borders, Level.END, endArrival.x, endArrival.z)) {
+            names.add("the End's arrival platform");
+        }
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (strands(borders, player.level().dimension(), player.getX(), player.getZ())) {
                 names.add(player.nameAndId().name());
@@ -136,7 +161,7 @@ final class BorderCommands {
                 names.add(grave.ownerName() + "'s grave");
             }
         }
-        return List.copyOf(names);
+        return new Outside(List.copyOf(names), spawnNote);
     }
 
     // One dimension's border as it is and as it would be
@@ -152,14 +177,10 @@ final class BorderCommands {
     }
 
     // Null when the change may go ahead
-    private static @Nullable String strandedRefusal(MinecraftServer server, boolean confirmed, Proposal proposal) {
-        if (confirmed) {
-            return null;
-        }
-        List<String> outside = stranded(server, proposal, false);
-        return outside.isEmpty()
+    private static @Nullable String refusal(Outside outside, boolean confirmed) {
+        return confirmed || outside.names().isEmpty()
                 ? null
-                : "This would leave " + listed(outside) + " outside the world border. Add confirm to the command to do it anyway.";
+                : "This would leave " + listed(outside.names()) + " outside the world border. Add confirm to the command to do it anyway.";
     }
 
     /** The first ten names and how many more, so a long list doesn't flood the chat. */
@@ -171,8 +192,8 @@ final class BorderCommands {
     }
 
     private static int border(CommandSourceStack source, int diameter, boolean confirmed) {
-        MinecraftServer server = source.getServer();
-        String refusal = strandedRefusal(server, confirmed, sized(diameter, Settings.get().worldBorder.endScale, false));
+        Outside outside = stranded(source.getServer(), diameter, Settings.get().worldBorder.endScale);
+        String refusal = refusal(outside, confirmed);
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
@@ -180,7 +201,7 @@ final class BorderCommands {
         Settings.save();
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
-        return YoltCommands.done(source, "World border diameter set to " + diameter + "." + borderOffNote());
+        return YoltCommands.done(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote());
     }
 
     // The centre isn't in the config: vanilla saves it with the world
@@ -196,7 +217,8 @@ final class BorderCommands {
             return YoltCommands.fail(source, "The world border feature is off, so YOLT moves no border.");
         }
         MinecraftServer server = source.getServer();
-        String refusal = strandedRefusal(server, confirmed, centred(x, z));
+        Outside outside = stranded(server, centred(x, z), false);
+        String refusal = refusal(outside, confirmed);
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
@@ -209,7 +231,7 @@ final class BorderCommands {
             }
         });
         LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
-        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + spawnOutsideNote(server));
+        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + outside.spawnNote());
     }
 
     private static int endScaling(CommandSourceStack source, double scaling, boolean confirmed) {
@@ -217,8 +239,8 @@ final class BorderCommands {
         if (!(scaling > 0)) {
             return YoltCommands.fail(source, "End world border scaling factor must be above 0.");
         }
-        MinecraftServer server = source.getServer();
-        String refusal = strandedRefusal(server, confirmed, sized(Settings.get().worldBorder.diameter, scaling, false));
+        Outside outside = stranded(source.getServer(), Settings.get().worldBorder.diameter, scaling);
+        String refusal = refusal(outside, confirmed);
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
@@ -226,7 +248,7 @@ final class BorderCommands {
         Settings.save();
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
-        return YoltCommands.done(source, "End world border scaling factor set to " + scaling + "." + borderOffNote());
+        return YoltCommands.done(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote());
     }
 
     // Read as doubles: Vec2Argument.getVec2 rounds to floats, which moves a centre past about 16 million by a block
@@ -242,16 +264,5 @@ final class BorderCommands {
     // With the feature off YOLT sizes no border: border and endscaling only save their value, and center is refused
     private static String borderOffNote() {
         return Settings.get().worldBorder.enabled ? "" : " The world border feature is off, so YOLT sizes no border.";
-    }
-
-    // With random spawn off, a first join starts at the world spawn itself, not at a spot vanilla keeps inside the border
-    private static String spawnOutsideNote(MinecraftServer server) {
-        if (Settings.get().randomSpawn) {
-            return "";
-        }
-        BlockPos spawn = server.getWorldData().overworldData().getRespawnData().pos();
-        return server.findRespawnDimension().getWorldBorder().isWithinBounds(spawn)
-                ? ""
-                : " The world spawn is outside the new border; move it with /setworldspawn.";
     }
 }

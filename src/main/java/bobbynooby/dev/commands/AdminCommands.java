@@ -60,16 +60,20 @@ final class AdminCommands {
             // An unchanged file is checked too: what counts is the world's own border, which a timed /worldborder can have
             // moved away from the config.
             YoltConfig.WorldBorderSection reloaded = Settings.get().worldBorder;
-            List<String> outside = BorderCommands.newlyStranded(server, reloaded.diameter, reloaded.endScale);
-            if (!outside.isEmpty()) {
+            BorderCommands.Outside outside = BorderCommands.newlyStranded(server, reloaded.diameter, reloaded.endScale);
+            if (!outside.names().isEmpty()) {
                 // The world's borders stay exactly as they are, and the live values as they were
                 Settings.get().worldBorder = liveBorder;
                 applyBorder = false;
-                warnings.add("World border kept as it was, since the config's border would leave " + BorderCommands.listed(outside)
+                warnings.add("World border kept as it was, since the config's border would leave " + BorderCommands.listed(outside.names())
                         + " outside it. A restart will apply the config's border; use /yolt border or endscaling with confirm"
                         + " to apply it now, or change the file.");
             } else {
                 Settings.releaseBorder();
+                // A world spawn left outside only blocks while new players start on it, so with random spawn it is just said
+                if (!outside.spawnNote().isEmpty()) {
+                    warnings.add(outside.spawnNote().strip());
+                }
             }
         }
         LiveSettings.applyAll(server, applyBorder);
