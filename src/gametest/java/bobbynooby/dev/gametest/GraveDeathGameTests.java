@@ -345,20 +345,21 @@ public class GraveDeathGameTests {
     public void lavaDeathPutsGraveOutOfLava(GameTestHelper helper) {
         List<BlockPos> lava = new ArrayList<>();
         List<BlockPos> rim = new ArrayList<>();
-        for (int x = 1; x <= 5; x++) {
-            for (int z = 1; z <= 5; z++) {
-                BlockPos pos = new BlockPos(x, 0, z);
-                if (x == 1 || x == 5 || z == 1 || z == 5) {
-                    rim.add(pos);
-                    helper.setBlock(pos, Blocks.STONE);
-                } else {
-                    lava.add(pos);
-                    helper.setBlock(pos, Blocks.LAVA);
+        ServerPlayer player = null;
+        try {
+            for (int x = 1; x <= 5; x++) {
+                for (int z = 1; z <= 5; z++) {
+                    BlockPos pos = new BlockPos(x, 0, z);
+                    if (x == 1 || x == 5 || z == 1 || z == 5) {
+                        rim.add(pos);
+                        helper.setBlock(pos, Blocks.STONE);
+                    } else {
+                        lava.add(pos);
+                        helper.setBlock(pos, Blocks.LAVA);
+                    }
                 }
             }
-        }
-        ServerPlayer player = TestPlayers.join(helper, "Lava", GameType.SURVIVAL, new BlockPos(3, 0, 3));
-        try {
+            player = TestPlayers.join(helper, "Lava", GameType.SURVIVAL, new BlockPos(3, 0, 3));
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             player.getInventory().add(new ItemStack(Items.IRON_SWORD));
             TestPlayers.markLoaded(player);
@@ -379,7 +380,9 @@ public class GraveDeathGameTests {
             helper.assertTrue(items.get(2).is(Items.IRON_SWORD), "third item is not the sword");
             assertHeadBlock(helper, grave);
         } finally {
-            cleanUp(helper, player);
+            if (player != null) {
+                cleanUp(helper, player);
+            }
             for (BlockPos pos : lava) {
                 helper.setBlock(pos, Blocks.AIR);
             }
