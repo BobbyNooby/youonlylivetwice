@@ -7,6 +7,7 @@ import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -709,9 +710,10 @@ public class GraveDeathGameTests {
 
     // The kick and the login refusal name the death's grave by the death's time. They tell for a grave in another
     // dimension than the death, even at the same spot; by the distance as set; and name a dimension that isn't one of
-    // the three by its id. The graves are records, each made after the death is recorded, within its minute. The test
-    // server has no dimension of its own, so that grave is a record in a dimension with no level. The distance goes back
-    // in the same tick.
+    // the three by its id. A grave made after the death is a later death's, so it isn't named. The graves are records
+    // made at the death's own time, as a death's graves are made just before it is recorded. The test server has no
+    // dimension of its own, so that grave is a record in a dimension with no level. The distance goes back in the same
+    // tick.
     @GameTest
     public void refusalTellsByDimensionAndDistance(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -726,13 +728,16 @@ public class GraveDeathGameTests {
         try {
             assertDefaultTelling(helper);
             DeathLockout.recordDeath(owner, name);
+            DeathLog death = DeathLockout.newestDeath(owner);
+            helper.assertTrue(death != null, "the death was not recorded");
+            long died = death.deathTimeMillis();
 
-            Grave nether = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at));
+            Grave nether = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at), died);
             helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of(overworldLine),
                     "grave line for a death in the Nether at the same spot");
             store.remove(nether.id());
 
-            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(20)));
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(20)), died);
             graves.tellLocationDistance = 30;
             helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(),
                     "grave line for a grave 20 from the death, told past 30");
@@ -744,10 +749,15 @@ public class GraveDeathGameTests {
 
             ResourceKey<Level> modded = ResourceKey.create(Registries.DIMENSION,
                     Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "elsewhere"));
-            putRecord(store, made, owner, name, modded, at, GlobalPos.of(Level.OVERWORLD, at));
+            putRecord(store, made, owner, name, modded, at, GlobalPos.of(Level.OVERWORLD, at), died);
             helper.assertValueEqual(refusalGraveLine(helper, server, owner, name),
                     Optional.of("Your grave is at 30000, 70, 30000 in you-only-live-twice-gametest:elsewhere."),
                     "grave line for a grave in a dimension of a mod's");
+            made.forEach(grave -> store.remove(grave.id()));
+
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at), died + 1);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(),
+                    "grave line for a grave made after the death");
         } finally {
             graves.tellLocationDistance = distanceBefore;
             made.forEach(grave -> store.remove(grave.id()));
@@ -803,11 +813,11 @@ public class GraveDeathGameTests {
         helper.assertValueEqual(Settings.get().graves.tellLocationDistance, 16, "tellLocationDistance");
     }
 
-    // A grave record only, made now, with no head in the world
+    // A grave record only, with no head in the world
     private static Grave putRecord(GraveStore store, List<Grave> made, UUID owner, String name, ResourceKey<Level> dimension,
-                                   BlockPos pos, GlobalPos died) {
+                                   BlockPos pos, GlobalPos died, long createdAt) {
         Grave grave = new Grave(UUID.randomUUID(), owner, name, ResolvableProfile.createUnresolved(name), dimension, pos,
-                List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis(), died);
+                List.of(new ItemStack(Items.DIAMOND)), createdAt, died);
         store.put(grave);
         made.add(grave);
         return grave;
