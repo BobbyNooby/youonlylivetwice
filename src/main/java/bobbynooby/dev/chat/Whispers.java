@@ -67,7 +67,7 @@ public final class Whispers {
         return 1;
     }
 
-    public static void send(ServerPlayer sender, String targetName, String message) {
+    private static void send(ServerPlayer sender, String targetName, String message) {
         String senderName = sender.nameAndId().name();
         // The same reply whether or not it arrived, so it never tells who is online or nearby
         sender.sendSystemMessage(whisper("You whisper to " + targetName + ": " + message));
