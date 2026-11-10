@@ -49,6 +49,29 @@ final class BodyDeath {
     }
 
     /**
+     * Who a dying entity is in the death log: for a body its owner, from the body's record, since a mannequin's own name
+     * is just "Mannequin"; for anything else its uuid. Worked out only when the line is written, as every death passes here.
+     */
+    static Object logName(LivingEntity entity) {
+        return new Object() {
+            @Override
+            public String toString() {
+                try {
+                    if (entity.level() instanceof ServerLevel level) {
+                        Optional<BodyRecord> record = BodyStore.get(level.getServer()).byEntity(entity.getUUID());
+                        if (record.isPresent()) {
+                            return record.get().ownerName();
+                        }
+                    }
+                } catch (RuntimeException e) {
+                    // The line already reports a failure, maybe this same one, so the uuid will do
+                }
+                return entity.getUUID().toString();
+            }
+        };
+    }
+
+    /**
      * Offline /yolt kill of a player whose body still stands. A loaded body is killed and its death does the rest;
      * one in an unloaded chunk dies at its last saved spot, and goes when its chunk next loads.
      * Throws if the owner could not be killed.
