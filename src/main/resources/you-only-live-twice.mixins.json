@@ -12,6 +12,7 @@
     "BodyPortalMixin",
     "ChatFallbackMixin",
     "CommandNodeAccessor",
+    "CommandParseMixin",
     "CommandRestrictionMixin",
     "CreakingTrailMixin",
     "GraveDeathDropsMixin",

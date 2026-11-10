@@ -1,6 +1,7 @@
 package bobbynooby.dev.chat;
 
 import bobbynooby.dev.config.Settings;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -40,6 +41,11 @@ public final class CommandRestriction {
             root.addChild(Whispers.command().build());
         }
         return root;
+    }
+
+    /** The tree a restricted player's client was sent, to read its commands and suggestions against. */
+    public static CommandDispatcher<CommandSourceStack> nonOpDispatcher() {
+        return new CommandDispatcher<>(nonOpTree(Settings.get().chat.allowWhispers));
     }
 
     /** True when a typed command must not run; a restricted player's /help gets its answer here. */
