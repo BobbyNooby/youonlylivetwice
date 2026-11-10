@@ -105,16 +105,15 @@ public final class GraveDeath {
         return true;
     }
 
-    // Queued from a task, so it runs after the lockout's kick, which the death queues after this. A player gone by then
-    // was saved as they left, and a kick told them about the grave. One still here would wait for the next autosave,
-    // and a crash before it would bring the items back beside their graves, so they are saved now; but only once the
-    // graves are on disk, or that crash would lose the items instead.
+    // Queued from a task, so it runs after the lockout's kick, which the death queues after this: a player the kick has
+    // taken already was saved as they left. One still here would wait for the next autosave, and a crash before it
+    // would bring the items back beside their graves, so they are saved now; but only once the graves are on disk, or
+    // that crash would lose the items instead. A kicked player on a real connection is still here, since they leave
+    // only at the next connection tick, so they are saved now and again as they leave, which does no harm.
     private static void afterTheKick(MinecraftServer server, UUID id, String name, boolean gravesOnDisk) {
         Later.afterTick(server, () -> Later.afterTick(server, () -> {
             ServerPlayer current = server.getPlayerList().getPlayer(id);
-            if (current == null) {
-                GraveNotice.forget(id);
-            } else if (gravesOnDisk) {
+            if (current != null && gravesOnDisk) {
                 Guard.run(() -> ((PlayerListInvoker) server.getPlayerList()).yoltSave(current),
                         "Could not save {} after their death, so their items are in their save until the next one", name);
             }

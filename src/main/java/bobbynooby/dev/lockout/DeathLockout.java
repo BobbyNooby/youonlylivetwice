@@ -162,6 +162,8 @@ public final class DeathLockout {
             Component reason = current == null ? null : refusal(server, uuid, current.nameAndId().name());
             if (reason != null) {
                 current.connection.disconnect(reason);
+                // The kick told them where the grave is, so the respawn after the lockout doesn't again
+                GraveNotice.forget(uuid);
             }
         });
     }

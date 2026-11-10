@@ -59,7 +59,7 @@ public final class GraveNotice {
     }
 
     /** At their respawn, the owner is told nothing: their death made no grave, or its kick told them. */
-    static void forget(UUID owner) {
+    public static void forget(UUID owner) {
         AT_RESPAWN.remove(owner);
     }
 
