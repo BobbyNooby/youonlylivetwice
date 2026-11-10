@@ -10,18 +10,19 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.storage.LevelResource;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Skins that belong to someone here: the skin of each player who has joined this server, and the account each player
- * picked. With skins.refuseKnownPlayers on, a non-op can't pick one (SkinCommands), and a player who joins takes their
- * own skin back from every player who picked it, though not from a pick an op made.
+ * picked. With skins.refuseKnownPlayers on, a non-op can't pick one (SkinCommands), and a pick of an account that has
+ * become someone else's goes at its holder's own next login, though not a pick an op made. The owner's join changes
+ * nothing for anyone else, so nothing a borrower sees lines up with it.
  */
 public final class SkinOwners {
     static final String RESET = "Your skin was reset because its owner joined this server.";
@@ -36,27 +37,37 @@ public final class SkinOwners {
     }
 
     /**
-     * True when the account is someone else's here, so a non-op can't pick it; a player's own name is always theirs.
-     * Someone else's means another player picked it, or a player other than this one has joined as it: under its name
-     * or its id in YOLT's record of joins, or with a save in players/data. A save is tried under the account's own id,
-     * for online mode, and under the id an offline-mode server gives the name as asked and as Mojang spells it. Only a
-     * join writes a save, so a name vanilla merely looked up never counts, and every player from before the record is
-     * covered.
+     * True when the account is someone else's here, so a non-op can't pick it: another player picked it, or it is
+     * owned (see owned). A player's own name is always theirs.
      */
     public static boolean taken(MinecraftServer server, CachedSkin skin, String asked, NameAndId by) {
         if (skin.name().equalsIgnoreCase(by.name())) {
             return false;
         }
+        return !SkinStore.get(server).pickedBy(skin.name(), by.id()).isEmpty()
+                || owned(server, skin.name(), skin.id(), asked, by);
+    }
+
+    /**
+     * True when a player other than this one has joined as the account: under its name or an id of it in YOLT's record
+     * of joins, or with a save in players/data. The ids tried are the account's own, for online mode, and the one an
+     * offline-mode server gives the name as asked and as Mojang spells it. Only a join writes a save, so a name vanilla
+     * merely looked up never counts, and every player from before the record is covered.
+     */
+    static boolean owned(MinecraftServer server, String name, @Nullable UUID accountId, String asked, NameAndId by) {
+        if (name.equalsIgnoreCase(by.name())) {
+            return false;
+        }
         SkinStore store = SkinStore.get(server);
-        if (store.joinedAs(skin.name(), by.id()) || !store.pickedBy(skin.name(), by.id()).isEmpty()) {
+        if (store.joinedAs(name, by.id())) {
             return true;
         }
         Set<UUID> ids = new LinkedHashSet<>();
-        if (skin.id() != null) {
-            ids.add(skin.id());
+        if (accountId != null) {
+            ids.add(accountId);
         }
         ids.add(UUIDUtil.createOfflinePlayerUUID(asked));
-        ids.add(UUIDUtil.createOfflinePlayerUUID(skin.name()));
+        ids.add(UUIDUtil.createOfflinePlayerUUID(name));
         Path saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
         for (UUID id : ids) {
             if (!id.equals(by.id()) && (store.joined(id) || Files.exists(saves.resolve(id + ".dat")))) {
@@ -66,39 +77,45 @@ public final class SkinOwners {
         return false;
     }
 
-    private static void onJoin(ServerPlayer player) {
-        if (!Settings.active()) {
-            return;
-        }
-        MinecraftServer server = player.level().getServer();
-        SkinStore store = SkinStore.get(server);
-        String name = player.nameAndId().name();
-        // Whatever the switches say, so the record is whole once they are turned on
-        store.noteJoin(player.getUUID(), name);
-        if (store.takeReset(player.getUUID())) {
-            player.sendSystemMessage(Component.literal(RESET));
-        }
+    /**
+     * At a player's own login, before their skin is worked out: their pick of an account that is now owned goes, and
+     * they are told once they have joined. Never a pick an op made. The saved answer stands in for Mojang, who isn't
+     * asked.
+     */
+    static void dropOwnedPick(MinecraftServer server, NameAndId who) {
         if (!Settings.get().skins.refuseKnownPlayers) {
             return;
         }
-        // An op's pick stays: ops may give anyone any skin
-        List<UUID> borrowers = store.pickedBy(name, player.getUUID()).stream().filter(id -> !store.pickedByOp(id)).toList();
-        if (borrowers.isEmpty()) {
+        SkinStore store = SkinStore.get(server);
+        String chosen = store.choice(who.id());
+        if (chosen == null || store.pickedByOp(who.id())) {
             return;
         }
-        for (UUID borrower : borrowers) {
-            store.clearChoice(borrower);
-            // Told at their next join, when the skin really changes. Told now, an online borrower would learn that the
-            // owner just came online.
-            store.noteReset(borrower);
+        CachedSkin saved = store.skin(chosen);
+        if (!owned(server, chosen, saved != null ? saved.id() : null, chosen, who)) {
+            return;
         }
-        Yolt.LOGGER.info("{} joined, so {} skin {} of their name went back to the default", name, borrowers.size(),
-                borrowers.size() == 1 ? "pick" : "picks");
+        store.clearChoice(who.id());
+        store.noteReset(who.id());
+        Yolt.LOGGER.info("{} logged in with the skin of {}, who has played here, so it went back to the default", who.name(),
+                chosen);
         // On disk at once, as a pick from the command is, so a crash can't bring back a pick that was reset
         try {
             store.saveNow(server);
         } catch (RuntimeException e) {
-            Yolt.LOGGER.error("Could not save the skin picks reset for {} at once, so they are saved with the world", name, e);
+            Yolt.LOGGER.error("Could not save the reset of {}'s skin pick at once, so it is saved with the world", who.name(), e);
+        }
+    }
+
+    private static void onJoin(ServerPlayer player) {
+        if (!Settings.active()) {
+            return;
+        }
+        SkinStore store = SkinStore.get(player.level().getServer());
+        // Whatever the switches say, so the record is whole once they are turned on
+        store.noteJoin(player.getUUID(), player.nameAndId().name());
+        if (store.takeReset(player.getUUID())) {
+            player.sendSystemMessage(Component.literal(RESET));
         }
     }
 }

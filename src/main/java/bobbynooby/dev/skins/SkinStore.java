@@ -115,7 +115,7 @@ public final class SkinStore extends SavedData {
     private final Set<UUID> opPicks = new LinkedHashSet<>();
     // The name each player last joined with
     private final Map<UUID, String> joined = new LinkedHashMap<>();
-    // Players whose pick was reset because its owner joined, until they are told at their next join
+    // Players whose pick was reset as they logged in, until their join tells them
     private final Set<UUID> resets = new LinkedHashSet<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;

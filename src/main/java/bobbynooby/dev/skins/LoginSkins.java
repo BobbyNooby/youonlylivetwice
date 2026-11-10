@@ -66,6 +66,8 @@ public final class LoginSkins {
             ready = profile;
             return;
         }
+        // At the player's own login, so the skin they join with is their own, and the moment matches nobody else's join
+        SkinOwners.dropOwnedPick(server, new NameAndId(profile));
         // The account the player picked wins over everything, a skin they came with included
         String chosen = SkinStore.get(server).choice(profile.id());
         if (chosen != null) {
