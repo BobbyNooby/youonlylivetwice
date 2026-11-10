@@ -67,11 +67,13 @@ public class CommandRestrictionGameTests {
     public void restrictedCommandDoesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         Scoreboard scoreboard = server.getScoreboard();
-        Objective objective = scoreboard.addObjective("yolt_t", ObjectiveCriteria.TRIGGER, Component.literal("yolt_t"),
-                ObjectiveCriteria.RenderType.INTEGER, false, null);
         ServerPlayer player = TestPlayers.join(helper, "Trigger", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         boolean before = Settings.get().restrictCommands;
+        // Made after the join, so a join that fails leaves no objective behind
+        Objective objective = null;
         try {
+            objective = scoreboard.addObjective("yolt_t", ObjectiveCriteria.TRIGGER, Component.literal("yolt_t"),
+                    ObjectiveCriteria.RenderType.INTEGER, false, null);
             ScoreAccess score = scoreboard.getOrCreatePlayerScore(player, objective);
             score.unlock();
 
@@ -84,7 +86,9 @@ public class CommandRestrictionGameTests {
             helper.assertValueEqual(score.get(), 1, "score after an unrestricted trigger");
         } finally {
             Settings.get().restrictCommands = before;
-            scoreboard.removeObjective(objective);
+            if (objective != null) {
+                scoreboard.removeObjective(objective);
+            }
             TestPlayers.leave(player);
         }
         helper.succeed();
