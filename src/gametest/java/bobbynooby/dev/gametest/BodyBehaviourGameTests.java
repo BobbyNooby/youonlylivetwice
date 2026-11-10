@@ -318,6 +318,8 @@ public class BodyBehaviourGameTests {
             helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
             // ItemEntity.setUnlimitedLifetime sets this age, which the item's tick never counts up from
             helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped chestplate's age");
+            // No random push, which could carry it off the block the body stood on and into lava or the void
+            helper.assertValueEqual(drops.get(0).getDeltaMovement(), Vec3.ZERO, "dropped chestplate's movement");
         } finally {
             if (around != null) {
                 helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_CHESTPLATE))

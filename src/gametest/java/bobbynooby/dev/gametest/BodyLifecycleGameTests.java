@@ -234,6 +234,7 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the old body");
             helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
             helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped chestplate's age");
+            helper.assertValueEqual(drops.get(0).getDeltaMovement(), Vec3.ZERO, "dropped chestplate's movement");
         } finally {
             if (around != null) {
                 helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_CHESTPLATE))
