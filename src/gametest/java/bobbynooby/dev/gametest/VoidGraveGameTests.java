@@ -41,11 +41,13 @@ import net.minecraft.world.level.dimension.end.EnderDragonFight;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.LevelData;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 // Deaths over the void. The test world is flat and solid to the bottom in every dimension, so each test digs its own
 // hole down through the world and puts every block back in finally. Positions are absolute.
@@ -72,7 +74,8 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
-    // A 3 by 3 hole through the End's floor, with the death under its middle
+    // A 3 by 3 hole through the End's floor, with the death under its middle. The test's structure is millions out, so
+    // a box check that squares in ints would take every spot there and leave only the last resort.
     @GameTest(dimension = "minecraft:the_end", skyAccess = true)
     public void endVoidDeathNearLandLandsOnLand(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -84,7 +87,7 @@ public class VoidGraveGameTests {
                     dig(level, middle.offset(dx, 0, dz), before);
                 }
             }
-            BlockPos result = GravePlacement.find(level, belowWorld(level, middle), store(level));
+            BlockPos result = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
             helper.assertTrue(Math.abs(result.getX() - middle.getX()) > 1 || Math.abs(result.getZ() - middle.getZ()) > 1,
                     "grave in the hole at " + result);
             // One of the four floor blocks straight out from the middle; the hole's corners are further
@@ -505,10 +508,20 @@ public class VoidGraveGameTests {
         return made.getFirst();
     }
 
+    // Throws past what an int holds, so a grave thrown far off fails the test rather than wrapping round to near
     static int flatDistanceSqr(BlockPos a, BlockPos b) {
-        int dx = a.getX() - b.getX();
-        int dz = a.getZ() - b.getZ();
-        return dx * dx + dz * dz;
+        long dx = a.getX() - b.getX();
+        long dz = a.getZ() - b.getZ();
+        return Math.toIntExact(dx * dx + dz * dz);
+    }
+
+    // The placement, failing the test if it fell back on the last resort, which logs why
+    static <T> T withoutLastResort(GameTestHelper helper, Supplier<T> placement) {
+        List<T> result = new ArrayList<>(1);
+        List<String> log = OfflineGameTests.yoltLog(() -> result.add(placement.get()));
+        List<String> lastResort = log.stream().filter(line -> line.startsWith("No spot near")).toList();
+        helper.assertTrue(lastResort.isEmpty(), "the grave came from the last resort: " + lastResort);
+        return result.getFirst();
     }
 
     private static boolean sameColumn(BlockPos a, BlockPos b) {
