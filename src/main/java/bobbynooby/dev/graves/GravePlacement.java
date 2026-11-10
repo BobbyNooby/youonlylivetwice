@@ -282,9 +282,28 @@ public final class GravePlacement {
                 .or(() -> firstFree(level, start, topY, store, false))
                 .orElseThrow(() -> new IllegalStateException(
                         "No free block for a grave in the column at " + level.dimension().identifier() + " " + start));
-        Yolt.LOGGER.warn("No spot near {} {} keeps a grave's items safe, so the grave goes at {}, over something that "
-                + "would destroy them if they were dropped", level.dimension().identifier(), start, pos);
+        List<String> wrong = whatIsWrong(level, pos, store);
+        // Below the start the column can still have a spot with nothing wrong
+        if (!wrong.isEmpty()) {
+            Yolt.LOGGER.warn("No spot near {} {} suits a grave, so it goes at {}, which is {}", level.dimension().identifier(),
+                    start, pos, String.join(", and ", wrong));
+        }
         return pos;
+    }
+
+    // Each reason the search would turn the spot down, past the block being free
+    private static List<String> whatIsWrong(ServerLevel level, BlockPos pos, GraveStore store) {
+        List<String> wrong = new ArrayList<>();
+        if (!level.getWorldBorder().isWithinBounds(pos)) {
+            wrong.add("past the world border");
+        }
+        if (EndRebuilds.wipes(level, pos)) {
+            wrong.add("where the End rebuilds and would delete its head");
+        }
+        if (!safeForItems(level, pos, store)) {
+            wrong.add("over something that would destroy its items if they were dropped");
+        }
+        return wrong;
     }
 
     // Up the column from the start, then down from just below it
