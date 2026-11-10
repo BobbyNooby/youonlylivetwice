@@ -8,6 +8,7 @@ import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
+import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -383,9 +384,78 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // A mark this death didn't make, from /tag say, hands nothing back: a death that counts takes it off, so the respawn
+    // gives back no XP or score, while the death drops its XP as usual. All in one tick, and the player leaves before
+    // the kick comes.
+    @GameTest
+    public void countedDeathDropsStrayMark(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Marked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        BlockPos at = player.blockPosition();
+        try {
+            player.giveExperienceLevels(10);
+            player.setScore(5);
+            player.addTag(UncountedDeaths.MARK);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            helper.assertFalse(player.entityTags().contains(UncountedDeaths.MARK), "the death that counts left the mark on");
+            helper.assertTrue(orbsNear(helper, at) > 0, "the death that counts dropped no XP");
+
+            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(back.experienceLevel, 0, "XP level after the respawn");
+            helper.assertValueEqual(back.getScore(), 0, "score after the respawn");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+            discardOrbsNear(helper, at);
+        }
+        helper.succeed();
+    }
+
+    // The same away: /yolt kill of a saved player who carries a stray mark takes it off the save, so the respawn after
+    // their rejoin gives back no score. All in one tick, and the player leaves before the kick comes.
+    @GameTest
+    public void offlineCountedKillDropsStrayMark(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "AwayMarked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        GameProfile profile = player.getGameProfile();
+        UUID uuid = player.getUUID();
+        String name = profile.name();
+        BlockPos at = player.blockPosition();
+        try {
+            player.setScore(3);
+            player.addTag(UncountedDeaths.MARK);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            TestPlayers.leave(player);
+            helper.assertValueEqual(SkinGameTests.console(server, "yolt kill " + name), List.of("Killed " + name + "."), "command output");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertFalse(saved.read("Tags", Codec.STRING.listOf()).orElse(List.of()).contains(UncountedDeaths.MARK),
+                    "the save kept the mark");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
+            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(respawned.getScore(), 0, "score after the respawn");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+            discardOrbsNear(helper, at);
+        }
+        helper.succeed();
+    }
+
     // XP orbs near an absolute position
     private static int orbsNear(GameTestHelper helper, BlockPos absolutePos) {
         return helper.getLevel().getEntitiesOfClass(ExperienceOrb.class, new AABB(absolutePos).inflate(3.0), Entity::isAlive).size();
+    }
+
+    // A death that counts drops its XP, which would sit in another test's way
+    private static void discardOrbsNear(GameTestHelper helper, BlockPos absolutePos) {
+        helper.getLevel().getEntitiesOfClass(ExperienceOrb.class, new AABB(absolutePos).inflate(3.0), Entity::isAlive)
+                .forEach(Entity::discard);
     }
 
     // Graves are off for the death and back on in the same tick: these players carry nothing, and the tests are
