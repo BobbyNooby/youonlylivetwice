@@ -10,6 +10,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -54,8 +55,8 @@ public final class GravePlacement {
     }
 
     /**
-     * True when a head can go at pos: the block there gives way, holds nothing and drops nothing, nothing below it
-     * could be blocked by the head, and items dropped there last.
+     * True when a head can go at pos: the block there gives way, holds nothing and drops nothing, the head would be
+     * in the way of no block entity, and items dropped there last.
      */
     static boolean fits(ServerLevel level, BlockPos pos, GraveStore store) {
         return free(level, pos, store) && safeForItems(level, pos, store);
@@ -65,7 +66,7 @@ public final class GravePlacement {
     private static boolean free(ServerLevel level, BlockPos pos, GraveStore store) {
         BlockState state = level.getBlockState(pos);
         return state.canBeReplaced() && !state.hasBlockEntity() && !DROPS_ITEMS.contains(state.getBlock())
-                && !destroysItems(state) && !onBlockEntity(level, pos.below(), store);
+                && !destroysItems(state) && !onBlockEntity(level, pos.below(), store) && !inFrontOfShulkerLid(level, pos);
     }
 
     // A head right on top of a block entity can be in its way, for example it keeps a shulker box's lid shut. Another
@@ -73,6 +74,17 @@ public final class GravePlacement {
     private static boolean onBlockEntity(ServerLevel level, BlockPos floor, GraveStore store) {
         BlockState state = level.getBlockState(floor);
         return state.hasBlockEntity() && !isGrave(level, floor, state, store);
+    }
+
+    // A shulker box opens only when the half block in front of its lid is clear, so a head there keeps it shut
+    private static boolean inFrontOfShulkerLid(ServerLevel level, BlockPos pos) {
+        for (Direction side : Direction.values()) {
+            BlockState state = level.getBlockState(pos.relative(side));
+            if (state.getBlock() instanceof ShulkerBoxBlock && state.getValue(ShulkerBoxBlock.FACING) == side.getOpposite()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isGrave(ServerLevel level, BlockPos pos, BlockState state, GraveStore store) {

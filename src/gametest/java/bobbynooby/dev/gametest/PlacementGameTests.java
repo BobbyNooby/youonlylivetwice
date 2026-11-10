@@ -5,6 +5,7 @@ import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
@@ -15,6 +16,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.border.WorldBorder;
 
 import java.util.ArrayList;
@@ -234,6 +236,21 @@ public class PlacementGameTests {
             store.remove(upper.id());
             helper.setBlock(floor.above(3), Blocks.AIR);
             helper.setBlock(floor, Blocks.AIR);
+        }
+        helper.succeed();
+    }
+
+    // A shulker box beside the death spot with its lid facing the spot: a head there would keep the box shut
+    @GameTest
+    public void graveKeepsClearOfShulkerLid(GameTestHelper helper) {
+        BlockPos box = new BlockPos(2, 0, 1);
+        BlockPos death = box.west();
+        try {
+            helper.setBlock(box, Blocks.SHULKER_BOX.defaultBlockState().setValue(ShulkerBoxBlock.FACING, Direction.WEST));
+            BlockPos result = GravePlacement.find(helper.getLevel(), helper.absolutePos(death), store(helper));
+            helper.assertFalse(result.equals(helper.absolutePos(death)), "grave placed in front of the shulker box's lid");
+        } finally {
+            helper.setBlock(box, Blocks.AIR);
         }
         helper.succeed();
     }
