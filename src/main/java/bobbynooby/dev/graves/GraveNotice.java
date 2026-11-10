@@ -54,7 +54,7 @@ public final class GraveNotice {
     }
 
     /** At their respawn, the owner is told where this grave is, the first their death made. */
-    static void tellAtRespawn(UUID owner, UUID graveId) {
+    public static void tellAtRespawn(UUID owner, UUID graveId) {
         AT_RESPAWN.put(owner, graveId);
     }
 

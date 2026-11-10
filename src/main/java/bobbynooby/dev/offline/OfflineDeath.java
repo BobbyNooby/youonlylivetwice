@@ -3,6 +3,7 @@ package bobbynooby.dev.offline;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveNotice;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -135,6 +136,9 @@ public final class OfflineDeath {
             created.undo().run();
             throw e;
         }
+        // As after an online death, the owner hears where the grave is at their respawn once they are back. If the
+        // commit fails after this, the grave is taken back, and the respawn finds nothing to tell.
+        GraveNotice.tellAtRespawn(who.id(), created.graves().get(0).id());
         return created.undo();
     }
 
