@@ -15,9 +15,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.ValueInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,16 +52,22 @@ public final class TestPlayers {
         return join(server.overworld(), uniqueProfile(name), mode, absolutePos);
     }
 
-    // A returning player: like a real login, their save is read before they are placed in the world
+    // A returning player: like a real login, their save is read before they are placed in the world, and the pearls
+    // and vehicle it holds come back once they are (PrepareSpawnTask)
     public static ServerPlayer rejoin(GameTestHelper helper, GameProfile profile, GameType mode, BlockPos relativePos) {
-        return join(helper.getLevel(), profile, mode, helper.absolutePos(relativePos), (level, cookie) -> {
-            MinecraftServer server = level.getServer();
-            ServerPlayer player = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation());
-            server.getPlayerList().loadPlayerData(player.nameAndId())
-                    .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, server.registryAccess(), tag))
-                    .ifPresent(player::load);
-            return player;
+        MinecraftServer server = helper.getLevel().getServer();
+        Optional<ValueInput> saved = server.getPlayerList().loadPlayerData(new NameAndId(profile.id(), profile.name()))
+                .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, server.registryAccess(), tag));
+        ServerPlayer player = join(helper.getLevel(), profile, mode, helper.absolutePos(relativePos), (level, cookie) -> {
+            ServerPlayer loaded = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation());
+            saved.ifPresent(loaded::load);
+            return loaded;
         });
+        saved.ifPresent(input -> {
+            player.loadAndSpawnEnderPearls(input);
+            player.loadAndSpawnParentVehicle(input);
+        });
+        return player;
     }
 
     public static Recording joinRecording(GameTestHelper helper, String name, GameType mode, BlockPos relativePos) {
@@ -91,6 +99,13 @@ public final class TestPlayers {
     public static void leave(ServerPlayer player) {
         player.level().getServer().getPlayerList().remove(player);
         CHANNELS.remove(player.getUUID());
+    }
+
+    // A client's whole disconnect, as ServerGamePacketListenerImpl.removePlayerFromWorld runs it: a sleeper is woken
+    // and anyone riding the player gets off before the player list lets them go
+    public static void disconnect(ServerPlayer player) {
+        player.disconnect();
+        leave(player);
     }
 
     // Every packet the server has sent this player so far, oldest first
