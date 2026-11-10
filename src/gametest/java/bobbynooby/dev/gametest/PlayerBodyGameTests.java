@@ -81,7 +81,7 @@ public class PlayerBodyGameTests {
     static final String BODY_RESTART = "you-only-live-twice-gametest:body_restart";
     // For the test that brings back and expires every body at once, where another test's record would take a turn
     private static final String BODY_EXPIRY = "you-only-live-twice-gametest:body_expiry";
-    // For the test that brings back every body with the nametag team removed
+    // For the tests that remove the nametag team around player bodies, each done within its tick
     private static final String BODY_TEAM = "you-only-live-twice-gametest:body_team";
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
 
@@ -293,8 +293,33 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // What /team remove and then /yolt reload do while a body is loaded: a body never joins, so the reload puts it back.
+    // Removing the team reaches other tests, so this runs away from them, and each test here is done within its tick.
+    @GameTest(environment = BODY_TEAM)
+    public void loadedBodyRefilledOnApply(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "RefillBody", ON_FLOOR);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leaveBody(helper, player);
+            scoreboard.removePlayerTeam(scoreboard.getPlayerTeam(NameTagTeam.TEAM_NAME));
+            helper.assertTrue(body.getTeam() == null, "the body is still in a team");
+
+            NameTagTeam.apply(server);
+            PlayerTeam team = scoreboard.getPlayerTeam(NameTagTeam.TEAM_NAME);
+            helper.assertTrue(team != null && team.getPlayers().contains(body.getScoreboardName()),
+                    "the loaded body is not back in the nametag team");
+        } finally {
+            cleanUp(helper, owner, before);
+            NameTagGameTests.restoreTeam(server);
+        }
+        helper.succeed();
+    }
+
     // A start with no team, after /team remove: the bodies come back before anything else makes it. Bringing back
-    // every body and removing the team both reach other tests, so this runs on its own.
+    // every body and removing the team both reach other tests, so this runs away from them, within one tick.
     @GameTest(environment = BODY_TEAM)
     public void bodyJoinsTeamEvenWhenTeamWasRemoved(GameTestHelper helper) {
         ServerPlayer player = join(helper, "TeamBody", ON_FLOOR);

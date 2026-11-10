@@ -1,13 +1,13 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.mixin.SetPlayerTeamPacketInvoker;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.scores.PlayerTeam;
@@ -57,10 +57,11 @@ public final class NameTagTeam {
         team.setNameTagVisibility(Settings.get().hide.nametags ? Team.Visibility.NEVER : Team.Visibility.ALWAYS);
         // Any other rule sends death messages straight to team members, past the game-message hide
         team.setDeathMessageVisibility(Team.Visibility.ALWAYS);
-        // Joining is the only other way in, so a team removed with /team remove is refilled here
-        for (ServerPlayer player : StandIn.without(server.getPlayerList().getPlayers())) {
-            if (player.getTeam() != team) {
-                server.getScoreboard().addPlayerToTeam(player.getScoreboardName(), team);
+        // Joining and a body's spawn are the only other ways in, so a team removed with /team remove is refilled here.
+        // Each level's players, since player bodies are players outside the player list.
+        for (ServerLevel level : server.getAllLevels()) {
+            for (ServerPlayer player : level.players()) {
+                addToTeam(server, player);
             }
         }
     }
