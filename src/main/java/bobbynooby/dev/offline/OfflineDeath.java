@@ -86,8 +86,11 @@ public final class OfflineDeath {
         }
         items.addAll(unplaced);
         OfflinePlayerData.markDead(tag, where);
+        // A death that counts takes off a mark from anywhere else, as an online one does
         if (uncounted) {
             OfflinePlayerData.addEntityTag(tag, UncountedDeaths.MARK);
+        } else {
+            OfflinePlayerData.removeEntityTag(tag, UncountedDeaths.MARK);
         }
         Path prepared = OfflinePlayerData.prepareSave(server, who.id(), tag);
 

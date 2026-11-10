@@ -26,10 +26,15 @@ public final class UncountedDeaths {
     }
 
     static void init() {
-        // Every such death, a spectator's too, whose drops vanilla skips
+        // Every such death, a spectator's too, whose drops vanilla skips. A death that counts takes off a mark from
+        // anywhere else, such as /tag, so the respawn can't hand back the XP this death dropped.
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (entity instanceof ServerPlayer player && !StandIn.is(player) && uncounted(player)) {
-                player.addTag(MARK);
+            if (entity instanceof ServerPlayer player && !StandIn.is(player)) {
+                if (uncounted(player)) {
+                    player.addTag(MARK);
+                } else {
+                    player.removeTag(MARK);
+                }
             }
         });
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> Guard.run(

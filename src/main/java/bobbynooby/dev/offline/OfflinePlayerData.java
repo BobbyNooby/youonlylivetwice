@@ -107,6 +107,13 @@ public final class OfflinePlayerData {
         }
     }
 
+    public static void removeEntityTag(CompoundTag tag, String entityTag) {
+        List<String> tags = new ArrayList<>(tag.read(TAGS, Codec.STRING.listOf()).orElse(List.of()));
+        if (tags.remove(entityTag)) {
+            tag.store(TAGS, Codec.STRING.listOf(), tags);
+        }
+    }
+
     /** Makes the save a dead player's, who died at where: no effects and no health. */
     public static void markDead(CompoundTag tag, GlobalPos where) {
         tag.remove(EFFECTS);
