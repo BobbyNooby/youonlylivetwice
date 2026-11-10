@@ -72,8 +72,17 @@ public final class GraveBlocks {
             BlockPos at = pos.get();
             boolean moved = !at.equals(grave.pos());
             if (moved) {
-                // The record moves first, so a head that fails to go down still leaves the grave in one place
+                // The moved record reaches the disk before the head goes down. Otherwise a crash could leave the
+                // record at the old spot and a head at the new one that nothing protects.
                 store.put(grave.withPos(at));
+                try {
+                    store.saveNow(level.getServer());
+                } catch (RuntimeException e) {
+                    store.put(grave);
+                    Yolt.LOGGER.error("Could not save {}'s grave at its new spot {}, so it stays at {} {} without a head for now",
+                            grave.ownerName(), at, level.dimension().identifier(), grave.pos(), e);
+                    continue;
+                }
             }
             // The record doesn't keep the facing, so a restored head faces the default way
             placeHead(level, at, grave.profile(), 0);
