@@ -118,11 +118,17 @@ final class BodyTestKit {
         store(helper).remove(owner);
     }
 
+    // Out of the store first, so the grave no longer protects its block. In the grave's own dimension, since a body can
+    // die in another.
     static void removeGraves(GameTestHelper helper, UUID owner) {
-        GraveStore graves = GraveStore.get(helper.getLevel().getServer());
+        MinecraftServer server = helper.getLevel().getServer();
+        GraveStore graves = GraveStore.get(server);
         for (Grave grave : gravesOf(helper, owner)) {
             graves.remove(grave.id());
-            helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            ServerLevel level = server.getLevel(grave.dimension());
+            if (level != null) {
+                level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
         }
     }
 
