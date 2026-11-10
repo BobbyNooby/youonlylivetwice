@@ -13,6 +13,7 @@
     "ChatFallbackMixin",
     "CommandNodeAccessor",
     "CommandRestrictionMixin",
+    "CreakingTrailMixin",
     "GraveDeathDropsMixin",
     "GraveDropMixin",
     "GraveHeadPlacementMixin",

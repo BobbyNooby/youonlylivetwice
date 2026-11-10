@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSigningContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.TrailParticleOption;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
@@ -17,6 +18,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
@@ -25,8 +27,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Crypt;
 import net.minecraft.util.CryptException;
 import net.minecraft.util.TaskChainer;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.monster.creaking.Creaking;
 import net.minecraft.world.entity.player.ProfilePublicKey;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CreakingHeartBlockEntity;
 import org.jspecify.annotations.Nullable;
 
 import java.security.KeyPair;
@@ -364,6 +370,55 @@ public class VisibilityGameTests {
             leaveAll(joined);
         }
         helper.succeed();
+    }
+
+    // Hitting a creaking makes its heart draw a trail to it, which vanilla forces out to 512 blocks with exact positions
+    @GameTest
+    public void creakingTrailIsNotForcedFar(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        BlockPos heartPos = new BlockPos(1, 1, 1);
+        Creaking creaking = null;
+        try {
+            hide.distantPlayers = true;
+            ServerPlayer near = join(helper, joined, "visheartnear", new BlockPos(3, 1, 1));
+            ServerPlayer far = join(helper, joined, "visheartfar", new BlockPos(3, 1, 1));
+            far.teleportTo(far.getX() + 100, far.getY(), far.getZ());
+            helper.setBlock(heartPos, Blocks.CREAKING_HEART);
+            CreakingHeartBlockEntity heart = helper.getBlockEntity(heartPos, CreakingHeartBlockEntity.class);
+            creaking = helper.spawn(EntityTypes.CREAKING, new BlockPos(1, 1, 3));
+            heart.setCreakingInfo(creaking);
+            int nearMark = TestPlayers.sentPackets(near).size();
+            int farMark = TestPlayers.sentPackets(far).size();
+
+            heart.creakingHurt();
+            List<ClientboundLevelParticlesPacket> nearTrail = trail(near, nearMark);
+            helper.assertFalse(nearTrail.isEmpty(), "no trail sent to a player next to the heart");
+            helper.assertFalse(nearTrail.getFirst().overrideLimiter(), "the trail is still forced out to 512 blocks");
+            helper.assertTrue(trail(far, farMark).isEmpty(), "trail sent to a player 100 blocks away");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            // Gone first, so removing the heart doesn't tear it down with a burst of particles
+            if (creaking != null) {
+                creaking.discard();
+            }
+            helper.setBlock(heartPos, Blocks.AIR);
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // The trail particles this player's client was sent, from its packet number from on
+    private static List<ClientboundLevelParticlesPacket> trail(ServerPlayer player, int from) {
+        List<Packet<?>> packets = TestPlayers.sentPackets(player);
+        List<ClientboundLevelParticlesPacket> trail = new ArrayList<>();
+        for (Packet<?> packet : packets.subList(from, packets.size())) {
+            if (packet instanceof ClientboundLevelParticlesPacket particles && particles.particle() instanceof TrailParticleOption) {
+                trail.add(particles);
+            }
+        }
+        return trail;
     }
 
     // The last listed flag this viewer's client was sent for seen
