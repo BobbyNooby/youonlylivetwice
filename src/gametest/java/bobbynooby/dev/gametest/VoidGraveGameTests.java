@@ -24,8 +24,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
@@ -42,6 +44,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.dimension.end.EnderDragonFight;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -564,6 +567,46 @@ public class VoidGraveGameTests {
             putBack(level, before);
         }
         helper.succeed();
+    }
+
+    // With graves off a new death is vanilla's, though old graves keep working: the items drop where the player died,
+    // below the world, and the void takes them a tick later. The lockout still starts. Off only for the death itself.
+    @GameTest(maxTicks = 20)
+    public void voidDeathWithGravesOffDropsLikeVanilla(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos column = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos death = belowWorld(level, column);
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        ServerPlayer player = TestPlayers.join(helper, "Unburied", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.getGameProfile().name();
+        List<ItemEntity> drops;
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            graves.enabled = false;
+            try {
+                dieBelowWorld(helper, level, player, column);
+            } finally {
+                graves.enabled = gravesBefore;
+            }
+            drops = level.getEntitiesOfClass(ItemEntity.class, new AABB(death).inflate(3.0), Entity::isAlive);
+            helper.assertValueEqual(drops.stream().filter(drop -> drop.getItem().is(Items.DIAMOND))
+                    .mapToInt(drop -> drop.getItem().getCount()).sum(), 3, "diamonds dropped below the world");
+            helper.assertTrue(gravesOf(level, owner).isEmpty(), "a grave was made with graves off");
+            String refusal = LockoutGameTests.refusalText(owner);
+            helper.assertTrue(refusal.startsWith("You died: " + name + " fell out of the world\nTry again in "), "lockout: " + refusal);
+        } finally {
+            cleanUp(level, player);
+        }
+        helper.runAfterDelay(2, () -> {
+            try {
+                helper.assertTrue(drops.stream().allMatch(Entity::isRemoved), "drops below the world are still there");
+            } finally {
+                drops.forEach(Entity::discard);
+            }
+            helper.succeed();
+        });
     }
 
     // Notes each block before it goes, so putBack can set back exactly what was there

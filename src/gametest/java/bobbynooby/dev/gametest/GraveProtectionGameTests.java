@@ -6,6 +6,8 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -25,6 +27,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
@@ -39,6 +42,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -52,6 +56,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -60,6 +65,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 // Every grave a test makes is removed again in finally, record and block, so no other test runs into it
@@ -321,20 +327,16 @@ public class GraveProtectionGameTests {
         restoreLeavesContainer(helper, Blocks.SHULKER_BOX);
     }
 
-    // With graves off the head is an ordinary block, so someone can break it and build on the spot. Graves come back
-    // on, and the chunk's next load puts the missing head back.
+    // A block set where a grave's head was, as /setblock can, is never overwritten by the head: the chunk's next load
+    // moves the grave instead
     private static void restoreLeavesContainer(GameTestHelper helper, Block block) {
         ServerLevel level = helper.getLevel();
         GraveStore store = GraveStore.get(level.getServer());
         Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         BlockPos spot = grave.pos();
-        YoltConfig.GravesSection graves = Settings.get().graves;
-        boolean before = graves.enabled;
         try {
-            graves.enabled = false;
             level.setBlock(spot, block.defaultBlockState(), Block.UPDATE_ALL);
             ((Container) level.getBlockEntity(spot)).setItem(0, new ItemStack(Items.DIAMOND, 3));
-            graves.enabled = true;
             GraveBlocks.restoreChunk(level, level.getChunkAt(spot));
 
             String name = block.getName().getString();
@@ -350,7 +352,6 @@ public class GraveProtectionGameTests {
             assertGraveIntact(helper, moved);
             helper.assertTrue(ItemStack.listMatches(moved.items(), grave.items()), "grave items changed: " + moved.items());
         } finally {
-            graves.enabled = before;
             // Emptied first, so removing the chest doesn't spill it
             if (level.getBlockEntity(spot) instanceof Container container) {
                 container.clearContent();
@@ -359,6 +360,68 @@ public class GraveProtectionGameTests {
             removeGraves(helper, store.byId(grave.id()).stream().toList());
         }
         helper.succeed();
+    }
+
+    // Graves switched off stop only new ones. An old grave still can't be broken or blown up, and still opens. A missing
+    // head still comes back when its chunk loads, here a far one loaded for the test, and on the re-check. Graves stay off
+    // across ticks, so the test runs apart.
+    @GameTest(environment = GRAVES_SWITCH, maxTicks = 20)
+    public void gravesOffKeepsOldGravesProtected(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        ChunkPos chunk = ChunkPos.containing(helper.absolutePos(BlockPos.ZERO).offset(4000, 0, 4000));
+        helper.assertTrue(level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) == null, "the far chunk is loaded already");
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        // Only the record, with nothing loaded where it is: its head goes down when the chunk loads
+        UUID farOwner = UUID.randomUUID();
+        ResolvableProfile farProfile = ResolvableProfile.createResolved(new GameProfile(farOwner, "Faraway"));
+        Grave far = new Grave(UUID.randomUUID(), farOwner, "Faraway", farProfile, level.dimension(),
+                chunk.getMiddleBlockPosition(100), List.of(GraveItems.graveHead(farProfile), new ItemStack(Items.DIAMOND)), 1L);
+        store.put(far);
+        ServerPlayer player = TestPlayers.join(helper, "OffOpener", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean before = graves.enabled;
+        Runnable cleanUp = () -> {
+            graves.enabled = before;
+            TestPlayers.leave(player);
+            removeGraves(helper, List.of(grave, far));
+            level.setChunkForced(chunk.x(), chunk.z(), false);
+        };
+        boolean waiting = false;
+        try {
+            graves.enabled = false;
+            helper.assertFalse(player.gameMode.destroyBlock(grave.pos()), "a player broke the grave with graves off");
+            assertGraveIntact(helper, grave);
+            Vec3 above = Vec3.atBottomCenterOf(grave.pos().above());
+            level.explode(null, above.x, above.y, above.z, 4.0F, Level.ExplosionInteraction.TNT);
+            assertGraveIntact(helper, grave);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(grave.pos()), Direction.UP, grave.pos(), false);
+            player.gameMode.useItemOn(player, level, player.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(player.containerMenu instanceof GraveMenu, "the grave did not open with graves off");
+            player.closeContainer();
+
+            // Loaded now and kept loaded; the restore waits for the end of the tick
+            level.setChunkForced(chunk.x(), chunk.z(), true);
+            helper.assertTrue(level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) != null, "the far chunk did not load");
+            helper.runAfterDelay(3, () -> {
+                try {
+                    helper.assertTrue(GraveBlocks.isOwnHead(level, far.pos(), far), "the chunk's load left the far grave without a head");
+                    level.setBlock(far.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    GraveRecheck.recheck(level, store, far);
+                    helper.assertTrue(GraveBlocks.isOwnHead(level, far.pos(), far), "the re-check left the far grave without a head");
+                    helper.assertValueEqual(store.byId(far.id()).map(Grave::pos), Optional.of(far.pos()), "far grave's spot");
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // Another player's head set on a grave's spot, for example with /setblock, stays theirs: the grave neither takes it
