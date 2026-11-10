@@ -5,7 +5,6 @@ import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.world.WorldBorders;
@@ -92,9 +91,10 @@ final class BorderCommands {
                 : border(live.getCenterX(), live.getCenterZ(), isEnd ? diameter * endScale : diameter);
     }
 
-    // /yolt center moves the overworld and nether to the new centre and the end to 0, 0
-    private static Proposal centred(double centerX, double centerZ, int diameter, double endScale) {
-        return (live, isEnd) -> isEnd ? border(0, 0, diameter * endScale) : border(centerX, centerZ, diameter);
+    // /yolt center moves the overworld and nether to the new centre and the end to 0, 0. Each keeps the size the world
+    // has, which can differ from the config's: a held border, or a vanilla /worldborder change.
+    private static Proposal centred(double centerX, double centerZ) {
+        return (live, isEnd) -> isEnd ? border(0, 0, live.getSize()) : border(centerX, centerZ, live.getSize());
     }
 
     private static WorldBorder border(double centerX, double centerZ, double size) {
@@ -192,8 +192,7 @@ final class BorderCommands {
             return YoltCommands.fail(source, "Center must be within ±" + (long) WorldBorder.MAX_CENTER_COORDINATE + ".");
         }
         MinecraftServer server = source.getServer();
-        YoltConfig.WorldBorderSection config = Settings.get().worldBorder;
-        String refusal = strandedRefusal(server, confirmed, centred(x, z, config.diameter, config.endScale));
+        String refusal = strandedRefusal(server, confirmed, centred(x, z));
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }

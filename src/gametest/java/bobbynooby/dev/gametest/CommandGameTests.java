@@ -260,6 +260,39 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // YOLT's diameter is 10,000, but the world's border is 2000, as it can be while held or after a vanilla
+    // /worldborder. A centre 3000 blocks from the player leaves them outside, though a 10,000 block border wouldn't.
+    // A batch of its own, so no other test's player can push this one's name off the list.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void centerChecksTheWorldsOwnBorderSize(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Recentred", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+
+        border.enabled = true;
+        border.diameter = 10000;
+        try {
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            double[] before = bordersBefore.get(server.overworld());
+            overworld.setSize(2000);
+            BlockPos at = player.blockPosition();
+            List<String> refused = run(server, "yolt center " + (at.getX() - 3000) + " " + at.getZ());
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave ") && refused.get(0).contains(name),
+                    "refusal: " + refused);
+            assertCentre(helper, server.overworld(), before[0], before[1]);
+        } finally {
+            border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // The overworld centre is put 1100 blocks west of the player, so a 2000 block border ends 100 blocks short of them
     @GameTest
     public void borderShrinkWithPlayerOutsideNeedsConfirm(GameTestHelper helper) throws IOException {
