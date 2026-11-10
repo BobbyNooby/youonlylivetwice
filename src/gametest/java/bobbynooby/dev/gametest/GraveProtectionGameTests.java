@@ -53,6 +53,7 @@ import net.minecraft.world.level.block.piston.PistonHeadBlock;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.PistonType;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.storage.LevelResource;
@@ -357,6 +358,65 @@ public class GraveProtectionGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // A grave the re-check can't put back: its spot is taken, and the border, moved far off in this tick, leaves no
+    // loaded spot to move it to. The failure is logged once. The grave then waits for its chunk's next load, even once
+    // it could be put back; after that load the re-check tries it again, and a second failure of the same kind logs
+    // nothing. Everything goes back in this tick.
+    @GameTest
+    public void recheckLogsAFailureOnceAndWaitsForTheChunk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos spot = grave.pos();
+        BlockPos above = spot.above();
+        Runnable borderFar = () -> {
+            border.setCenter(spot.getX() + 100_000, spot.getZ());
+            border.setSize(16);
+        };
+        Runnable recheck = () -> GraveRecheck.recheck(level, store, store.byId(grave.id()).orElseThrow());
+        String failure = "Could not put back the head of Ghost's grave";
+        try {
+            level.setBlock(spot, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            borderFar.run();
+            helper.assertValueEqual(failures(recheck, failure), 1L, "failure lines from the first re-check");
+            helper.assertValueEqual(failures(recheck, failure), 0L, "failure lines from the second re-check");
+
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            recheck.run();
+            helper.assertValueEqual(store.byId(grave.id()).map(Grave::pos), Optional.of(spot), "grave's spot before its chunk loads");
+            helper.assertTrue(level.getBlockState(above).isAir(), "the re-check put the grave back before its chunk loaded");
+
+            GraveBlocks.restoreChunk(level, level.getChunkAt(spot));
+            Grave moved = store.byId(grave.id()).orElseThrow();
+            helper.assertValueEqual(moved.pos(), above, "grave's spot after its chunk loaded");
+            helper.assertTrue(GraveBlocks.isOwnHead(level, above, moved), "no head after the chunk loaded");
+            level.setBlock(above, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            recheck.run();
+            helper.assertTrue(GraveBlocks.isOwnHead(level, above, moved), "the re-check left the grave alone after its chunk loaded");
+
+            level.setBlock(above, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            borderFar.run();
+            helper.assertValueEqual(failures(recheck, failure), 0L, "failure lines from a later failure of the same kind");
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            store.remove(grave.id());
+            level.setBlock(spot, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(above, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.succeed();
+    }
+
+    // How many lines YOLT logged with that text while the action ran
+    private static long failures(Runnable action, String text) {
+        return OfflineGameTests.yoltLog(action).stream().filter(line -> line.contains(text)).count();
     }
 
     @GameTest(environment = GRAVES_SWITCH)
