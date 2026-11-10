@@ -160,6 +160,36 @@ public class PlacementGameTests {
         helper.succeed();
     }
 
+    // The same pillar top, with the death on it: the grave goes on the ground just past what the respawn clears, 10 out
+    // from the pillar, at the nearest spot there, and not up over the top
+    @GameTest
+    public void endSpikeTopDeathGraveOnGroundBeside(GameTestHelper helper) {
+        ServerLevel end = end(helper);
+        EndSpikeFeature.EndSpike spike = EndSpikeFeature.getSpikesForLevel(end).getFirst();
+        BlockPos top = new BlockPos(spike.getCenterX(), spike.getHeight(), spike.getCenterZ());
+        // The ground past the box is read only where its chunks are loaded
+        for (int x = top.getX() - 16; x <= top.getX() + 16; x += 16) {
+            for (int z = top.getZ() - 16; z <= top.getZ() + 16; z += 16) {
+                end.getChunk(new BlockPos(x, 0, z));
+            }
+        }
+        int groundY = end.getHeight(Heightmap.Types.MOTION_BLOCKING, top.getX() - 11, top.getZ());
+        Map<BlockPos, BlockState> before = remembered(end, List.of(top.below()));
+        Grave grave = null;
+        try {
+            end.setBlock(top.below(), Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
+            grave = VoidGraveGameTests.withoutLastResort(helper, () -> endGrave(end, top));
+            BlockPos at = grave.pos();
+            helper.assertValueEqual(VoidGraveGameTests.flatDistanceSqr(at, top), 11 * 11,
+                    "grave's distance from the pillar's centre, squared, at " + at);
+            helper.assertValueEqual(at.getY(), groundY, "grave height");
+            VoidGraveGameTests.assertOnSolid(helper, end, at);
+        } finally {
+            cleanUpEnd(end, grave, before, top);
+        }
+        helper.succeed();
+    }
+
     // The first of the 20 gateways a kill can place, by the fight's own sums, with the death on a block at its middle
     @GameTest
     public void endGatewayGetsNoNewGrave(GameTestHelper helper) {
