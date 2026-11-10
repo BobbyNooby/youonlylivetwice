@@ -56,9 +56,13 @@ public final class CommandRestriction {
         ServerPlayer player = source.getPlayer();
         String commandRoot = command.split(" ")[0];
 
-        // /w is our own command (Whispers), so it runs normally and reads the signed message
-        if (commandRoot.equals("w") && Settings.get().chat.allowWhispers) {
-            return false;
+        // /w is our own command (Whispers), so it runs normally and reads the signed message. With whispers off the
+        // player's tree has no /w to run, so the answer /w itself would give comes from here.
+        if (commandRoot.equals("w")) {
+            if (Settings.get().chat.allowWhispers) {
+                return false;
+            }
+            source.sendFailure(Component.literal(Whispers.TURNED_OFF));
         }
 
         if (commandRoot.equals("help")) {

@@ -1,7 +1,6 @@
 package bobbynooby.dev.chat;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.CommandNodeAccessor;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -18,6 +17,8 @@ import net.minecraft.server.level.ServerPlayer;
 
 /** Our /w, which only reaches a player close enough to hear it. */
 public final class Whispers {
+    static final String TURNED_OFF = "Whispers are turned off.";
+
     private Whispers() {}
 
     public static void init() {
@@ -51,10 +52,16 @@ public final class Whispers {
         // The node stays even with whispers off, so the client's tree and the server's signing tree still match.
         // With restrictCommands off nothing else stops a non-op, so the refusal is here.
         if (!Settings.get().chat.allowWhispers && !sender.level().getServer().getPlayerList().isOp(sender.nameAndId())) {
-            context.getSource().sendFailure(Component.literal("Whispers are turned off."));
+            context.getSource().sendFailure(Component.literal(TURNED_OFF));
             return 0;
         }
         String target = StringArgumentType.getString(context, "target");
+        // "w  hi" reads as an empty name. Refused here, not in the parse: the client has signed the message, and a parse
+        // error would leave that signature unmatched and break the sender's chat.
+        if (target.isEmpty()) {
+            context.getSource().sendFailure(Component.literal("Name a player to whisper to."));
+            return 0;
+        }
         // Read like vanilla's /w so a signed message stays in the player's chat chain; it goes out as our own text
         MessageArgument.resolveChatMessage(context, "message", message -> send(sender, target, message.signedContent()));
         return 1;
@@ -70,7 +77,6 @@ public final class Whispers {
                 Settings.get().chat.radius)) {
             target.sendSystemMessage(whisper(senderName + " whispers to you: " + message));
         }
-        Yolt.LOGGER.info("[whisper] {} -> {}: {}", senderName, targetName, message);
     }
 
     private static Component whisper(String text) {
