@@ -3,8 +3,10 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.config.Settings;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.decoration.Mannequin;
 
 /** What counts as a body, and how a body differs from other entities: no drops, worn armour, no portals. */
 public final class BodyRules {
@@ -40,6 +42,23 @@ public final class BodyRules {
             }
         }
         return false;
+    }
+
+    /**
+     * The damage a hit deals a mannequin body, scaled for the difficulty as vanilla scales it for a player
+     * (Player.hurtServer), so the body takes what its owner would. Vanilla scales it for players only, so a mob hits a
+     * mannequin as on Normal. A player body is a player already, and anything else takes the damage as dealt.
+     */
+    public static float damageTaken(LivingEntity entity, ServerLevel level, DamageSource source, float damage) {
+        if (!(entity instanceof Mannequin) || !source.scalesWithDifficulty() || !Settings.active() || !isBody(entity)) {
+            return damage;
+        }
+        return switch (level.getDifficulty()) {
+            case PEACEFUL -> 0.0F;
+            case EASY -> Math.min(damage / 2.0F + 1.0F, damage);
+            case NORMAL -> damage;
+            case HARD -> damage * 3.0F / 2.0F;
+        };
     }
 
     /** True when the entity carries our tag and a record still points at it. */

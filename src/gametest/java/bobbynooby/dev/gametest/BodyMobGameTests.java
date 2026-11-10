@@ -13,8 +13,11 @@ import bobbynooby.dev.mixin.TargetGoalAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityProcessor;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -28,6 +31,7 @@ import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -47,6 +51,7 @@ import java.util.function.Consumer;
 public class BodyMobGameTests {
     private static final String SOLO = "you-only-live-twice-gametest:solo";
     private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
+    private static final String BODY_DIFFICULTY = "you-only-live-twice-gametest:body_difficulty";
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
     private static final BlockPos NEXT_TO_BODY = new BlockPos(3, 0, 1);
     private static final BlockPos FOUR_AWAY = new BlockPos(5, 0, 1);
@@ -206,6 +211,49 @@ public class BodyMobGameTests {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();
+    }
+
+    // A mob's hit of 4 scaled as for a player (26.3 Player.hurtServer): Easy min(4 / 2 + 1, 4), Normal 4, Hard
+    // 4 * 3 / 2, Peaceful none. Its own batch, since it changes the difficulty; it puts it back within the tick.
+    @GameTest(environment = BODY_DIFFICULTY)
+    public void bodyMobDamageFollowsDifficulty(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Difficulty before = level.getDifficulty();
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer player = join(helper, "Scaled");
+        UUID owner = player.getUUID();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, FOUR_AWAY);
+            spawned.add(zombie);
+            DamageSource attack = level.damageSources().mobAttack(zombie);
+            assertHit(helper, body, Difficulty.EASY, attack, 3.0F);
+            assertHit(helper, body, Difficulty.NORMAL, attack, 4.0F);
+            assertHit(helper, body, Difficulty.HARD, attack, 6.0F);
+            assertHit(helper, body, Difficulty.PEACEFUL, attack, 0.0F);
+            // As for a player, only a hit a mob caused scales
+            assertHit(helper, body, Difficulty.HARD, level.damageSources().generic(), 4.0F);
+            // A mannequin that isn't a body stays vanilla
+            Mannequin plain = helper.spawn(EntityTypes.MANNEQUIN, NEXT_TO_BODY);
+            spawned.add(plain);
+            assertHit(helper, plain, Difficulty.HARD, attack, 4.0F);
+        } finally {
+            level.getServer().setDifficulty(before, true);
+            cleanUp(helper, owner, spawned);
+        }
+        helper.succeed();
+    }
+
+    private static void assertHit(GameTestHelper helper, Mannequin target, Difficulty difficulty, DamageSource source,
+                                  float expected) {
+        helper.getLevel().getServer().setDifficulty(difficulty, true);
+        target.setHealth(target.getMaxHealth());
+        // Past the hurt cooldown, so the hit lands in full
+        target.damageCooldownTime = 0;
+        boolean landed = target.hurtServer(helper.getLevel(), source, 4.0F);
+        helper.assertValueEqual(landed, expected > 0.0F, difficulty.getSerializedName() + " hit landed");
+        helper.assertValueEqual(target.getMaxHealth() - target.getHealth(), expected,
+                difficulty.getSerializedName() + " damage");
     }
 
     // An evoker keeps after a player out of sight for 300 ticks (26.3 Evoker.registerGoals); most mobs for 60

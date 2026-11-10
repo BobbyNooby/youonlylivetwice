@@ -8,6 +8,7 @@
     "BodyArmourWearMixin",
     "BodyDeathLootMixin",
     "BodyDeathMessageMixin",
+    "BodyDifficultyDamageMixin",
     "BodyPickupMixin",
     "BodyPortalMixin",
     "ChatFallbackMixin",
