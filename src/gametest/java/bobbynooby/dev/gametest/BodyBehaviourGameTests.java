@@ -395,6 +395,65 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // An immovable body floats where its owner logged out, here with two blocks of air under it. The chestplate it
+    // drops stays at its feet rather than falling, since lava or the void could be under it.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY, maxTicks = 60)
+    public void bodyItemOverAirStaysPut(GameTestHelper helper) {
+        ItemEntity drop = dropAtExpiry(helper, "Floating", new BlockPos(1, 3, 1), false);
+        Vec3 at = drop.position();
+        helper.assertTrue(drop.isNoGravity(), "the chestplate dropped over air has gravity");
+        helper.runAfterDelay(50, () -> {
+            try {
+                helper.assertTrue(drop.isAlive(), "the dropped chestplate is gone");
+                helper.assertTrue(drop.position().distanceTo(at) < 0.01, "the dropped chestplate moved from " + at
+                        + " to " + drop.position());
+            } finally {
+                drop.discard();
+            }
+            helper.succeed();
+        });
+    }
+
+    // On solid ground the item falls as vanilla's drops do, which only puts it on the floor
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void bodyItemOverStoneKeepsGravity(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ItemEntity drop = dropAtExpiry(helper, "Grounded", new BlockPos(1, 1, 1), true);
+        try {
+            helper.assertFalse(drop.isNoGravity(), "the chestplate dropped on stone has no gravity");
+        } finally {
+            drop.discard();
+        }
+        helper.succeed();
+    }
+
+    // The no-free-slot expiry above, for a body standing at the given spot. Returns the one chestplate it dropped; the
+    // switches, the body and its record are gone again by then.
+    private static ItemEntity dropAtExpiry(GameTestHelper helper, String name, BlockPos at, boolean movable) {
+        ServerPlayer player = join(helper, name, at);
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Settings.get().bodies.movable = movable;
+            OfflineGameTests.fillInventory(player);
+            Mannequin body = leaveBody(helper, player);
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            unreadableChest(server, player);
+            expiredLogout(helper, owner);
+            AABB around = new AABB(body.blockPosition()).inflate(2.0);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            List<ItemEntity> drops = chestplatesIn(helper, around);
+            helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the body");
+            return drops.get(0);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+    }
+
     private static List<ItemEntity> chestplatesIn(GameTestHelper helper, AABB area) {
         return helper.getLevel().getEntitiesOfClass(ItemEntity.class, area,
                 drop -> drop.isAlive() && drop.getItem().is(Items.IRON_CHESTPLATE));
