@@ -44,7 +44,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
+import net.minecraft.world.level.block.piston.PistonHeadBlock;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.PistonType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
@@ -149,6 +152,81 @@ public class GraveProtectionGameTests {
             helper.setBlock(new BlockPos(2, 1, 3), Blocks.WATER);
             helper.runAfterDelay(40, () -> {
                 try {
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    removeGraves(helper, List.of(grave));
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                removeGraves(helper, List.of(grave));
+            }
+        }
+    }
+
+    // The same channel as the water's. Lava in the overworld spreads every 30 ticks, so this waits for two spreads.
+    @GameTest(maxTicks = 100)
+    public void lavaFlowLeavesGrave(GameTestHelper helper) {
+        for (BlockPos stone : List.of(new BlockPos(2, 0, 3), new BlockPos(3, 0, 3), new BlockPos(1, 1, 3), new BlockPos(2, 1, 2),
+                new BlockPos(2, 1, 4), new BlockPos(3, 1, 2), new BlockPos(3, 1, 4), new BlockPos(4, 1, 3))) {
+            helper.setBlock(stone, Blocks.STONE);
+        }
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        BlockPos source = new BlockPos(2, 1, 3);
+        boolean waiting = false;
+        try {
+            helper.setBlock(source, Blocks.LAVA);
+            helper.runAfterDelay(70, () -> {
+                try {
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    // Lava left in the open would set fire to what is round it
+                    helper.setBlock(source, Blocks.AIR);
+                    removeGraves(helper, List.of(grave));
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                helper.setBlock(source, Blocks.AIR);
+                removeGraves(helper, List.of(grave));
+            }
+        }
+    }
+
+    // Vanilla never pulls a head itself (heads pop rather than move), but a pulled slime block drags the block on top
+    // of it along, and that block crushes whatever head is in its way. The grave sits above the piston's arm, where the
+    // stone on the slime would land. The piston starts out extended, so taking its power away makes it pull at once.
+    @GameTest(maxTicks = 20)
+    public void stickyPistonCannotPullBlockOntoGrave(GameTestHelper helper) {
+        BlockPos power = new BlockPos(0, 1, 3);
+        BlockPos piston = new BlockPos(1, 1, 3);
+        BlockPos arm = new BlockPos(2, 1, 3);
+        BlockPos slime = new BlockPos(3, 1, 3);
+        helper.setBlock(power, Blocks.REDSTONE_BLOCK);
+        helper.setBlock(piston, Blocks.STICKY_PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST)
+                .setValue(PistonBaseBlock.EXTENDED, true));
+        helper.setBlock(arm, Blocks.PISTON_HEAD.defaultBlockState().setValue(PistonHeadBlock.FACING, Direction.EAST)
+                .setValue(PistonHeadBlock.TYPE, PistonType.STICKY));
+        helper.setBlock(slime, Blocks.SLIME_BLOCK);
+        helper.setBlock(slime.above(), Blocks.STONE);
+        Grave grave = makeGrave(helper, arm.above());
+        boolean waiting = false;
+        try {
+            helper.setBlock(power, Blocks.AIR);
+            // Pistons move in block events at the end of the tick, and a moved block settles two ticks later
+            helper.runAfterDelay(5, () -> {
+                try {
+                    // The piston did pull back, so it did try to pull the slime
+                    BlockState base = helper.getBlockState(piston);
+                    helper.assertTrue(base.is(Blocks.STICKY_PISTON) && !base.getValue(PistonBaseBlock.EXTENDED),
+                            "the piston did not pull back: " + base);
+                    helper.assertBlockPresent(Blocks.AIR, arm);
+                    helper.assertBlockPresent(Blocks.SLIME_BLOCK, slime);
+                    helper.assertBlockPresent(Blocks.STONE, slime.above());
                     assertGraveIntact(helper, grave);
                 } finally {
                     removeGraves(helper, List.of(grave));
