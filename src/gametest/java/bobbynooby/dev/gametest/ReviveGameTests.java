@@ -15,15 +15,22 @@ import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -34,6 +41,11 @@ import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.EnchantmentInstance;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -72,6 +84,44 @@ public class ReviveGameTests {
             helper.assertTrue(GraveItems.ownerId(result).filter(player.getUUID()::equals).isPresent(), "result lost the owner");
             helper.assertTrue(Boolean.TRUE.equals(result.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)), "result has no glint");
             helper.assertValueEqual(result.get(DataComponents.RARITY), Rarity.EPIC, "rarity");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The anvil won't put curse of vanishing on a revive head: the result slot stays empty, costs nothing, and the last
+    // the client was told of that slot is that it is empty. A plain player head with the same book does get the curse,
+    // so the book and the anvil work.
+    @GameTest
+    public void anvilRefusesVanishingOnReviveHead(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Anvil", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            Holder<Enchantment> vanishing = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.VANISHING_CURSE);
+            player.openMenu(new SimpleMenuProvider((id, inventory, user) -> new AnvilMenu(id, inventory, ContainerLevelAccess.NULL),
+                    Component.literal("Anvil")));
+            helper.assertTrue(player.containerMenu instanceof AnvilMenu, "no anvil menu opened");
+            AnvilMenu menu = (AnvilMenu) player.containerMenu;
+
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.PLAYER_HEAD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(EnchantmentHelper.createBook(new EnchantmentInstance(vanishing, 1)));
+            ItemStack plain = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            helper.assertTrue(plain.is(Items.PLAYER_HEAD) && EnchantmentHelper.has(plain, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP),
+                    "a plain head got no curse: " + plain);
+
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(reviveHead(staticProfile(UUID.randomUUID()), 1));
+            helper.assertTrue(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().isEmpty(),
+                    "the anvil made " + menu.getSlot(AnvilMenu.RESULT_SLOT).getItem());
+            helper.assertValueEqual(menu.getCost(), 0, "anvil cost");
+            ItemStack sent = null;
+            for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+                if (packet instanceof ClientboundContainerSetSlotPacket slot && slot.getContainerId() == menu.containerId
+                        && slot.getSlot() == AnvilMenu.RESULT_SLOT) {
+                    sent = slot.getItem();
+                }
+            }
+            helper.assertTrue(sent != null && sent.isEmpty(), "the result slot the client was last sent: " + sent);
         } finally {
             TestPlayers.leave(player);
         }
@@ -481,7 +531,7 @@ public class ReviveGameTests {
     }
 
     // Built the way the recipe builds it, without the lore and looks the tests don't need
-    private static ItemStack reviveHead(ResolvableProfile profile, int count) {
+    static ItemStack reviveHead(ResolvableProfile profile, int count) {
         ItemStack stack = new ItemStack(Items.PLAYER_HEAD, count);
         if (profile != null) {
             stack.set(DataComponents.PROFILE, profile);

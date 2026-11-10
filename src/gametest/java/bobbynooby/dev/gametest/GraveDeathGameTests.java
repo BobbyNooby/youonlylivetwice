@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
@@ -11,9 +12,11 @@ import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -24,6 +27,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
@@ -42,6 +46,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -188,6 +193,56 @@ public class GraveDeathGameTests {
             cleanUp(helper, player);
         }
         helper.succeed();
+    }
+
+    // A grave or revive head with curse of vanishing goes into the grave like any other item, while the cursed helmet
+    // beside it still vanishes. The same for an offline death, which keeps the curse its own way.
+    @GameTest
+    public void cursedReviveHeadGoesToGrave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Holder<Enchantment> vanishing = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.VANISHING_CURSE);
+        ServerPlayer player = join(helper, "CursedHead");
+        ServerPlayer away = join(helper, "CursedAway");
+        NameAndId awayWho = away.nameAndId();
+        try {
+            carryCursedHeads(player, vanishing);
+            kill(helper, player);
+            assertHeadsKept(helper, onlyGrave(helper, player).items(), "online");
+
+            carryCursedHeads(away, vanishing);
+            TestPlayers.leave(away);
+            helper.assertValueEqual(Kills.kill(server, awayWho), Kills.Result.KILLED_OFFLINE, "offline kill result");
+            List<Grave> awayGraves = gravesOf(helper, awayWho.id());
+            helper.assertValueEqual(awayGraves.size(), 1, "graves for the player killed offline");
+            assertHeadsKept(helper, awayGraves.get(0).items(), "offline");
+        } finally {
+            cleanUp(helper, player);
+            leaveAndRemoveGraves(helper, awayWho.id());
+        }
+        helper.succeed();
+    }
+
+    // A revive head and an older grave's head, both cursed, and a cursed helmet worn
+    private static void carryCursedHeads(ServerPlayer player, Holder<Enchantment> vanishing) {
+        ItemStack revive = ReviveGameTests.reviveHead(ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Ghost")), 1);
+        revive.enchant(vanishing, 1);
+        ItemStack graveHead = GraveItems.graveHead(ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Ghost")));
+        graveHead.enchant(vanishing, 1);
+        ItemStack helmet = new ItemStack(Items.IRON_HELMET);
+        helmet.enchant(vanishing, 1);
+        player.getInventory().add(revive);
+        player.getInventory().add(graveHead);
+        player.setItemSlot(EquipmentSlot.HEAD, helmet);
+    }
+
+    // The grave's own head, the carried grave head and the revive head are all there, each once, and the helmet isn't
+    private static void assertHeadsKept(GameTestHelper helper, List<ItemStack> items, String death) {
+        helper.assertValueEqual(items.stream().filter(GraveItems::isReviveHead).mapToInt(ItemStack::getCount).sum(), 1,
+                "revive heads in the grave of the " + death + " death");
+        helper.assertValueEqual(items.stream().filter(GraveItems::isGraveHead).mapToInt(ItemStack::getCount).sum(), 2,
+                "grave heads in the grave of the " + death + " death");
+        helper.assertValueEqual(GraveAsserts.count(items, Items.IRON_HELMET), 0, "cursed helmets in the grave of the " + death + " death");
     }
 
     @GameTest
