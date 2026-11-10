@@ -518,9 +518,10 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
-    // The body keeps its owner's ledge until the owner comes back and takes it over
+    // The body keeps its owner's ledge until the owner comes back and takes it over. They stand where the body stood,
+    // so the ledge is theirs from then on.
     @GameTest(skyAccess = true)
-    public void ownerLoginForgetsBodyLastGround(GameTestHelper helper) {
+    public void ownerLoginTakesBodyLastGround(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
         Map<BlockPos, BlockState> before = new LinkedHashMap<>();
@@ -535,7 +536,7 @@ public class VoidGraveGameTests {
 
             TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(6, 1, 6));
             helper.assertTrue(BodyTestKit.store(helper).byOwner(owner).isEmpty(), "body record kept");
-            helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(), "the login kept the body's last ground");
+            helper.assertValueEqual(LastGround.in(owner, level.dimension()), Optional.of(onLedge), "owner's last ground after the login");
         } finally {
             BodyTestKit.cleanUp(helper, owner, bodiesBefore);
             LastGround.forget(owner);
