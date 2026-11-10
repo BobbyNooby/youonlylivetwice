@@ -9,7 +9,6 @@ import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.UncountedDeaths;
-import bobbynooby.dev.mixin.PlayerInvoker;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -75,7 +74,7 @@ public final class GraveDeath {
             if (!keepInventory) {
                 // Menus close first, so a menu that hands items back into the inventory is covered by the scan
                 closeMenusInto(player, fromMenus);
-                ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
+                destroyVanishing(inventory);
                 addStacks(items, inventory);
                 items.addAll(fromMenus);
             }
@@ -145,7 +144,7 @@ public final class GraveDeath {
         Inventory inventory = player.getInventory();
         BlockPos spot;
         try {
-            ((PlayerInvoker) player).yoltDestroyVanishingCursedItems();
+            destroyVanishing(inventory);
             spot = GravePlacement.dropSpot(level, player.blockPosition(),
                     LastGround.in(player.getUUID(), level.dimension()).orElse(null), GraveStore.get(level.getServer()));
             // Copies, so a drop that fails leaves every item where it was
@@ -163,6 +162,15 @@ public final class GraveDeath {
         inventory.clearContent();
         Yolt.LOGGER.info("Dropped {}'s items at {} {}, since their grave could not be made", name, level.dimension().identifier(), spot);
         return true;
+    }
+
+    // As vanilla's own death does, but a grave or revive head stays: it goes into the grave, or drops, like any item
+    private static void destroyVanishing(Inventory inventory) {
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            if (GraveItems.vanishesAtDeath(inventory.getItem(i))) {
+                inventory.removeItemNoUpdate(i);
+            }
+        }
     }
 
     private static void addStacks(List<ItemStack> into, Container container) {

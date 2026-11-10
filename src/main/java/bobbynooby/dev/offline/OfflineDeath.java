@@ -19,8 +19,6 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
-import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.Vec3;
@@ -67,9 +65,10 @@ public final class OfflineDeath {
         List<ItemStack> items = new ArrayList<>();
         int experience = 0;
         if (dropsLoot) {
-            // Vanilla destroys curse of vanishing items on death, but only those in the inventory
+            // Vanilla destroys curse of vanishing items on death, but only those in the inventory. A grave or revive
+            // head is kept, as in an online death.
             for (ItemStack item : OfflinePlayerData.takeInventory(tag, server.registryAccess(), who.name())) {
-                if (!EnchantmentHelper.has(item, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP)) {
+                if (!GraveItems.vanishesAtDeath(item)) {
                     items.add(item);
                 }
             }

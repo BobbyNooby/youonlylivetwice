@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.config.Settings;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -9,6 +10,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
@@ -37,6 +40,23 @@ public final class GraveItems {
 
     public static boolean isReviveHead(ItemStack stack) {
         return hasMarker(stack, REVIVE);
+    }
+
+    /**
+     * True for an item a death destroys, as vanilla's curse of vanishing does. Never a grave or revive head, which can
+     * take the curse too: losing one would lose its owner's revive.
+     */
+    public static boolean vanishesAtDeath(ItemStack stack) {
+        return !stack.isEmpty() && cursed(stack) && !isGraveHead(stack) && !isReviveHead(stack);
+    }
+
+    /** True when the anvil's result gives a grave or revive head curse of vanishing that the input head didn't have. */
+    public static boolean anvilAddsVanishing(ItemStack input, ItemStack result) {
+        return Settings.active() && (isGraveHead(result) || isReviveHead(result)) && cursed(result) && !cursed(input);
+    }
+
+    private static boolean cursed(ItemStack stack) {
+        return EnchantmentHelper.has(stack, EnchantmentEffectComponents.PREVENT_EQUIPMENT_DROP);
     }
 
     /** The id stored on the head's profile. Empty when the head has no profile, no stored id, or the nil id. */

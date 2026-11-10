@@ -5,6 +5,7 @@
   "mixins": [
     "AdminViewOpListMixin",
     "AdminViewOpMixin",
+    "AnvilVanishingMixin",
     "BodyArmourWearMixin",
     "BodyDeathLootMixin",
     "BodyDeathMessageMixin",
@@ -39,7 +40,6 @@
     "PlayerCountMixin",
     "PlayerCountQueryMixin",
     "PlayerInfoUpdatePacketAccessor",
-    "PlayerInvoker",
     "PlayerListBodyStatsMixin",
     "PlayerListInvoker",
     "PlayerListLoginMixin",
