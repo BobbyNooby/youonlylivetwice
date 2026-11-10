@@ -51,6 +51,7 @@ public class VisibilityGameTests {
     // player or a reload would add to
     private static final String VISIBILITY_NEAR = "you-only-live-twice-gametest:visibility_near";
     private static final String VISIBILITY_FORGET = "you-only-live-twice-gametest:visibility_forget";
+    private static final String INFO_UPDATES = "you-only-live-twice-gametest:info_updates";
 
     @GameTest
     public void joinerDoesNotKnowFarPlayers(GameTestHelper helper) {
@@ -156,6 +157,66 @@ public class VisibilityGameTests {
             if (!waiting) {
                 TestPlayers.leave(a);
                 TestPlayers.leave(b);
+            }
+        }
+    }
+
+    // Vanilla sends every client each player's latency every 600 ticks and their game mode when it changes. A client
+    // without the player's entry would learn the player is online. The far viewer joins first and is left undriven,
+    // so it never starts tracking the others.
+    @GameTest(maxTicks = 20, environment = INFO_UPDATES)
+    public void latencyAndGameModeOnlyReachViewersWhoKnow(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        hide.distantPlayers = true;
+        List<ServerPlayer> joined = new ArrayList<>();
+        boolean waiting = false;
+        try {
+            ServerPlayer far = join(helper, joined, "visinfofar", new BlockPos(1, 0, 0));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            ServerPlayer seen = join(helper, joined, "visinfo", BlockPos.ZERO);
+            ServerPlayer near = join(helper, joined, "visinfonear", new BlockPos(5, 0, 0));
+            helper.onEachTick(() -> {
+                TestPlayers.driveTracking(seen);
+                TestPlayers.driveTracking(near);
+            });
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(PlayerVisibility.known(near).contains(seen.getUUID()), "the near viewer does not know the player");
+                    helper.assertFalse(PlayerVisibility.known(far).contains(seen.getUUID()), "the far viewer knows the player");
+                    int nearMark = TestPlayers.sentPackets(near).size();
+                    int farMark = TestPlayers.sentPackets(far).size();
+
+                    seen.setGameMode(GameType.CREATIVE);
+                    // The latency broadcast comes from PlayerList.tick, once its counter passes 600, so 601 calls send
+                    // exactly one
+                    for (int i = 0; i <= 600; i++) {
+                        server.getPlayerList().tick();
+                    }
+
+                    helper.assertValueEqual(infoUpdates(near, nearMark, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_GAME_MODE, seen), 1,
+                            "game mode updates for the player sent to the near viewer");
+                    helper.assertValueEqual(infoUpdates(near, nearMark, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, seen), 1,
+                            "latency updates for the player sent to the near viewer");
+                    helper.assertValueEqual(infoUpdates(far, farMark, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_GAME_MODE, seen), 0,
+                            "game mode updates for the player sent to the far viewer");
+                    helper.assertValueEqual(infoUpdates(far, farMark, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, seen), 0,
+                            "latency updates for the player sent to the far viewer");
+                    // The far viewer did get the latency broadcast, with only its own entry in it
+                    helper.assertValueEqual(infoUpdates(far, farMark, ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LATENCY, far), 1,
+                            "latency updates for itself sent to the far viewer");
+                } finally {
+                    hide.distantPlayers = distantBefore;
+                    leaveAll(joined);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                hide.distantPlayers = distantBefore;
+                leaveAll(joined);
             }
         }
     }
@@ -493,6 +554,15 @@ public class VisibilityGameTests {
             }
         }
         return packet instanceof ClientboundAddEntityPacket add && add.getUUID().equals(seen.getUUID());
+    }
+
+    // Player-info packets with this action that carried seen's entry to viewer's client, counting from packet "from"
+    private static int infoUpdates(ServerPlayer viewer, int from, ClientboundPlayerInfoUpdatePacket.Action action, ServerPlayer seen) {
+        List<Packet<?>> packets = TestPlayers.sentPackets(viewer);
+        return (int) packets.subList(from, packets.size()).stream()
+                .filter(p -> p instanceof ClientboundPlayerInfoUpdatePacket info && info.actions().contains(action)
+                        && info.entries().stream().anyMatch(entry -> entry.profileId().equals(seen.getUUID())))
+                .count();
     }
 
     private static boolean gotRemove(ServerPlayer viewer, ServerPlayer seen) {
