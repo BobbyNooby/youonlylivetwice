@@ -299,8 +299,8 @@ public class ChatStoryClientTest implements FabricClientGameTest {
         server.runOnServer(s -> s.getCommands().performPrefixedCommand(player.createCommandSourceStack(), command));
     }
 
-    // Everything the client showed in its chat, player chat and server lines alike
-    private static boolean chatLogHas(ClientGameTestContext ctx, String text) {
+    // Everything the client showed in its chat, player chat and server lines alike. VisibilityClientTest reads it too.
+    static boolean chatLogHas(ClientGameTestContext ctx, String text) {
         return ctx.computeOnClient(mc -> {
             ChatLog log = mc.getReportingContext().chatLog();
             for (int id = log.start(); id <= log.end(); id++) {

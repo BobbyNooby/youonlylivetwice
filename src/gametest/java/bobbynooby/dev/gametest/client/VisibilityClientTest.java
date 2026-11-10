@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
+import net.minecraft.client.Minecraft;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 
@@ -15,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 // Checks what a real client ends up holding, rather than the packets the server meant to send
 public class VisibilityClientTest implements FabricClientGameTest {
@@ -35,7 +38,10 @@ public class VisibilityClientTest implements FabricClientGameTest {
                 });
                 ServerPlayer near = join(server, connection, joined, "Near", NEAR_BLOCKS);
                 ServerPlayer far = join(server, connection, joined, "Far", FAR_BLOCKS);
-                waitDriving(ctx, server, joined, 40);
+                waitDriving(ctx, server, joined, mc -> mc.getConnection().getPlayerInfo(near.getUUID()) != null,
+                        mc -> "the client never got an entry for the near player");
+                // So whatever the server sent about the far player by now has reached the client too
+                connection.waitForClientboundPackets();
 
                 checkOnlyNearKnown(ctx, near.getUUID(), far.getUUID());
                 showConsoleSay(ctx, server, connection);
@@ -74,6 +80,9 @@ public class VisibilityClientTest implements FabricClientGameTest {
                                        TestDedicatedServerConnection connection) {
         server.runCommand("say hello from console");
         connection.waitForClientboundPackets();
+        if (!ChatStoryClientTest.chatLogHas(ctx, "hello from console")) {
+            throw new AssertionError("the client's chat has no \"hello from console\"");
+        }
         screenshot(ctx, "03-chat-say");
     }
 
@@ -84,20 +93,16 @@ public class VisibilityClientTest implements FabricClientGameTest {
         if (!server.computeOnServer(s -> AdminView.toggle(connection.getServerPlayer()))) {
             throw new AssertionError("admin view was already on, so the toggle turned it off");
         }
-        waitDriving(ctx, server, joined, 20);
-
-        if (!knownIds(ctx).contains(far)) {
-            throw new AssertionError("admin view did not give the client the far player's entry");
-        }
-        boolean farListed = ctx.computeOnClient(mc -> mc.getConnection().getListedOnlinePlayers().stream()
-                .anyMatch(info -> info.getProfile().id().equals(far)));
-        if (!farListed) {
-            throw new AssertionError("admin view did not list the far player in the tab list");
-        }
+        waitDriving(ctx, server, joined, mc -> mc.getConnection().getPlayerInfo(far) != null && listed(mc, far),
+                mc -> mc.getConnection().getPlayerInfo(far) == null ? "admin view did not give the client the far player's entry"
+                        : "admin view did not list the far player in the tab list");
 
         ctx.getInput().holdKey(options -> options.keyPlayerList);
-        screenshot(ctx, "03-adminview-tablist");
-        ctx.getInput().releaseKey(options -> options.keyPlayerList);
+        try {
+            screenshot(ctx, "03-adminview-tablist");
+        } finally {
+            ctx.getInput().releaseKey(options -> options.keyPlayerList);
+        }
 
         server.runOnServer(s -> AdminView.toggle(connection.getServerPlayer()));
     }
@@ -110,13 +115,25 @@ public class VisibilityClientTest implements FabricClientGameTest {
         return player;
     }
 
-    // Test players have no client, so each tick the server gets what a client would have sent it
-    private static void waitDriving(ClientGameTestContext ctx, TestDedicatedServerContext server,
-                                    List<ServerPlayer> players, int ticks) {
-        for (int i = 0; i < ticks; i++) {
+    // Test players have no client, so each tick the server gets what a client would have sent it, until the client
+    // has what the condition asks. Like ClientTests.waitOnClient, whose condition runs on the client thread, where the
+    // server can't be driven; a timeout says what was wrong.
+    private static void waitDriving(ClientGameTestContext ctx, TestDedicatedServerContext server, List<ServerPlayer> players,
+                                    Predicate<Minecraft> condition, Function<Minecraft, String> failure) {
+        for (int tick = 0; tick < ClientGameTestContext.DEFAULT_TIMEOUT; tick++) {
+            if (ctx.computeOnClient(condition::test)) {
+                return;
+            }
             server.runOnServer(s -> players.forEach(TestPlayers::driveTracking));
             ctx.waitTick();
         }
+        if (!ctx.computeOnClient(condition::test)) {
+            throw new AssertionError(ctx.computeOnClient(failure::apply));
+        }
+    }
+
+    private static boolean listed(Minecraft mc, UUID id) {
+        return mc.getConnection().getListedOnlinePlayers().stream().anyMatch(info -> info.getProfile().id().equals(id));
     }
 
     // A copy, since the client changes its map on its own thread

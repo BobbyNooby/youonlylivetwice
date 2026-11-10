@@ -23,8 +23,12 @@ public class JoinClientTest implements FabricClientGameTest {
 
             // No counter prefix, so the CI artifact keeps the plain file names
             ctx.getInput().holdKey(options -> options.keyPlayerList);
-            ctx.takeScreenshot(TestScreenshotOptions.of("01-join-tablist").disableCounterPrefix());
-            ctx.getInput().releaseKey(options -> options.keyPlayerList);
+            try {
+                ctx.takeScreenshot(TestScreenshotOptions.of("01-join-tablist").disableCounterPrefix());
+            } finally {
+                // A key left held would keep the tab list open in every later test's screenshots
+                ctx.getInput().releaseKey(options -> options.keyPlayerList);
+            }
 
             ctx.takeScreenshot(TestScreenshotOptions.of("01-join-world").disableCounterPrefix());
         });
