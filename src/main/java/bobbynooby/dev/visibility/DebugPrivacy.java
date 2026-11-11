@@ -49,6 +49,15 @@ public final class DebugPrivacy {
         }
     }
 
+    /** Runs after vanilla has sent every player the reduced debug rule's own flag. */
+    public static void onRuleChanged(MinecraftServer server) {
+        // With the switch off, reduced() is the rule for everyone, so vanilla's flag is already each player's own. Anything
+        // else reduced() comes to read must be resent here too.
+        if (Settings.on(c -> c.hide.debugScreen)) {
+            applyAll(server);
+        }
+    }
+
     /** The server brand F3 shows. One for the whole server, so admin view doesn't change it. */
     public static String brand(String real) {
         return Settings.on(c -> c.hide.serverBrand) ? "vanilla" : real;
