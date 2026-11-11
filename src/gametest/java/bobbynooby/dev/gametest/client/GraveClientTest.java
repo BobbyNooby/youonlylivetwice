@@ -362,10 +362,11 @@ public class GraveClientTest implements FabricClientGameTest {
             ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
                     mc -> mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.MISS,
                     mc -> "the client looks at " + mc.hitResult + ", so its click would not be a use in the air");
+            int mark = ChatStoryClientTest.chatLogEnd(ctx);
             ctx.getInput().pressKey(options -> options.keyUse);
             ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
-                    mc -> ChatStoryClientTest.chatLogHas(mc, line) && mc.player.getMainHandItem().getCount() == before - 1,
-                    mc -> ChatStoryClientTest.chatLogHas(mc, line)
+                    mc -> ChatStoryClientTest.chatLogHas(mc, mark, line) && mc.player.getMainHandItem().getCount() == before - 1,
+                    mc -> ChatStoryClientTest.chatLogHas(mc, mark, line)
                             ? "the client holds " + mc.player.getMainHandItem() + " after the use, not " + (before - 1) + " revive heads"
                             : "the client never got the line \"" + line + "\"");
             if (!ctx.computeOnClient(mc -> GraveItems.isReviveHead(mc.player.getMainHandItem()))) {

@@ -123,18 +123,20 @@ public class ChatStoryClientTest implements FabricClientGameTest {
     private static void showChat(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                  TestDedicatedServerConnection connection, ServerPlayer near, ServerPlayer far) {
         String nearLine = "hello from Near";
+        int mark = chatLogEnd(ctx);
         chat(server, near, nearLine);
         connection.waitForClientboundPackets();
-        if (!chatLogHas(ctx, nearLine)) {
+        if (!chatLogHas(ctx, mark, nearLine)) {
             throw new AssertionError("the client missed chat from a player " + NEAR_BLOCKS + " blocks away");
         }
         ClientTests.screenshot(ctx, "06-chat-in-range");
 
         String farLine = "hello from Far";
+        mark = chatLogEnd(ctx);
         chat(server, far, farLine);
         // Anything sent before this reply has arrived by now
         connection.waitForClientboundPackets();
-        if (chatLogHas(ctx, farLine)) {
+        if (chatLogHas(ctx, mark, farLine)) {
             throw new AssertionError("the client got chat from a player " + FAR_BLOCKS + " blocks away");
         }
         // The open chat shows all of it: the near line, and nothing from far under it
@@ -152,23 +154,26 @@ public class ChatStoryClientTest implements FabricClientGameTest {
         connection.waitForClientboundPackets();
 
         String nearWhisper = near.getScoreboardName() + " whispers to you: psst from Near";
+        int mark = chatLogEnd(ctx);
         run(server, near, "w " + selfName + " psst from Near");
         connection.waitForClientboundPackets();
-        if (!chatLogHas(ctx, nearWhisper)) {
+        if (!chatLogHas(ctx, mark, nearWhisper)) {
             throw new AssertionError("the client missed a whisper from a player " + NEAR_BLOCKS + " blocks away");
         }
         screenshotWithChatOpen(ctx, "06-whisper-in-range");
 
+        mark = chatLogEnd(ctx);
         run(server, far, "w " + selfName + " psst from Far");
         connection.waitForClientboundPackets();
-        if (chatLogHas(ctx, "psst from Far")) {
+        if (chatLogHas(ctx, mark, "psst from Far")) {
             throw new AssertionError("the client got a whisper from a player " + FAR_BLOCKS + " blocks away");
         }
 
         String farName = far.getScoreboardName();
         server.runOnServer(s -> far.messages.clear());
+        mark = chatLogEnd(ctx);
         sendFromChat(ctx, connection, "/w " + farName + " can you hear me");
-        if (!chatLogHas(ctx, "You whisper to " + farName + ": can you hear me")) {
+        if (!chatLogHas(ctx, mark, "You whisper to " + farName + ": can you hear me")) {
             throw new AssertionError("the client got no reply to its own whisper");
         }
         List<String> farGot = server.computeOnServer(s -> far.messages.stream().map(Component::getString).toList());
@@ -244,9 +249,10 @@ public class ChatStoryClientTest implements FabricClientGameTest {
 
         // The same path the far chat missed the client by before, so that miss was the range
         String farLine = "hello again from Far";
+        int mark = chatLogEnd(ctx);
         chat(server, far, farLine);
         connection.waitForClientboundPackets();
-        if (!chatLogHas(ctx, farLine)) {
+        if (!chatLogHas(ctx, mark, farLine)) {
             throw new AssertionError("an admin client missed chat from a player " + FAR_BLOCKS + " blocks away");
         }
 
@@ -299,15 +305,22 @@ public class ChatStoryClientTest implements FabricClientGameTest {
         server.runOnServer(s -> s.getCommands().performPrefixedCommand(player.createCommandSourceStack(), command));
     }
 
-    // Everything the client showed in its chat, player chat and server lines alike. VisibilityClientTest reads it too.
-    static boolean chatLogHas(ClientGameTestContext ctx, String text) {
-        return ctx.computeOnClient(mc -> chatLogHas(mc, text));
+    // Where the client's chat log ends now. Every test server has the same address, so the client keeps the log from
+    // one client test to the next (Minecraft.updateReportEnvironment); a check reads only what came after this mark.
+    static int chatLogEnd(ClientGameTestContext ctx) {
+        return ctx.computeOnClient(mc -> mc.getReportingContext().chatLog().end());
+    }
+
+    // Everything the client showed in its chat after the mark, player chat and server lines alike. VisibilityClientTest
+    // and GraveClientTest read it too.
+    static boolean chatLogHas(ClientGameTestContext ctx, int after, String text) {
+        return ctx.computeOnClient(mc -> chatLogHas(mc, after, text));
     }
 
     // The same on the client thread, for a wait's condition
-    static boolean chatLogHas(Minecraft mc, String text) {
+    static boolean chatLogHas(Minecraft mc, int after, String text) {
         ChatLog log = mc.getReportingContext().chatLog();
-        for (int id = log.start(); id <= log.end(); id++) {
+        for (int id = Math.max(after + 1, log.start()); id <= log.end(); id++) {
             if (log.lookup(id) instanceof LoggedChatMessage message && message.toContentComponent().getString().contains(text)) {
                 return true;
             }

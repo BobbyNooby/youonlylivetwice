@@ -83,9 +83,10 @@ public class VisibilityClientTest implements FabricClientGameTest {
 
     private static void showConsoleSay(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                        TestDedicatedServerConnection connection) {
+        int mark = ChatStoryClientTest.chatLogEnd(ctx);
         server.runCommand("say hello from console");
         connection.waitForClientboundPackets();
-        if (!ChatStoryClientTest.chatLogHas(ctx, "hello from console")) {
+        if (!ChatStoryClientTest.chatLogHas(ctx, mark, "hello from console")) {
             throw new AssertionError("the client's chat has no \"hello from console\"");
         }
         screenshot(ctx, "03-chat-say");
