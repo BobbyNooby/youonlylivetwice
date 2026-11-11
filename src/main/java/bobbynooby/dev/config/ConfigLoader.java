@@ -461,7 +461,7 @@ public final class ConfigLoader {
     }
 
     /** Returns why the user's value can't replace the default, or null if it can. */
-    private static String primitiveProblem(String path, JsonElement def, JsonElement value) {
+    private static @Nullable String primitiveProblem(String path, JsonElement def, JsonElement value) {
         if (!value.isJsonPrimitive()) {
             return "wrong type";
         }

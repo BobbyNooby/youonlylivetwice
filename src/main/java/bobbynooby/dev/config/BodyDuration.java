@@ -5,6 +5,7 @@ import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 
@@ -31,7 +32,7 @@ public record BodyDuration(int minutes) {
         }
 
         @Override
-        public BodyDuration read(JsonReader in) throws IOException {
+        public @Nullable BodyDuration read(JsonReader in) throws IOException {
             JsonToken token = in.peek();
             if (token == JsonToken.NUMBER) {
                 double value = in.nextDouble();
