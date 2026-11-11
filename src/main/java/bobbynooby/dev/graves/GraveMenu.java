@@ -1,7 +1,9 @@
 package bobbynooby.dev.graves;
 
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -20,7 +22,7 @@ public final class GraveMenu extends AbstractContainerMenu {
     private static final double MAX_DISTANCE = 8.0;
 
     private final Grave grave;
-    private final Container container;
+    private final SharedGraveContainer container;
 
     public GraveMenu(int containerId, Inventory inventory, Grave grave) {
         super(MenuType.GENERIC_9x6, containerId);
@@ -87,8 +89,20 @@ public final class GraveMenu extends AbstractContainerMenu {
 
     @Override
     public void removed(Player player) {
+        // Vanilla drops the cursor of a player who left, or was removed at their respawn, as an item that despawns. A
+        // grave never expires, so the stack goes back into it instead. The grave is still there: one emptied by a
+        // click goes at once and closes every menu on it.
+        if (player instanceof ServerPlayer serverPlayer && cursorWouldDrop(serverPlayer) && !getCarried().isEmpty()) {
+            setCarried(container.putBack(getCarried()));
+        }
         super.removed(player);
         container.stopOpen(player);
+    }
+
+    // The same check as AbstractContainerMenu.dropOrPlaceInInventory
+    private static boolean cursorWouldDrop(ServerPlayer player) {
+        return player.hasDisconnected()
+                || player.isRemoved() && player.getRemovalReason() != Entity.RemovalReason.CHANGED_DIMENSION;
     }
 
     // Refusing every place also stops number-key swaps, drags and bundles from putting anything in

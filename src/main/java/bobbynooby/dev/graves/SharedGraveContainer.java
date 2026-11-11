@@ -43,6 +43,31 @@ final class SharedGraveContainer extends SimpleContainer {
         });
     }
 
+    // A stack taken out of this grave goes back: onto a stack of the same item first, then into an empty slot. Nothing
+    // can be put into a grave, so every stack on a cursor left room it fits back into. Returns what didn't fit. Set in
+    // the list directly, like the constructor, so nothing is cut down to the slot limit.
+    ItemStack putBack(ItemStack stack) {
+        ItemStack rest = stack.copy();
+        List<ItemStack> items = getItems();
+        for (ItemStack in : items) {
+            if (!rest.isEmpty() && ItemStack.isSameItemSameComponents(in, rest)) {
+                int moved = Math.min(rest.getCount(), in.getMaxStackSize() - in.getCount());
+                if (moved > 0) {
+                    in.grow(moved);
+                    rest.shrink(moved);
+                }
+            }
+        }
+        for (int slot = 0; slot < items.size() && !rest.isEmpty(); slot++) {
+            if (items.get(slot).isEmpty()) {
+                items.set(slot, rest);
+                rest = ItemStack.EMPTY;
+            }
+        }
+        setChanged();
+        return rest;
+    }
+
     @Override
     public void startOpen(ContainerUser user) {
         viewers.add(user);

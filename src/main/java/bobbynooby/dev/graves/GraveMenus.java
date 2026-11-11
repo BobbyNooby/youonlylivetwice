@@ -42,7 +42,7 @@ public final class GraveMenus {
     }
 
     // Filled from the stored record, never the caller's copy, which may still list items someone has taken
-    static Container sharedContainer(MinecraftServer server, Grave grave) {
+    static SharedGraveContainer sharedContainer(MinecraftServer server, Grave grave) {
         return OPEN.computeIfAbsent(grave.id(), id -> new SharedGraveContainer(server, id,
                 GraveStore.get(server).byId(id).map(Grave::items).orElse(List.of())));
     }

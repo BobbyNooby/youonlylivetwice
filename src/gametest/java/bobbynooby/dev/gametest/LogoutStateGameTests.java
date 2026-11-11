@@ -267,8 +267,8 @@ public class LogoutStateGameTests {
     }
 
     // A looter logs out with someone's grave open: the menu shuts, and each stack is in one place after. The ones
-    // taken are in the looter's save, the rest in the grave, and the stack held on the cursor is where vanilla drops
-    // one as a menu closes on a player who left. The body only holds copies, so the login adds nothing.
+    // taken are in the looter's save and the rest in the grave. The stack held on the cursor goes back into the grave
+    // too, where vanilla would drop it to despawn. The body only holds copies, so the login adds nothing.
     @GameTest
     public void logoutWithGraveMenuOpen(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -305,11 +305,11 @@ public class LogoutStateGameTests {
             List<ItemStack> onGround = level.getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive).stream()
                     .map(ItemEntity::getItem).toList();
             assertOnce(helper, back, inGrave, onGround, Items.DIAMOND, 4, 0, 0);
-            assertOnce(helper, back, inGrave, onGround, Items.EMERALD, 0, 0, 6);
+            assertOnce(helper, back, inGrave, onGround, Items.EMERALD, 0, 6, 0);
             assertOnce(helper, back, inGrave, onGround, Items.GOLD_INGOT, 0, 2, 0);
             assertOnce(helper, back, inGrave, onGround, Items.IRON_SWORD, 1, 0, 0);
             helper.assertValueEqual(GraveAsserts.count(inGrave, Items.PLAYER_HEAD), 1, "grave heads in the grave");
-            helper.assertValueEqual(onGround.size(), 1, "stacks on the ground");
+            helper.assertTrue(onGround.isEmpty(), "stacks on the ground: " + onGround);
         } finally {
             cleanUp(helper, owner, before);
             level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);

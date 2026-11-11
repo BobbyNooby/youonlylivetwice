@@ -6,13 +6,18 @@ import bobbynooby.dev.graves.GraveMenu;
 import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.lockout.DeathLockout;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -24,6 +29,8 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -225,6 +232,75 @@ public class GraveMenuGameTests {
         helper.succeed();
     }
 
+    // A looter dies holding a grave stack on the cursor. With keepInventory on, the death leaves their menus open, so
+    // the menu closes as the respawn removes the dead player. Vanilla would drop the stack there to despawn; it goes
+    // back into the grave instead. The rule is only on for the death's own tick.
+    @GameTest
+    public void cursorGoesBackWhenLooterDies(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GameRules rules = server.getGameRules();
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 2), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer looter = join(helper, "DyingLooter");
+        UUID id = looter.getUUID();
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        try {
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(2, PRIMARY, ContainerInput.PICKUP, looter);
+            helper.assertTrue(menu.getCarried().is(Items.EMERALD), "the emeralds are not on the cursor");
+            boolean before = rules.get(GameRules.KEEP_INVENTORY);
+            rules.set(GameRules.KEEP_INVENTORY, true, server);
+            try {
+                TestPlayers.markLoaded(looter);
+                looter.kill(looter.level());
+            } finally {
+                rules.set(GameRules.KEEP_INVENTORY, before, server);
+            }
+            helper.assertTrue(looter.isDeadOrDying(), "the looter did not die");
+            helper.assertTrue(looter.containerMenu == menu && menu.getCarried().is(Items.EMERALD),
+                    "the death closed the menu, so the respawn has nothing left to close");
+
+            looter.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+            ServerPlayer respawned = server.getPlayerList().getPlayer(id);
+            helper.assertTrue(respawned != null && respawned != looter && looter.isRemoved(), "the looter did not respawn");
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.EMERALD), 6, "emeralds in the grave");
+            helper.assertValueEqual(count(respawned, Items.EMERALD), 0, "emeralds the respawned looter has");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, id, Items.EMERALD), 0, "emeralds in the looter's own grave");
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive).isEmpty(), "items dropped");
+        } finally {
+            cleanUpDeath(helper, grave, id, around);
+        }
+        helper.succeed();
+    }
+
+    // The same death with the server's own rules, which take the looter's open menus into their own grave at the
+    // death, cursor and all, as for any menu. So the stack is in a grave either way, and never on the ground.
+    @GameTest
+    public void cursorGoesInLootersGraveWhenTheyDie(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 2), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer looter = join(helper, "GravedLooter");
+        UUID id = looter.getUUID();
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        try {
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(2, PRIMARY, ContainerInput.PICKUP, looter);
+            helper.assertTrue(menu.getCarried().is(Items.EMERALD), "the emeralds are not on the cursor");
+            TestPlayers.markLoaded(looter);
+            looter.kill(looter.level());
+            helper.assertTrue(looter.isDeadOrDying(), "the looter did not die");
+
+            helper.assertTrue(looter.containerMenu == looter.inventoryMenu, "the death left the menu open");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, id, Items.EMERALD), 6, "emeralds in the looter's own grave");
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.EMERALD), 0, "emeralds back in the first grave");
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive).isEmpty(), "items dropped");
+        } finally {
+            cleanUpDeath(helper, grave, id, around);
+        }
+        helper.succeed();
+    }
+
     // The grave head comes first, as in a real death; empty stacks in the list are dropped by the record
     private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
@@ -267,6 +343,24 @@ public class GraveMenuGameTests {
         for (int i = 0; i < expected.length; i++) {
             helper.assertTrue(expected[i].test(items.get(i)) && items.get(i).getCount() == 1, what + " stack " + i + " changed: " + items.get(i));
         }
+    }
+
+    // After a looter's death: the looter leaves, their lockout ends, and their own grave, anything dropped and the
+    // looted grave go
+    private static void cleanUpDeath(GameTestHelper helper, Grave grave, UUID id, AABB around) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer online = server.getPlayerList().getPlayer(id);
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+        DeathLockout.revive(id, "Test", "console");
+        for (Grave own : BodyTestKit.gravesOf(helper, id)) {
+            GraveStore.get(server).remove(own.id());
+            helper.getLevel().setBlock(own.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+        GraveStore.get(server).remove(grave.id());
+        helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
     }
 
     // Leaving closes each menu; the grave goes too, whether or not the test emptied it
