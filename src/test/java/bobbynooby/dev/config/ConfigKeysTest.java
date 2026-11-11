@@ -145,14 +145,16 @@ class ConfigKeysTest {
             }
         }
         assertEquals(Map.of(
+                "bodies.enabled", Applies.When.NEW_BODIES,
                 "bodies.type", Applies.When.NEW_BODIES,
                 "bodies.pose", Applies.When.NEW_BODIES,
                 "bodies.movable", Applies.When.NEW_BODIES,
                 "bodies.totems", Applies.When.NEW_BODIES,
                 "deathLockout.cooldownDays", Applies.When.NEW_DEATHS,
                 "deathLockout.countCreativeAndSpectatorDeaths", Applies.When.NEW_DEATHS,
-                "graves.tellLocation", Applies.When.NEW_DEATHS,
-                "graves.tellLocationDistance", Applies.When.NEW_DEATHS), waiting);
+                "graves.enabled", Applies.When.NEW_DEATHS,
+                "graves.enderChestOnDeath", Applies.When.NEW_DEATHS,
+                "skins.mode", Applies.When.NEXT_JOIN), waiting);
         assertEquals("", Applies.When.NOW.note());
         assertEquals(" (applies when a player next joins)", Applies.When.NEXT_JOIN.note());
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());

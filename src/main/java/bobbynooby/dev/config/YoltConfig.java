@@ -38,13 +38,15 @@ public class YoltConfig {
     }
 
     public static class GravesSection {
-        public boolean enabled = true;
-        public EnderChestMode enderChestOnDeath = EnderChestMode.KEEP;
+        // Graves already there stay either way
+        @Applies(Applies.When.NEW_DEATHS) public boolean enabled = true;
+        @Applies(Applies.When.NEW_DEATHS) public EnderChestMode enderChestOnDeath = EnderChestMode.KEEP;
         // How often graves in loaded chunks get a missing head put back; 0 turns that off
         public int recheckSeconds = 5;
-        @Applies(Applies.When.NEW_DEATHS) public TellLocation tellLocation = TellLocation.WHEN_MOVED;
+        // Read each time the dead player is told, so a change reaches earlier deaths too
+        public TellLocation tellLocation = TellLocation.WHEN_MOVED;
         // How far from the death spot, in blocks, a grave must be for whenMoved to tell the dead player
-        @Applies(Applies.When.NEW_DEATHS) public int tellLocationDistance = 16;
+        public int tellLocationDistance = 16;
     }
 
     public static class ReviveSection {
@@ -76,7 +78,8 @@ public class YoltConfig {
     }
 
     public static class BodiesSection {
-        public boolean enabled = true;
+        // Bodies already standing stay either way
+        @Applies(Applies.When.NEW_BODIES) public boolean enabled = true;
         @Applies(Applies.When.NEW_BODIES) public BodyType type = BodyType.MANNEQUIN;
         public BodyDuration duration = BodyDuration.OFFLINE;
         @Applies(Applies.When.NEW_BODIES) public BodyPose pose = BodyPose.PRONE;
@@ -95,7 +98,8 @@ public class YoltConfig {
     }
 
     public static class SkinsSection {
-        public SkinMode mode = SkinMode.AUTO;
+        // A player gets their skin as they log in, so one already online keeps theirs until they rejoin
+        @Applies(Applies.When.NEXT_JOIN) public SkinMode mode = SkinMode.AUTO;
         public int lookupTimeoutSeconds = 5;
         public int refreshHours = 24;
         public boolean allowPlayerChoice = true;
