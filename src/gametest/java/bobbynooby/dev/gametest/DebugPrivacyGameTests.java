@@ -10,14 +10,13 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
-import net.minecraft.network.DisconnectionDetails;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.ClientboundPingPacket;
 import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.common.custom.BrandPayload;
+import net.minecraft.network.protocol.configuration.ConfigurationProtocols;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.server.MinecraftServer;
@@ -259,6 +258,8 @@ public class DebugPrivacyGameTests {
         GameProfile profile = new GameProfile(UUID.randomUUID(), "dpbrand");
         ServerConfigurationPacketListenerImpl listener = new ServerConfigurationPacketListenerImpl(server, connection,
                 CommonListenerCookie.createInitial(profile, false));
+        // As the login hands over to the configuration, so the connection's own disconnect reaches the listener
+        connection.setupInboundProtocol(ConfigurationProtocols.SERVERBOUND, listener);
         try {
             listener.startConfiguration();
             int ping = 0;
@@ -275,8 +276,10 @@ public class DebugPrivacyGameTests {
             }
             return Optional.empty();
         } finally {
-            // Drops the spawn task the configuration queued, as a client leaving does
-            listener.onDisconnect(new DisconnectionDetails(Component.literal("test over")));
+            // As a client leaving: the listener drops the spawn task the configuration queued, and Fabric ends its
+            // networking session for the connection
+            channel.close();
+            connection.handleDisconnection();
         }
     }
 
