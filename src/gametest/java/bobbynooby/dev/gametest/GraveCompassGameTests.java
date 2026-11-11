@@ -35,6 +35,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.component.LodestoneTracker;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -306,11 +307,14 @@ public class GraveCompassGameTests {
         helper.succeed();
     }
 
-    // 36 inventory stacks, 27 from the ender chest and the head make 64 stacks, so two graves, and the head is in one
+    // 36 inventory stacks, 27 from the ender chest and the head make 64 stacks, so two graves, and the head is in one.
+    // A death puts the head first, so its grave is also the first; graves made with the head after 54 stacks have it in
+    // the second, which tells the head's grave from the first one.
     @GameTest(environment = TWO_GRAVES)
     public void compassPointsAtHeadGraveWhenTwoGraves(GameTestHelper helper) {
         Runnable restore = keepSwitches(helper);
         ServerPlayer player = join(helper, "CompassTwo");
+        ServerPlayer later = join(helper, "CompassHead");
         UUID owner = player.getUUID();
         try {
             config().graves.compass = true;
@@ -335,9 +339,25 @@ public class GraveCompassGameTests {
             helper.assertValueEqual(trackerOf(compass), pointingAt(withHead.get(0)), "the compass's tracker");
             helper.assertTrue(BodyTestKit.gravesOf(helper, owner).stream().noneMatch(Grave::compassPending),
                     "a grave still owes a compass");
+
+            List<ItemStack> items = new ArrayList<>();
+            for (int i = 0; i < 54; i++) {
+                items.add(new ItemStack(Items.COBBLESTONE, 64));
+            }
+            ResolvableProfile profile = ResolvableProfile.createResolved(later.getGameProfile());
+            items.add(GraveItems.graveHead(profile));
+            List<Grave> made = Graves.createUndoable(helper.getLevel(), helper.absolutePos(new BlockPos(4, 0, 4)), profile,
+                    later.getUUID(), later.nameAndId().name(), items).graves();
+            helper.assertValueEqual(made.size(), 2, "graves made with the head last");
+            helper.assertFalse(made.get(0).compassPending(), "the first grave, without the head, owes a compass");
+            helper.assertTrue(made.get(1).compassPending(), "the head's grave owes no compass");
+            helper.assertTrue(GraveCompass.offer(later), "no compass was given for the graves made with the head last");
+            helper.assertValueEqual(trackerOf(onlyCompass(helper, later)), pointingAt(made.get(1)),
+                    "the tracker of the compass for the head's grave");
         } finally {
             restore.run();
             cleanUp(helper, owner);
+            cleanUp(helper, later.getUUID());
         }
         helper.succeed();
     }
