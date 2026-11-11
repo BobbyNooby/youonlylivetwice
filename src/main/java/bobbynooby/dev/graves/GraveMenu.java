@@ -1,6 +1,9 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.core.Yolt;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
@@ -13,6 +16,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.UUID;
 
 /** A grave's items in a 6-row chest menu. Anyone can take items out; nothing can be put in. */
@@ -90,13 +94,38 @@ public final class GraveMenu extends AbstractContainerMenu {
     @Override
     public void removed(Player player) {
         // Vanilla drops the cursor of a player who left, or was removed at their respawn, as an item that despawns. A
-        // grave never expires, so the stack goes back into it instead. The grave is still there: one emptied by a
-        // click goes at once and closes every menu on it.
+        // grave never expires, so the grave's share of the stack goes back into it instead. The rest is the looter's
+        // own and goes the vanilla way, as from any chest. The grave is still there: one emptied by a click goes at
+        // once and closes every menu on it.
         if (player instanceof ServerPlayer serverPlayer && cursorWouldDrop(serverPlayer) && !getCarried().isEmpty()) {
-            setCarried(container.putBack(getCarried()));
+            ItemStack carried = getCarried().copy();
+            ItemStack noRoom = container.takeBack(carried);
+            if (!noRoom.isEmpty() && !dropForGood(serverPlayer.level().getServer(), noRoom)) {
+                carried.grow(noRoom.getCount());
+            }
+            setCarried(carried.isEmpty() ? ItemStack.EMPTY : carried);
         }
         super.removed(player);
         container.stopOpen(player);
+    }
+
+    // The grave's own items that found no room drop for good, as an admin removal's do: at the grave, or at the
+    // nearest spot that won't destroy them. False if that failed, so vanilla's drop is the last resort.
+    private boolean dropForGood(MinecraftServer server, ItemStack stack) {
+        ServerLevel level = server.getLevel(grave.dimension());
+        if (level == null) {
+            return false;
+        }
+        GraveStore store = GraveStore.get(server);
+        BlockPos spot = GravePlacement.safeForItems(level, grave.pos(), store) ? grave.pos()
+                : GravePlacement.nearestSafe(level, grave.pos(), store, true).orElse(grave.pos());
+        try {
+            Graves.dropForGood(level, spot, List.of(stack));
+            return true;
+        } catch (RuntimeException e) {
+            Yolt.LOGGER.error("Could not drop {} from {}'s grave for good", stack, grave.ownerName(), e);
+            return false;
+        }
     }
 
     // The same check as AbstractContainerMenu.dropOrPlaceInInventory

@@ -42,6 +42,8 @@ import java.util.function.Predicate;
 // Clicks go through menu.clicked, the same entry point as a client's click packet
 public class GraveMenuGameTests {
     private static final int PRIMARY = 0;
+    // The menu slot of the looter's inventory slot 9, the first after the grave's 54
+    private static final int OWN_SLOT = 54;
 
     @GameTest
     public void openingShowsItemsCompacted(GameTestHelper helper) {
@@ -301,6 +303,110 @@ public class GraveMenuGameTests {
         helper.succeed();
     }
 
+    // A looter's own stack on the cursor stays theirs at a disconnect, even of an item the grave holds: the grave takes
+    // none of it, and it drops the vanilla way, as from any chest
+    @GameTest
+    public void ownCursorStackStaysOutOfTheGrave(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 3), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer looter = join(helper, "OwnCursor");
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        try {
+            looter.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 5));
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(OWN_SLOT, PRIMARY, ContainerInput.PICKUP, looter);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND) && menu.getCarried().getCount() == 5,
+                    "the looter's own diamonds are not on the cursor: " + menu.getCarried());
+
+            TestPlayers.disconnect(looter);
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(inGrave.size(), 3, "grave stacks");
+            helper.assertValueEqual(countIn(inGrave, Items.DIAMOND), 3, "diamonds in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.EMERALD), 6, "emeralds in the grave");
+            helper.assertValueEqual(onGround(helper, around, Items.DIAMOND, false), 5, "diamonds dropped the vanilla way");
+            helper.assertValueEqual(onGround(helper, around, Items.DIAMOND, true), 0, "diamonds dropped for good");
+        } finally {
+            cleanUpLeft(helper, grave, around, looter);
+        }
+        helper.succeed();
+    }
+
+    // A double-click gathers the looter's own diamonds onto two taken from the grave. At a disconnect only the
+    // grave's two go back; the looter's own five drop the vanilla way.
+    @GameTest
+    public void gatheredCursorPutsBackOnlyTheGravesShare(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 2), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer looter = join(helper, "Gatherer");
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        try {
+            looter.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 5));
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(1, PRIMARY, ContainerInput.PICKUP, looter);
+            menu.clicked(1, PRIMARY, ContainerInput.PICKUP_ALL, looter);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND) && menu.getCarried().getCount() == 7,
+                    "the double-click did not gather 7 diamonds: " + menu.getCarried());
+            helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 0, "diamonds left in the inventory");
+
+            TestPlayers.disconnect(looter);
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(countIn(inGrave, Items.DIAMOND), 2, "diamonds in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.EMERALD), 6, "emeralds in the grave");
+            helper.assertValueEqual(onGround(helper, around, Items.DIAMOND, false), 5, "diamonds dropped the vanilla way");
+            helper.assertValueEqual(onGround(helper, around, Items.DIAMOND, true), 0, "diamonds dropped for good");
+        } finally {
+            cleanUpLeft(helper, grave, around, looter);
+        }
+        helper.succeed();
+    }
+
+    // A full grave. Two looters hold grave stacks on their cursors, and a third their own cobblestone, which the
+    // grave also holds. The third drops out first: their stack must not take the room the grave's own need. Then each
+    // grave stack is in the grave or dropped for good, exactly once, and the cobblestone drops the vanilla way.
+    @GameTest
+    public void fullGraveKeepsRoomForItsOwnStacks(GameTestHelper helper) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            stacks.add(new ItemStack(Items.COBBLESTONE, 64));
+        }
+        stacks.add(new ItemStack(Items.EMERALD, 6));
+        stacks.add(new ItemStack(Items.GOLD_INGOT, 2));
+        Grave grave = makeGrave(helper, stacks.toArray(ItemStack[]::new));
+        helper.assertValueEqual(grave.items().size(), 54, "stacks in the full grave");
+        ServerPlayer a = join(helper, "FullA");
+        ServerPlayer b = join(helper, "FullB");
+        ServerPlayer own = join(helper, "FullOwn");
+        AABB around = new AABB(a.blockPosition()).inflate(4.0);
+        try {
+            own.getInventory().setItem(9, new ItemStack(Items.COBBLESTONE, 64));
+            GraveMenus.open(a, grave);
+            GraveMenus.open(b, grave);
+            GraveMenus.open(own, grave);
+            a.containerMenu.clicked(52, PRIMARY, ContainerInput.PICKUP, a);
+            b.containerMenu.clicked(53, PRIMARY, ContainerInput.PICKUP, b);
+            own.containerMenu.clicked(OWN_SLOT, PRIMARY, ContainerInput.PICKUP, own);
+            helper.assertTrue(a.containerMenu.getCarried().is(Items.EMERALD) && b.containerMenu.getCarried().is(Items.GOLD_INGOT)
+                    && own.containerMenu.getCarried().is(Items.COBBLESTONE), "the cursors don't hold what the test needs");
+
+            TestPlayers.disconnect(own);
+            TestPlayers.disconnect(a);
+            TestPlayers.disconnect(b);
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(inGrave.size(), 54, "stacks in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.COBBLESTONE), 51 * 64, "cobblestone in the grave");
+            for (Item item : List.of(Items.EMERALD, Items.GOLD_INGOT)) {
+                helper.assertValueEqual(countIn(inGrave, item) + onGround(helper, around, item, true), item == Items.EMERALD ? 6 : 2,
+                        item + " in the grave or dropped for good");
+                helper.assertValueEqual(onGround(helper, around, item, false), 0, item + " dropped to despawn");
+            }
+            helper.assertValueEqual(onGround(helper, around, Items.COBBLESTONE, false), 64, "own cobblestone dropped the vanilla way");
+            helper.assertValueEqual(onGround(helper, around, Items.COBBLESTONE, true), 0, "own cobblestone dropped for good");
+        } finally {
+            cleanUpLeft(helper, grave, around, a, b, own);
+        }
+        helper.succeed();
+    }
+
     // The grave head comes first, as in a real death; empty stacks in the list are dropped by the record
     private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
@@ -343,6 +449,27 @@ public class GraveMenuGameTests {
         for (int i = 0; i < expected.length; i++) {
             helper.assertTrue(expected[i].test(items.get(i)) && items.get(i).getCount() == 1, what + " stack " + i + " changed: " + items.get(i));
         }
+    }
+
+    // How many of the item lie on the ground, dropped for good or the vanilla way, which despawns
+    private static int onGround(GameTestHelper helper, AABB around, Item item, boolean forGood) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive).stream()
+                .filter(entity -> entity.getItem().is(item) && (entity.getAge() < 0) == forGood)
+                .mapToInt(entity -> entity.getItem().getCount())
+                .sum();
+    }
+
+    // After disconnects: anyone still online leaves, and anything dropped and the grave go
+    private static void cleanUpLeft(GameTestHelper helper, Grave grave, AABB around, ServerPlayer... players) {
+        for (ServerPlayer player : players) {
+            ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID());
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+        }
+        helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+        GraveStore.get(helper.getLevel().getServer()).remove(grave.id());
+        helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
     }
 
     // After a looter's death: the looter leaves, their lockout ends, and their own grave, anything dropped and the

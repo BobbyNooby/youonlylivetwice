@@ -16,12 +16,15 @@ final class SharedGraveContainer extends SimpleContainer {
     private final MinecraftServer server;
     private final UUID graveId;
     private final List<ContainerUser> viewers = new ArrayList<>();
+    // What the grave held as this container was filled. Only what has left since can be taken back in.
+    private final List<ItemStack> filledWith;
 
     SharedGraveContainer(MinecraftServer server, UUID graveId, List<ItemStack> items) {
         // Room for every stored stack, so saving back can never drop one the menu has no slot for
         super(Math.max(GraveMenu.GRAVE_SLOTS, items.size()));
         this.server = server;
         this.graveId = graveId;
+        this.filledWith = Stacks.nonEmptyCopies(items);
         int slot = 0;
         // Copies, so taking from the menu never changes the record behind its back. Put in the list
         // directly because setItem would cut an oversized stack down to the slot limit.
@@ -43,11 +46,18 @@ final class SharedGraveContainer extends SimpleContainer {
         });
     }
 
-    // A stack taken out of this grave goes back: onto a stack of the same item first, then into an empty slot. Nothing
-    // can be put into a grave, so every stack on a cursor left room it fits back into. Returns what didn't fit. Set in
-    // the list directly, like the constructor, so nothing is cut down to the slot limit.
-    ItemStack putBack(ItemStack stack) {
-        ItemStack rest = stack.copy();
+    /**
+     * Takes the grave's share of a closing menu's cursor stack back in, out of that stack: never more of the item than
+     * has left the grave since this container was filled, so the looter's own items stay theirs. It goes onto a stack
+     * of the same item first, then into an empty slot. Returns any of the share that found no room, which shouldn't
+     * happen: only the grave's own items come back, never more than left, so they only fill room that leaving made.
+     */
+    ItemStack takeBack(ItemStack carried) {
+        int share = Math.min(carried.getCount(), count(filledWith, carried) - count(getItems(), carried));
+        if (share <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack rest = carried.split(share);
         List<ItemStack> items = getItems();
         for (ItemStack in : items) {
             if (!rest.isEmpty() && ItemStack.isSameItemSameComponents(in, rest)) {
@@ -58,6 +68,7 @@ final class SharedGraveContainer extends SimpleContainer {
                 }
             }
         }
+        // Set in the list directly, like the constructor, so nothing is cut down to the slot limit
         for (int slot = 0; slot < items.size() && !rest.isEmpty(); slot++) {
             if (items.get(slot).isEmpty()) {
                 items.set(slot, rest);
@@ -66,6 +77,16 @@ final class SharedGraveContainer extends SimpleContainer {
         }
         setChanged();
         return rest;
+    }
+
+    private static int count(List<ItemStack> stacks, ItemStack like) {
+        int total = 0;
+        for (ItemStack stack : stacks) {
+            if (ItemStack.isSameItemSameComponents(stack, like)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
     }
 
     @Override
