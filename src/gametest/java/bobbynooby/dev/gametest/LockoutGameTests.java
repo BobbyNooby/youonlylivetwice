@@ -18,6 +18,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -308,7 +309,10 @@ public class LockoutGameTests {
             GraveDeathGameTests.respawnBesideTest(helper, player);
             lockout.cooldownDays = 7;
             killWithoutGrave(helper, player);
-            ServerPlayer back = level.getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            // The client's respawn, which also ends the connection's wait for one; until then the player can't be hurt
+            player.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+            ServerPlayer back = level.getServer().getPlayerList().getPlayer(uuid);
+            helper.assertTrue(back != null && back != player, "the player did not respawn");
             TestPlayers.markLoaded(back);
             lockout.cooldownDays = 1;
             YoltConfig.GravesSection graves = Settings.get().graves;
