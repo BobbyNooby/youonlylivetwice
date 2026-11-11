@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.gametest.TestPlayers;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -20,7 +21,9 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,6 +35,7 @@ public class LockoutClientTest implements FabricClientGameTest {
     private static final int LOGIN_TIMEOUT = SharedConstants.TICKS_PER_MINUTE;
     // The title vanilla gives a connection lost from inside the world. A refusal during login gets CONNECT_FAILED instead.
     private static final Component LOST = Component.translatable("disconnect.lost");
+    private static final int WITNESS_DISTANCE = 2;
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -60,12 +64,16 @@ public class LockoutClientTest implements FabricClientGameTest {
     private static String showKicked(ClientGameTestContext ctx, TestDedicatedServerContext server, UUID self) {
         // Not closed by a try: the kick ends it, and closing a connection the server has ended throws
         TestDedicatedServerConnection connection = server.connect();
-        int chatBefore;
+        // The client's own copy of its death line can be lost: the kick right after it closes the connection on the
+        // network thread, and the client then drops chat it hasn't handled yet. A test player beside it keeps every line
+        // the server sends. Only touched on the server thread.
+        List<TestPlayers.Recording> witness = new ArrayList<>();
         try {
-            chatBefore = ctx.computeOnClient(ChatStoryClientTest::chatLogEnd);
             connection.waitForChunksRender();
             server.runOnServer(s -> {
                 ServerPlayer player = connection.getServerPlayer();
+                witness.add(TestPlayers.joinRecording(s, "Witness", GameType.SURVIVAL,
+                        player.blockPosition().relative(player.getDirection(), WITNESS_DISTANCE)));
                 player.kill(player.level());
                 if (!player.isDeadOrDying()) {
                     throw new AssertionError("the client's player did not die");
@@ -76,10 +84,15 @@ public class LockoutClientTest implements FabricClientGameTest {
                     mc -> mc.level == null && mc.gui.screen() instanceof DisconnectedScreen,
                     mc -> "the death did not kick the client, which is on " + screenName(mc));
         } finally {
-            // Only when the kick never came, so the server never stops under a client still in its world
-            if (ctx.computeOnClient(mc -> mc.level != null)) {
-                connection.close();
-            }
+            ClientTests.runAll(List.of(
+                    // Gone before the client comes back, so its next login is the only one
+                    () -> server.runOnServer(s -> witness.forEach(player -> ClientTests.leaveWithoutBody(s, player.getUUID()))),
+                    // Only when the kick never came, so the server never stops under a client still in its world
+                    () -> {
+                        if (ctx.computeOnClient(mc -> mc.level != null)) {
+                            connection.close();
+                        }
+                    }));
         }
         String died = server.computeOnServer(s -> {
             DeathLog death = DeathLockout.newestDeath(self);
@@ -88,10 +101,10 @@ public class LockoutClientTest implements FabricClientGameTest {
             }
             return death.deathMessage();
         });
-        // The record builds the reason too, so the death line the client itself got in chat is what shows it is right.
-        // Only lines from after the join, since an earlier test's death can read the same.
-        if (!ctx.computeOnClient(mc -> ChatStoryClientTest.chatLogHasAfter(mc, chatBefore, died))) {
-            throw new AssertionError("the client's chat never said \"" + died + "\", the death the lockout recorded");
+        // The record builds the reason too, so the death line the server sent to chat is what shows it is right
+        List<String> said = server.computeOnServer(s -> witness.get(0).messages.stream().map(Component::getString).toList());
+        if (!said.contains(died)) {
+            throw new AssertionError("the server's chat said " + said + ", not \"" + died + "\", the death the lockout recorded");
         }
         checkTitle(ctx, LOST);
         checkReason(ctx, died);
