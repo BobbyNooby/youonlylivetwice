@@ -61,8 +61,10 @@ public class DebugPrivacyGameTests {
     public void adminViewLiftsReducedDebug(GameTestHelper helper) {
         ServerPlayer admin = join(helper, "dpadmin");
         try {
+            // Only what the op itself sends: the reduced flag from the join is already there
+            int beforeOp = TestPlayers.sentPackets(admin).size();
             TestPlayers.op(admin);
-            helper.assertValueEqual(lastDebugEvent(admin, 0), REDUCED, "debug flag of an op without admin view");
+            helper.assertValueEqual(lastDebugEvent(admin, beforeOp), NONE, "debug flag sent for an op without admin view");
             helper.assertTrue(AdminView.toggle(admin), "toggle did not turn admin view on");
             helper.assertValueEqual(lastDebugEvent(admin, 0), FULL, "debug flag with admin view on");
             helper.assertFalse(AdminView.toggle(admin), "toggle did not turn admin view off");
