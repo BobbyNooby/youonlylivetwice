@@ -121,11 +121,14 @@ public final class ChatDelivery {
     }
 
     /**
-     * A client with no entry for the sender throws its player chat away, so it gets the same line as plain text.
-     * Returns false, sending nothing, when the normal send can go ahead.
+     * A client with no entry for the sender throws its player chat away, so it gets the same line as plain text. Only
+     * while distant players are hidden. Returns false, sending nothing, when the normal send can go ahead.
      */
     public static boolean sendAsTextIfSenderUnknown(ServerPlayer recipient, OutgoingChatMessage message, boolean filtered,
                                                     ChatType.Bound chatType) {
+        if (!Settings.on(c -> c.hide.distantPlayers)) {
+            return false;
+        }
         // A disguised message has no sender for the client to check
         if (!(message instanceof OutgoingChatMessage.Player player)
                 || PlayerVisibility.known(recipient).contains(player.message().sender())) {

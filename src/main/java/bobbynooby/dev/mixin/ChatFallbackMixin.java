@@ -1,7 +1,6 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.chat.ChatDelivery;
-import bobbynooby.dev.config.Settings;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.OutgoingChatMessage;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,8 +15,7 @@ public abstract class ChatFallbackMixin {
     @Inject(method = "sendChatMessage(Lnet/minecraft/network/chat/OutgoingChatMessage;ZLnet/minecraft/network/chat/ChatType$Bound;)V",
             at = @At("HEAD"), cancellable = true)
     private void textForUnknownSender(OutgoingChatMessage message, boolean filtered, ChatType.Bound chatType, CallbackInfo ci) {
-        if (Settings.on(c -> c.hide.distantPlayers)
-                && ChatDelivery.sendAsTextIfSenderUnknown((ServerPlayer) (Object) this, message, filtered, chatType)) {
+        if (ChatDelivery.sendAsTextIfSenderUnknown((ServerPlayer) (Object) this, message, filtered, chatType)) {
             ci.cancel();
         }
     }
