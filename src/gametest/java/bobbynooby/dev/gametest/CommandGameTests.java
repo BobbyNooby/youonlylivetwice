@@ -50,15 +50,22 @@ public class CommandGameTests {
     // A batch of its own: a reload swaps the whole config object, which a test holding the old one across ticks would miss
     static final String CONFIG_COMMAND = "you-only-live-twice-gametest:config_command";
 
-    // Writes the config file, so it runs with the other tests that do, apart from the ones holding the config
+    // Writes the config file, so it runs with the other tests that do, apart from the ones holding the config. The log
+    // line names the unit as the reply does.
     @GameTest(environment = CONFIG_COMMAND)
     public void respawnCooldownReplyNamesUnitAndScope(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         String fileBefore = Files.readString(Settings.path());
         try {
             String scope = " It applies to deaths from now on; use /yolt unkill for the rest.";
-            helper.assertValueEqual(run(server, "yolt respawncooldown 7"), List.of("Respawn cooldown set to 7 days." + scope), "output for 7");
-            helper.assertValueEqual(run(server, "yolt respawncooldown 1"), List.of("Respawn cooldown set to 1 day." + scope), "output for 1");
+            List<String> output = new ArrayList<>();
+            List<String> log = OfflineGameTests.yoltLog(() -> output.addAll(run(server, "yolt respawncooldown 7")));
+            helper.assertValueEqual(output, List.of("Respawn cooldown set to 7 days." + scope), "output for 7");
+            helper.assertTrue(log.stream().anyMatch(line -> line.endsWith(" set the respawn cooldown to 7 days")), "log for 7: " + log);
+            output.clear();
+            log = OfflineGameTests.yoltLog(() -> output.addAll(run(server, "yolt respawncooldown 1")));
+            helper.assertValueEqual(output, List.of("Respawn cooldown set to 1 day." + scope), "output for 1");
+            helper.assertTrue(log.stream().anyMatch(line -> line.endsWith(" set the respawn cooldown to 1 day")), "log for 1: " + log);
             helper.assertValueEqual(Settings.get().deathLockout.cooldownDays, 1, "cooldown setting");
             helper.assertTrue(Files.readString(Settings.path()).contains("\"cooldownDays\": 1"), "cooldown not saved to the config file");
         } finally {

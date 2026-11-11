@@ -44,8 +44,9 @@ final class LockoutCommands {
         if (change.problem() != null) {
             return ConfigCommands.failed(source, change);
         }
-        LOGGER.info("{} set the respawn cooldown to {} days", source.getTextName(), days);
-        YoltCommands.reply(source, "Respawn cooldown set to " + (days == 1 ? "1 day" : days + " days") + "."
+        String shown = days == 1 ? "1 day" : days + " days";
+        LOGGER.info("{} set the respawn cooldown to {}", source.getTextName(), shown);
+        YoltCommands.reply(source, "Respawn cooldown set to " + shown + "."
                 + " It applies to deaths from now on; use /yolt unkill for the rest.");
         ConfigCommands.tellBackup(source, change);
         return 1;
