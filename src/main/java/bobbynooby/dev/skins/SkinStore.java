@@ -185,11 +185,17 @@ public final class SkinStore extends SavedData {
 
     /**
      * Writes the store to disk before returning, so a crash can't lose a pick the player was told about. 26.3 can't
-     * save one entry on its own, so this saves every changed entry of the data storage.
+     * save one entry on its own, so this saves every changed entry of the data storage. The store stays marked as
+     * changed, so the world's next save writes it once more.
      */
     public void saveNow(MinecraftServer server) {
         setDirty();
-        server.getDataStorage().saveAndJoin();
+        try {
+            server.getDataStorage().saveAndJoin();
+        } finally {
+            // The storage clears the mark before it writes, and only logs a write that fails
+            setDirty();
+        }
     }
 
     /** True when the file came from a newer YOLT than this one. */

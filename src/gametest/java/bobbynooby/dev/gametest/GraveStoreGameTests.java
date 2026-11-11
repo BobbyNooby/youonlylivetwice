@@ -4,6 +4,7 @@ import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.skins.SkinStore;
 import com.mojang.serialization.DataResult;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -212,6 +213,39 @@ public class GraveStoreGameTests {
             helper.assertValueEqual(copiesOf(file).size(), 1, "copies after a second get");
         } finally {
             deleteFolder(folder);
+        }
+        helper.succeed();
+    }
+
+    // The skin store's save at once, with a folder where its file goes, so the write fails. The storage only logs that
+    // and counts the store as saved, so the store must stay marked as changed: the world's next save then writes the
+    // pick. The file is written again in this tick.
+    @GameTest
+    public void skinPickSurvivesAFailedSaveNow(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        SkinStore store = SkinStore.get(server);
+        UUID player = UUID.randomUUID();
+        Path file = SkinStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        try {
+            store.choose(player, "Picked");
+            Files.deleteIfExists(file);
+            Files.createDirectories(file);
+            store.saveNow(server);
+            helper.assertTrue(store.isDirty(), "the failed write left the skin store marked as saved");
+
+            Files.delete(file);
+            server.getDataStorage().saveAndJoin();
+            helper.assertTrue(Files.isRegularFile(file), "the next save did not write the skin file");
+            RegistryOps<Tag> ops = server.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+            SkinStore onDisk = SkinStore.TYPE.codec()
+                    .parse(ops, NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).get("data")).getOrThrow();
+            helper.assertValueEqual(onDisk.choice(player), "Picked", "the pick in the skin file");
+        } finally {
+            if (Files.isDirectory(file)) {
+                Files.delete(file);
+            }
+            store.clearChoice(player);
+            server.getDataStorage().saveAndJoin();
         }
         helper.succeed();
     }
