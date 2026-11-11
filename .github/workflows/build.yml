@@ -73,7 +73,8 @@ jobs:
           report_paths: build/test-results/**/*.xml
           check_name: server tests
           include_passed: false
-          detailed_summary: false
+          # A row per failed test in the job summary, not only in the check's annotations
+          detailed_summary: true
           fail_on_failure: false
           require_tests: false
       - name: store test reports
