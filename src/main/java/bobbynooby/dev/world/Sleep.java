@@ -24,7 +24,7 @@ public final class Sleep {
     }
 
     /** True when beds and respawn anchors set no respawn point; a point set by /spawnpoint still works. */
-    public static boolean ignoresRespawnPoint() {
+    public static boolean bedsSetNoRespawnPoint() {
         return Settings.on(c -> c.sleep.noBedRespawn);
     }
 
@@ -33,6 +33,6 @@ public final class Sleep {
      * them even with the switch on; /spawnpoint's are forced and always count.
      */
     public static boolean ignoresStoredPoint(boolean forced) {
-        return !forced && ignoresRespawnPoint();
+        return !forced && bedsSetNoRespawnPoint();
     }
 }

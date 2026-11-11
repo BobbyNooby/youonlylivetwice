@@ -15,7 +15,7 @@ public abstract class NoBedRespawnAnchorMixin {
     @Inject(method = "useWithoutItem", cancellable = true, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;getRespawnConfig()Lnet/minecraft/server/level/ServerPlayer$RespawnConfig;"))
     private void anchorSetsNoRespawnPoint(CallbackInfoReturnable<InteractionResult> cir) {
-        if (Sleep.ignoresRespawnPoint()) {
+        if (Sleep.bedsSetNoRespawnPoint()) {
             cir.setReturnValue(InteractionResult.CONSUME);
         }
     }

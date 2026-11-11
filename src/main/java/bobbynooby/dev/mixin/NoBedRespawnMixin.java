@@ -14,7 +14,7 @@ public abstract class NoBedRespawnMixin {
     @WrapWithCondition(method = "startSleepInBed", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;setRespawnPosition(Lnet/minecraft/server/level/ServerPlayer$RespawnConfig;Z)V"))
     private boolean bedSetsNoRespawnPoint(ServerPlayer player, ServerPlayer.RespawnConfig config, boolean showMessage) {
-        return !Sleep.ignoresRespawnPoint();
+        return !Sleep.bedsSetNoRespawnPoint();
     }
 
     // Death respawns, the credits and End exits all read the point here. A bed or anchor point stored by an older
