@@ -69,10 +69,11 @@ public class YoltConfig {
         public boolean locatorBar = true;
         public boolean globalSounds = true;
         public boolean mapPlayers = true;
-        // Vanilla's reduced F3 for every player: no coordinates, biome, light or targeted block. Admin view gives an op the
-        // full screen back.
+        // Vanilla's reduced F3 for every player: no coordinates, biome, light or targeted block, though the position inside
+        // the current 16-block section still shows. Admin view gives an op the full screen back.
         public boolean debugScreen = true;
-        // F3 names the server "vanilla" rather than "fabric". The brand is sent as a player logs in.
+        // F3 names the server "vanilla" rather than "fabric". The brand is sent as a player logs in. Fabric's channel
+        // registration and ping at login still show a client that logs packets it is Fabric.
         @Applies(Applies.When.NEXT_JOIN) public boolean serverBrand = false;
     }
 
