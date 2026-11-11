@@ -7,6 +7,7 @@ import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
@@ -37,7 +38,10 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.ItemStack;
@@ -627,16 +631,76 @@ public class GraveProtectionGameTests {
             helper.assertFalse(moved.pos().equals(spot), "grave still claims the other head's spot");
             assertGraveIntact(helper, moved);
 
-            // Removal drops the grave's items and clears only its own head
+            // Removal drops the grave's two stacks, each once, and clears only its own head
             setHead(level, removed.pos(), stranger);
-            helper.assertTrue(Graves.removeAndDrop(server, removed) instanceof Graves.Removal.Dropped, "the grave was not removed");
+            helper.assertValueEqual(Graves.removeAndDrop(server, removed), new Graves.Removal.Dropped(2), "removal");
             assertHeadOf(helper, removed.pos(), stranger);
+            List<ItemEntity> drops = near(helper, EntityTypes.ITEM, removed.pos(), 3.0);
+            helper.assertValueEqual(drops.size(), 2, "item entities dropped");
+            helper.assertValueEqual(drops.stream().filter(drop -> GraveItems.isGraveHead(drop.getItem())).count(), 1L,
+                    "grave heads dropped");
+            helper.assertValueEqual(drops.stream().filter(drop -> drop.getItem().is(Items.DIAMOND))
+                    .mapToInt(drop -> drop.getItem().getCount()).sum(), 1, "diamonds dropped");
         } finally {
             near(helper, EntityTypes.ITEM, removed.pos(), 3.0).forEach(Entity::discard);
             level.setBlock(spot, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             level.setBlock(removed.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             removeGraves(helper, store.all().stream()
                     .filter(grave -> grave.id().equals(restored.id()) || grave.id().equals(removed.id())).toList());
+        }
+        helper.succeed();
+    }
+
+    // Another player's head set on the spot while a looter has the grave open: emptying it removes the grave, and the
+    // head stays theirs
+    @GameTest
+    public void foreignHeadKeptWhenGraveIsEmptied(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        ResolvableProfile stranger = ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Stranger"));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ServerPlayer looter = TestPlayers.join(helper, "Emptier", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            helper.assertTrue(menu instanceof GraveMenu, "the grave did not open");
+            setHead(level, grave.pos(), stranger);
+            menu.clicked(0, 0, ContainerInput.QUICK_MOVE, looter);
+            menu.clicked(1, 0, ContainerInput.QUICK_MOVE, looter);
+
+            helper.assertTrue(store.byId(grave.id()).isEmpty(), "the emptied grave's record is still there");
+            helper.assertTrue(looter.containerMenu == looter.inventoryMenu, "the grave's menu is still open");
+            assertHeadOf(helper, grave.pos(), stranger);
+            helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 1, "diamonds the looter has");
+            helper.assertValueEqual(looter.getInventory().countItem(Items.PLAYER_HEAD), 1, "heads the looter has");
+        } finally {
+            TestPlayers.leave(looter);
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            store.remove(grave.id());
+        }
+        helper.succeed();
+    }
+
+    // A click on another player's head that sits on a grave's spot is a click on that head: the grave doesn't open
+    @GameTest
+    public void foreignHeadOnGraveSpotDoesNotOpenIt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        ResolvableProfile stranger = ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Stranger"));
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ServerPlayer player = TestPlayers.join(helper, "Clicker", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            setHead(level, grave.pos(), stranger);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(grave.pos()), Direction.UP, grave.pos(), false);
+            player.gameMode.useItemOn(player, level, player.getItemInHand(InteractionHand.MAIN_HAND), InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(player.containerMenu == player.inventoryMenu, "a menu opened: " + player.containerMenu);
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "the grave's container is open");
+            helper.assertTrue(store.byId(grave.id()).isPresent(), "the grave record is gone");
+            assertHeadOf(helper, grave.pos(), stranger);
+        } finally {
+            TestPlayers.leave(player);
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            store.remove(grave.id());
         }
         helper.succeed();
     }
