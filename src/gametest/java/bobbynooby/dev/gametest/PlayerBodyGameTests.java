@@ -365,8 +365,11 @@ public class PlayerBodyGameTests {
             helper.assertTrue(team != null && team.getPlayers().contains(body.getScoreboardName()),
                     "the loaded body is not back in the nametag team");
         } finally {
-            cleanUp(helper, owner, before);
-            NameTagGameTests.restoreTeam(server);
+            try {
+                cleanUp(helper, owner, before);
+            } finally {
+                NameTagGameTests.restoreTeam(server);
+            }
         }
         helper.succeed();
     }
@@ -394,8 +397,11 @@ public class PlayerBodyGameTests {
             helper.assertTrue(team != null && team.getPlayers().contains(restored.getScoreboardName()),
                     "the restored body is not in the nametag team");
         } finally {
-            cleanUp(helper, owner, before);
-            NameTagGameTests.restoreTeam(server);
+            try {
+                cleanUp(helper, owner, before);
+            } finally {
+                NameTagGameTests.restoreTeam(server);
+            }
         }
         helper.succeed();
     }
