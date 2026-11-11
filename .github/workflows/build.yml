@@ -16,7 +16,7 @@ on:
         type: string
         required: false
       verify:
-        description: Repeat the selected GameTests to find flakes
+        description: Repeat the selected GameTests to find flakes (needs a filter; every GameTest repeated can't finish in time)
         type: boolean
         default: false
 
@@ -60,6 +60,10 @@ jobs:
           GAMETEST_FILTER: ${{ inputs.filter }}
           GAMETEST_VERIFY: ${{ inputs.verify }}
         run: |
+          if [ "$GAMETEST_VERIFY" = "true" ] && [ -z "$GAMETEST_FILTER" ]; then
+            echo "::error::verify needs a filter: repeating every GameTest would run past the job's 30 minutes"
+            exit 1
+          fi
           args=()
           if [ -n "$GAMETEST_FILTER" ]; then args+=("-Dfabric-api.gametest.filter=$GAMETEST_FILTER"); fi
           if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
