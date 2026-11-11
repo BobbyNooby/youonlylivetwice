@@ -25,6 +25,19 @@ final class GraveAsserts {
         return total;
     }
 
+    // The same stacks in the same order, each with the same count and components
+    static boolean sameStacks(List<ItemStack> left, List<ItemStack> right) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            if (!ItemStack.matches(left.get(i), right.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // Across every grave the owner has on the server
     static int countInGraves(MinecraftServer server, UUID owner, Item item) {
         return countInGraves(GraveStore.get(server).all().stream().filter(grave -> grave.owner().equals(owner)).toList(), item);

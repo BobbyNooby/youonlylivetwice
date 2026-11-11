@@ -575,7 +575,7 @@ public class GraveProtectionGameTests {
             // A head right on top would keep a shulker box's lid shut
             helper.assertFalse(moved.pos().equals(spot.above()), "grave moved right on top of the " + name);
             assertGraveIntact(helper, moved);
-            helper.assertTrue(ItemStack.listMatches(moved.items(), grave.items()), "grave items changed: " + moved.items());
+            helper.assertTrue(GraveAsserts.sameStacks(moved.items(), grave.items()), "grave items changed: " + moved.items());
         } finally {
             // Emptied first, so removing the chest doesn't spill it
             if (level.getBlockEntity(spot) instanceof Container container) {
