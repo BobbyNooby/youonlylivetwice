@@ -5,6 +5,8 @@ import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
@@ -31,6 +33,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
@@ -348,6 +353,41 @@ public class CommandGameTests {
             restoreBorders(bordersBefore);
             Files.writeString(Settings.path(), fileBefore);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Nobody could reach a grave outside the border to open it. Every border is centred, so a WIDE one holds everything
+    // the tests have, and only this grave sits past it: a record alone, since the check reads the records. A refusal
+    // changes nothing, so no file is written.
+    @GameTest
+    public void borderShrinkOverGraveNeedsConfirm(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        int diameterBefore = border.diameter;
+        double endScaleBefore = border.endScale;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        GraveStore store = GraveStore.get(server);
+        String owner = uniqueName("Buried");
+        Grave grave = new Grave(UUID.randomUUID(), UUID.randomUUID(), owner, ResolvableProfile.createUnresolved(owner),
+                Level.OVERWORLD, new BlockPos(BEYOND, 64, 0), List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis());
+
+        border.enabled = true;
+        border.endScale = 1.0;
+        try {
+            centreAll(server);
+            store.put(grave);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("This would leave " + owner
+                    + "'s grave outside the world border. Add confirm to the command to do it anyway."), "refusal");
+            helper.assertValueEqual(border.diameter, diameterBefore, "diameter setting after the refusal");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), bordersBefore.get(server.overworld())[2],
+                    "overworld border size after the refusal");
+        } finally {
+            store.remove(grave.id());
+            border.enabled = enabledBefore;
+            border.endScale = endScaleBefore;
+            restoreBorders(bordersBefore);
         }
         helper.succeed();
     }
