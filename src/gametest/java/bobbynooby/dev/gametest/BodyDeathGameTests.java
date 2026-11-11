@@ -496,6 +496,48 @@ public class BodyDeathGameTests {
     }
 
     // The real slot was empty, so only the body has the helmet; GearSync gives it to the save before the death
+    // A body that dies while its owner's save is dead already, as after a crash before an earlier death's record
+    // removal was saved: the save stays and there is no grave. A helmet a dispenser put on its empty head is real, and
+    // the body drops nothing itself, so it drops where the body fell, for good.
+    @GameTest
+    public void deadSaveBodyDeathDropsDispensedGear(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "DeadAgain");
+        UUID owner = player.getUUID();
+        String name = player.getGameProfile().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            CompoundTag dead = save(helper, player);
+            dead.putFloat("Health", 0.0F);
+            OfflinePlayerData.save(server, owner, dead);
+            byte[] saveBefore = Files.readAllBytes(saveFile(helper, owner));
+            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            around = new AABB(body.blockPosition()).inflate(2.0);
+
+            List<String> log = OfflineGameTests.yoltLog(() -> body.kill(helper.getLevel()));
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertTrue(gravesOf(helper, owner).isEmpty(), "a grave was made for a dead save");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "dead owner's save changed");
+            List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
+                    drop -> drop.getItem().is(Items.IRON_HELMET));
+            helper.assertValueEqual(drops.size(), 1, "helmets dropped at the body");
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped helmet's age");
+            String line = name + "'s body got an item in slot head after they logged out, ";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(line)).count(), 1L,
+                    "warnings for the helmet: " + log);
+        } finally {
+            if (around != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_HELMET))
+                        .forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void bodyGearReachesGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Helmet");
