@@ -16,6 +16,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -28,6 +30,8 @@ public class LockoutClientTest implements FabricClientGameTest {
     private static final String WAIT = "Try again in";
     // As long as Fabric's own connect gives a world to load
     private static final int LOGIN_TIMEOUT = SharedConstants.TICKS_PER_MINUTE;
+    // The title vanilla gives a connection lost from inside the world. A refusal during login gets CONNECT_FAILED instead.
+    private static final Component LOST = Component.translatable("disconnect.lost");
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -44,6 +48,8 @@ public class LockoutClientTest implements FabricClientGameTest {
                 ClientTests.runAll(List.of(
                         // The switch is static, so later client tests in this JVM would see it
                         () -> server.runOnServer(s -> Settings.get().deathLockout.enabled = lockoutWas),
+                        // A login let in and never kicked leaves the client in the world, and the server can't stop under it
+                        () -> leaveWorld(ctx),
                         // Every client test has to end on the title screen
                         () -> ctx.setScreen(TitleScreen::new)));
             }
@@ -80,6 +86,7 @@ public class LockoutClientTest implements FabricClientGameTest {
             }
             return death.deathMessage();
         });
+        checkTitle(ctx, LOST);
         checkReason(ctx, died);
         ClientTests.screenshot(ctx, "06-lockout-kicked");
         return died;
@@ -96,12 +103,25 @@ public class LockoutClientTest implements FabricClientGameTest {
         if (ctx.computeOnClient(mc -> mc.level != null)) {
             throw new AssertionError("the refused client is in a world");
         }
-        // The refusal comes at the login check, so the player was never placed
         if (server.computeOnServer(s -> s.getPlayerList().getPlayer(self) != null)) {
             throw new AssertionError("the server let the locked-out client in");
         }
+        // Only a disconnect during login has this title, so a join and then a kick with the same reason fails here
+        checkTitle(ctx, CommonComponents.CONNECT_FAILED);
         checkReason(ctx, died);
         ClientTests.screenshot(ctx, "06-lockout-refused");
+    }
+
+    private static void checkTitle(ClientGameTestContext ctx, Component expected) {
+        ctx.runOnClient(mc -> {
+            if (!(mc.gui.screen() instanceof DisconnectedScreen screen)) {
+                throw new AssertionError("the client is on " + screenName(mc) + ", not the disconnect screen");
+            }
+            if (!screen.getTitle().equals(expected)) {
+                throw new AssertionError("the disconnect screen says \"" + screen.getTitle().getString() + "\", not \""
+                        + expected.getString() + "\"");
+            }
+        });
     }
 
     private static void checkReason(ClientGameTestContext ctx, String died) {
@@ -124,6 +144,18 @@ public class LockoutClientTest implements FabricClientGameTest {
                 .map(widget -> ((MultiLineTextWidget) widget).getMessage().getString())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the disconnect screen shows no reason"));
+    }
+
+    // As Fabric's own close does it
+    private static void leaveWorld(ClientGameTestContext ctx) {
+        if (ctx.computeOnClient(mc -> mc.level == null)) {
+            return;
+        }
+        ctx.runOnClient(mc -> {
+            mc.level.disconnect(Component.literal("Disconnecting"));
+            mc.disconnectWithSavingScreen();
+        });
+        ctx.waitFor(mc -> mc.level == null);
     }
 
     private static String screenName(Minecraft mc) {
