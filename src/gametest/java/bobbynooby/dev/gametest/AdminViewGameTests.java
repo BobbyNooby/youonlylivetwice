@@ -274,6 +274,13 @@ public class AdminViewGameTests {
             NameTagTeam.apply(server);
             helper.assertValueEqual(lastRule(admin), Team.Visibility.ALWAYS, "admin's nametag rule after a reload");
             helper.assertValueEqual(lastRule(other), Team.Visibility.NEVER, "normal player's nametag rule after a reload");
+
+            // With the names back on it, seeing the admin again puts them on the team, and forgetting them sends one LEAVE
+            int afterReload = TestPlayers.sentPackets(other).size();
+            PlayerVisibility.onPairingStart(other, admin);
+            PlayerVisibility.onPairingStop(other, admin);
+            helper.assertValueEqual(NameTagGameTests.moves(other, admin, afterReload), List.of("join", "leave"),
+                    "team changes after a reload");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.nametags = nametagsBefore;
