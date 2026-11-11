@@ -36,6 +36,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -336,6 +340,57 @@ public class CommandGameTests {
             helper.assertTrue(before.isEmpty(), "the read before the kill worked on a closed store");
             helper.assertTrue(DeathLockout.refusal(id, "Test") != null, "the older death does not lock " + name + " out");
             helper.assertFalse(DeathLockout.deathRecordedAfter(id, name, before), "the kill was confirmed by an older death");
+        }
+        helper.succeed();
+    }
+
+    // The same through /yolt kill. Another program holds the database through the read before the kill, which gives up
+    // after its 250 ms, and lets go 1.5 s in, well inside the 3 s the death's write waits. So the kill's own death is
+    // the newest row, yet the failed read can't tell it from an older one. With the lock test's batch, so the server
+    // thread's pause falls among quick checks.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void killNotConfirmedWhenALockFailedTheReadBeforeIt(GameTestHelper helper)
+            throws IOException, SQLException, InterruptedException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "LockedKill", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        List<String> output = new ArrayList<>();
+        List<String> log;
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            TestPlayers.markLoaded(player);
+            try (Connection lock = DriverManager.getConnection(own.url()); Statement statement = lock.createStatement()) {
+                statement.execute("BEGIN EXCLUSIVE");
+                Thread release = new Thread(() -> {
+                    try {
+                        Thread.sleep(1500);
+                        statement.execute("ROLLBACK");
+                    } catch (InterruptedException | SQLException e) {
+                        throw new IllegalStateException(e);
+                    }
+                }, "yolt-gametest-lock-release");
+                // No grave to clean up: the player carries nothing, and this test is about the lockout
+                graves.enabled = false;
+                release.start();
+                try {
+                    log = OfflineGameTests.yoltLog(() -> output.addAll(run(server, "yolt kill " + who.name())));
+                } finally {
+                    graves.enabled = gravesBefore;
+                    release.join();
+                }
+            }
+            helper.assertValueEqual(output, List.of("Killed " + who.name() + ", but the death could not be recorded; see the server log."),
+                    "command output");
+            helper.assertTrue(log.contains("Could not read the death log of " + who.name() + " before the kill"),
+                    "the read before the kill did not meet the lock: " + log);
+            helper.assertTrue(log.stream().noneMatch(line -> line.startsWith("Could not record death of ")), "the death's write failed: " + log);
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") != null, "the kill's death is not in the store");
+        } finally {
+            ServerPlayer online = server.getPlayerList().getPlayer(who.id());
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
         }
         helper.succeed();
     }
