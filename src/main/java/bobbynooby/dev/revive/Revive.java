@@ -2,6 +2,7 @@ package bobbynooby.dev.revive;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -123,7 +124,7 @@ public final class Revive {
             tryUse(user, stack);
         }
         // The client placed the head on its side and took it off the stack, so send it the real stack
-        user.inventoryMenu.sendAllDataToRemote();
+        GraveBlocks.resendInventory(user);
         return InteractionResult.FAIL;
     }
 

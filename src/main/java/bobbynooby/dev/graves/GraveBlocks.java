@@ -130,8 +130,8 @@ public final class GraveBlocks {
         return InteractionResult.PASS;
     }
 
-    // The client placed the head on its side and took it off the stack, so send it the real stack
-    private static void resendInventory(ServerPlayer player) {
+    /** Sends the player their real inventory: their client placed a head on its side and took it off the stack. */
+    public static void resendInventory(ServerPlayer player) {
         player.inventoryMenu.sendAllDataToRemote();
     }
 
