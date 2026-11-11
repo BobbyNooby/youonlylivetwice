@@ -9,8 +9,11 @@ import bobbynooby.dev.graves.Graves;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,12 +23,15 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -191,6 +197,64 @@ public class GraveCommandGameTests {
             removePool(helper, grave, pool);
         }
         helper.succeed();
+    }
+
+    // The command only takes a loaded spot, so a grave in a chunk nobody has loaded keeps its record, and the command
+    // doesn't load the chunk to look. Only the record is there, as for a grave whose chunk unloaded.
+    @GameTest
+    public void removeRefusesUnloadedChunk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        ChunkPos chunk = ChunkPos.containing(helper.absolutePos(BlockPos.ZERO).offset(-4000, 0, 4000));
+        helper.assertTrue(level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) == null, "the far chunk is loaded already");
+        Grave grave = record(level.dimension(), chunk.getMiddleBlockPosition(64));
+        store.put(grave);
+        try {
+            BlockPos pos = grave.pos();
+            List<String> out = run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+            helper.assertValueEqual(out, List.of(Component.translatable("argument.pos.unloaded").getString()), "command output");
+            helper.assertValueEqual(store.byId(grave.id()).map(stored -> stored.items().size()), Optional.of(2),
+                    "stacks in the grave record");
+            helper.assertTrue(level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) == null, "the command loaded the far chunk");
+        } finally {
+            store.remove(grave.id());
+        }
+        helper.succeed();
+    }
+
+    // A grave in a dimension the server doesn't have, as after the datapack that added it went. The command can't
+    // name one, since it removes in its own dimension, so the removal is called as the command calls it. The record
+    // stays for when the dimension is back.
+    @GameTest
+    public void removeLeavesGraveInMissingDimension(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GraveStore store = GraveStore.get(server);
+        ResourceKey<Level> missing = ResourceKey.create(Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "nowhere"));
+        helper.assertTrue(server.getLevel(missing) == null, "the made-up dimension is loaded");
+        Grave grave = record(missing, new BlockPos(1, 64, 1));
+        store.put(grave);
+        try {
+            List<Graves.Removal> result = new ArrayList<>(1);
+            List<String> log = OfflineGameTests.yoltLog(() -> result.add(Graves.removeAndDrop(server, grave)));
+            helper.assertTrue(result.get(0) instanceof Graves.Removal.DimensionNotLoaded, "removal result: " + result.get(0));
+            helper.assertValueEqual(store.byId(grave.id()).map(stored -> stored.items().size()), Optional.of(2),
+                    "stacks in the grave record");
+            String line = "Could not remove Ghost's grave at " + missing.identifier() + " " + grave.pos()
+                    + ": that dimension is not loaded";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith("Could not remove Ghost's grave")).toList(),
+                    List.of(line), "the removal's log lines");
+        } finally {
+            store.remove(grave.id());
+        }
+        helper.succeed();
+    }
+
+    // Only a record, with no head block, holding the grave head and a diamond
+    private static Grave record(ResourceKey<Level> dimension, BlockPos pos) {
+        ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
+        return new Grave(UUID.randomUUID(), UUID.randomUUID(), "Ghost", profile, dimension, pos,
+                List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND)), 1L);
     }
 
     private static int count(List<ItemEntity> drops, Predicate<ItemStack> which) {
