@@ -37,6 +37,7 @@
     "NearestAttackableTargetGoalAccessor",
     "NetherScaleMixin",
     "NoBedRespawnAnchorMixin",
+    "NoBedRespawnAnchorSoundMixin",
     "NoBedRespawnMixin",
     "PlayerCountLegacyMixin",
     "PlayerCountMixin",
