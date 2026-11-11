@@ -17,6 +17,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** A grave's items in a 6-row chest menu. Anyone can take items out; nothing can be put in. */
@@ -25,6 +26,7 @@ public final class GraveMenu extends AbstractContainerMenu {
     static final int GRAVE_SLOTS = ROWS * 9;
     private static final double MAX_DISTANCE = 8.0;
 
+    // As the menu opened. The re-check can move a grave while it is open, so its spot is read from the store.
     private final Grave grave;
     private final SharedGraveContainer container;
 
@@ -51,10 +53,13 @@ public final class GraveMenu extends AbstractContainerMenu {
     @Override
     public boolean stillValid(Player player) {
         MinecraftServer server = player.level().getServer();
-        return server != null
-                && GraveStore.get(server).byId(grave.id()).isPresent()
-                && player.level().dimension().equals(grave.dimension())
-                && player.distanceToSqr(Vec3.atCenterOf(grave.pos())) <= MAX_DISTANCE * MAX_DISTANCE;
+        if (server == null) {
+            return false;
+        }
+        Optional<Grave> stored = GraveStore.get(server).byId(grave.id());
+        return stored.isPresent()
+                && player.level().dimension().equals(stored.get().dimension())
+                && player.distanceToSqr(Vec3.atCenterOf(stored.get().pos())) <= MAX_DISTANCE * MAX_DISTANCE;
     }
 
     // Shift-click only ever moves items out of the grave
@@ -112,13 +117,15 @@ public final class GraveMenu extends AbstractContainerMenu {
     // The grave's own items that found no room drop for good, as an admin removal's do: at the grave, or at the
     // nearest spot that won't destroy them. False if that failed, so vanilla's drop is the last resort.
     private boolean dropForGood(MinecraftServer server, ItemStack stack) {
-        ServerLevel level = server.getLevel(grave.dimension());
+        GraveStore store = GraveStore.get(server);
+        Grave stored = store.byId(grave.id()).orElse(grave);
+        ServerLevel level = server.getLevel(stored.dimension());
         if (level == null) {
             return false;
         }
-        GraveStore store = GraveStore.get(server);
-        BlockPos spot = GravePlacement.safeForItems(level, grave.pos(), store) ? grave.pos()
-                : GravePlacement.nearestSafe(level, grave.pos(), store, true).orElse(grave.pos());
+        BlockPos pos = stored.pos();
+        BlockPos spot = GravePlacement.safeForItems(level, pos, store) ? pos
+                : GravePlacement.nearestSafe(level, pos, store, true).orElse(pos);
         try {
             Graves.dropForGood(level, spot, List.of(stack));
             return true;

@@ -1,9 +1,11 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
 import bobbynooby.dev.graves.GraveMenus;
+import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -13,6 +15,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -190,6 +193,58 @@ public class GraveMenuGameTests {
             helper.assertValueEqual(count(player, Items.IRON_SWORD), 1, "swords the player has");
         } finally {
             cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    // An op fills the grave's spot and the 7 blocks above while two looters have it open, so the re-check moves the
+    // grave up on top, 8 blocks up. From then on the menus go by the new spot: open for the looter beside it, closed
+    // for the one beside the old spot, and emptying the grave takes the head from the new spot.
+    @GameTest(skyAccess = true)
+    public void menuFollowsAGraveTheRecheckMoved(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        GraveStore store = GraveStore.get(level.getServer());
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
+        BlockPos spot = grave.pos();
+        BlockPos moved = spot.above(8);
+        ServerPlayer byOld = join(helper, "ByOldSpot");
+        ServerPlayer byNew = join(helper, "ByNewSpot");
+        try {
+            // Test players don't fall: one stands a block east of the old spot, the other a block east of the new spot
+            // and a block up
+            byOld.snapTo(spot.getX() + 1.5, spot.getY(), spot.getZ() + 0.5);
+            byNew.snapTo(spot.getX() + 1.5, moved.getY() + 1, spot.getZ() + 0.5);
+            GraveMenus.open(byOld, grave);
+            GraveMenus.open(byNew, grave);
+            AbstractContainerMenu oldMenu = byOld.containerMenu;
+            AbstractContainerMenu newMenu = byNew.containerMenu;
+            helper.assertTrue(oldMenu instanceof GraveMenu && newMenu instanceof GraveMenu, "the grave did not open for both");
+            helper.assertTrue(oldMenu.stillValid(byOld), "the menu is not valid beside the grave");
+            helper.assertFalse(newMenu.stillValid(byNew), "the menu is valid 8 blocks over the grave");
+
+            for (int dy = 0; dy < 8; dy++) {
+                level.setBlock(spot.above(dy), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            GraveRecheck.recheck(level, store, stored(helper, grave));
+            helper.assertValueEqual(stored(helper, grave).pos(), moved, "grave's spot after the re-check");
+            helper.assertTrue(GraveBlocks.isOwnHead(level, moved, stored(helper, grave)), "no head at the new spot");
+            helper.assertFalse(oldMenu.stillValid(byOld), "the menu is still valid beside the old spot");
+            helper.assertTrue(newMenu.stillValid(byNew), "the menu is not valid beside the new spot");
+
+            for (int slot = 0; slot < 3; slot++) {
+                newMenu.clicked(slot, PRIMARY, ContainerInput.QUICK_MOVE, byNew);
+            }
+            helper.assertTrue(store.byId(grave.id()).isEmpty(), "the emptied grave's record is still there");
+            helper.assertTrue(level.getBlockState(moved).isAir(), "the emptied grave's head is still at " + moved);
+            helper.assertTrue(byOld.containerMenu == byOld.inventoryMenu && byNew.containerMenu == byNew.inventoryMenu,
+                    "a menu on the emptied grave is still open");
+            helper.assertValueEqual(count(byNew, Items.DIAMOND) + count(byNew, Items.IRON_SWORD) + count(byNew, Items.PLAYER_HEAD), 3,
+                    "items the looter took");
+        } finally {
+            for (int dy = 0; dy <= 8; dy++) {
+                level.setBlock(spot.above(dy), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            cleanUp(helper, grave, byOld, byNew);
         }
         helper.succeed();
     }

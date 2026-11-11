@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Opens grave menus, and keeps the one container all viewers of a grave share. Server thread only. */
@@ -62,15 +63,19 @@ public final class GraveMenus {
         return OPEN.remove(graveId);
     }
 
-    /** Once the stored record is empty: the head goes, then the record, then every menu still showing it. */
+    /**
+     * Once the stored record is empty: the head goes, then the record, then every menu still showing it. The head is
+     * looked for where the record says, since the re-check may have moved the grave while it was open.
+     */
     static void removeIfEmpty(MinecraftServer server, Grave grave) {
         GraveStore store = GraveStore.get(server);
-        if (store.byId(grave.id()).filter(stored -> stored.items().isEmpty()).isEmpty()) {
+        Optional<Grave> emptied = store.byId(grave.id()).filter(stored -> stored.items().isEmpty());
+        if (emptied.isEmpty()) {
             return;
         }
-        ServerLevel level = server.getLevel(grave.dimension());
+        ServerLevel level = server.getLevel(emptied.get().dimension());
         if (level != null) {
-            GraveBlocks.clearHead(level, grave);
+            GraveBlocks.clearHead(level, emptied.get());
         }
         store.remove(grave.id());
         SharedGraveContainer container = release(grave.id());
