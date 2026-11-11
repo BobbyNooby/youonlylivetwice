@@ -245,6 +245,17 @@ public class BodyMobGameTests {
         helper.succeed();
     }
 
+    // The dark control for the daylight test: at midnight a spider does go after a body and hit it
+    @GameTest(maxTicks = 300, environment = MIDNIGHT)
+    public void spiderHuntsBodyAtMidnight(GameTestHelper helper) {
+        hurtsBody(helper, "Night", spawned -> {
+            Mob spider = helper.spawn(EntityTypes.SPIDER, FOUR_AWAY);
+            spawned.add(spider);
+            return spider;
+        }, (spider, body) -> helper.assertTrue(body.getLastHurtByMob() == spider,
+                "the body was last hurt by " + body.getLastHurtByMob() + ", not the spider"));
+    }
+
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
     @GameTest(maxTicks = 100, environment = MIDNIGHT)
     public void creeperExplosionHurtsBody(GameTestHelper helper) {
