@@ -255,6 +255,28 @@ class ConfigLoaderTest {
         assertTrue(r.warnings().stream().allMatch(w -> w.endsWith("using the current value")));
     }
 
+    // merge checks every type first, so only a tree it would never make gets here. The whole config then falls back as
+    // one bad key does: on a reload to a copy of the live config, not to every default.
+    @Test
+    void unreadableMergedConfigFallsBackToACopyOfTheFallback() {
+        YoltConfig live = new YoltConfig();
+        live.chat.radius = 20;
+        live.worldBorder.diameter = 20000;
+        JsonObject merged = new Gson().toJsonTree(live).getAsJsonObject();
+        merged.getAsJsonObject("worldBorder").addProperty("diameter", "big");
+
+        ConfigLoader.Read read = ConfigLoader.read(merged, live);
+        assertEquals(20, read.config().chat.radius);
+        assertEquals(20000, read.config().worldBorder.diameter);
+        assertNotSame(live, read.config());
+        assertNotSame(live.chat, read.config().chat);
+        assertTrue(read.problem().startsWith("config could not be read ("), read.problem());
+
+        ConfigLoader.Read good = ConfigLoader.read(new Gson().toJsonTree(live).getAsJsonObject(), new YoltConfig());
+        assertEquals(20, good.config().chat.radius);
+        assertNull(good.problem());
+    }
+
     @Test
     void missingFileOnReloadKeepsLiveConfig() {
         Path file = dir.resolve("config.json");

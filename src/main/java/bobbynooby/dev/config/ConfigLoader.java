@@ -123,11 +123,11 @@ public final class ConfigLoader {
         int warningsBeforeMerge = warnings.size();
         JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused);
 
-        Read read = read(merged);
+        Read read = read(merged, fallback);
         YoltConfig config = read.config();
         String borderProblem = read.problem();
         if (borderProblem != null) {
-            warnings.add(borderProblem + ", using defaults");
+            warnings.add(borderProblem + (base != null ? ", using the current values" : ", using defaults"));
         }
         refused.addAll(ConfigChecks.validate(config, fallback, warnings, fallbackName));
         if (borderProblem == null) {
@@ -154,12 +154,15 @@ public final class ConfigLoader {
     /** The merged tree as a config, and why it couldn't be read, or null when it could. */
     record Read(YoltConfig config, @Nullable String problem) {}
 
-    // merge already checked the types, so this should not fail
-    static Read read(JsonObject merged) {
+    // merge already checked the types, so this should not fail. If it does, the whole config falls back as one bad key
+    // does: on a reload to the live values, not every default. A copy, since the checks after this change the config they
+    // get, and a reload that hands back the live config itself counts as one that read nothing.
+    static Read read(JsonObject merged, YoltConfig fallback) {
         try {
             return new Read(GSON.fromJson(merged, YoltConfig.class), null);
         } catch (JsonParseException e) {
-            return new Read(new YoltConfig(), "config could not be read (" + e.getMessage() + ")");
+            YoltConfig copy = GSON.fromJson(GSON.toJsonTree(fallback), YoltConfig.class);
+            return new Read(copy, "config could not be read (" + e.getMessage() + ")");
         }
     }
 
