@@ -227,6 +227,31 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // The same, with a ledge two columns away under a block of its own in the top layer, so nothing in that layer takes
+    // the grave. The nearest land comes before the exit portal: the grave goes on the ledge, under that block.
+    @GameTest
+    public void topLayerBlockOverEndVoidGraveOnNearLedge(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(-312, -312);
+        BlockPos block = new BlockPos(chunk.getMiddleBlockX(), end.getMaxY(), chunk.getMiddleBlockZ());
+        // Inside the columns the land search reads, which stay 4 in from the chunk's edges
+        BlockPos ledge = block.offset(2, -2, 0);
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        List<Grave> made = new ArrayList<>();
+        try {
+            emptyLoneChunk(helper, end, chunk, before, 1);
+            setRemembered(end, block, Blocks.OBSIDIAN, before);
+            setRemembered(end, ledge, Blocks.OBSIDIAN, before);
+            setRemembered(end, ledge.above(2), Blocks.OBSIDIAN, before);
+            withoutLastResort(helper, () -> made.add(graveFor(end, block.above())));
+            helper.assertValueEqual(made.getFirst().pos(), ledge.above(), "grave position");
+        } finally {
+            made.forEach(grave -> removeGrave(end, grave));
+            putBack(end, before);
+        }
+        helper.succeed();
+    }
+
     // The same in the Nether, with the fallback column at 0, 0 filled up to a bedrock roof, so it has no room under the
     // roof. The columns beside it have, so the grave goes there and not up on the roof.
     @GameTest
