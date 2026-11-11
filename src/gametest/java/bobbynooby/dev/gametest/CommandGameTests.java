@@ -173,6 +173,11 @@ public class CommandGameTests {
         String fileBefore = Files.readString(Settings.path());
         try {
             helper.assertValueEqual(run(server, "yolt endscaling 0"), List.of("End world border scaling factor must be above 0."), "endscaling 0 output");
+            // The End border is the diameter times endScale (2.0 here), and can't pass vanilla's largest border
+            String capped = "worldBorder.diameter times endScale can't pass 59999968.";
+            helper.assertTrue(diameterBefore == 10000 && endScaleBefore == 2.0, "the test server's border values");
+            helper.assertValueEqual(run(server, "yolt border 40000000"), List.of(capped), "border past the End cap");
+            helper.assertValueEqual(run(server, "yolt endscaling 10000"), List.of(capped), "endscaling past the End cap");
             for (String command : List.of("yolt border 0", "yolt border 59999969", "yolt endscaling -1", "yolt respawncooldown -1")) {
                 List<String> output = run(server, command);
                 helper.assertTrue(!output.isEmpty() && output.stream().noneMatch(line -> line.contains("set to")), command + " was not refused: " + output);
