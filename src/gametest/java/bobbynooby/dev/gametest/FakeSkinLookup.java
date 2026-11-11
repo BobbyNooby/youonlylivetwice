@@ -4,6 +4,7 @@ import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinLookup;
 import bobbynooby.dev.skins.SkinTextures;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
@@ -54,6 +55,18 @@ public final class FakeSkinLookup implements SkinLookup {
     // Mojang never answers about this name
     public void neverAnswer(String name) {
         answers.put(key(name), CompletableFuture::new);
+    }
+
+    // Mojang answers about this name once the test completes the answer returned, which every ask gets
+    public CompletableFuture<CachedSkin> hold(String name) {
+        CompletableFuture<CachedSkin> answer = new CompletableFuture<>();
+        answers.put(key(name), () -> answer);
+        return answer;
+    }
+
+    // Mojang can't be reached about this name
+    public void fail(String name) {
+        answers.put(key(name), () -> CompletableFuture.failedFuture(new IOException("Mojang is unreachable")));
     }
 
     public int timesAsked(String name) {

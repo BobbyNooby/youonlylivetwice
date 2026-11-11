@@ -106,7 +106,7 @@ public final class LoginSkins {
         asked = name;
         askedForPick = pick;
         earlier = saved;
-        answer = Skins.lookup().find(name);
+        answer = Skins.find(name);
     }
 
     // A pick with no skin to give, its account gone or Mojang unable to say, gives way to the player's own skin, the

@@ -57,6 +57,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BooleanSupplier;
 
 // The fake lookup stands in for Mojang (TestServerSetup puts it in before the server starts), and each test sets up
@@ -180,6 +181,30 @@ public class SkinGameTests {
             helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked after the pick");
         } finally {
             skins.mode = before;
+            MOJANG.forget(name);
+        }
+        helper.succeed();
+    }
+
+    // Two lookups of one name, in two cases, while Mojang is still answering the first: Mojang is asked once, and both
+    // get its answer. Nothing is saved here, so once it has answered, the next lookup asks again.
+    @GameTest
+    public void lookupsOfANameBeingAskedShareTheAnswer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Twice");
+        CompletableFuture<CachedSkin> mojang = MOJANG.hold(name);
+        try {
+            CompletableFuture<CachedSkin> first = Skins.lookUp(server, name);
+            CompletableFuture<CachedSkin> second = Skins.lookUp(server, name.toLowerCase(Locale.ROOT));
+            helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked while it answered");
+            CachedSkin skin = CachedSkin.found(name, FakeSkinLookup.idOf(name), FakeSkinLookup.texturesOf(name),
+                    System.currentTimeMillis());
+            mojang.complete(skin);
+            assertEqual(helper, first.getNow(null), skin, "the first lookup's answer");
+            assertEqual(helper, second.getNow(null), skin, "the second lookup's answer");
+            Skins.lookUp(server, name);
+            helper.assertValueEqual(MOJANG.timesAsked(name), 2, "times Mojang was asked once it had answered");
+        } finally {
             MOJANG.forget(name);
         }
         helper.succeed();

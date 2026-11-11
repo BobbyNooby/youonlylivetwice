@@ -13,8 +13,11 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
@@ -30,6 +33,8 @@ public final class Skins {
     private static final Pattern MOJANG_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
 
     private static volatile @Nullable SkinLookup lookup;
+    // The lookups still waiting on Mojang, by name in lower case. Started on the server thread, ended on Mojang's.
+    private static final Map<String, CompletableFuture<CachedSkin>> PENDING = new ConcurrentHashMap<>();
     private static volatile boolean lookupFromTests;
     // The two skin mods for Fabric that give skins at login; YOLT leaves skins to them
     private static volatile BooleanSupplier skinModLoaded = () -> FabricLoader.getInstance().isModLoaded("skinsrestorer")
@@ -94,7 +99,25 @@ public final class Skins {
                 && (cached.id() != null || !cached.exists())) {
             return CompletableFuture.completedFuture(cached);
         }
-        return lookup().find(name).orTimeout(Settings.get().skins.lookupTimeoutSeconds, TimeUnit.SECONDS);
+        return find(name).orTimeout(Settings.get().skins.lookupTimeoutSeconds, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Mojang's answer about a name. A name still being asked about, in any case, is not asked again: the lookup shares
+     * the answer on its way. Each caller gets a copy of it, so one caller's timeout never ends another's wait.
+     */
+    static CompletableFuture<CachedSkin> find(String name) {
+        String key = name.toLowerCase(Locale.ROOT);
+        CompletableFuture<CachedSkin> answer = PENDING.get(key);
+        if (answer == null) {
+            CompletableFuture<CachedSkin> asked = lookup().find(name);
+            if (!asked.isDone()) {
+                PENDING.put(key, asked);
+                asked.whenComplete((skin, error) -> PENDING.remove(key, asked));
+            }
+            answer = asked;
+        }
+        return answer.copy();
     }
 
     static SkinLookup lookup() {
