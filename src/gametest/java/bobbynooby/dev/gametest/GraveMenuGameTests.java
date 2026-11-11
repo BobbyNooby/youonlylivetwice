@@ -526,6 +526,54 @@ public class GraveMenuGameTests {
         helper.succeed();
     }
 
+    // The same, after an op filled the grave's spot and the 7 blocks above and the re-check moved the grave up on top,
+    // 8 blocks up. The stack with no room drops at the new spot, not in the op's stone at the old one.
+    @GameTest(skyAccess = true)
+    public void cursorStackWithNoRoomDropsWhereTheGraveMovedTo(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<ItemStack> stacks = new ArrayList<>();
+        for (int i = 0; i < 52; i++) {
+            stacks.add(new ItemStack(Items.COBBLESTONE, 64));
+        }
+        stacks.add(new ItemStack(Items.DIAMOND, 10));
+        Grave grave = makeGrave(helper, stacks.toArray(ItemStack[]::new));
+        helper.assertValueEqual(grave.items().size(), 54, "stacks in the full grave");
+        BlockPos spot = grave.pos();
+        BlockPos moved = spot.above(8);
+        ServerPlayer looter = join(helper, "NoRoomMoved");
+        AABB aroundOld = new AABB(spot).inflate(4.0);
+        AABB aroundNew = new AABB(moved).inflate(2.0);
+        try {
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(53, PRIMARY, ContainerInput.PICKUP, looter);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND) && menu.getCarried().getCount() == 10,
+                    "the diamonds are not on the cursor: " + menu.getCarried());
+            GraveMenus.containerFor(grave).setItem(53, new ItemStack(Items.STONE));
+            for (int dy = 0; dy < 8; dy++) {
+                level.setBlock(spot.above(dy), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            GraveRecheck.recheck(level, GraveStore.get(level.getServer()), stored(helper, grave));
+            helper.assertValueEqual(stored(helper, grave).pos(), moved, "grave's spot after the re-check");
+
+            TestPlayers.disconnect(looter);
+            List<ItemEntity> forGood = drops(helper, aroundNew, true);
+            helper.assertValueEqual(forGood.size(), 1, "drops that never despawn by the new spot");
+            ItemStack dropped = forGood.get(0).getItem();
+            helper.assertTrue(dropped.is(Items.DIAMOND) && dropped.getCount() == 10, "the drop that never despawns: " + dropped);
+            helper.assertValueEqual(forGood.get(0).blockPosition(), moved, "the drop's spot");
+            helper.assertValueEqual(drops(helper, aroundOld, true).size() + drops(helper, aroundOld, false).size(), 0,
+                    "drops by the old spot");
+        } finally {
+            for (int dy = 0; dy <= 8; dy++) {
+                level.setBlock(spot.above(dy), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            level.getEntitiesOfClass(ItemEntity.class, aroundNew).forEach(Entity::discard);
+            cleanUpLeft(helper, grave, aroundOld, looter);
+        }
+        helper.succeed();
+    }
+
     // The grave head comes first, as in a real death; empty stacks in the list are dropped by the record
     private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
