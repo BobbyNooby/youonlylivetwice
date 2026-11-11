@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -29,20 +30,21 @@ import java.util.Set;
 
 /** Picks the block a grave head goes on: near the death spot, never on another grave, always reachable. */
 public final class GravePlacement {
-    private static final int VOID_SEARCH_RADIUS = 16;
     private static final int UP_SEARCH = 8;
     private static final int RING_RADIUS = 3;
     private static final int RING_UP = 3;
-    // How far out a new grave looks for firm ground when nothing close is safe, such as in the middle of a lava lake
-    private static final int WIDE_RADIUS = 16;
     // An item is a quarter block wide, so one dropped at a block's centre with no push falls straight down this column
     private static final VoxelShape ITEM_COLUMN = Block.column(4.0, 0.0, 16.0);
     // The replaceable blocks that drop themselves, or sticks, when broken by hand; a head set over one deletes that
     // drop. Grass and ferns only now and then drop a seed, so they stay usable.
     private static final Set<Block> DROPS_ITEMS = Set.of(Blocks.RESIN_CLUMP, Blocks.LEAF_LITTER, Blocks.CRIMSON_ROOTS,
             Blocks.WARPED_ROOTS, Blocks.DEAD_BUSH, Blocks.RED_SHRUB);
-    // Every column the void search reaches, nearest first. The sort keeps the scan order for ties, so the pick never varies.
-    private static final List<BlockPos> NEAREST_FIRST = nearestFirst(VOID_SEARCH_RADIUS);
+    // Every column the void search reaches, nearest first, for the radius it was built for. Built again when the config's
+    // radius changes. Server thread only.
+    private static VoidColumns voidColumns = new VoidColumns(-1, List.of());
+
+    private record VoidColumns(int radius, List<BlockPos> offsets) {
+    }
 
     private GravePlacement() {
     }
@@ -296,10 +298,12 @@ public final class GravePlacement {
         return Optional.empty();
     }
 
-    // Further rings out, from the start's height to a few blocks above it, for the shore of a lava lake or sea
+    // Further rings out, from the start's height to a few blocks above it, for the shore of a lava lake or sea. Read from
+    // the live config, so a change counts from the next search on.
     private static Optional<BlockPos> wideSearch(ServerLevel level, BlockPos start, GraveStore store) {
         int topY = topY(level, start.getY());
-        for (int r = RING_RADIUS + 1; r <= WIDE_RADIUS; r++) {
+        int radius = Settings.get().graves.searchRadius;
+        for (int r = RING_RADIUS + 1; r <= radius; r++) {
             for (int dy = 0; dy <= UP_SEARCH && start.getY() + dy <= topY; dy++) {
                 for (BlockPos pos : ring(start.above(dy), r)) {
                     if (loaded(level, pos) && usable(level, pos, store)) {
@@ -434,10 +438,21 @@ public final class GravePlacement {
         return true;
     }
 
-    // The nearest column out to 16 blocks with ground to stand on that items would last on, its own column included
+    // The nearest column out to graves.voidSearchRadius with ground to stand on that items would last on, its own column
+    // included
     private static Optional<BlockPos> nearestLand(ServerLevel level, BlockPos from, GraveStore store) {
-        List<BlockPos> columns = NEAREST_FIRST.stream().map(offset -> from.offset(offset.getX(), 0, offset.getZ())).toList();
+        List<BlockPos> columns = voidOffsets().stream().map(offset -> from.offset(offset.getX(), 0, offset.getZ())).toList();
         return firstGround(level, columns, topY(level, from.getY()), store);
+    }
+
+    private static List<BlockPos> voidOffsets() {
+        int radius = Settings.get().graves.voidSearchRadius;
+        VoidColumns built = voidColumns;
+        if (built.radius() != radius) {
+            built = new VoidColumns(radius, nearestFirst(radius));
+            voidColumns = built;
+        }
+        return built.offsets();
     }
 
     // A respawn builds a spike's top and the column under it again, so a start in that box moves out to the ground just

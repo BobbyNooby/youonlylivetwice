@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
@@ -499,6 +501,30 @@ public class PlacementGameTests {
             BlockPos result = findInWideLavaPool(helper, placed);
             assertOnFirmGround(helper, result);
         } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // With graves.searchRadius at 3 only the first rings are searched, and the rim of the same pool is 4 out, so the
+    // grave goes to the last resort over the lava in the death's own column
+    @GameTest(skyAccess = true)
+    public void searchRadiusLimitsTheWideSearch(GameTestHelper helper) {
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int before = graves.searchRadius;
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            graves.searchRadius = 3;
+            List<BlockPos> found = new ArrayList<>(1);
+            List<String> log = OfflineGameTests.yoltLog(() -> found.add(findInWideLavaPool(helper, placed)));
+            BlockPos result = found.getFirst();
+            BlockPos death = helper.absolutePos(LAVA_DEATH);
+            helper.assertTrue(log.stream().anyMatch(line -> line.startsWith("No spot near")), "no last resort: " + log);
+            helper.assertValueEqual(result.getX(), death.getX(), "grave x");
+            helper.assertValueEqual(result.getZ(), death.getZ(), "grave z");
+            helper.assertTrue(helper.getLevel().getFluidState(result.below()).is(FluidTags.LAVA), "grave not over the lava at " + result);
+        } finally {
+            graves.searchRadius = before;
             clear(helper, placed);
         }
         helper.succeed();

@@ -13,6 +13,10 @@ final class ConfigChecks {
     // seconds after the client's last packet, and online-mode checks and other mods' login steps come before the wait,
     // so this leaves two thirds of both for them.
     static final int MAX_SKIN_LOOKUP_SECONDS = 10;
+    // A grave's first search already looks 3 blocks round the death, so a smaller radius adds nothing. Past 32 one death
+    // could check tens of thousands of spots on the server thread.
+    static final int MIN_GRAVE_SEARCH_RADIUS = 3;
+    static final int MAX_GRAVE_SEARCH_RADIUS = 32;
 
     private ConfigChecks() {}
 
@@ -70,6 +74,14 @@ final class ConfigChecks {
             c.graves.tellLocationDistance = fallback.graves.tellLocationDistance;
             fellBack.accept("graves.tellLocationDistance", "must be 0 or more");
         }
+        if (outsideGraveSearch(c.graves.searchRadius)) {
+            c.graves.searchRadius = fallback.graves.searchRadius;
+            fellBack.accept("graves.searchRadius", "must be " + MIN_GRAVE_SEARCH_RADIUS + " to " + MAX_GRAVE_SEARCH_RADIUS);
+        }
+        if (outsideGraveSearch(c.graves.voidSearchRadius)) {
+            c.graves.voidSearchRadius = fallback.graves.voidSearchRadius;
+            fellBack.accept("graves.voidSearchRadius", "must be " + MIN_GRAVE_SEARCH_RADIUS + " to " + MAX_GRAVE_SEARCH_RADIUS);
+        }
         if (c.chat.mode == null) {
             c.chat.mode = fallback.chat.mode;
             fellBack.accept("chat.mode", "unknown value");
@@ -110,6 +122,10 @@ final class ConfigChecks {
                     + " characters each, the rest was dropped");
         }
         return reset;
+    }
+
+    private static boolean outsideGraveSearch(int radius) {
+        return radius < MIN_GRAVE_SEARCH_RADIUS || radius > MAX_GRAVE_SEARCH_RADIUS;
     }
 
     // Never between the two halves of a character outside the basic range, such as an emoji

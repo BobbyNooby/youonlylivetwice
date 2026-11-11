@@ -50,6 +50,12 @@ public class YoltConfig {
         // A compass to the death's grave, given when the owner is next back in and alive. A death while it was on is
         // still owed one after it is turned off.
         @Applies(Applies.When.NEW_DEATHS) public boolean compass = false;
+        // How far out, in blocks, a new grave looks for safe ground when nothing close to the death is safe, such as in
+        // the middle of a lava lake. Graves already placed stay where they are.
+        public int searchRadius = 16;
+        // How far out, in blocks, a death over the void looks for land when the owner has no last ground there, before
+        // the grave goes to a fixed spot such as the world spawn
+        public int voidSearchRadius = 16;
     }
 
     public static class ReviveSection {

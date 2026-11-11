@@ -136,6 +136,29 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void graveSearchRadiiOutOfRangeFallBack() throws IOException {
+        for (int bad : new int[] {2, 33}) {
+            ConfigLoader.Result r = loadJson("{\"graves\":{\"searchRadius\":" + bad + ",\"voidSearchRadius\":" + bad + "}}");
+            assertEquals(16, r.config().graves.searchRadius, "searchRadius " + bad);
+            assertEquals(16, r.config().graves.voidSearchRadius, "voidSearchRadius " + bad);
+            assertTrue(r.warnings().contains("graves.searchRadius: must be 3 to 32, using default"), r.warnings().toString());
+            assertTrue(r.warnings().contains("graves.voidSearchRadius: must be 3 to 32, using default"), r.warnings().toString());
+        }
+        YoltConfig.GravesSection edges = loadJson("{\"graves\":{\"searchRadius\":3,\"voidSearchRadius\":32}}").config().graves;
+        assertEquals(3, edges.searchRadius);
+        assertEquals(32, edges.voidSearchRadius);
+
+        // A reload keeps the live radius
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"graves\":{\"searchRadius\":33}}");
+        YoltConfig live = new YoltConfig();
+        live.graves.searchRadius = 10;
+        ConfigLoader.Result reloaded = ConfigLoader.load(file, live, false);
+        assertEquals(10, reloaded.config().graves.searchRadius);
+        assertEquals(List.of("graves.searchRadius: must be 3 to 32, using the current value"), reloaded.warnings());
+    }
+
+    @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");
         JsonObject written = JsonParser.parseString(Files.readString(dir.resolve("config.json"))).getAsJsonObject();
