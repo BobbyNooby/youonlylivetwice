@@ -139,6 +139,37 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // The same 7 by 7 hole. graves.voidSearchRadius at exactly 4 finds the land 4 out, and at 3, one short, the grave
+    // goes to the fixed spot beside the exit portal. Set and put back in this tick.
+    @GameTest(dimension = "minecraft:the_end", skyAccess = true)
+    public void voidSearchRadiusReachesLandExactlyAtIt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos middle = helper.absolutePos(new BlockPos(3, 0, 3));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int radiusBefore = graves.voidSearchRadius;
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        try {
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    dig(level, middle.offset(dx, 0, dz), before);
+                }
+            }
+            graves.voidSearchRadius = 4;
+            BlockPos atRadius = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
+            helper.assertValueEqual(flatDistanceSqr(atRadius, middle), 16L, "grave's distance from the hole's middle, squared, at 4");
+            assertOnSolid(helper, level, atRadius);
+
+            graves.voidSearchRadius = 3;
+            BlockPos fixed = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
+            long fromPortal = flatDistanceSqr(fixed, EnderDragonFight.getPodiumLocation(BlockPos.ZERO));
+            helper.assertTrue(fromPortal <= 49, "grave not beside the exit portal at 3: " + fixed);
+        } finally {
+            graves.voidSearchRadius = radiusBefore;
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
     // Tracked on a ledge across the test, then dead below the world down a shaft whose side is nearer land
     @GameTest(skyAccess = true)
     public void voidDeathUsesLastGround(GameTestHelper helper) {
