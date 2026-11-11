@@ -32,8 +32,7 @@ public final class Skins {
     private static volatile BooleanSupplier skinModLoaded = () -> FabricLoader.getInstance().isModLoaded("skinsrestorer")
             || FabricLoader.getInstance().isModLoaded("skinrestorer");
 
-    private Skins() {
-    }
+    private Skins() {}
 
     public static void init() {
         ServerLifecycleEvents.SERVER_STARTING.register(Skins::onServerStarting);

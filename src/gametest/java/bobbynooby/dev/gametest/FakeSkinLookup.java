@@ -21,8 +21,7 @@ public final class FakeSkinLookup implements SkinLookup {
     private final Map<String, Supplier<CompletableFuture<CachedSkin>>> answers = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> asked = new ConcurrentHashMap<>();
 
-    private FakeSkinLookup() {
-    }
+    private FakeSkinLookup() {}
 
     @Override
     public CompletableFuture<CachedSkin> find(String name) {

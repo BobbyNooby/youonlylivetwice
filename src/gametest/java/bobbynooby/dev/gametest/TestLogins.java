@@ -19,8 +19,7 @@ import java.util.Optional;
 // server ticks this listener, so the test does, one login tick per call. The GameTest server holds one player, so a
 // test that logs in runs where no other test's player is online.
 final class TestLogins {
-    private TestLogins() {
-    }
+    private TestLogins() {}
 
     // The profile an offline server gives a joining name (ServerLoginPacketListenerImpl.handleHello)
     static GameProfile offline(String name) {

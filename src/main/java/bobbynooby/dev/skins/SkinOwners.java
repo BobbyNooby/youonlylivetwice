@@ -33,8 +33,7 @@ import java.util.UUID;
 public final class SkinOwners {
     static final String RESET = "Your skin was reset because its owner joined this server.";
 
-    private SkinOwners() {
-    }
+    private SkinOwners() {}
 
     static void init() {
         // A throw here would leave the player half joined
