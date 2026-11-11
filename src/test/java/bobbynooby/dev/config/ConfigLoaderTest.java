@@ -603,6 +603,15 @@ class ConfigLoaderTest {
         }
     }
 
+    @Test
+    void badTabHeaderLinesFallBackToDefault() throws IOException {
+        for (String bad : List.of("\"text\"", "[1, 2]", "[\"ok\", null]")) {
+            ConfigLoader.Result r = loadJson("{\"hide\":{\"tabHeaderLines\":" + bad + "}}");
+            assertEquals(new YoltConfig().hide.tabHeaderLines, r.config().hide.tabHeaderLines, bad);
+            assertTrue(r.warnings().contains("hide.tabHeaderLines: expected a list of strings, using default"), bad);
+        }
+    }
+
     private static ConfigKey key(String path) {
         return ConfigKeys.find(path).orElseThrow(() -> new AssertionError("no key " + path));
     }
