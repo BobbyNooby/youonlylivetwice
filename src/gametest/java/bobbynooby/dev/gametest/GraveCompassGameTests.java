@@ -419,10 +419,9 @@ public class GraveCompassGameTests {
 
     // Bound to a lodestone by the player, a grave compass becomes that lodestone's compass, and loses the grave's name
     // but not one given in an anvil, even with the same text. A stack of one is bound itself; from a stack of two,
-    // vanilla binds a copy, which carries the marker too and must not stay a grave compass. The lodestone's point of
-    // interest is added only after the tick that placed it, and vanilla's own tick clears a bound target without one,
-    // so the binding waits.
-    @GameTest(environment = LODESTONE, maxTicks = 20)
+    // vanilla binds a copy, which carries the marker too and must not stay a grave compass. Vanilla's own tick clears a
+    // bound target whose lodestone has no point of interest; setBlock adds that point at once, so nothing waits.
+    @GameTest(environment = LODESTONE)
     public void compassUsedOnLodestoneKeepsLodestone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         Runnable restore = keepSwitches(helper);
@@ -430,12 +429,6 @@ public class GraveCompassGameTests {
         UUID owner = player.getUUID();
         BlockPos lodestone = helper.absolutePos(new BlockPos(4, 0, 4));
         LodestoneTracker toLodestone = new LodestoneTracker(Optional.of(GlobalPos.of(level.dimension(), lodestone)), true);
-        Runnable cleanUp = () -> {
-            restore.run();
-            level.setBlock(lodestone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            cleanUp(helper, owner);
-        };
-        boolean waiting = false;
         try {
             config().graves.compass = true;
             config().deathLockout.enabled = false;
@@ -443,49 +436,43 @@ public class GraveCompassGameTests {
             ServerPlayer back = dieAndRespawn(helper, player);
             Grave grave = onlyGrave(helper, owner);
             String graveName = grave.ownerName() + "'s grave";
-            helper.runAfterDelay(2, () -> {
-                try {
-                    ItemStack single = onlyCompass(helper, back);
-                    holdOnly(back, single);
-                    useOn(back, lodestone);
-                    single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
-                    assertBoundToLodestone(helper, single, toLodestone, "the bound compass");
-                    helper.assertTrue(single.get(DataComponents.CUSTOM_NAME) == null, "the bound compass kept the grave's name");
-                    single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
-                    helper.assertValueEqual(trackerOf(single), toLodestone, "the bound compass's tracker a tick later");
 
-                    ItemStack named = GraveCompass.compassFor(current(helper, grave));
-                    // As an anvil names it: the text alone, with no style
-                    named.set(DataComponents.CUSTOM_NAME, Component.literal(graveName));
-                    holdOnly(back, named);
-                    useOn(back, lodestone);
-                    named.inventoryTick(level, back, EquipmentSlot.MAINHAND);
-                    assertBoundToLodestone(helper, named, toLodestone, "the compass named in an anvil");
-                    helper.assertValueEqual(named.get(DataComponents.CUSTOM_NAME), Component.literal(graveName), "the anvil's name");
+            ItemStack single = onlyCompass(helper, back);
+            holdOnly(back, single);
+            useOn(back, lodestone);
+            single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+            assertBoundToLodestone(helper, single, toLodestone, "the bound compass");
+            helper.assertTrue(single.get(DataComponents.CUSTOM_NAME) == null, "the bound compass kept the grave's name");
+            single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+            helper.assertValueEqual(trackerOf(single), toLodestone, "the bound compass's tracker a tick later");
 
-                    holdOnly(back, GraveCompass.compassFor(current(helper, grave)).copyWithCount(2));
-                    useOn(back, lodestone);
-                    compasses(back).forEach(stack -> stack.inventoryTick(level, back, null));
-                    List<ItemStack> held = compasses(back);
-                    helper.assertValueEqual(held.size(), 2, "compass stacks after binding one of two");
-                    List<ItemStack> graveCompasses = held.stream().filter(GraveCompassGameTests::isGraveCompass).toList();
-                    helper.assertValueEqual(graveCompasses.size(), 1, "grave compass stacks after binding one of two");
-                    helper.assertValueEqual(graveCompasses.get(0).getCount(), 1, "grave compasses after binding one of two");
-                    helper.assertValueEqual(trackerOf(graveCompasses.get(0)), pointingAt(grave), "the unbound compass's tracker");
-                    ItemStack copy = held.stream().filter(stack -> !isGraveCompass(stack)).findFirst().orElseThrow();
-                    assertBoundToLodestone(helper, copy, toLodestone, "the bound copy");
-                    helper.assertTrue(copy.get(DataComponents.CUSTOM_NAME) == null, "the bound copy kept the grave's name");
-                } finally {
-                    cleanUp.run();
-                }
-                helper.succeed();
-            });
-            waiting = true;
+            ItemStack named = GraveCompass.compassFor(current(helper, grave));
+            // As an anvil names it: the text alone, with no style
+            named.set(DataComponents.CUSTOM_NAME, Component.literal(graveName));
+            holdOnly(back, named);
+            useOn(back, lodestone);
+            named.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+            assertBoundToLodestone(helper, named, toLodestone, "the compass named in an anvil");
+            helper.assertValueEqual(named.get(DataComponents.CUSTOM_NAME), Component.literal(graveName), "the anvil's name");
+
+            holdOnly(back, GraveCompass.compassFor(current(helper, grave)).copyWithCount(2));
+            useOn(back, lodestone);
+            compasses(back).forEach(stack -> stack.inventoryTick(level, back, null));
+            List<ItemStack> held = compasses(back);
+            helper.assertValueEqual(held.size(), 2, "compass stacks after binding one of two");
+            List<ItemStack> graveCompasses = held.stream().filter(GraveCompassGameTests::isGraveCompass).toList();
+            helper.assertValueEqual(graveCompasses.size(), 1, "grave compass stacks after binding one of two");
+            helper.assertValueEqual(graveCompasses.get(0).getCount(), 1, "grave compasses after binding one of two");
+            helper.assertValueEqual(trackerOf(graveCompasses.get(0)), pointingAt(grave), "the unbound compass's tracker");
+            ItemStack copy = held.stream().filter(stack -> !isGraveCompass(stack)).findFirst().orElseThrow();
+            assertBoundToLodestone(helper, copy, toLodestone, "the bound copy");
+            helper.assertTrue(copy.get(DataComponents.CUSTOM_NAME) == null, "the bound copy kept the grave's name");
         } finally {
-            if (!waiting) {
-                cleanUp.run();
-            }
+            restore.run();
+            level.setBlock(lodestone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            cleanUp(helper, owner);
         }
+        helper.succeed();
     }
 
     // The death while away that a server sees most: the player logs out, their body is killed, and they come back after
