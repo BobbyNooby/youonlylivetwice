@@ -15,12 +15,15 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionResult;
@@ -45,7 +48,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -280,6 +286,66 @@ public class SleepGameTests {
             sleep.noBedRespawn = before;
             nether.setBlockAndUpdate(anchor, replaced);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // An old anchor point that YOLT ignores leaves the anchor alone at a death respawn, so vanilla's deplete sound must
+    // not play either. With the switch off the point is used: a charge goes and the sound plays at the anchor.
+    @GameTest
+    public void ignoredAnchorPlaysNoSound(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel nether = server.getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether for the anchor");
+        BlockPos anchor = new BlockPos(24, 100, 8);
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer switchOn = TestPlayers.join(helper, "AnchorOn", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        ServerPlayer switchOff = TestPlayers.join(helper, "AnchorOff", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        List<UUID> ids = List.of(switchOn.getUUID(), switchOff.getUUID());
+        YoltConfig config = Settings.get();
+        boolean respawnBefore = config.sleep.noBedRespawn;
+        boolean gravesBefore = config.graves.enabled;
+        try {
+            // A floor round the anchor, so vanilla has somewhere to stand the player up when the point is used
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    VoidGraveGameTests.setRemembered(nether, anchor.offset(dx, -1, dz), Blocks.STONE, before);
+                }
+            }
+            before.putIfAbsent(anchor, nether.getBlockState(anchor));
+            nether.setBlockAndUpdate(anchor, Blocks.RESPAWN_ANCHOR.defaultBlockState().setValue(RespawnAnchorBlock.CHARGE, 2));
+            // No graves: this test is only about the respawn
+            config.graves.enabled = false;
+            storeOldPoint(switchOn, Level.NETHER, anchor);
+            storeOldPoint(switchOff, Level.NETHER, anchor);
+
+            config.sleep.noBedRespawn = true;
+            int mark = TestPlayers.sentPackets(switchOn).size();
+            ServerPlayer back = dieAndRespawn(helper, switchOn);
+            helper.assertTrue(back.level() != nether, "respawned at " + back.blockPosition() + " in the nether, by the old anchor point, with no-bed-respawn on");
+            helper.assertValueEqual(nether.getBlockState(anchor).getValue(RespawnAnchorBlock.CHARGE), 2, "anchor charge after the respawn with no-bed-respawn on");
+            helper.assertValueEqual(depleteSounds(back, mark), List.of(), "anchor deplete sounds with no-bed-respawn on");
+
+            config.sleep.noBedRespawn = false;
+            mark = TestPlayers.sentPackets(switchOff).size();
+            back = dieAndRespawn(helper, switchOff);
+            helper.assertTrue(back.level() == nether && back.position().distanceTo(Vec3.atCenterOf(anchor)) <= 2.0,
+                    "respawned at " + back.blockPosition() + " in " + back.level().dimension().identifier()
+                            + ", away from the anchor, with no-bed-respawn off");
+            helper.assertValueEqual(nether.getBlockState(anchor).getValue(RespawnAnchorBlock.CHARGE), 1, "anchor charge after the respawn with no-bed-respawn off");
+            helper.assertValueEqual(depleteSounds(back, mark), List.of(anchor), "anchor deplete sounds with no-bed-respawn off");
+        } finally {
+            config.sleep.noBedRespawn = respawnBefore;
+            config.graves.enabled = gravesBefore;
+            for (UUID id : ids) {
+                ServerPlayer online = server.getPlayerList().getPlayer(id);
+                if (online != null) {
+                    TestPlayers.leave(online);
+                }
+                DeathLockout.revive(id, "Test", "console");
+                removeGraves(server, id);
+            }
+            VoidGraveGameTests.putBack(nether, before);
         }
         helper.succeed();
     }
@@ -526,7 +592,12 @@ public class SleepGameTests {
     }
 
     private static void storeOldBedPoint(GameTestHelper helper, ServerPlayer player, BlockPos head) {
-        LevelData.RespawnData data = LevelData.RespawnData.of(helper.getLevel().dimension(), helper.absolutePos(head), 0.0F, 0.0F);
+        storeOldPoint(player, helper.getLevel().dimension(), helper.absolutePos(head));
+    }
+
+    // Unforced, like every point a bed or anchor stored
+    private static void storeOldPoint(ServerPlayer player, ResourceKey<Level> dimension, BlockPos pos) {
+        LevelData.RespawnData data = LevelData.RespawnData.of(dimension, pos, 0.0F, 0.0F);
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(data, false), false);
     }
 
@@ -619,6 +690,18 @@ public class SleepGameTests {
         return (int) packets.subList(from, packets.size()).stream()
                 .filter(p -> p instanceof ClientboundSystemChatPacket chat && chat.overlay() && SLEEP_LINES.contains(key(chat.content())))
                 .count();
+    }
+
+    // Where each anchor deplete sound sent to this player played, counting from packet number "from"
+    private static List<BlockPos> depleteSounds(ServerPlayer player, int from) {
+        List<Packet<?>> packets = TestPlayers.sentPackets(player);
+        List<BlockPos> at = new ArrayList<>();
+        for (Packet<?> packet : packets.subList(from, packets.size())) {
+            if (packet instanceof ClientboundSoundPacket sound && sound.getSound().value() == SoundEvents.RESPAWN_ANCHOR_DEPLETE.value()) {
+                at.add(BlockPos.containing(sound.getX(), sound.getY(), sound.getZ()));
+            }
+        }
+        return at;
     }
 
     private static int messages(ServerPlayer player, String key) {
