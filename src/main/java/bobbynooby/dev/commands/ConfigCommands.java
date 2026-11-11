@@ -78,9 +78,7 @@ final class ConfigCommands {
             return BorderCommands.refusal(outside[0], confirmed);
         });
         if (change.problem() != null) {
-            YoltCommands.fail(source, sentence(change.problem()));
-            tellBackup(source, change);
-            return 0;
+            return failed(source, change);
         }
         if (change.config() == null) {
             return YoltCommands.done(source, name + " is already " + change.newValue() + ".");
@@ -108,8 +106,15 @@ final class ConfigCommands {
         return YoltCommands.fail(source, "No config key is named " + name + ".");
     }
 
-    /** A reply ends with a full stop, which the config's range problems don't have. */
-    static String sentence(String text) {
+    /** Fails a command with the change's problem, saying where the admin's file went if it couldn't be read. */
+    static int failed(CommandSourceStack source, ConfigLoader.Change change) {
+        YoltCommands.fail(source, sentence(change.problem()));
+        tellBackup(source, change);
+        return 0;
+    }
+
+    // A reply ends with a full stop, which the config's range problems don't have
+    private static String sentence(String text) {
         return text.endsWith(".") ? text : text + ".";
     }
 

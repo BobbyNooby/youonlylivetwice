@@ -1,6 +1,8 @@
 package bobbynooby.dev.commands;
 
 import bobbynooby.dev.bodies.Kills;
+import bobbynooby.dev.config.ConfigKeys;
+import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
@@ -36,12 +38,17 @@ final class LockoutCommands {
                                 .executes(c -> unkill(c.getSource(), StringArgumentType.getString(c, "player")))));
     }
 
+    // Only this key is written, so an edit to the file not yet reloaded stays
     private static int respawnCooldown(CommandSourceStack source, int days) {
-        Settings.get().deathLockout.cooldownDays = days;
-        Settings.save();
+        ConfigLoader.Change change = Settings.set(ConfigKeys.find("deathLockout.cooldownDays").orElseThrow(), Integer.toString(days));
+        if (change.problem() != null) {
+            return ConfigCommands.failed(source, change);
+        }
         LOGGER.info("{} set the respawn cooldown to {} days", source.getTextName(), days);
-        return YoltCommands.done(source, "Respawn cooldown set to " + (days == 1 ? "1 day" : days + " days") + "."
+        YoltCommands.reply(source, "Respawn cooldown set to " + (days == 1 ? "1 day" : days + " days") + "."
                 + " It applies to deaths from now on; use /yolt unkill for the rest.");
+        ConfigCommands.tellBackup(source, change);
+        return 1;
     }
 
     private static int kill(CommandSourceStack source, String name) {

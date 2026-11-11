@@ -3,6 +3,7 @@ package bobbynooby.dev.commands;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -206,11 +207,17 @@ final class BorderCommands {
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
-        Settings.get().worldBorder.diameter = diameter;
-        Settings.save();
+        // Only this key is written, so an edit to the file not yet reloaded stays. The value already set still applies the
+        // border, which may have been held or changed with vanilla's /worldborder since.
+        ConfigLoader.Change change = Settings.set(ConfigKeys.find("worldBorder.diameter").orElseThrow(), Integer.toString(diameter));
+        if (change.problem() != null) {
+            return ConfigCommands.failed(source, change);
+        }
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
-        return YoltCommands.done(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote());
+        YoltCommands.reply(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote());
+        ConfigCommands.tellBackup(source, change);
+        return 1;
     }
 
     // The centre isn't in the config: vanilla saves it with the world
@@ -253,11 +260,16 @@ final class BorderCommands {
         if (refusal != null) {
             return YoltCommands.fail(source, refusal);
         }
-        Settings.get().worldBorder.endScale = scaling;
-        Settings.save();
+        // The config's End cap can still refuse it, as a reload would
+        ConfigLoader.Change change = Settings.set(ConfigKeys.find("worldBorder.endScale").orElseThrow(), Double.toString(scaling));
+        if (change.problem() != null) {
+            return ConfigCommands.failed(source, change);
+        }
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
-        return YoltCommands.done(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote());
+        YoltCommands.reply(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote());
+        ConfigCommands.tellBackup(source, change);
+        return 1;
     }
 
     // Read as doubles: Vec2Argument.getVec2 rounds to floats, which moves a centre past about 16 million by a block

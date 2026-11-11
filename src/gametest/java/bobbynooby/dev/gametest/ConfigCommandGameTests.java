@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.world.LiveSettings;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.suggestion.Suggestion;
@@ -180,6 +181,31 @@ public class ConfigCommandGameTests {
             helper.assertValueEqual(run(server, "yolt config chat.radius 48"), List.of("chat.radius is already 48."), "command output");
             helper.assertTrue(Settings.get() == before, "the live config was replaced");
             helper.assertTrue(Arrays.equals(Files.readAllBytes(Settings.path()), fileBefore), "the config file was written");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // /yolt border writes only its own key, so an edit to the file that wasn't reloaded yet stays in the file and stays
+    // out of the live config
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void commandKeepsUnreloadedFileEdits(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        try {
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "the test server's chat radius");
+            JsonObject edited = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
+            edited.getAsJsonObject("chat").addProperty("radius", 20);
+            Files.writeString(path, edited.toString());
+
+            helper.assertValueEqual(run(server, "yolt border 8000"),
+                    List.of("World border diameter set to 8000. The world border feature is off, so YOLT sizes no border."), "command output");
+            helper.assertValueEqual(fileValue("chat.radius").getAsInt(), 20, "chat.radius in the file");
+            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 8000, "diameter in the file");
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 8000, "live diameter");
         } finally {
             restore(server, fileBefore);
         }
