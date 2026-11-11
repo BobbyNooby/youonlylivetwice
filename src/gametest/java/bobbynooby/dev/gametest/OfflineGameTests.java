@@ -20,6 +20,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.ItemStackWithSlot;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -177,6 +179,29 @@ public class OfflineGameTests {
             helper.assertValueEqual(gravesOf(helper, who.id()).size(), gravesBefore, "graves after the second kill");
             helper.assertTrue(Arrays.deepEquals(saveFiles(server, who), filesBefore), "second kill wrote the save");
             helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "second kill restarted the lockout");
+        } finally {
+            removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // A respawn after a death starts with no effects, so the save of a player killed offline keeps none either
+    @GameTest
+    public void offlineKillClearsSavedEffects(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Hasted", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 12000));
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.assertTrue(OfflinePlayerData.load(server, who).orElseThrow().contains("active_effects"), "speed was not saved");
+
+        try {
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            helper.assertFalse(saved.contains("active_effects"), "effects still saved: " + saved.get("active_effects"));
         } finally {
             removeGraves(helper, who.id());
         }
