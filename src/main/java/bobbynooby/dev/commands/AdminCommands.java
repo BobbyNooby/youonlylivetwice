@@ -74,10 +74,15 @@ final class AdminCommands {
                 Settings.get().worldBorder = liveBorder;
                 applyBorder = false;
                 // A restart checks it again for the world spawn, the End platform, bodies and graves, but not for players,
-                // who are all offline then: a border kept only for online players is applied at the next restart
+                // who are all offline then: a border kept only for online players is applied at the next restart.
+                // When the file turned the feature on, it is off again, and the border commands then only save a value.
+                String advice = liveBorder.enabled
+                        ? " Use /yolt border or endscaling with confirm to apply it now, or change the file, then run /yolt reload."
+                        : " The world border feature stays off too, so set the border with /yolt border or endscaling, then run"
+                                + " /yolt config worldBorder.enabled true confirm to apply it now, or change the file, then run"
+                                + " /yolt reload.";
                 warnings.add("World border kept as it was, since the config's border would leave " + BorderCommands.listed(outside.names())
-                        + " outside it. Use /yolt border or endscaling with confirm to apply it now, or change the file, then run"
-                        + " /yolt reload.");
+                        + " outside it." + advice);
             } else {
                 Settings.releaseBorder();
                 // A world spawn left outside only blocks while new players start on it, so with random spawn it is just said

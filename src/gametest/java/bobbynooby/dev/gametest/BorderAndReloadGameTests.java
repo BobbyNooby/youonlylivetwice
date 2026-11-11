@@ -941,7 +941,8 @@ public class BorderAndReloadGameTests {
     }
 
     // A reload can't be confirmed, so it keeps the live border. The settings are put back before the player leaves,
-    // since the reloaded file turns bodies on.
+    // since the reloaded file turns bodies on. The test server keeps the border feature off, and the kept live section
+    // keeps it off, so the advice says how to turn it on: the border commands alone would only save their value.
     @GameTest(environment = CONFIG_COMMAND)
     public void reloadThatStrandsKeepsBorder(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -960,8 +961,9 @@ public class BorderAndReloadGameTests {
             List<String> output = run(server, "yolt reload");
             helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line -> line.contains(name)
                     && line.startsWith("World border kept as it was, since the config's border would leave ")
-                    && line.endsWith(" outside it. Use /yolt border or endscaling with confirm to apply it now, or change the file,"
-                            + " then run /yolt reload.")),
+                    && line.endsWith(" outside it. The world border feature stays off too, so set the border with /yolt border or"
+                            + " endscaling, then run /yolt config worldBorder.enabled true confirm to apply it now, or change the"
+                            + " file, then run /yolt reload.")),
                     "command output: " + output);
             helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
             helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
@@ -1048,9 +1050,12 @@ public class BorderAndReloadGameTests {
             overworld.setSize(4000);
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000, \"endScale\": 2.0}}");
 
+            // The feature was on before the reload, so the border commands can apply it
             List<String> output = run(server, "yolt reload");
             helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line ->
-                    line.startsWith("World border kept as it was, since the config's border would leave ") && line.contains(name)),
+                    line.startsWith("World border kept as it was, since the config's border would leave ") && line.contains(name)
+                            && line.endsWith(" outside it. Use /yolt border or endscaling with confirm to apply it now, or change"
+                            + " the file, then run /yolt reload.")),
                     "command output: " + output);
             helper.assertValueEqual(overworld.getSize(), 4000.0, "overworld border size");
         } finally {
