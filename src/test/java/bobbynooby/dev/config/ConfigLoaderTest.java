@@ -709,4 +709,24 @@ class ConfigLoaderTest {
         ConfigLoader.Change distance = ConfigLoader.setKey(file, live, key("graves.tellLocationDistance"), new JsonPrimitive(-2));
         assertEquals("graves.tellLocationDistance: must be 0 or more", distance.problem());
     }
+
+    // A .bak or timed copy that can't be compared, here a folder, counts as different: the startup keeps the typed file in
+    // a new timed copy rather than stopping
+    @Test
+    void backupThatCantBeComparedCountsAsDifferent() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.createDirectory(dir.resolve("config.json.bak"));
+        Path folderCopy = Files.createDirectory(dir.resolve("config.json.bak-5"));
+        byte[] typed = "{\"chat\": {\"radius\": 2.5}}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, typed);
+
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true);
+        assertEquals(48, r.config().chat.radius);
+        List<Path> copies = timedCopies();
+        copies.remove(folderCopy);
+        assertEquals(1, copies.size(), copies.toString());
+        assertArrayEquals(typed, Files.readAllBytes(copies.get(0)));
+        assertEquals(copies.get(0).getFileName().toString(), r.backup());
+        assertTrue(Files.isDirectory(dir.resolve("config.json.bak")));
+    }
 }

@@ -334,20 +334,31 @@ public final class ConfigLoader {
         }
     }
 
-    // name, or one of its copies with the time added, when it already holds the file's bytes
-    private static @Nullable String sameCopy(Path file, String name) throws IOException {
-        if (Files.mismatch(file, file.resolveSibling(name)) == -1) {
+    // name, or one of its copies with the time added, when it already holds the file's bytes. One that can't be compared
+    // counts as different, since a copy too many is the safe side and a startup must not stop over it
+    private static @Nullable String sameCopy(Path file, String name) {
+        if (sameBytes(file, file.resolveSibling(name))) {
             return name;
         }
         try (Stream<Path> siblings = Files.list(file.toAbsolutePath().getParent())) {
             for (Path sibling : siblings.toList()) {
                 String siblingName = sibling.getFileName().toString();
-                if (siblingName.startsWith(name + "-") && Files.mismatch(file, sibling) == -1) {
+                if (siblingName.startsWith(name + "-") && sameBytes(file, sibling)) {
                     return siblingName;
                 }
             }
+        } catch (IOException | UncheckedIOException e) {
+            return null;
         }
         return null;
+    }
+
+    private static boolean sameBytes(Path file, Path copy) {
+        try {
+            return Files.mismatch(file, copy) == -1;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName,
