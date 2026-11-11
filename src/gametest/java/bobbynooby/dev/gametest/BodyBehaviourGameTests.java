@@ -66,6 +66,8 @@ import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 public class BodyBehaviourGameTests {
     // Where a test player joins inside its block: the middle of the bottom
     private static final Vec3 BLOCK_CENTRE = new Vec3(0.5, 0.0, 0.5);
+    // A batch of its own: the test runs the expiry at clock times days ahead, when every other body would be due
+    private static final String BODY_RETRY = "you-only-live-twice-gametest:body_retry";
 
     @GameTest
     public void armourWearsWhenHit(GameTestHelper helper) {
@@ -778,6 +780,52 @@ public class BodyBehaviourGameTests {
             helper.assertFalse(body.isRemoved(), "failed body was tried again straight away");
             helper.assertTrue(store(helper).byOwner(owner).isPresent(), "failed body's record was tried again straight away");
         } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // With no save to load, every try fails. Each failure names the wait before the next try, which doubles from 5
+    // minutes up to a day, so vanilla doesn't copy an unreadable save every few minutes for good. The clock is stepped
+    // by hand, a millisecond short of each try first.
+    @GameTest(environment = BODY_RETRY)
+    public void failedExpiryWaitDoublesUpToADay(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "Backoff", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String failed = "Could not remove the expired body of " + player.nameAndId().name() + "; ";
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Path file = saveFile(helper, owner);
+        byte[] save = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            expiredLogout(helper, owner);
+            save = Files.readAllBytes(file);
+            Files.delete(file);
+            Files.deleteIfExists(file.resolveSibling(owner + ".dat_old"));
+
+            long at = System.currentTimeMillis();
+            for (long wait : List.of(5L, 10L, 20L, 40L, 80L, 160L, 320L, 640L, 1280L, 1440L, 1440L)) {
+                long tryAt = at;
+                List<String> log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server, tryAt));
+                helper.assertValueEqual(log.stream().filter(line -> line.startsWith(failed)).toList(),
+                        List.of(failed + "it stays, and this is tried again in " + wait + " minutes"), "errors of the failed try");
+                at += wait * 60_000L;
+                long early = at - 1;
+                List<String> waiting = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server, early));
+                helper.assertTrue(waiting.stream().noneMatch(line -> line.startsWith(failed)),
+                        "tried again before a wait of " + wait + " minutes was up");
+            }
+
+            Files.write(file, save);
+            BodyExpiry.tick(server, at);
+            helper.assertTrue(body.isRemoved(), "body still in the world once its save was back");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept once its save was back");
+        } finally {
+            if (save != null && !Files.exists(file)) {
+                Files.write(file, save);
+            }
             cleanUp(helper, owner, before);
         }
         helper.succeed();

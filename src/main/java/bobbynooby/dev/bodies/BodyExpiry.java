@@ -29,16 +29,20 @@ import java.util.stream.Collectors;
 public final class BodyExpiry {
     private static final long MINUTE_MILLIS = 60_000L;
     // Loading an unreadable save makes vanilla log a warning and keep a copy of the file every time, so a body
-    // whose expiry failed waits this long before the next try
-    private static final long RETRY_MILLIS = 5 * MINUTE_MILLIS;
+    // whose expiry failed waits before the next try: this long at first, twice as long after each failure since, and
+    // never more than a day
+    private static final long FIRST_RETRY_MILLIS = 5 * MINUTE_MILLIS;
+    private static final long MAX_RETRY_MILLIS = 24 * 60 * MINUTE_MILLIS;
     /**
      * How many bodies one pass tries to remove. Each loads and writes a save on the server thread, and after downtime
      * everyone who was online at the stop shares one logout time, so they all come due in the same tick.
      */
     public static final int MAX_PER_PASS = 4;
 
-    // Body entity id to when it may be tried again, for bodies whose expiry failed. Our error is logged once per body.
-    private static final Map<UUID, Long> RETRY_AT = new HashMap<>();
+    // Body entity id to its next try, for bodies whose expiry failed. Each failure logs our error with the wait.
+    private static final Map<UUID, Retry> RETRIES = new HashMap<>();
+
+    private record Retry(long at, long waitMillis) {}
 
     private BodyExpiry() {}
 
@@ -50,7 +54,7 @@ public final class BodyExpiry {
             }
         });
         // Static, so it would outlive the server in a JVM that starts another one
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> RETRY_AT.clear());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> RETRIES.clear());
     }
 
     /**
@@ -58,6 +62,11 @@ public final class BodyExpiry {
      * runs, like the login does.
      */
     public static void tick(MinecraftServer server) {
+        tick(server, System.currentTimeMillis());
+    }
+
+    /** The same as at the wall-clock time now, in milliseconds, so a test can step past a retry's wait. */
+    public static void tick(MinecraftServer server, long now) {
         if (!Settings.active()) {
             return;
         }
@@ -65,12 +74,11 @@ public final class BodyExpiry {
         // A body taken over, killed or replaced by a new logout since it failed is done with
         Set<UUID> standing = records.stream().filter(record -> !record.pendingRemoval())
                 .map(BodyRecord::bodyEntity).collect(Collectors.toSet());
-        RETRY_AT.keySet().retainAll(standing);
+        RETRIES.keySet().retainAll(standing);
         BodyDuration duration = Settings.get().bodies.duration;
         if (duration.isOffline()) {
             return;
         }
-        long now = System.currentTimeMillis();
         int tried = 0;
         for (BodyRecord record : records) {
             // The rest wait for the next pass
@@ -78,8 +86,8 @@ public final class BodyExpiry {
                 break;
             }
             // A pending record was taken over already, and a body that failed waits for its next try
-            if (record.pendingRemoval() || !isDue(record, duration, now)
-                    || now < RETRY_AT.getOrDefault(record.bodyEntity(), Long.MIN_VALUE)) {
+            Retry retry = RETRIES.get(record.bodyEntity());
+            if (record.pendingRemoval() || !isDue(record, duration, now) || (retry != null && now < retry.at())) {
                 continue;
             }
             // The death path owns a dying body. An owner who is online isn't away, and saves over their file anyway.
@@ -92,13 +100,13 @@ public final class BodyExpiry {
             tried++;
             try {
                 expire(server, record, entity);
-                RETRY_AT.remove(record.bodyEntity());
+                RETRIES.remove(record.bodyEntity());
             } catch (RuntimeException e) {
                 // The body and record stay, and the next try starts again from a freshly loaded save
-                if (RETRY_AT.put(record.bodyEntity(), now + RETRY_MILLIS) == null) {
-                    Yolt.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried "
-                            + "again every {} minutes", record.ownerName(), RETRY_MILLIS / MINUTE_MILLIS, e);
-                }
+                long wait = retry == null ? FIRST_RETRY_MILLIS : Math.min(retry.waitMillis() * 2, MAX_RETRY_MILLIS);
+                RETRIES.put(record.bodyEntity(), new Retry(now + wait, wait));
+                Yolt.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried again in {} "
+                        + "minutes", record.ownerName(), wait / MINUTE_MILLIS, e);
             }
         }
     }
