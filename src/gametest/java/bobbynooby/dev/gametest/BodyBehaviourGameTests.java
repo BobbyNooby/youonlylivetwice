@@ -8,7 +8,9 @@ import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -69,6 +71,19 @@ public class BodyBehaviourGameTests {
     private static final Vec3 BLOCK_CENTRE = new Vec3(0.5, 0.0, 0.5);
     // A batch of its own: the test runs the expiry at clock times days ahead, when every other body would be due
     private static final String BODY_RETRY = "you-only-live-twice-gametest:body_retry";
+
+    // While set, an item entity of this item throws as it loads, as another mod's load listener might. Fabric's events
+    // can't take a listener off again, so this one stays, and does nothing while it is null.
+    private static volatile Item failingDrop;
+
+    static {
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            Item failing = failingDrop;
+            if (failing != null && entity instanceof ItemEntity drop && drop.getItem().is(failing)) {
+                throw new IllegalStateException("A test made this drop fail");
+            }
+        });
+    }
 
     @GameTest
     public void armourWearsWhenHit(GameTestHelper helper) {
@@ -664,6 +679,51 @@ public class BodyBehaviourGameTests {
             String line = name + "'s body got an item in slot chest after they logged out, ";
             helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(line)).count(), 1L,
                     "warnings for the chestplate: " + log);
+        } finally {
+            if (around != null) {
+                chestplatesIn(helper, around).forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // The same, with the drop failing, here through a load listener that throws. The drop takes its item entity back,
+    // so the warning, which holds the whole item, is all that is left of it for an admin.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void failedDropOfDispensedGearIsLogged(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "NoDrop", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            CompoundTag dead = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            dead.putFloat("Health", 0.0F);
+            OfflinePlayerData.save(server, owner, dead);
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            expiredLogout(helper, owner);
+            around = new AABB(body.blockPosition()).inflate(2.0);
+
+            List<String> log;
+            failingDrop = Items.IRON_CHESTPLATE;
+            try {
+                log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server));
+            } finally {
+                failingDrop = null;
+            }
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertValueEqual(chestplatesIn(helper, around).size(), 0, "chestplates left by the failed drop");
+            String start = name + "'s body got an item in slot chest after they logged out, and the body goes without them "
+                    + "taking it over, ";
+            helper.assertValueEqual(log.stream().filter(line -> line.startsWith(start)).toList(),
+                    List.of(start + "but the item could not be dropped: "
+                            + Stacks.saved(damaged(Items.IRON_CHESTPLATE, 7), server.registryAccess())),
+                    "warnings for the chestplate");
         } finally {
             if (around != null) {
                 chestplatesIn(helper, around).forEach(Entity::discard);
