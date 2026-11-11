@@ -63,11 +63,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
 import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
+import static bobbynooby.dev.gametest.BodyTestKit.once;
 import static bobbynooby.dev.gametest.BodyTestKit.store;
 import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
@@ -774,16 +774,6 @@ public class BodyDeathGameTests {
         helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "the first grave item is not the grave head");
         helper.assertValueEqual(GraveAsserts.count(items, Items.IRON_SWORD), 1, "swords in the grave");
         helper.assertValueEqual(GraveAsserts.count(items, Items.DIAMOND), 3, "diamonds in the grave");
-    }
-
-    // Runs at the test's end or just before its timeout, whichever comes first, and only once
-    private static Runnable once(Runnable action) {
-        AtomicBoolean done = new AtomicBoolean();
-        return () -> {
-            if (done.compareAndSet(false, true)) {
-                action.run();
-            }
-        };
     }
 
     private static ResolvableProfile texturedProfile(ServerPlayer player) {

@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // What every body test does to make a body and get rid of it. The test server keeps bodies off, so a test turns the
 // default switches on, and cleanUp puts the server's own back in the same tick.
@@ -97,6 +98,16 @@ final class BodyTestKit {
     // For a test whose switches are the server's own already
     static void cleanUp(GameTestHelper helper, UUID owner) {
         cleanUp(helper, owner, Settings.get().bodies);
+    }
+
+    // For a waiting test's clean-up, which runs at its end or just before its timeout, whichever comes first: only once
+    static Runnable once(Runnable action) {
+        AtomicBoolean done = new AtomicBoolean();
+        return () -> {
+            if (done.compareAndSet(false, true)) {
+                action.run();
+            }
+        };
     }
 
     // The switches go back first, so a player still online leaves without making another body. By uuid: after a

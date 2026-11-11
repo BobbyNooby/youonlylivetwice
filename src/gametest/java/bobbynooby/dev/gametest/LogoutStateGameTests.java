@@ -46,11 +46,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.disconnectBody;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
+import static bobbynooby.dev.gametest.BodyTestKit.once;
 import static bobbynooby.dev.gametest.BodyTestKit.store;
 import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
@@ -407,15 +407,5 @@ public class LogoutStateGameTests {
         helper.assertValueEqual(looter.getInventory().countItem(item), held, what + " the looter has");
         helper.assertValueEqual(GraveAsserts.count(inGrave, item), kept, what + " in the grave");
         helper.assertValueEqual(GraveAsserts.count(onGround, item), dropped, what + " on the ground");
-    }
-
-    // Runs at the test's end or just before its timeout, whichever comes first, and only once
-    private static Runnable once(Runnable action) {
-        AtomicBoolean done = new AtomicBoolean();
-        return () -> {
-            if (done.compareAndSet(false, true)) {
-                action.run();
-            }
-        };
     }
 }
