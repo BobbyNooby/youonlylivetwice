@@ -194,6 +194,32 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
+    // The owner is online and alive, with an older death the console ended: their own head does nothing, stays in the
+    // hand, and leaves that death as it was
+    @GameTest
+    public void reviveHeadOnOnlineOwnerKeepsHead(GameTestHelper helper) {
+        ServerPlayer owner = TestPlayers.join(helper, "Online", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Hopeful", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID id = owner.getUUID();
+        String name = owner.getGameProfile().name();
+        try {
+            DeathLockout.recordDeath(id, name);
+            helper.assertValueEqual(DeathLockout.revive(id, name, "console"), DeathLockout.ReviveResult.REVIVED, "the console's revive");
+            ItemStack head = reviveHead(ResolvableProfile.createResolved(owner.getGameProfile()), 1);
+            int from = user.messages.size();
+
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.NOT_DEAD, "outcome");
+            helper.assertValueEqual(head.getCount(), 1, "heads left");
+            helper.assertValueEqual(said(user, from), List.of(name + " is not dead."), "reply");
+            helper.assertTrue(helper.getLevel().getServer().getPlayerList().getPlayer(id) == owner, "the owner is no longer online");
+            helper.assertValueEqual(DeathLockout.newestDeath(id).revivedBy(), "console", "who revived the owner's death");
+        } finally {
+            TestPlayers.leave(owner);
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
     // The reply depends on the lockout switch, which is flipped and put back inside this test
     @GameTest
     public void notDeadReplyFollowsLockoutSwitch(GameTestHelper helper) {
