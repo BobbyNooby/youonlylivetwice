@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -45,6 +46,7 @@ import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -127,6 +129,99 @@ public class GraveDeathGameTests {
             });
         } finally {
             cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // Curse of binding only keeps armour on a living player; at a death it goes in the grave like any armour, and the
+    // respawn doesn't put it back on
+    @GameTest
+    public void curseOfBindingArmourGoesInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Bound");
+        try {
+            ItemStack chestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+            chestplate.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.BINDING_CURSE), 1);
+            ItemStack worn = chestplate.copy();
+            player.setItemSlot(EquipmentSlot.CHEST, chestplate);
+            BlockPos at = player.blockPosition();
+            ServerPlayer back = dieAndRespawn(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            List<ItemStack> chestplates = grave.items().stream().filter(stack -> stack.is(Items.DIAMOND_CHESTPLATE)).toList();
+            helper.assertValueEqual(chestplates.size(), 1, "chestplates in the grave");
+            helper.assertTrue(ItemStack.matches(chestplates.get(0), worn), "the grave's chestplate changed: " + chestplates.get(0));
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.CHEST).isEmpty(), "the respawned player wears the bound chestplate");
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND_CHESTPLATE), 0, "chestplates the respawned player has");
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND_CHESTPLATE, at, 3.0), 0, "chestplates dropped");
+        } finally {
+            leaveAndRemoveGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // A shulker box keeps its items inside it, in the grave and in the grave file, and none spill out of it
+    @GameTest
+    public void fullShulkerBoxGoesInTheGraveIntact(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Shulker");
+        try {
+            List<ItemStack> inside = new ArrayList<>();
+            for (int i = 0; i < 26; i++) {
+                inside.add(new ItemStack(Items.DIAMOND, 64));
+            }
+            ItemStack named = new ItemStack(Items.IRON_SWORD);
+            named.set(DataComponents.CUSTOM_NAME, Component.literal("Keepsake"));
+            inside.add(named);
+            ItemStack box = new ItemStack(Items.SHULKER_BOX);
+            box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(inside));
+            ItemStack packed = box.copy();
+            player.getInventory().add(box);
+            BlockPos at = player.blockPosition();
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.items().size(), 2, "stacks in the grave, the head and the box");
+            ItemStack inGrave = grave.items().get(1);
+            helper.assertTrue(ItemStack.matches(inGrave, packed), "the grave's shulker box changed: " + inGrave);
+            assertBoxHolds(helper, inGrave, "in the grave");
+            Grave onDisk = GraveStoreGameTests.onDisk(helper.getLevel().getServer()).stream()
+                    .filter(saved -> saved.id().equals(grave.id())).findFirst().orElseThrow();
+            assertBoxHolds(helper, onDisk.items().get(1), "in the grave file");
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, at, 3.0) + itemsNear(helper, Items.SHULKER_BOX, at, 3.0), 0,
+                    "diamonds and boxes dropped");
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // Two players on one block die in the same tick: two graves, one each, at different blocks, each with only its own
+    // owner's items and head
+    @GameTest
+    public void twoPlayersDieOnSameBlockSameTick(GameTestHelper helper) {
+        ServerPlayer first = join(helper, "SameBlockA");
+        ServerPlayer second = join(helper, "SameBlockB");
+        try {
+            helper.assertValueEqual(first.blockPosition(), second.blockPosition(), "the two players' block");
+            first.getInventory().add(new ItemStack(Items.DIAMOND, 5));
+            second.getInventory().add(new ItemStack(Items.EMERALD, 7));
+            kill(helper, first);
+            kill(helper, second);
+
+            Grave firstGrave = onlyGrave(helper, first);
+            Grave secondGrave = onlyGrave(helper, second);
+            helper.assertFalse(firstGrave.pos().equals(secondGrave.pos()), "both graves at " + firstGrave.pos());
+            helper.assertValueEqual(GraveAsserts.count(firstGrave.items(), Items.DIAMOND), 5, "diamonds in the first grave");
+            helper.assertValueEqual(GraveAsserts.count(firstGrave.items(), Items.EMERALD), 0, "emeralds in the first grave");
+            helper.assertValueEqual(GraveAsserts.count(secondGrave.items(), Items.EMERALD), 7, "emeralds in the second grave");
+            helper.assertValueEqual(GraveAsserts.count(secondGrave.items(), Items.DIAMOND), 0, "diamonds in the second grave");
+            helper.assertValueEqual(GraveItems.ownerId(firstGrave.items().get(0)), Optional.of(first.getUUID()), "first grave's head");
+            helper.assertValueEqual(GraveItems.ownerId(secondGrave.items().get(0)), Optional.of(second.getUUID()), "second grave's head");
+            assertHeadBlock(helper, firstGrave);
+            assertHeadBlock(helper, secondGrave);
+        } finally {
+            cleanUp(helper, first);
+            cleanUp(helper, second);
         }
         helper.succeed();
     }
@@ -1054,6 +1149,16 @@ public class GraveDeathGameTests {
         for (int i = fromSlot; i < toSlot; i++) {
             helper.assertFalse(menu.getSlot(i).hasItem(), "menu slot " + i + " still holds an item");
         }
+    }
+
+    // 26 stacks of 64 diamonds and the named sword, as the box was packed
+    private static void assertBoxHolds(GameTestHelper helper, ItemStack box, String where) {
+        helper.assertTrue(box.is(Items.SHULKER_BOX), "not a shulker box " + where + ": " + box);
+        List<ItemStack> held = box.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItemCopyStream().toList();
+        helper.assertValueEqual(held.size(), 27, "stacks in the shulker box " + where);
+        helper.assertValueEqual(GraveAsserts.count(held, Items.DIAMOND), 26 * 64, "diamonds in the shulker box " + where);
+        helper.assertValueEqual(held.stream().filter(stack -> stack.is(Items.IRON_SWORD)
+                && stack.getHoverName().getString().equals("Keepsake")).count(), 1L, "named swords in the shulker box " + where);
     }
 
     private static void assertHeadBlock(GameTestHelper helper, Grave grave) {
