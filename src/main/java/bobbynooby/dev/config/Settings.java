@@ -54,12 +54,17 @@ public final class Settings {
     /**
      * Sets one key in the file and the live config from what an admin typed. A text the key can't take, or a value its
      * range check refuses, comes back as the problem and changes nothing; so does the value the key has already, with
-     * no problem. The caller then applies the new config with LiveSettings.applyAll.
+     * no problem. A file that couldn't be read is kept as change.backup before it is rewritten. The caller then applies
+     * the new config with LiveSettings.applyAll.
      */
     public static ConfigLoader.Change set(ConfigKey key, String text) {
         ConfigLoader.Change change = ConfigLoader.setText(path(), config, key, text);
         if (change.config() != null) {
             config = change.config();
+        }
+        if (change.backup() != null) {
+            Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {} and rewritten",
+                    key.path(), change.backup());
         }
         return change;
     }

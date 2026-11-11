@@ -512,6 +512,7 @@ class ConfigLoaderTest {
         assertEquals(48, change.config().chat.radius);
         assertEquals(8000, change.config().worldBorder.diameter);
         assertEquals(10000, live.worldBorder.diameter, "the live config was changed in place");
+        assertNull(change.backup());
 
         JsonObject written = readJson(file);
         assertEquals(20, written.getAsJsonObject("chat").get("radius").getAsInt());
@@ -540,6 +541,7 @@ class ConfigLoaderTest {
 
         ConfigLoader.Change change = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.diameter"), new JsonPrimitive(8000));
         assertNull(change.problem());
+        assertEquals("config.json.bak", change.backup());
         assertEquals("{", Files.readString(dir.resolve("config.json.bak")));
         assertEquals(new Gson().toJsonTree(change.config()), readJson(file));
         assertEquals(8000, readJson(file).getAsJsonObject("worldBorder").get("diameter").getAsInt());
@@ -572,10 +574,10 @@ class ConfigLoaderTest {
         YoltConfig live = new YoltConfig();
 
         ConfigLoader.Change bad = ConfigLoader.setText(file, live, key("chat.radius"), "abc");
-        assertEquals(new ConfigLoader.Change(null, "48", "abc", "chat.radius takes a whole number, not 'abc'."), bad);
+        assertEquals(new ConfigLoader.Change(null, "48", "abc", "chat.radius takes a whole number, not 'abc'.", null), bad);
         // 48 is the live value, whatever the file says, so nothing is written
-        assertEquals(new ConfigLoader.Change(null, "48", "48", null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
-        assertEquals(new ConfigLoader.Change(null, "2.0", "2.0", null),
+        assertEquals(new ConfigLoader.Change(null, "48", "48", null, null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
+        assertEquals(new ConfigLoader.Change(null, "2.0", "2.0", null, null),
                 ConfigLoader.setText(file, live, key("worldBorder.endScale"), "2"));
         assertArrayEquals(before, Files.readAllBytes(file));
 
@@ -631,11 +633,12 @@ class ConfigLoaderTest {
                 broken.warnings().toString());
 
         Files.writeString(file, "{");
-        ConfigLoader.setKey(file, new YoltConfig(), key("chat.radius"), new JsonPrimitive(20));
+        ConfigLoader.Change set = ConfigLoader.setKey(file, new YoltConfig(), key("chat.radius"), new JsonPrimitive(20));
         List<Path> setCopies = timedCopies();
         setCopies.removeAll(timed);
         setCopies.removeAll(brokenCopies);
         assertEquals(1, setCopies.size(), setCopies.toString());
+        assertEquals(setCopies.get(0).getFileName().toString(), set.backup());
         assertEquals("{", Files.readString(setCopies.get(0)));
         assertArrayEquals(first, Files.readAllBytes(bak));
     }

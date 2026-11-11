@@ -1,7 +1,6 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.core.Migrations;
-import bobbynooby.dev.core.Yolt;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -38,9 +37,11 @@ public final class ConfigLoader {
 
     /**
      * What setting one key did. config is the new live config, and null when nothing changed: problem then says why, or
-     * is null too when the key already had that value.
+     * is null too when the key already had that value. backup names the copy kept of a file that couldn't be read before
+     * the whole config was written over it, and is null otherwise.
      */
-    public record Change(@Nullable YoltConfig config, String oldValue, String newValue, @Nullable String problem) {}
+    public record Change(@Nullable YoltConfig config, String oldValue, String newValue, @Nullable String problem,
+                         @Nullable String backup) {}
 
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
@@ -187,10 +188,10 @@ public final class ConfigLoader {
         try {
             value = key.parse(text);
         } catch (ConfigKey.BadValue e) {
-            return new Change(null, current, text, e.getMessage());
+            return new Change(null, current, text, e.getMessage(), null);
         }
         if (key.json(live).equals(value)) {
-            return new Change(null, current, current, null);
+            return new Change(null, current, current, null, null);
         }
         return setKey(file, live, key, value);
     }
@@ -198,7 +199,8 @@ public final class ConfigLoader {
     /**
      * Checks the new value as a reload would, with the live config as the fallback, and refuses it if any warning names
      * the key. Otherwise only that key changes in the file, so the admin's other edits and keys this build doesn't know
-     * stay. A file that can't be read is kept as a .bak and the whole new config written. live itself is not changed.
+     * stay. A file that can't be read is kept as a .bak, named in the change, and the whole new config written. live
+     * itself is not changed.
      */
     public static Change setKey(Path file, YoltConfig live, ConfigKey key, JsonPrimitive value) {
         String oldValue = key.show(live);
@@ -213,42 +215,44 @@ public final class ConfigLoader {
         try {
             config = GSON.fromJson(merged, YoltConfig.class);
         } catch (JsonParseException e) {
-            return new Change(null, oldValue, typed, key.path() + ": " + e.getMessage());
+            return new Change(null, oldValue, typed, key.path() + ": " + e.getMessage(), null);
         }
         ConfigChecks.validate(config, live, warnings, CURRENT_VALUE);
         for (String warning : warnings) {
             // Contains, not starts with: the End cap's warning begins with endScale but is as much about the diameter
             if (warning.contains(key.path())) {
                 int tail = warning.lastIndexOf(", using ");
-                return new Change(null, oldValue, typed, tail < 0 ? warning : warning.substring(0, tail));
+                return new Change(null, oldValue, typed, tail < 0 ? warning : warning.substring(0, tail), null);
             }
         }
 
+        String backup;
         try {
-            writeKey(file, key.path(), value, config);
+            backup = writeKey(file, key.path(), value, config);
         } catch (UncheckedIOException e) {
-            return new Change(null, oldValue, typed, "the config file could not be saved (" + e.getCause().getMessage() + ")");
+            String problem = "the config file could not be saved (" + e.getCause().getMessage() + ")";
+            return new Change(null, oldValue, typed, problem, null);
         }
-        return new Change(config, oldValue, key.show(config), null);
+        return new Change(config, oldValue, key.show(config), null, backup);
     }
 
-    private static void writeKey(Path file, String path, JsonPrimitive value, YoltConfig config) {
+    // Returns the copy kept of a file that couldn't be read, or null
+    private static @Nullable String writeKey(Path file, String path, JsonPrimitive value, YoltConfig config) {
         if (!Files.exists(file)) {
             write(file, config);
-            return;
+            return null;
         }
         JsonObject own;
         try {
             own = readObject(file);
         } catch (JsonParseException | IOException e) {
             String backup = backup(file, file.getFileName() + ".bak");
-            Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {} and the whole config"
-                    + " was written", path, backup);
             write(file, config);
-            return;
+            return backup;
         }
         put(own, path, value);
         writeText(file, GSON.toJson(own));
+        return null;
     }
 
     // Sets a dotted path, making any section on the way that is missing or isn't an object
