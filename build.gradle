@@ -95,6 +95,8 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
     it.options.release = 25
+    // Names each deprecated call in the log, instead of one note per source set
+    it.options.compilerArgs.add("-Xlint:deprecation")
 }
 
 java {
