@@ -624,11 +624,15 @@ public class SkinGameTests {
             MOJANG.forget(account);
         }
         List<String> reply = output;
+        // Every try clears the pick, so a test that fails leaves none behind either
         helper.succeedWhen(() -> {
-            helper.assertValueEqual(reply, List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."),
-                    "reply once Mojang answered");
-            assertEqual(helper, store.choice(player), account, "the pick once Mojang answered");
-            store.clearChoice(player);
+            try {
+                helper.assertValueEqual(reply, List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."),
+                        "reply once Mojang answered");
+                assertEqual(helper, store.choice(player), account, "the pick once Mojang answered");
+            } finally {
+                store.clearChoice(player);
+            }
         });
     }
 
