@@ -31,6 +31,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Prediction;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
@@ -636,6 +637,31 @@ public class GraveDeathGameTests {
             helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, at, 3.0), 5, "diamonds dropped");
             helper.assertValueEqual(itemsNear(helper, Items.EMERALD, at, 3.0), 3, "emeralds dropped");
             helper.assertValueEqual(player.getInventory().countItem(Items.EMERALD), 1, "emeralds put back");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(at).inflate(3.0)).forEach(ItemEntity::discard);
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // With a full inventory, vanilla's put-back drops the very stack it was given. If it throws after that, as when
+    // another mod's load listener throws for the new item entity, the stack is already in the world: dropping it again
+    // would make the items exist twice, so the one dropped stack is all there is
+    @GameTest
+    public void failedPutBackAfterItsOwnDropDropsOnce(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "FullPutBack");
+        BlockPos at = player.blockPosition();
+        try {
+            for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+                player.getInventory().setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+            }
+            GraveDeath.putBackOrDrop(player, new ItemStack(Items.DIAMOND, 5), stack -> {
+                player.getInventory().placeItemBackInInventory(stack, Prediction.SERVER_ONLY);
+                throw new IllegalStateException("a put-back that fails after it dropped the stack, for this test");
+            });
+
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, at, 3.0), 5, "diamonds dropped");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 0, "diamonds put back");
         } finally {
             helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(at).inflate(3.0)).forEach(ItemEntity::discard);
             cleanUp(helper, player);
