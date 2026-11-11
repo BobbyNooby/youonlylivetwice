@@ -42,6 +42,8 @@ public class NorthCompassGameTests {
     private static final String DRIFT = "you-only-live-twice-gametest:compass_north_drift";
     // At least this far north, the needle is within a tenth of a degree for any holder in a 10,000 border
     private static final int FAR = 10_000_000;
+    // The target's Z, and how far east or west it goes: a million blocks inside the world's edge at 29,999,984
+    private static final int EDGE = 28_999_984;
 
     // The Nether and End borders get warnings of their own here, so a bundle that put back the old level's border fails
     @GameTest(environment = DIMENSIONS)
@@ -242,7 +244,8 @@ public class NorthCompassGameTests {
     }
 
     // A few thousand blocks sideways moves the needle by a fraction of a degree, so nothing is sent; a million is past
-    // half a degree from anywhere in the test area, so the target follows. This is what the once-a-second check runs.
+    // half a degree from anywhere in the test area, so the target follows. At the north edge nothing follows. This is
+    // what the once-a-second check runs.
     @GameTest(environment = DRIFT)
     public void driftSendsTheTargetAgain(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -263,6 +266,17 @@ public class NorthCompassGameTests {
             assertNorth(helper, sends.get(0), player, helper.getLevel(), "the drift's");
             NorthCompass.recheckAll(server);
             helper.assertValueEqual(spawnSends(player, mark).size(), 1, "spawn sends once the target followed");
+
+            // Near the target, or past it, no new target would help, so walking there sends nothing
+            player.snapTo(player.getX(), player.getY(), -EDGE + 100.0);
+            NorthCompass.recheckAll(server);
+            player.snapTo(player.getX() + 10_000.0, player.getY(), player.getZ());
+            NorthCompass.recheckAll(server);
+            helper.assertValueEqual(spawnSends(player, mark).size(), 1,
+                    "spawn sends walking sideways just south of the target");
+            player.snapTo(player.getX() + 10_000.0, player.getY(), -EDGE - 5_000.0);
+            NorthCompass.recheckAll(server);
+            helper.assertValueEqual(spawnSends(player, mark).size(), 1, "spawn sends walking north of the target");
         } finally {
             TestPlayers.leave(player);
         }

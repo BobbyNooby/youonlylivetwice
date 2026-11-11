@@ -35,6 +35,9 @@ public final class NorthCompass {
     private static final int EDGE = MinecraftServer.ABSOLUTE_MAX_WORLD_SIZE - 1_000_000;
     // The sideways drift, as a share of the distance to the target, at which the needle is half a degree off
     private static final double MAX_DRIFT = Math.tan(Math.toRadians(0.5));
+    // Within this many blocks south of the target, or north of it, no new target keeps the needle true for long, so a
+    // player there keeps the one they have rather than get one a second while they walk
+    private static final int NORTH_EDGE_ZONE = 1_000;
     // The target last sent to the player, for the drift check. Not saved: every join and respawn sends a new one.
     private static final AttachmentType<GlobalPos> SENT = AttachmentRegistry.create(Yolt.id("compass_target"));
 
@@ -104,9 +107,10 @@ public final class NorthCompass {
                 continue;
             }
             ServerLevel level = player.level();
-            // Past the edge, or north of the target, the player would get the same target again, which changes nothing
+            // Past the side edges the player would get the same target again, which changes nothing
             boolean same = sent.dimension() == level.dimension();
-            if (same && (!drifted(player, sent.pos()) || sent.pos().equals(targetFor(player, level)))) {
+            if (same && (atNorthEdge(player) || !drifted(player, sent.pos())
+                    || sent.pos().equals(targetFor(player, level)))) {
                 continue;
             }
             player.connection.send(northFor(player, level));
@@ -131,10 +135,14 @@ public final class NorthCompass {
                 new ClientboundInitializeBorderPacket(level.getWorldBorder())));
     }
 
-    // The needle aims at the target block's centre. North of the target it points the wrong way altogether.
+    private static boolean atNorthEdge(ServerPlayer player) {
+        return player.getZ() < -EDGE + NORTH_EDGE_ZONE;
+    }
+
+    // The needle aims at the target block's centre. Only asked south of the north edge zone.
     private static boolean drifted(ServerPlayer player, BlockPos target) {
         double sideways = player.getX() - (target.getX() + 0.5);
         double south = player.getZ() - (target.getZ() + 0.5);
-        return south <= 0.0 || Math.abs(sideways) > south * MAX_DRIFT;
+        return Math.abs(sideways) > south * MAX_DRIFT;
     }
 }
