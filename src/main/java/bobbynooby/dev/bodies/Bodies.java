@@ -33,7 +33,7 @@ public final class Bodies {
     private Bodies() {}
 
     public static void init() {
-        // LEAVE runs on the server thread before vanilla saves the player; DISCONNECT can run on the network thread
+        // LEAVE runs on the server thread before vanilla saves the player, so the save holds what this changes
         ServerPlayerEvents.LEAVE.register(player -> {
             // A failure here must not stop the logout save that follows
             Guard.run(() -> BodyLogout.onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
