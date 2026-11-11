@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -13,6 +14,7 @@ import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityEvent;
 import net.minecraft.world.level.GameType;
@@ -193,6 +195,25 @@ public class DebugPrivacyGameTests {
             AdminView.set(admin, false);
             TestPlayers.deop(admin);
             TestPlayers.leave(admin);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(environment = DEBUG_PRIVACY)
+    public void brandFakedOnlyWithSwitch(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean before = hide.serverBrand;
+        try {
+            hide.serverBrand = true;
+            helper.assertValueEqual(DebugPrivacy.brand("fabric"), "vanilla", "brand with hide.serverBrand on");
+            hide.serverBrand = false;
+            helper.assertValueEqual(DebugPrivacy.brand("fabric"), "fabric", "brand with hide.serverBrand off");
+            // No test player logs in through configuration, so nothing else loads the class the brand hook is on here.
+            // Loading it applies the hook, which fails if the brand call it changes is gone.
+            helper.assertTrue(ServerConfigurationPacketListenerImpl.class.getDeclaredMethods().length > 0,
+                    "the configuration listener has no methods");
+        } finally {
+            hide.serverBrand = before;
         }
         helper.succeed();
     }

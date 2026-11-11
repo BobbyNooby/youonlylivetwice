@@ -155,17 +155,18 @@ class ConfigKeysTest {
                 waiting.put(key.path(), key.when());
             }
         }
-        assertEquals(Map.of(
-                "bodies.enabled", Applies.When.NEW_BODIES,
-                "bodies.type", Applies.When.NEW_BODIES,
-                "bodies.pose", Applies.When.NEW_BODIES,
-                "bodies.movable", Applies.When.NEW_BODIES,
-                "bodies.totems", Applies.When.NEW_BODIES,
-                "deathLockout.cooldownDays", Applies.When.NEW_DEATHS,
-                "deathLockout.countCreativeAndSpectatorDeaths", Applies.When.NEW_DEATHS,
-                "graves.enabled", Applies.When.NEW_DEATHS,
-                "graves.enderChestOnDeath", Applies.When.NEW_DEATHS,
-                "skins.mode", Applies.When.NEXT_JOIN), waiting);
+        assertEquals(Map.ofEntries(
+                Map.entry("bodies.enabled", Applies.When.NEW_BODIES),
+                Map.entry("bodies.type", Applies.When.NEW_BODIES),
+                Map.entry("bodies.pose", Applies.When.NEW_BODIES),
+                Map.entry("bodies.movable", Applies.When.NEW_BODIES),
+                Map.entry("bodies.totems", Applies.When.NEW_BODIES),
+                Map.entry("deathLockout.cooldownDays", Applies.When.NEW_DEATHS),
+                Map.entry("deathLockout.countCreativeAndSpectatorDeaths", Applies.When.NEW_DEATHS),
+                Map.entry("graves.enabled", Applies.When.NEW_DEATHS),
+                Map.entry("graves.enderChestOnDeath", Applies.When.NEW_DEATHS),
+                Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
+                Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
         assertEquals("", Applies.When.NOW.note());
         assertEquals(" (applies when a player next joins)", Applies.When.NEXT_JOIN.note());
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());

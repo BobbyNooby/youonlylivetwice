@@ -72,6 +72,8 @@ public class YoltConfig {
         // Vanilla's reduced F3 for every player: no coordinates, biome, light or targeted block. Admin view gives an op the
         // full screen back.
         public boolean debugScreen = true;
+        // F3 names the server "vanilla" rather than "fabric". The brand is sent as a player logs in.
+        @Applies(Applies.When.NEXT_JOIN) public boolean serverBrand = false;
     }
 
     public static class SleepSection {

@@ -17,6 +17,7 @@
     "CommandParseMixin",
     "CommandRestrictionMixin",
     "CreakingTrailMixin",
+    "DebugPrivacyBrandMixin",
     "DebugPrivacyGameRuleMixin",
     "GraveDeathDropsMixin",
     "GraveDropMixin",

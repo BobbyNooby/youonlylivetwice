@@ -48,4 +48,9 @@ public final class DebugPrivacy {
             apply(player);
         }
     }
+
+    /** The server brand F3 shows. One for the whole server, so admin view doesn't change it. */
+    public static String brand(String real) {
+        return Settings.on(c -> c.hide.serverBrand) ? "vanilla" : real;
+    }
 }
