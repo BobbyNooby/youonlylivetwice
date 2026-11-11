@@ -11,8 +11,10 @@ import java.util.Set;
 
 /** Every config key, found from the config's own fields, so a new key can be read and set without more code. */
 public final class ConfigKeys {
-    // The version is the file's layout, not a setting, and a list can't be typed as one value, so both stay in the file
-    private static final Set<String> FILE_ONLY = Set.of("configVersion", "serverList.hoverLines");
+    // The file's layout, not a setting
+    private static final String VERSION = "configVersion";
+    // One typed value can't hold a list, so these are changed in the file
+    private static final Set<String> FILE_ONLY = Set.of("serverList.hoverLines");
 
     private ConfigKeys() {}
 
@@ -23,6 +25,11 @@ public final class ConfigKeys {
 
     public static Optional<ConfigKey> find(String path) {
         return all().stream().filter(key -> key.path().equals(path)).findFirst();
+    }
+
+    /** True for a setting that has no key here because it is changed only in the file, then reloaded. */
+    public static boolean fileOnly(String path) {
+        return FILE_ONLY.contains(path);
     }
 
     /**
@@ -42,7 +49,7 @@ public final class ConfigKeys {
                 continue;
             }
             String path = prefix + field.getName();
-            if (FILE_ONLY.contains(path)) {
+            if (path.equals(VERSION) || FILE_ONLY.contains(path)) {
                 continue;
             }
             Class<?> fieldType = field.getType();

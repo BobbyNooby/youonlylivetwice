@@ -68,6 +68,17 @@ class ConfigKeysTest {
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
     }
 
+    // /yolt config can then say to change the list in the file rather than call it unknown
+    @Test
+    void hoverLinesIsFileOnly() {
+        assertTrue(ConfigKeys.fileOnly("serverList.hoverLines"));
+        assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
+        // The version is no setting at all, and a real key or a typo is not file-only
+        assertFalse(ConfigKeys.fileOnly("configVersion"));
+        assertFalse(ConfigKeys.fileOnly("chat.radius"));
+        assertFalse(ConfigKeys.fileOnly("serverList.hoverLine"));
+    }
+
     @Test
     void parsesEachKind() throws ConfigKey.BadValue {
         assertEquals(new JsonPrimitive(true), key("hide.tabList").parse("true"));
