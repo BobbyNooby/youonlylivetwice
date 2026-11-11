@@ -12,6 +12,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Prediction;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -61,10 +63,23 @@ public final class GraveCompass {
             return false;
         }
         owed.forEach(grave -> store.put(grave.withCompassPending(false)));
-        // Only one grave owes a compass at a time; should more ever, the store keeps them oldest first. Dropped at the
-        // player when no slot takes it: Inventory.add would report a full creative inventory as taking it, and lose it.
-        player.getInventory().placeItemBackInInventory(compassFor(owed.getLast()), Prediction.SERVER_ONLY);
+        // Only one grave owes a compass at a time; should more ever, the store keeps them oldest first
+        give(player, compassFor(owed.getLast()));
         return true;
+    }
+
+    // Dropped at the player when no slot takes it: Inventory.add would report a full creative inventory as taking it, and
+    // lose it. The drop never despawns, since no grave owes the compass any more.
+    private static void give(ServerPlayer player, ItemStack compass) {
+        Inventory inventory = player.getInventory();
+        if (inventory.getSlotWithRemainingSpace(compass) != -1 || inventory.getFreeSlot() != -1) {
+            inventory.placeItemBackInInventory(compass, Prediction.SERVER_ONLY);
+            return;
+        }
+        ItemEntity dropped = player.drop(compass, false, Prediction.SERVER_ONLY);
+        if (dropped != null) {
+            dropped.setUnlimitedLifetime();
+        }
     }
 
     /** A compass that points at the grave, named for its owner. */

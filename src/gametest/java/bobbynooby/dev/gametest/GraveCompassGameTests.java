@@ -235,7 +235,8 @@ public class GraveCompassGameTests {
     }
 
     // In creative too, where Inventory.add would report the full inventory as taking the compass, and lose it. That
-    // player dies in survival and comes back in creative, as after an admin's change.
+    // player dies in survival and comes back in creative, as after an admin's change. The grave owes no compass by then,
+    // so the drop must not despawn.
     @GameTest(environment = FULL)
     public void compassDropsWhenInventoryFull(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -269,6 +270,8 @@ public class GraveCompassGameTests {
                 helper.assertValueEqual(dropped.size(), 1, "compasses dropped for " + name);
                 helper.assertTrue(dropped.get(0).distanceTo(back) < 2.0, name + "'s compass dropped "
                         + dropped.get(0).distanceTo(back) + " blocks from them");
+                // ItemEntity.setUnlimitedLifetime sets this age, which the item's tick never counts up from
+                helper.assertValueEqual(dropped.get(0).getAge(), (int) Short.MIN_VALUE, name + "'s dropped compass's age");
             }
         } finally {
             restore.run();
