@@ -495,7 +495,6 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
-    // The real slot was empty, so only the body has the helmet; GearSync gives it to the save before the death
     // A body that dies while its owner's save is dead already, as after a crash before an earlier death's record
     // removal was saved: the save stays and there is no grave. A helmet a dispenser put on its empty head is real, and
     // the body drops nothing itself, so it drops where the body fell, for good.
@@ -538,6 +537,7 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // The real slot was empty, so only the body has the helmet; GearSync gives it to the save before the death
     @GameTest
     public void bodyGearReachesGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Helmet");
