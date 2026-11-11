@@ -1,6 +1,7 @@
 package bobbynooby.dev.world;
 
 import bobbynooby.dev.graves.GraveRecheck;
+import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import bobbynooby.dev.visibility.TabHeaders;
@@ -33,5 +34,7 @@ public final class LiveSettings {
             server.getCommands().sendCommands(player);
             PlayerVisibility.refresh(player);
         }
+        // Each player's debug screen depends on hide.debugScreen
+        DebugPrivacy.applyAll(server);
     }
 }

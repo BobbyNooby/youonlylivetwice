@@ -9,7 +9,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 
-/** Whether an op sees everyone and every hidden message. Saved with the player, so it survives relogs and restarts. */
+/**
+ * Whether an op sees everyone, every hidden message and the full debug screen. Saved with the player, so it survives relogs
+ * and restarts.
+ */
 public final class AdminView {
     // Copied on death as well, since a respawn makes a new player object. Saved in player files as a bare boolean
     // with no version, so a different shape needs a new id and a one-time copy from this one.
@@ -33,6 +36,8 @@ public final class AdminView {
         set(player, on);
         // Entries, the tab list and the nametag rule all depend on it; this also resends the nametag team
         PlayerVisibility.refresh(player);
+        // So does the full debug screen
+        DebugPrivacy.apply(player);
         return on;
     }
 
@@ -41,6 +46,7 @@ public final class AdminView {
         ServerPlayer player = playerList.getPlayer(who.id());
         if (player != null && player.hasAttached(ATTACHMENT)) {
             PlayerVisibility.refresh(player);
+            DebugPrivacy.apply(player);
         }
     }
 

@@ -11,6 +11,7 @@ import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import bobbynooby.dev.skins.Skins;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
@@ -44,6 +45,7 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         // Visibility and chat: their hooks don't share an event with a hook that cares about order
         TabHeaders.init();
         NameTagTeam.init();
+        DebugPrivacy.init();
         ChatDelivery.init();
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads

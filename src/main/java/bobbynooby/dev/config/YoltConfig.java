@@ -69,6 +69,9 @@ public class YoltConfig {
         public boolean locatorBar = true;
         public boolean globalSounds = true;
         public boolean mapPlayers = true;
+        // Vanilla's reduced F3 for every player: no coordinates, biome, light or targeted block. Admin view gives an op the
+        // full screen back.
+        public boolean debugScreen = true;
     }
 
     public static class SleepSection {
