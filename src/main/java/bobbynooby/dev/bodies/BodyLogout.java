@@ -28,7 +28,7 @@ public final class BodyLogout {
     public static Optional<Entity> onLogout(ServerPlayer player) {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
-        if (!Settings.active() || !cfg.enabled || player.isDeadOrDying()
+        if (!Settings.active() || player.isDeadOrDying()
                 || DeathLockout.refusal(player.getUUID(), player.nameAndId().name()) != null) {
             return Optional.empty();
         }
@@ -37,8 +37,9 @@ public final class BodyLogout {
         // Out again before the old body was taken back. The player has been online since, so the old body no longer
         // stands for them: it goes, and there is never a second one.
         Optional<BodyRecord> old = store.byOwner(player.getUUID());
-        // None in creative or spectator: the body could be killed while its owner can't be
-        if (player.isCreative() || player.isSpectator()) {
+        // None with bodies switched off, and none in creative or spectator, where the body could be killed while its
+        // owner can't be. The old body goes all the same: a login would take it over and clear gear put on since.
+        if (!cfg.enabled || player.isCreative() || player.isSpectator()) {
             old.ifPresent(record -> {
                 store.remove(record.owner());
                 retire(server, player, record);

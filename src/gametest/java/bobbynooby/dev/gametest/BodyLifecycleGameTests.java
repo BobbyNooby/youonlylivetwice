@@ -199,6 +199,29 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // The same stale body, at a real logout with bodies switched off since. It goes all the same: its head was empty,
+    // so taking it over at the next login would clear the helmet put on since.
+    @GameTest
+    public void bodiesOffLogoutClearsStaleBody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "SwitchedOff", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin old = logOut(helper, player);
+            player.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            Settings.get().bodies.enabled = false;
+            TestPlayers.leave(player);
+            helper.assertTrue(old.isRemoved(), "the old body still stands");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "the old body's record kept");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET), "the helmet is gone after login");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // A stale body as above, whose empty chest slot a dispenser filled: that chestplate is real, so clearing the body
     // must not take it along. It goes into the owner's inventory, never the hand, or with no room drops where the body
     // stood, for good.
