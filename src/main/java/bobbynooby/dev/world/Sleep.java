@@ -4,7 +4,7 @@ import bobbynooby.dev.config.Settings;
 
 /** What the sleep switches mean; the sleep and bed-respawn mixins only ask these. */
 public final class Sleep {
-    /** More sleepers than any server holds, so the night never skips. */
+    /** Far more sleepers than a real server has in bed at once, so in practice the night never skips. */
     public static final int SLEEPERS_NEEDED_WHEN_BLOCKED = 727;
 
     private Sleep() {}
