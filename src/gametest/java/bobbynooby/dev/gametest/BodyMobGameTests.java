@@ -4,6 +4,7 @@ import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyMobs;
 import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyTargetGoal;
+import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.MobAccessor;
@@ -31,6 +32,7 @@ import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -57,6 +59,9 @@ public class BodyMobGameTests {
     private static final String MIDNIGHT = "you-only-live-twice-gametest:midnight";
     private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
     private static final String BODY_DIFFICULTY = "you-only-live-twice-gametest:body_difficulty";
+    // A player body that stays across ticks is a player to every mob, and the piglin is a mob to every player body near
+    // it, so this has a batch of its own rather than player_body's
+    private static final String PIGLIN_BODY = "you-only-live-twice-gametest:piglin_body";
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
     private static final BlockPos NEXT_TO_BODY = new BlockPos(3, 0, 1);
     private static final BlockPos FOUR_AWAY = new BlockPos(5, 0, 1);
@@ -254,6 +259,55 @@ public class BodyMobGameTests {
             return spider;
         }, (spider, body) -> helper.assertTrue(body.getLastHurtByMob() == spider,
                 "the body was last hurt by " + body.getLastHurtByMob() + ", not the spider"));
+    }
+
+    // A brain mob finds players through its own senses, not goals, so it never gets the body goal, and a player body is
+    // a player to it: a piglin goes after one, as it would after its owner without gold. The mannequin body, nearer to
+    // it, is the control and is never its target.
+    @GameTest(maxTicks = 200, environment = PIGLIN_BODY)
+    public void piglinHuntsPlayerBody(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer playerOwner = join(helper, "Hunted");
+        ServerPlayer mannequinOwner = TestPlayers.join(helper, "Overlooked", GameType.SURVIVAL, NEXT_TO_BODY);
+        UUID playerId = playerOwner.getUUID();
+        UUID mannequinId = mannequinOwner.getUUID();
+        Runnable finish = BodyTestKit.once(() -> {
+            try {
+                cleanUp(helper, playerId, spawned);
+            } finally {
+                BodyTestKit.cleanUp(helper, mannequinId);
+            }
+        });
+        YoltConfig.BodiesSection before = BodyTestKit.usePlayerBodies();
+        boolean waiting = false;
+        try {
+            PlayerBody playerBody = BodyTestKit.leavePlayerBody(helper, playerOwner);
+            Settings.get().bodies.type = YoltConfig.BodyType.MANNEQUIN;
+            Mannequin mannequin = BodyTestKit.leaveBody(helper, mannequinOwner);
+            Settings.get().bodies = before;
+            Piglin piglin = helper.spawn(EntityTypes.PIGLIN, FOUR_AWAY);
+            spawned.add(piglin);
+            // It would turn into a zombified piglin in the overworld after 300 ticks
+            piglin.setImmuneToZombification(true);
+            AtomicBoolean mannequinTargeted = new AtomicBoolean();
+            helper.onEachTick(() -> {
+                if (piglin.getTarget() == mannequin) {
+                    mannequinTargeted.set(true);
+                }
+            });
+            helper.runBeforeTestEnd(finish);
+            helper.succeedWhen(() -> {
+                helper.assertFalse(mannequinTargeted.get(), "the piglin went for the mannequin body");
+                helper.assertTrue(piglin.getTarget() == playerBody, "the piglin has not gone for the player body");
+                finish.run();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                finish.run();
+            }
+        }
     }
 
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
