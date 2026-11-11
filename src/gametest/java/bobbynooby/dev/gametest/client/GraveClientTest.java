@@ -1,12 +1,14 @@
 package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.world.RandomSpawn;
 import bobbynooby.dev.world.WorldBorders;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -37,15 +39,18 @@ import net.minecraft.world.item.Rarity;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SkullBlock;
 import net.minecraft.world.level.block.state.properties.RotationSegment;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
@@ -55,9 +60,15 @@ public class GraveClientTest implements FabricClientGameTest {
     private static final int MENU_SLOTS = 54 + 36;
     // YOLT's own border, the one a random respawn has to land inside
     private static final double BORDER = 10_000.0;
-    // Vanilla respawns at the world spawn, and the test world's respawn radius is 0. A random spot in the border lands
-    // this close to one of the two about once in 15 000 runs.
+    // Vanilla respawns at the world spawn, and the test world's respawn radius is 0
     private static final double AWAY = 32.0;
+    // Fixed, with the seed, so the respawn lands in the same column every run, and the checks against both come out the
+    // same every time
+    private static final int SPAWN_X = 0;
+    private static final int SPAWN_Z = 0;
+    private static final int DEATH_X = 100;
+    private static final int DEATH_Z = 100;
+    private static final long RESPAWN_SEED = 3L;
     // Two, so the use leaves one in the hand
     private static final int REVIVE_HEADS = 2;
     // Past where the grave menu still reaches
@@ -106,7 +117,9 @@ public class GraveClientTest implements FabricClientGameTest {
                 ClientTests.runAll(List.of(
                         () -> server.runOnServer(s -> Settings.get().deathLockout.enabled = lockoutWas),
                         () -> server.runOnServer(s -> Settings.get().graves.compass = compassWas),
-                        () -> server.runOnServer(s -> Settings.get().worldBorder.enabled = borderWas)));
+                        () -> server.runOnServer(s -> Settings.get().worldBorder.enabled = borderWas),
+                        // Static, so later tests in this JVM would get the seeded spots
+                        () -> RandomSpawn.useRandomForTesting(null)));
             }
         });
     }
@@ -114,6 +127,20 @@ public class GraveClientTest implements FabricClientGameTest {
     private static Death dieWithDiamond(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                         TestDedicatedServerConnection connection) {
         LocalPlayer before = ctx.computeOnClient(mc -> mc.player);
+        server.runOnServer(s -> {
+            ServerLevel overworld = s.overworld();
+            // The world is new for each test, so its spawn needs no setting back
+            s.setRespawnData(LevelData.RespawnData.of(Level.OVERWORLD, ground(overworld, SPAWN_X, SPAWN_Z), 0.0F, 0.0F));
+            Vec3 deathSpot = Vec3.atBottomCenterOf(ground(overworld, DEATH_X, DEATH_Z));
+            ServerPlayer player = connection.getServerPlayer();
+            player.teleportTo(overworld, deathSpot.x, deathSpot.y, deathSpot.z, Set.of(), player.getYRot(), player.getXRot(), true);
+        });
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT,
+                mc -> mc.player.blockPosition().getX() == DEATH_X && mc.player.blockPosition().getZ() == DEATH_Z,
+                mc -> "the client is at " + mc.player.blockPosition().toShortString() + ", not where it is to die");
+        connection.waitForChunksRender();
+        // Right before the death, so the respawn is the first spot it picks
+        RandomSpawn.useRandomForTesting(new Random(RESPAWN_SEED));
         Death death = server.computeOnServer(s -> {
             ServerPlayer player = connection.getServerPlayer();
             player.getInventory().add(new ItemStack(Items.DIAMOND));
@@ -141,6 +168,15 @@ public class GraveClientTest implements FabricClientGameTest {
         return death;
     }
 
+    // Where a player can stand in that column of the overworld
+    private static BlockPos ground(ServerLevel overworld, int x, int z) {
+        BlockPos spot = RandomSpawn.spotAt(overworld, x, z);
+        if (spot == null) {
+            throw new AssertionError("nowhere to stand at " + x + ", " + z);
+        }
+        return spot;
+    }
+
     // A random respawn inside YOLT's border: away from where the client died, and from the world spawn vanilla would use
     private static void showRespawnSpot(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                         TestDedicatedServerConnection connection, Vec3 died) {
@@ -149,6 +185,7 @@ public class GraveClientTest implements FabricClientGameTest {
             throw new AssertionError("the server's border is " + serverBorder + " wide, not YOLT's " + BORDER);
         }
         BlockPos worldSpawn = server.computeOnServer(s -> s.overworld().getRespawnData().pos());
+        BlockPos picked = server.computeOnServer(s -> connection.getServerPlayer().blockPosition());
         // The respawn's spawn packet comes wrapped in a whole-world border for the north compass, so the client only has
         // the real border once that is done
         ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.level.getWorldBorder().getSize() == BORDER,
@@ -156,6 +193,11 @@ public class GraveClientTest implements FabricClientGameTest {
         connection.waitForChunksRender();
         ctx.runOnClient(mc -> {
             Vec3 at = mc.player.position();
+            BlockPos column = mc.player.blockPosition();
+            if (column.getX() != picked.getX() || column.getZ() != picked.getZ()) {
+                throw new AssertionError("the client stands at " + column.toShortString() + ", not where the server put it at "
+                        + picked.toShortString());
+            }
             if (!mc.level.getWorldBorder().isWithinBounds(mc.player.getBoundingBox())) {
                 throw new AssertionError("the client respawned at " + at + ", outside its border");
             }
@@ -166,6 +208,7 @@ public class GraveClientTest implements FabricClientGameTest {
                 throw new AssertionError("the client respawned at " + at + ", at the world spawn " + worldSpawn.toShortString()
                         + " as vanilla would");
             }
+            Yolt.LOGGER.info("The client respawned at {}, having died at {}", at, died);
         });
         screenshot(ctx, "02-respawn-spot");
     }

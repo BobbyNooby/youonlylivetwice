@@ -27,7 +27,9 @@ public final class RandomSpawn {
     private RandomSpawn() {}
 
     static final int ATTEMPTS = 50;
-    private static final Random RANDOM = new Random();
+    private static final Random DEFAULT_RANDOM = new Random();
+    // A test can swap in a seeded one from its own thread
+    private static volatile Random random = DEFAULT_RANDOM;
     // Set while spotAt runs vanilla's column check, which is the method our hook replaces, so the hook lets it through.
     // Spawn searches only run on the server thread.
     private static boolean checkingColumn;
@@ -52,7 +54,7 @@ public final class RandomSpawn {
     public static BlockPos pick(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
         for (int attempt = 1; ; attempt++) {
-            Column column = pickColumn(RANDOM, border.getCenterX(), border.getCenterZ(), border.getSize(), Settings.get().worldBorder.diameter);
+            Column column = pickColumn(random, border.getCenterX(), border.getCenterZ(), border.getSize(), Settings.get().worldBorder.diameter);
             BlockPos spot = spotAt(level, column.x(), column.z());
             if (spot != null) {
                 return spot;
@@ -66,6 +68,14 @@ public final class RandomSpawn {
                 return fallback;
             }
         }
+    }
+
+    /**
+     * For the tests only: columns come from this generator from now on, so a seeded one gives the same spot every run.
+     * Null puts the default one back.
+     */
+    public static void useRandomForTesting(@Nullable Random testRandom) {
+        random = testRandom == null ? DEFAULT_RANDOM : testRandom;
     }
 
     /**
