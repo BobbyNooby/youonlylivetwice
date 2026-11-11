@@ -62,6 +62,7 @@
 			"bobbynooby.dev.gametest.client.LockoutClientTest",
 			"bobbynooby.dev.gametest.client.ServerListClientTest",
 			"bobbynooby.dev.gametest.client.SingleplayerClientTest",
+			"bobbynooby.dev.gametest.client.SleepClientTest",
 			"bobbynooby.dev.gametest.client.VisibilityClientTest"
 		]
 	},
