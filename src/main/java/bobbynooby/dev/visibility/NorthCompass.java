@@ -38,6 +38,10 @@ public final class NorthCompass {
     // Within this many blocks south of the target, or north of it, no new target keeps the needle true for long, so a
     // player there keeps the one they have rather than get one a second while they walk
     private static final int NORTH_EDGE_ZONE = 1_000;
+    // The border every client starts a level with, whose walls are at the world's edge. Packets don't change once built,
+    // so one does for every bundle.
+    private static final ClientboundInitializeBorderPacket WHOLE_WORLD =
+            new ClientboundInitializeBorderPacket(new WorldBorder());
     // The target last sent to the player, for the drift check. Not saved: every join and respawn sends a new one.
     private static final AttachmentType<GlobalPos> SENT = AttachmentRegistry.create(Yolt.id("compass_target"));
 
@@ -123,14 +127,14 @@ public final class NorthCompass {
     }
 
     // A client keeps a spawn only inside its own border, and moves one outside it to the border's centre. So the target
-    // goes out between the border every client starts a level with, which reaches the world's edge, and the player's
-    // real one. A bundle is handled all at once, so nothing on the client sees the first border. The real one carries a
-    // moving border's sizes, time left and warning settings, so it goes on as it was.
+    // goes out between the whole-world border and the player's real one. A bundle is handled all at once, so nothing on
+    // the client sees the first border. The real one carries a moving border's sizes, time left and warning settings,
+    // so it goes on as it was.
     private static Packet<?> northFor(ServerPlayer player, ServerLevel level) {
         BlockPos target = targetFor(player, level);
         player.setAttached(SENT, GlobalPos.of(level.dimension(), target));
         return new ClientboundBundlePacket(List.<Packet<? super ClientGamePacketListener>>of(
-                new ClientboundInitializeBorderPacket(new WorldBorder()),
+                WHOLE_WORLD,
                 new ClientboundSetDefaultSpawnPositionPacket(LevelData.RespawnData.of(level.dimension(), target, 0.0F, 0.0F)),
                 new ClientboundInitializeBorderPacket(level.getWorldBorder())));
     }
