@@ -22,8 +22,7 @@ public final class UncountedDeaths {
      */
     public static final String MARK = "yolt_uncounted_death";
 
-    private UncountedDeaths() {
-    }
+    private UncountedDeaths() {}
 
     static void init() {
         // Every such death, a spectator's too, whose drops vanilla skips. A death that counts takes off a mark from
