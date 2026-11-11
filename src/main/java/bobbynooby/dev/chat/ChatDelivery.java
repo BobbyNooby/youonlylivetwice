@@ -53,7 +53,7 @@ public final class ChatDelivery {
     }
 
     public static Set<ServerPlayer> gameMessageRecipients(MinecraftServer server) {
-        boolean hidden = Settings.get().hide.gameMessages;
+        boolean hidden = Settings.on(c -> c.hide.gameMessages);
         Set<ServerPlayer> recipients = new LinkedHashSet<>();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!hidden || AdminView.isOn(player)) {
