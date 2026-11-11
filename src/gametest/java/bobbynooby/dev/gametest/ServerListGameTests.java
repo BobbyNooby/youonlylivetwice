@@ -115,13 +115,15 @@ public class ServerListGameTests {
         helper.succeed();
     }
 
-    // serverList.shownMaxPlayers is the slot count every reply shows while the count is hidden: the status, the pre-1.7
-    // ping and the query. Flipped and restored inside one tick.
+    // serverList.shownMaxPlayers is the slot count every reply shows while the count is hidden: the status, both pre-1.7
+    // pings and the query. Flipped and restored inside one tick.
     @GameTest
     public void shownMaxPlayersSetsTheSlotCount(GameTestHelper helper) throws ReflectiveOperationException {
         MinecraftServer server = helper.getLevel().getServer();
         Method version1 = LegacyQueryHandler.class.getDeclaredMethod("createVersion1Response", ServerInfo.class);
         version1.setAccessible(true);
+        Method version0 = LegacyQueryHandler.class.getDeclaredMethod("createVersion0Response", ServerInfo.class);
+        version0.setAccessible(true);
         ServerStatus.Players players = new ServerStatus.Players(20, 5, List.of());
         boolean before = Settings.get().hide.serverPlayerCount;
         int maxBefore = Settings.get().serverList.shownMaxPlayers;
@@ -132,6 +134,8 @@ public class ServerListGameTests {
             helper.assertValueEqual(players.online(), 0, "status online players");
             String legacy = (String) version1.invoke(null, server);
             helper.assertTrue(legacy.endsWith("\u00000\u000050"), "legacy ping counts: " + legacy);
+            String beta = (String) version0.invoke(null, server);
+            helper.assertTrue(beta.endsWith("\u00a70\u00a750"), "beta ping counts: " + beta);
             String query = queryRules(server, "nobody");
             helper.assertTrue(query.contains("numplayers\u00000\u0000maxplayers\u000050\u0000"), "query counts: " + query);
 
