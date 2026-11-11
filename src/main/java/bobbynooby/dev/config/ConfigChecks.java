@@ -17,8 +17,9 @@ final class ConfigChecks {
     // seconds after the client's last packet, and online-mode checks and other mods' login steps come before the wait,
     // so this leaves two thirds of both for them.
     static final int MAX_SKIN_LOOKUP_SECONDS = 10;
-    // A grave's first search already looks 3 blocks round the death, so a smaller radius adds nothing. Past 32 one death
-    // could check tens of thousands of spots on the server thread.
+    // A grave's first search already covers 3 blocks round the death, so the wide search starts 4 out, and a
+    // searchRadius of 3 means no wide search. At 32 it checks up to 37,584 spots on the server thread (9 layers of the
+    // rings 4 to 32 out), four times the 9,360 at the default 16.
     static final int MIN_GRAVE_SEARCH_RADIUS = 3;
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
 
