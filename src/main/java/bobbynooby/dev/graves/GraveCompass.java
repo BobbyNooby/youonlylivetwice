@@ -16,6 +16,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.LodestoneTracker;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,11 +24,12 @@ import java.util.UUID;
 
 /**
  * A compass to the grave of the owner's latest death, given once they are back in and alive. It shows no coordinates,
- * and spins once the grave is gone.
+ * and spins once the grave is gone. Bound to a lodestone by the player, it is an ordinary lodestone compass.
  */
 public final class GraveCompass {
     private static final String ROOT = "yolt";
     private static final String GRAVE_COMPASS = "grave_compass";
+    private static final String NAME_END = "'s grave";
 
     private GraveCompass() {
     }
@@ -72,8 +74,7 @@ public final class GraveCompass {
         ItemStack compass = new ItemStack(Items.COMPASS);
         compass.set(DataComponents.LODESTONE_TRACKER, trackerFor(grave));
         // A compass with a tracker calls itself a lodestone compass whatever its item name, so only a custom name shows
-        compass.set(DataComponents.CUSTOM_NAME, Component.literal(grave.ownerName() + "'s grave")
-                .withStyle(style -> style.withItalic(false)));
+        compass.set(DataComponents.CUSTOM_NAME, nameFor(grave.ownerName()));
         CompoundTag marker = new CompoundTag();
         marker.store(GRAVE_COMPASS, UUIDUtil.STRING_CODEC, grave.id());
         CompoundTag root = new CompoundTag();
@@ -83,9 +84,10 @@ public final class GraveCompass {
     }
 
     /**
-     * Runs as a compass ticks in a player's inventory. A grave compass follows its grave if the grave has moved, and once
-     * the grave is gone it loses its target, so it spins, and stops being a grave compass. With the switch off too,
-     * since the switch only stops new compasses.
+     * Runs as a compass ticks in an inventory or a hand. A grave compass follows its grave if the grave has moved, and
+     * once the grave is gone it loses its target, so it spins, and stops being a grave compass. One the player has
+     * bound to a lodestone stops being one too, and keeps that lodestone. With the switch off too, since the switch
+     * only stops new compasses.
      */
     public static void tick(ItemStack stack, ServerLevel level) {
         // Every compass in every inventory comes here each tick, so one without custom data costs a lookup and no more
@@ -98,21 +100,50 @@ public final class GraveCompass {
         if (graveId.isEmpty()) {
             return;
         }
+        LodestoneTracker tracker = stack.get(DataComponents.LODESTONE_TRACKER);
+        // Only the player's use on a lodestone makes a tracked target; the grave's never is. The copy that use makes in
+        // creative, or from a stack of two, carries the marker too, and ends up the same.
+        if (tracker != null && tracker.tracked()) {
+            removeMarker(stack);
+            // A name the player gave it in an anvil stays
+            if (isGraveName(stack.get(DataComponents.CUSTOM_NAME))) {
+                stack.remove(DataComponents.CUSTOM_NAME);
+            }
+            return;
+        }
         Optional<Grave> grave = GraveStore.get(level.getServer()).byId(graveId.get());
         if (grave.isEmpty()) {
             stack.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.empty(), false));
-            CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.getCompound(ROOT).ifPresent(marker -> {
-                marker.remove(GRAVE_COMPASS);
-                if (marker.isEmpty()) {
-                    tag.remove(ROOT);
-                }
-            }));
+            removeMarker(stack);
             return;
         }
-        LodestoneTracker tracker = trackerFor(grave.get());
-        if (!tracker.equals(stack.get(DataComponents.LODESTONE_TRACKER))) {
-            stack.set(DataComponents.LODESTONE_TRACKER, tracker);
+        LodestoneTracker target = trackerFor(grave.get());
+        if (!target.equals(tracker)) {
+            stack.set(DataComponents.LODESTONE_TRACKER, target);
         }
+    }
+
+    // From then on it is an ordinary compass, which tick leaves alone
+    private static void removeMarker(ItemStack stack) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> tag.getCompound(ROOT).ifPresent(marker -> {
+            marker.remove(GRAVE_COMPASS);
+            if (marker.isEmpty()) {
+                tag.remove(ROOT);
+            }
+        }));
+    }
+
+    private static Component nameFor(String ownerName) {
+        return Component.literal(ownerName + NAME_END).withStyle(style -> style.withItalic(false));
+    }
+
+    // The name compassFor gives, whoever the owner. An anvil's name has no style, so a name typed there never matches.
+    private static boolean isGraveName(@Nullable Component name) {
+        if (name == null) {
+            return false;
+        }
+        String text = name.getString();
+        return text.endsWith(NAME_END) && name.equals(nameFor(text.substring(0, text.length() - NAME_END.length())));
     }
 
     // Not tracked: vanilla clears a tracked target that has no lodestone, and a grave has none

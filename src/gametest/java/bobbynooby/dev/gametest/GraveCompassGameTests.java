@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
+import bobbynooby.dev.graves.GraveCompass;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
@@ -12,6 +13,7 @@ import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,7 +24,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
@@ -35,6 +39,8 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -56,6 +62,7 @@ public class GraveCompassGameTests {
     private static final String TWO_GRAVES = "you-only-live-twice-gametest:grave_compass_two_graves";
     private static final String SWITCHED_OFF = "you-only-live-twice-gametest:grave_compass_switched_off";
     private static final String MOVED = "you-only-live-twice-gametest:grave_compass_moved";
+    private static final String LODESTONE = "you-only-live-twice-gametest:grave_compass_lodestone";
 
     // One compass at the respawn, and the rejoin after it owes none
     @GameTest(environment = ONCE)
@@ -372,6 +379,77 @@ public class GraveCompassGameTests {
         helper.succeed();
     }
 
+    // Bound to a lodestone by the player, a grave compass becomes that lodestone's compass, and loses the grave's name
+    // but not one given in an anvil, even with the same text. A stack of one is bound itself; from a stack of two,
+    // vanilla binds a copy, which carries the marker too and must not stay a grave compass. The lodestone's point of
+    // interest is added only after the tick that placed it, and vanilla's own tick clears a bound target without one,
+    // so the binding waits.
+    @GameTest(environment = LODESTONE, maxTicks = 20)
+    public void compassUsedOnLodestoneKeepsLodestone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Runnable restore = keepSwitches(helper);
+        ServerPlayer player = join(helper, "CompassStone");
+        UUID owner = player.getUUID();
+        BlockPos lodestone = helper.absolutePos(new BlockPos(4, 0, 4));
+        LodestoneTracker toLodestone = new LodestoneTracker(Optional.of(GlobalPos.of(level.dimension(), lodestone)), true);
+        Runnable cleanUp = () -> {
+            restore.run();
+            level.setBlock(lodestone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            cleanUp(helper, owner);
+        };
+        boolean waiting = false;
+        try {
+            config().graves.compass = true;
+            config().deathLockout.enabled = false;
+            level.setBlock(lodestone, Blocks.LODESTONE.defaultBlockState(), Block.UPDATE_ALL);
+            ServerPlayer back = dieAndRespawn(helper, player);
+            Grave grave = onlyGrave(helper, owner);
+            String graveName = grave.ownerName() + "'s grave";
+            helper.runAfterDelay(2, () -> {
+                try {
+                    ItemStack single = onlyCompass(helper, back);
+                    holdOnly(back, single);
+                    useOn(back, lodestone);
+                    single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+                    assertBoundToLodestone(helper, single, toLodestone, "the bound compass");
+                    helper.assertTrue(single.get(DataComponents.CUSTOM_NAME) == null, "the bound compass kept the grave's name");
+                    single.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+                    helper.assertValueEqual(trackerOf(single), toLodestone, "the bound compass's tracker a tick later");
+
+                    ItemStack named = GraveCompass.compassFor(current(helper, grave));
+                    // As an anvil names it: the text alone, with no style
+                    named.set(DataComponents.CUSTOM_NAME, Component.literal(graveName));
+                    holdOnly(back, named);
+                    useOn(back, lodestone);
+                    named.inventoryTick(level, back, EquipmentSlot.MAINHAND);
+                    assertBoundToLodestone(helper, named, toLodestone, "the compass named in an anvil");
+                    helper.assertValueEqual(named.get(DataComponents.CUSTOM_NAME), Component.literal(graveName), "the anvil's name");
+
+                    holdOnly(back, GraveCompass.compassFor(current(helper, grave)).copyWithCount(2));
+                    useOn(back, lodestone);
+                    compasses(back).forEach(stack -> stack.inventoryTick(level, back, null));
+                    List<ItemStack> held = compasses(back);
+                    helper.assertValueEqual(held.size(), 2, "compass stacks after binding one of two");
+                    List<ItemStack> graveCompasses = held.stream().filter(GraveCompassGameTests::isGraveCompass).toList();
+                    helper.assertValueEqual(graveCompasses.size(), 1, "grave compass stacks after binding one of two");
+                    helper.assertValueEqual(graveCompasses.get(0).getCount(), 1, "grave compasses after binding one of two");
+                    helper.assertValueEqual(trackerOf(graveCompasses.get(0)), pointingAt(grave), "the unbound compass's tracker");
+                    ItemStack copy = held.stream().filter(stack -> !isGraveCompass(stack)).findFirst().orElseThrow();
+                    assertBoundToLodestone(helper, copy, toLodestone, "the bound copy");
+                    helper.assertTrue(copy.get(DataComponents.CUSTOM_NAME) == null, "the bound copy kept the grave's name");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     private static YoltConfig config() {
         return Settings.get();
     }
@@ -405,6 +483,29 @@ public class GraveCompassGameTests {
         TestPlayers.markLoaded(player);
         player.kill(player.level());
         helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+    }
+
+    // Empties the inventory, so the stack is the only thing the player has, and puts it in their main hand
+    private static void holdOnly(ServerPlayer player, ItemStack stack) {
+        player.getInventory().clearContent();
+        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+    }
+
+    // A right-click on the block's top with what is in the main hand
+    private static void useOn(ServerPlayer player, BlockPos pos) {
+        player.gameMode.useItemOn(player, player.level(), player.getMainHandItem(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
+    }
+
+    // Pointing at the lodestone, and no grave compass any more
+    private static void assertBoundToLodestone(GameTestHelper helper, ItemStack compass, LodestoneTracker lodestone, String which) {
+        helper.assertValueEqual(trackerOf(compass), lodestone, which + "'s tracker");
+        helper.assertTrue(compass.get(DataComponents.CUSTOM_DATA) == null, which + " kept the grave marker");
+    }
+
+    private static boolean isGraveCompass(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        return data != null && data.copyTag().getCompound("yolt").flatMap(tag -> tag.getString("grave_compass")).isPresent();
     }
 
     // Back through the death screen's respawn
