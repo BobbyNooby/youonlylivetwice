@@ -30,6 +30,7 @@ import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -161,6 +162,87 @@ public class BodyMobGameTests {
                         // Proves the scene: spiders hunt below this
                         (spider, body) -> helper.assertTrue(spider.getLightLevelDependentMagicValue() >= 0.5F, "no daylight at the spider"),
                         NOTHING_TO_RESTORE));
+    }
+
+    // The drowned's own player rule (26.3 Drowned.okTarget): while it is bright outside it only goes after someone in
+    // water, so a body on land is left alone. In the daylight batch, waiting for the last storm to fade, as the spider
+    // test does, since a storm darkens the sky.
+    @GameTest(maxTicks = 320, environment = DAYLIGHT)
+    public void drownedIgnoresBodyOnLand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(level.getRainLevel(1.0F) == 0 && level.getThunderLevel(1.0F) == 0,
+                        "the last storm's rain and thunder haven't faded"))
+                .thenExecute(() -> ignoresBody(helper, "Dry", EntityTypes.DROWNED, NEXT_TO_BODY,
+                        // Proves the scene: the rule lets a drowned hunt at night, or a body in water
+                        (drowned, body) -> {
+                            helper.assertTrue(level.isBrightOutside(), "it is not bright outside");
+                            helper.assertFalse(body.isInWater(), "the body is in water");
+                        },
+                        NOTHING_TO_RESTORE));
+    }
+
+    // The slime's own player rule (26.3 Slime.addTargetingGoals): nothing more than 4 blocks above or below it. A big
+    // slime's search reaches higher than that, so a body 6 blocks over its feet is in the search but left alone, and
+    // found once the slime is 3 blocks below it.
+    @GameTest
+    public void slimeKeepsItsPlayerRule(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = TestPlayers.join(helper, "Bounced", GameType.SURVIVAL, BODY_POS.above(6));
+        try {
+            leaveBodyWithDefaults(helper, owner);
+            Slime slime = helper.spawnWithNoFreeWill(EntityTypes.SLIME, BODY_POS);
+            spawned.add(slime);
+            slime.setSize(8, true);
+            BodyTargetGoal goal = bodyGoal(slime);
+            helper.assertFalse(canUseWithin(goal), "a slime 6 blocks below the body went for it");
+            slime.setPos(slime.getX(), slime.getY() + 3, slime.getZ());
+            helper.assertTrue(canUseWithin(goal), "a slime 3 blocks below the body never went for it");
+        } finally {
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    // The guardian's own rule (26.3 Guardian.GuardianAttackSelector): nothing within 3 blocks, where its beam would
+    // stop. One 2 blocks from the body leaves it alone, and one 4 blocks away finds it.
+    @GameTest
+    public void guardianIgnoresBodyWithinThreeBlocks(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = join(helper, "Beamed");
+        try {
+            leaveBodyWithDefaults(helper, owner);
+            Mob near = helper.spawnWithNoFreeWill(EntityTypes.GUARDIAN, NEXT_TO_BODY);
+            spawned.add(near);
+            Mob far = helper.spawnWithNoFreeWill(EntityTypes.GUARDIAN, FOUR_AWAY);
+            spawned.add(far);
+            helper.assertFalse(canUseWithin(bodyGoal(near)), "a guardian 2 blocks from the body went for it");
+            helper.assertTrue(canUseWithin(bodyGoal(far)), "a guardian 4 blocks from the body never went for it");
+        } finally {
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    // A phantom circles high above whoever it is after, so its search reaches 64 blocks up and down, as its own player
+    // search does (26.3 Phantom.PhantomAttackPlayerTargetGoal). A body 40 blocks below is found, where a mob's usual
+    // search reaches only 4 blocks up and down. Open to the sky, so nothing is between them.
+    @GameTest(skyAccess = true)
+    public void phantomFindsBodyFarBelow(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = join(helper, "Deep");
+        try {
+            Mannequin body = leaveBodyWithDefaults(helper, owner);
+            Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, BODY_POS.above(40));
+            spawned.add(phantom);
+            BodyTargetGoal goal = bodyGoal(phantom);
+            helper.assertTrue(canUseWithin(goal), "a phantom 40 blocks above the body never went for it");
+            goal.start();
+            helper.assertTrue(phantom.getTarget() == body, "the phantom went for " + phantom.getTarget() + ", not the body");
+        } finally {
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
     }
 
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
