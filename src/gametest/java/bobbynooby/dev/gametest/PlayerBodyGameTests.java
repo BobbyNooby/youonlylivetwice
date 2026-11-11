@@ -28,9 +28,12 @@ import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerLevel;
@@ -260,7 +263,9 @@ public class PlayerBodyGameTests {
     }
 
     // The record is by uuid. After a restart the body comes back from it under the old name, and its owner, renamed
-    // since, still takes it over. The restart is done by hand, as above.
+    // since, still takes it over. The restart is done by hand, as above, and the record goes through the body file's
+    // codec on the way, as a restart reads it from disk. The store itself is shared by every test running, so it is
+    // never swapped for one read from the real file.
     @GameTest(environment = BODY_RESTART)
     public void renamedOwnerTakesOverBodyAfterRestart(GameTestHelper helper) {
         ServerPlayer player = join(helper, "OldName", ON_FLOOR);
@@ -274,6 +279,12 @@ public class PlayerBodyGameTests {
             body.setHealth(12.0F);
             BodyRestart.snapshotBodies(server);
             body.discard();
+            BodyStore store = store(helper);
+            RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+            Tag file = BodyStore.TYPE.codec().encodeStart(ops, store).getOrThrow();
+            Optional<BodyRecord> fromFile = BodyStore.TYPE.codec().parse(ops, file).getOrThrow().byOwner(owner);
+            helper.assertTrue(fromFile.isPresent(), "the body file lost the owner's record");
+            store.put(fromFile.get());
             BodyRestart.restorePlayerBodies(server);
             Entity found = helper.getLevel().getEntity(body.getUUID());
             helper.assertTrue(found instanceof PlayerBody && found != body, "no player body brought back");
