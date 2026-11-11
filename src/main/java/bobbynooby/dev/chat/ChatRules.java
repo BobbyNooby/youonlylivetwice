@@ -23,7 +23,9 @@ public final class ChatRules {
                 case SELF_ONLY -> l.adminView();
                 case PROXIMITY -> l.adminView() || inRange(sender, l, radius);
             };
-            if (hears) heard.add(l.id());
+            if (hears) {
+                heard.add(l.id());
+            }
         }
         return heard;
     }
@@ -39,7 +41,9 @@ public final class ChatRules {
     }
 
     private static boolean inRange(Listener a, Listener b, int radius) {
-        if (!a.dimension().equals(b.dimension())) return false;
+        if (!a.dimension().equals(b.dimension())) {
+            return false;
+        }
         double dx = a.x() - b.x(), dy = a.y() - b.y(), dz = a.z() - b.z();
         // compare squared so the boundary stays exact
         return dx * dx + dy * dy + dz * dz <= (double) radius * radius;
