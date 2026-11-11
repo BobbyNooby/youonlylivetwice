@@ -14,9 +14,13 @@ public final class Settings {
     // volatile because the status ping reads these from network threads
     private static volatile YoltConfig config = new YoltConfig();
     private static volatile boolean active;
-    // Set when the startup's border values fell back to defaults, which could strand players: the world then keeps the
-    // border it saved until a reload or a border command applies one checked for who it leaves outside
+    // Set when the startup's border values fell back to defaults, which could strand players, or when a server's startup
+    // check finds the config's border would: the world then keeps the border it saved until a reload or a border command
+    // applies one checked for who it leaves outside
     private static volatile boolean borderHeld;
+    // The hold for fallback values outlives a server, since the next one in the same process runs on the same config. A
+    // hold from one server's own check doesn't.
+    private static volatile boolean borderFellBack;
     private static volatile @Nullable String startupBackup;
 
     private Settings() {}
@@ -35,7 +39,8 @@ public final class Settings {
         for (String warning : result.warnings()) {
             Yolt.LOGGER.warn("Config: {}", warning);
         }
-        borderHeld = result.borderProblem() != null;
+        borderFellBack = result.borderProblem() != null;
+        borderHeld = borderFellBack;
         startupBackup = result.backup();
         if (borderHeld) {
             Yolt.LOGGER.warn("Config: {}, so YOLT left the world border as the world saved it. Fix the config, then run /yolt reload.",
@@ -90,6 +95,7 @@ public final class Settings {
 
     public static void releaseBorder() {
         borderHeld = false;
+        borderFellBack = false;
     }
 
     /** Holds the border as the world saved it, as a startup with bad border values does. */
@@ -113,6 +119,7 @@ public final class Settings {
 
     public static void onServerStopped(MinecraftServer server) {
         active = false;
+        borderHeld = borderFellBack;
     }
 
     public static Path path() {

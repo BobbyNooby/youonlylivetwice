@@ -962,6 +962,42 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // A server stopping ends the hold its own startup check set, so the next server in the same process checks its own
+    // border. A hold for bad border values in the loaded config stays, since the next server runs on that same config.
+    @GameTest(environment = STARTUP_BORDER)
+    public void serverStopEndsOnlyItsOwnBorderHold(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        SavedBackups backups = saveBackups(path);
+        try {
+            helper.assertFalse(Settings.borderHeld(), "border held before the test");
+            Settings.holdBorder();
+            stopAndStart(server);
+            helper.assertFalse(Settings.borderHeld(), "the startup check's hold carried into the next server");
+
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}");
+            Settings.load();
+            helper.assertTrue(Settings.borderHeld(), "a bad border value wasn't held");
+            stopAndStart(server);
+            helper.assertTrue(Settings.borderHeld(), "the hold for a bad border value ended with the server");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.onServerStarting(server);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            LiveSettings.applyAll(server);
+            restoreBackups(backups);
+        }
+        helper.succeed();
+    }
+
+    // What a process running a second server does to the settings between the two. YOLT is inactive in between.
+    private static void stopAndStart(MinecraftServer server) {
+        Settings.onServerStopped(server);
+        Settings.onServerStarting(server);
+    }
+
     // The mod's startup with the test server's overrides, but YOLT's border on as the file has it
     private static void startUp(MinecraftServer server) {
         Settings.load();
