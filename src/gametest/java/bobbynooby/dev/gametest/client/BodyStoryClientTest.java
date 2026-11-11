@@ -269,7 +269,8 @@ public class BodyStoryClientTest implements FabricClientGameTest {
         if (!ctx.computeOnClient(mc -> mc.level.getBlockState(at).is(Blocks.PLAYER_HEAD))) {
             throw new AssertionError("the client has no player head where the body died");
         }
-        // The smoke it leaves in would cover the head
+        // The smoke it leaves in would cover the head. A fixed wait, since the particle engine only gives its count as F3
+        // text, and it only clears the picture: the checks are done.
         ctx.waitTicks(DEATH_SMOKE_TICKS);
         ClientTests.screenshotWithoutHud(ctx, "05-body-killed-grave");
         // So the next body has the spot to itself
