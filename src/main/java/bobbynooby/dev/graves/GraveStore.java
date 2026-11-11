@@ -20,6 +20,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -77,11 +78,18 @@ public final class GraveStore extends SavedData {
 
     public static GraveStore get(MinecraftServer server) {
         GraveStore store = server.getDataStorage().computeIfAbsent(TYPE);
+        // Most calls find it checked already, and skip working out where the file is
+        return store.fileChecked ? store : get(server.getDataStorage(), server.getWorldPath(LevelResource.DATA));
+    }
+
+    /** The store in this data storage, which reads its files from dataFolder. Tests pass a storage of their own. */
+    public static GraveStore get(SavedDataStorage storage, Path dataFolder) {
+        GraveStore store = storage.computeIfAbsent(TYPE);
         // Checked on first use, before anything can save: a dedicated server saves once before its start event,
         // and chunk loads can fetch the graves before that
         if (!store.fileChecked) {
             store.fileChecked = true;
-            store.checkFile(file(server));
+            store.checkFile(file(dataFolder));
         }
         return store;
     }
@@ -102,7 +110,11 @@ public final class GraveStore extends SavedData {
 
     /** Where the storage keeps the graves. */
     private static Path file(MinecraftServer server) {
-        return TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        return file(server.getWorldPath(LevelResource.DATA));
+    }
+
+    private static Path file(Path dataFolder) {
+        return TYPE.id().withSuffix(".dat").resolveAgainst(dataFolder);
     }
 
     /**

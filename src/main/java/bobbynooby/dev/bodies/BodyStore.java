@@ -12,6 +12,7 @@ import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.nio.file.Path;
 import java.util.Collection;
@@ -69,10 +70,17 @@ public final class BodyStore extends SavedData {
 
     public static BodyStore get(MinecraftServer server) {
         BodyStore store = server.getDataStorage().computeIfAbsent(TYPE);
+        // Most calls find it checked already, and skip working out where the file is
+        return store.fileChecked ? store : get(server.getDataStorage(), server.getWorldPath(LevelResource.DATA));
+    }
+
+    /** The store in this data storage, which reads its files from dataFolder. Tests pass a storage of their own. */
+    public static BodyStore get(SavedDataStorage storage, Path dataFolder) {
+        BodyStore store = storage.computeIfAbsent(TYPE);
         // Checked on first use, before anything can save, so a file that couldn't be read is kept
         if (!store.fileChecked) {
             store.fileChecked = true;
-            store.checkFile(file(server));
+            store.checkFile(TYPE.id().withSuffix(".dat").resolveAgainst(dataFolder));
         }
         return store;
     }
@@ -89,11 +97,6 @@ public final class BodyStore extends SavedData {
             // A newer file's copy already holds whatever this version skipped
             UnreadableFiles.keepPartlyReadCopy(file, "body");
         }
-    }
-
-    /** Where the storage keeps the bodies. */
-    private static Path file(MinecraftServer server) {
-        return TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
     }
 
     /** True when the file came from a newer YOLT or Minecraft than this one. */
