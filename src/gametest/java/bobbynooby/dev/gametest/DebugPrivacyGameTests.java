@@ -3,17 +3,27 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.AdminView;
-import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.world.LiveSettings;
+import com.mojang.authlib.GameProfile;
+import io.netty.channel.embedded.EmbeddedChannel;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.Connection;
+import net.minecraft.network.DisconnectionDetails;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.common.ClientboundPingPacket;
+import net.minecraft.network.protocol.common.ServerboundPongPacket;
+import net.minecraft.network.protocol.common.custom.BrandPayload;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityEvent;
@@ -25,7 +35,9 @@ import net.minecraft.world.level.storage.LevelData;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 // The game rule test sends every online player the flag, so these all run in a batch of their own
 public class DebugPrivacyGameTests {
@@ -199,19 +211,20 @@ public class DebugPrivacyGameTests {
         helper.succeed();
     }
 
+    // The brand goes out while a client configures, which no test player does, so this runs the start of a login on a
+    // connection of its own and reads what the server sent
     @GameTest(environment = DEBUG_PRIVACY)
     public void brandFakedOnlyWithSwitch(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.HideSection hide = Settings.get().hide;
         boolean before = hide.serverBrand;
+        String real = server.getServerModName();
         try {
+            helper.assertFalse(real.equals("vanilla"), "the test server's own brand is vanilla, so a faked one can't be told apart");
             hide.serverBrand = true;
-            helper.assertValueEqual(DebugPrivacy.brand("fabric"), "vanilla", "brand with hide.serverBrand on");
+            helper.assertValueEqual(sentBrand(server), Optional.of("vanilla"), "brand sent with hide.serverBrand on");
             hide.serverBrand = false;
-            helper.assertValueEqual(DebugPrivacy.brand("fabric"), "fabric", "brand with hide.serverBrand off");
-            // No test player logs in through configuration, so nothing else loads the class the brand hook is on here.
-            // Loading it applies the hook, which fails if the brand call it changes is gone.
-            helper.assertTrue(ServerConfigurationPacketListenerImpl.class.getDeclaredMethods().length > 0,
-                    "the configuration listener has no methods");
+            helper.assertValueEqual(sentBrand(server), Optional.of(real), "brand sent with hide.serverBrand off");
         } finally {
             hide.serverBrand = before;
         }
@@ -234,6 +247,35 @@ public class DebugPrivacyGameTests {
             }
         }
         return last;
+    }
+
+    // The brand a new client is sent as it configures, as a vanilla client sees it: Fabric holds the configuration back
+    // until its ping is answered, and a vanilla client answers without registering any channels
+    private static Optional<String> sentBrand(MinecraftServer server) {
+        Connection connection = new Connection(PacketFlow.SERVERBOUND);
+        EmbeddedChannel channel = new EmbeddedChannel(connection);
+        GameProfile profile = new GameProfile(UUID.randomUUID(), "dpbrand");
+        ServerConfigurationPacketListenerImpl listener = new ServerConfigurationPacketListenerImpl(server, connection,
+                CommonListenerCookie.createInitial(profile, false));
+        try {
+            listener.startConfiguration();
+            int ping = 0;
+            for (Object message : channel.outboundMessages()) {
+                if (message instanceof ClientboundPingPacket sent) {
+                    ping = sent.getId();
+                }
+            }
+            listener.handlePong(new ServerboundPongPacket(ping));
+            for (Object message : channel.outboundMessages()) {
+                if (message instanceof ClientboundCustomPayloadPacket packet && packet.payload() instanceof BrandPayload brand) {
+                    return Optional.of(brand.brand());
+                }
+            }
+            return Optional.empty();
+        } finally {
+            // Drops the spawn task the configuration queued, as a client leaving does
+            listener.onDisconnect(new DisconnectionDetails(Component.literal("test over")));
+        }
     }
 
     // The respawn packet makes the client's new player, so a flag must come after the last one; -1 when none was sent
