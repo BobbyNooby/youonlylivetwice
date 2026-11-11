@@ -18,7 +18,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.regex.Pattern;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
@@ -28,8 +27,6 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
  * A non-op is also held to skins.refuseKnownPlayers and skins.lockAfterFirstChoice; ops and the console never are.
  */
 public final class SkinCommands {
-    // What a Mojang account name can be made of. Anything else can't be one, so Mojang isn't asked about it.
-    private static final Pattern MOJANG_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
     private static final String LOCKED = "Your skin is locked. Ask an op to change it.";
 
     private SkinCommands() {}
@@ -97,7 +94,7 @@ public final class SkinCommands {
         if (locked(source, who, own)) {
             return YoltCommands.fail(source, LOCKED);
         }
-        if (!MOJANG_NAME.matcher(mojangName).matches()) {
+        if (!Skins.couldBeAccount(mojangName)) {
             return YoltCommands.fail(source, noAccount(mojangName));
         }
         MinecraftServer server = source.getServer();

@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 
 /**
  * Skins on offline-mode servers. An offline login profile has no skin, so YOLT asks Mojang for the skin of the account
@@ -25,6 +26,8 @@ import java.util.function.BooleanSupplier;
  */
 public final class Skins {
     static final String TEXTURES = "textures";
+    // What a Mojang account name can be made of
+    private static final Pattern MOJANG_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
 
     private static volatile @Nullable SkinLookup lookup;
     private static volatile boolean lookupFromTests;
@@ -62,6 +65,11 @@ public final class Skins {
     /** True while YOLT gives skins: the mode is auto and no other skin mod is there to do it. Off, nothing goes to Mojang. */
     public static boolean on() {
         return Settings.on(c -> c.skins.mode == YoltConfig.SkinMode.AUTO) && !skinModLoaded.getAsBoolean();
+    }
+
+    /** False for a name no Mojang account can have, so Mojang isn't asked about it. */
+    public static boolean couldBeAccount(String name) {
+        return MOJANG_NAME.matcher(name).matches();
     }
 
     /** Why YOLT gives no skins right now, for a command's reply, or empty while it does. */
