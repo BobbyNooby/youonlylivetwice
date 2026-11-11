@@ -258,7 +258,8 @@ public class SleepGameTests {
         helper.succeed();
     }
 
-    // The anchor only reads the level it stands in, so the player can stay in the test's level
+    // The anchor only reads the level it stands in, so the player can stay in the test's level. Vanilla spends a charge
+    // only at a respawn, never when it sets a point, so the charge checks just record that and can't fail.
     @GameTest
     public void anchorSetsNoRespawnPointOrCharge(GameTestHelper helper) {
         ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
