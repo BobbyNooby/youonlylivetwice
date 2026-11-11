@@ -19,6 +19,7 @@
     "CreakingTrailMixin",
     "DebugPrivacyBrandMixin",
     "DebugPrivacyGameRuleMixin",
+    "GraveCompassSpinMixin",
     "GraveDeathDropsMixin",
     "GraveDropMixin",
     "GraveHeadPlacementMixin",

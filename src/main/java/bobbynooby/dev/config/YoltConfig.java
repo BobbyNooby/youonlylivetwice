@@ -47,6 +47,9 @@ public class YoltConfig {
         public TellLocation tellLocation = TellLocation.WHEN_MOVED;
         // How far from the death spot, in blocks, a grave must be for whenMoved to tell the dead player
         public int tellLocationDistance = 16;
+        // A compass to the death's grave, given when the owner is next back in and alive. A death while it was on is
+        // still owed one after it is turned off.
+        @Applies(Applies.When.NEW_DEATHS) public boolean compass = false;
     }
 
     public static class ReviveSection {

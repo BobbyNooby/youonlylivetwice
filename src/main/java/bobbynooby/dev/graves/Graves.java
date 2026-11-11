@@ -25,8 +25,10 @@ import net.minecraft.world.level.block.state.properties.RotationSegment;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Makes and removes graves. Its init wires the use-block, block-break and chunk hooks; the rest are mixins. */
@@ -94,6 +96,7 @@ public final class Graves {
         long now = System.currentTimeMillis();
         // Only a death over the void uses it, and only the first grave can be over the void
         BlockPos lastGround = LastGround.in(owner, level.dimension()).orElse(null);
+        boolean compass = Settings.on(c -> c.graves.compass);
 
         List<Grave> created = new ArrayList<>();
         List<Runnable> undo = new ArrayList<>();
@@ -102,10 +105,15 @@ public final class Graves {
         try {
             BlockPos from = near;
             int start = 0;
+            boolean compassOwed = false;
             do {
                 List<ItemStack> part = stacks.subList(start, Math.min(start + SLOTS_PER_GRAVE, stacks.size()));
                 BlockPos pos = GravePlacement.find(level, from, lastGround, store);
-                Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now, died);
+                // The compass leads to the grave with the head, the owner's revive token
+                boolean owesCompass = compass && !compassOwed && part.stream().anyMatch(GraveItems::isGraveHead);
+                compassOwed |= owesCompass;
+                Grave grave = new Grave(UUID.randomUUID(), owner, ownerName, profile, level.dimension(), pos, part, now, died,
+                        owesCompass);
                 BlockState previous = level.getBlockState(pos);
                 undo.add(() -> {
                     // The record goes first, so a block that can't be put back still leaves no grave holding items
@@ -121,11 +129,29 @@ public final class Graves {
                 from = pos;
                 start += SLOTS_PER_GRAVE;
             } while (start < stacks.size());
+            if (compassOwed) {
+                undo.add(settleOlderCompasses(store, owner, created));
+            }
         } catch (RuntimeException e) {
             undoAll.run();
             throw e;
         }
         return new Created(List.copyOf(created), undoAll);
+    }
+
+    // Only the newest death's compass is owed, so the owner's older graves stop owing one. Returns how to owe them again.
+    private static Runnable settleOlderCompasses(GraveStore store, UUID owner, List<Grave> created) {
+        Set<UUID> made = new HashSet<>();
+        created.forEach(grave -> made.add(grave.id()));
+        List<UUID> settled = new ArrayList<>();
+        for (Grave grave : store.all()) {
+            if (grave.owner().equals(owner) && grave.compassPending() && !made.contains(grave.id())) {
+                store.put(grave.withCompassPending(false));
+                settled.add(grave.id());
+            }
+        }
+        // From the store as it is then, so nothing else that changed on those graves is undone
+        return () -> settled.forEach(id -> store.byId(id).ifPresent(grave -> store.put(grave.withCompassPending(true))));
     }
 
     /** What an admin removal did: dropped the grave's stacks, or left the grave as it was and why. */

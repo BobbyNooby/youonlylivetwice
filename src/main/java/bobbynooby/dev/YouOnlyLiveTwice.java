@@ -6,6 +6,7 @@ import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.GraveCompass;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
@@ -50,8 +51,10 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads
         Skins.init();
-        // Bodies: last, so the handover follows the lockout check, and the bodies come back once the team is there
+        // Bodies: late, so the handover follows the lockout check, and the bodies come back once the team is there
         Bodies.init();
+        // Grave compass: after Bodies, so a body taken over at the join has set the player's gear before the compass goes in
+        GraveCompass.init();
 
         Yolt.LOGGER.info("You Only Live Twice started");
     }

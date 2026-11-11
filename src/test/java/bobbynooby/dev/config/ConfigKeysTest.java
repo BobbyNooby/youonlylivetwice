@@ -165,6 +165,7 @@ class ConfigKeysTest {
                 Map.entry("deathLockout.countCreativeAndSpectatorDeaths", Applies.When.NEW_DEATHS),
                 Map.entry("graves.enabled", Applies.When.NEW_DEATHS),
                 Map.entry("graves.enderChestOnDeath", Applies.When.NEW_DEATHS),
+                Map.entry("graves.compass", Applies.When.NEW_DEATHS),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
         assertEquals("", Applies.When.NOW.note());
