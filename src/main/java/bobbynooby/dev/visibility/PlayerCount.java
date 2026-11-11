@@ -25,20 +25,25 @@ public final class PlayerCount {
         return hides() ? Settings.get().serverList.shownMaxPlayers : real;
     }
 
-    /** The player names the query port lists. */
+    /** The player names the query port lists: none whenever the server list's hover shows no real names. */
     public static String[] names(String[] real) {
-        return hides() ? new String[0] : real;
+        return hides() || showsHoverLines() ? new String[0] : real;
     }
 
     /** The names the server list's hover shows: the configured lines if there are any, otherwise vanilla's rule. */
     public static List<NameAndId> sample(List<NameAndId> real) {
-        List<String> lines = Settings.get().serverList.hoverLines;
-        if (Settings.active() && !lines.isEmpty()) {
+        if (showsHoverLines()) {
             // The client shows each entry's name as plain text, so a line is a fake player. Its id comes from the text,
             // so it stays the same from one ping to the next.
-            return lines.stream().map(line -> new NameAndId(UUID.nameUUIDFromBytes(line.getBytes(StandardCharsets.UTF_8)), line)).toList();
+            return Settings.get().serverList.hoverLines.stream()
+                    .map(line -> new NameAndId(UUID.nameUUIDFromBytes(line.getBytes(StandardCharsets.UTF_8)), line)).toList();
         }
         return hides() ? List.of() : real;
+    }
+
+    // The configured lines stand in for the real names, whatever the count switch says
+    private static boolean showsHoverLines() {
+        return Settings.active() && !Settings.get().serverList.hoverLines.isEmpty();
     }
 
     /** True when the server list must show the fake counts and no names. */

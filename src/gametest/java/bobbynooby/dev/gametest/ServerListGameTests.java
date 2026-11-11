@@ -179,13 +179,15 @@ public class ServerListGameTests {
     }
 
     // enable-query lists every online name and the real counts. The reply is built by reflection with a stand-in
-    // server, since the query thread itself needs a socket.
+    // server, since the query thread itself needs a socket. No hover lines, since they hide the names on their own.
     @GameTest
     public void queryHidesNames(GameTestHelper helper) throws ReflectiveOperationException, SocketException {
         ServerPlayer player = TestPlayers.join(helper, "Queried", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         String name = player.getName().getString();
         boolean before = Settings.get().hide.serverPlayerCount;
+        List<String> lines = Settings.get().serverList.hoverLines;
         try {
+            Settings.get().serverList.hoverLines = List.of();
             Settings.get().hide.serverPlayerCount = true;
             String hidden = queryRules(helper.getLevel().getServer(), name);
             helper.assertTrue(!hidden.contains(name), "query listed a name with the count hidden");
@@ -204,6 +206,34 @@ public class ServerListGameTests {
                     "basic stat did not show the real counts with the count shown: " + shownStat);
         } finally {
             Settings.get().hide.serverPlayerCount = before;
+            Settings.get().serverList.hoverLines = lines;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // With the count shown but hover lines set, the server list shows the lines instead of names, so the query port
+    // lists no names either, while its counts stay real. The switches are put back and the player leaves in the same tick.
+    @GameTest
+    public void queryHidesNamesWhileHoverLinesStandIn(GameTestHelper helper) throws ReflectiveOperationException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Lined", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.getName().getString();
+        boolean before = Settings.get().hide.serverPlayerCount;
+        List<String> lines = Settings.get().serverList.hoverLines;
+        try {
+            Settings.get().hide.serverPlayerCount = false;
+            Settings.get().serverList.hoverLines = List.of("Nobody here");
+            String hidden = queryRules(server, name);
+            helper.assertTrue(!hidden.contains(name), "query listed a name while the hover lines stand in: " + hidden);
+            helper.assertTrue(hidden.contains("numplayers\u0000" + server.getPlayerCount() + "\u0000maxplayers\u0000"
+                    + server.getMaxPlayers() + "\u0000"), "query hid the real counts with the count shown: " + hidden);
+
+            Settings.get().serverList.hoverLines = List.of();
+            helper.assertTrue(queryRules(server, name).contains(name), "query did not list the player with no hover lines");
+        } finally {
+            Settings.get().hide.serverPlayerCount = before;
+            Settings.get().serverList.hoverLines = lines;
             TestPlayers.leave(player);
         }
         helper.succeed();
