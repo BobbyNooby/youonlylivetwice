@@ -282,6 +282,37 @@ public class BorderAndReloadGameTests {
         helper.succeed();
     }
 
+    // The overworld border is 4000 blocks now but shrinking to 2000, and /yolt center leaves it moving. A centre 1500
+    // blocks from the player holds them for now, but not once the border has shrunk. Like the test above, it runs in the
+    // config command batch, so the default batch's players can't push this one's name off the list.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void centerChecksWhereAMovingBorderEnds(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Shrinking", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+
+        border.enabled = true;
+        try {
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            double[] before = bordersBefore.get(server.overworld());
+            overworld.lerpSizeBetween(4000, 2000, 1_000_000L, server.overworld().getGameTime());
+            BlockPos at = player.blockPosition();
+            List<String> refused = run(server, "yolt center " + (at.getX() - 1500) + " " + at.getZ());
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave ") && refused.get(0).contains(name),
+                    "refusal: " + refused);
+            assertCentre(helper, server.overworld(), before[0], before[1]);
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.SHRINKING, "overworld border status after the refusal");
+        } finally {
+            border.enabled = enabledBefore;
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // The overworld centre is put 1100 blocks west of the player, so a 2000 block border ends 100 blocks short of them.
     // The command swaps the whole config object, so it runs with the others that do.
     @GameTest(environment = CONFIG_COMMAND)

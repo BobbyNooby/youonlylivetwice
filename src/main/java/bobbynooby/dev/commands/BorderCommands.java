@@ -133,9 +133,13 @@ final class BorderCommands {
     }
 
     // /yolt center moves the overworld and nether to the new centre and the end to 0, 0. Each keeps the size the world
-    // has, which can differ from the config's: a held border, or a vanilla /worldborder change.
+    // has, which can differ from the config's: a held border, or a vanilla /worldborder change. A moving border keeps
+    // moving, so it is checked at the smaller of its size now and the size it is heading for.
     private static Proposal centred(double centerX, double centerZ) {
-        return (live, isEnd) -> isEnd ? borderAt(0, 0, live.getSize()) : borderAt(centerX, centerZ, live.getSize());
+        return (live, isEnd) -> {
+            double size = Math.min(live.getSize(), live.getLerpTarget());
+            return isEnd ? borderAt(0, 0, size) : borderAt(centerX, centerZ, size);
+        };
     }
 
     private static WorldBorder borderAt(double centerX, double centerZ, double size) {
