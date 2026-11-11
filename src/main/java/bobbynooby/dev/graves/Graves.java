@@ -194,7 +194,7 @@ public final class Graves {
             Yolt.LOGGER.info("Dropping {}'s grave items at {} {} instead of at the grave, where they would be destroyed",
                     grave.ownerName(), grave.dimension().identifier(), dropAt.get());
         }
-        SharedGraveContainer container = GraveMenus.OPEN.remove(grave.id());
+        SharedGraveContainer container = GraveMenus.release(grave.id());
         // The live container is newer than the record while anyone has the grave open
         List<ItemStack> source = container != null ? container.getItems() : store.byId(grave.id()).map(Grave::items).orElse(grave.items());
         List<ItemStack> items = Stacks.nonEmptyCopies(source);

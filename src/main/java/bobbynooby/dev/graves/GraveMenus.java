@@ -16,8 +16,8 @@ import java.util.UUID;
 
 /** Opens grave menus, and keeps the one container all viewers of a grave share. Server thread only. */
 public final class GraveMenus {
-    // One container per grave while anyone has it open, keyed by grave id.
-    static final Map<UUID, SharedGraveContainer> OPEN = new HashMap<>();
+    // One container per grave while anyone has it open, keyed by grave id. Only this class writes it.
+    private static final Map<UUID, SharedGraveContainer> OPEN = new HashMap<>();
 
     private GraveMenus() {
     }
@@ -47,6 +47,22 @@ public final class GraveMenus {
                 GraveStore.get(server).byId(id).map(Grave::items).orElse(List.of())));
     }
 
+    // True while this is the container the grave's menus share, the only one that may write the record
+    static boolean isShared(UUID graveId, SharedGraveContainer container) {
+        return OPEN.get(graveId) == container;
+    }
+
+    // Its last viewer closed, so it lets go, unless a newer container has taken its place
+    static void letGo(UUID graveId, SharedGraveContainer container) {
+        OPEN.remove(graveId, container);
+    }
+
+    // Takes the grave's container out of the shared ones, so it can't write the record again. Null when nobody has the
+    // grave open.
+    static @Nullable SharedGraveContainer release(UUID graveId) {
+        return OPEN.remove(graveId);
+    }
+
     /** Once the stored record is empty: the head goes, then the record, then every menu still showing it. */
     static void removeIfEmpty(MinecraftServer server, Grave grave) {
         GraveStore store = GraveStore.get(server);
@@ -58,7 +74,7 @@ public final class GraveMenus {
             GraveBlocks.clearHead(level, grave);
         }
         store.remove(grave.id());
-        SharedGraveContainer container = OPEN.remove(grave.id());
+        SharedGraveContainer container = release(grave.id());
         if (container != null) {
             container.closeMenus();
         }

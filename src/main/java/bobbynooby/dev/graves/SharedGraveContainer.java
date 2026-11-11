@@ -37,7 +37,7 @@ final class SharedGraveContainer extends SimpleContainer {
     // Only the live container writes: one let go of could otherwise overwrite newer contents.
     @Override
     public void setChanged() {
-        if (GraveMenus.OPEN.get(graveId) != this) {
+        if (!GraveMenus.isShared(graveId, this)) {
             return;
         }
         GraveStore store = GraveStore.get(server);
@@ -100,7 +100,7 @@ final class SharedGraveContainer extends SimpleContainer {
     public void stopOpen(ContainerUser user) {
         viewers.remove(user);
         if (viewers.isEmpty()) {
-            GraveMenus.OPEN.remove(graveId, this);
+            GraveMenus.letGo(graveId, this);
         }
     }
 
