@@ -710,6 +710,34 @@ class ConfigLoaderTest {
         assertEquals("graves.tellLocationDistance: must be 0 or more", distance.problem());
     }
 
+    // A key name can end a sentence, and only the whole name counts: not one that goes on with more letters or another part
+    @Test
+    void warningNamesAKeyThatEndsASentence() {
+        assertTrue(ConfigLoader.names("set worldBorder.diameter.", "worldBorder.diameter"));
+        assertTrue(ConfigLoader.names("worldBorder.diameter: must be 1 to 59999968", "worldBorder.diameter"));
+        assertTrue(ConfigLoader.names("worldBorder.endScale: worldBorder.diameter times endScale can't pass 59999968",
+                "worldBorder.diameter"));
+        assertFalse(ConfigLoader.names("graves.tellLocationDistance: must be 0 or more", "graves.tellLocation"));
+        assertFalse(ConfigLoader.names("graves.tellLocation.extra: unknown key, ignored", "graves.tellLocation"));
+        assertFalse(ConfigLoader.names("old.graves.tellLocation: unknown key, ignored", "graves.tellLocation"));
+    }
+
+    // The copy is made before the write, so when the write then fails the admin is still told where their file went. The
+    // write goes through a temp file, which can't be made where a folder is.
+    @Test
+    void setKeyNamesTheCopyWhenTheRewriteFails() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{");
+        Files.createDirectories(dir.resolve("config.json.tmp").resolve("inside"));
+
+        ConfigLoader.Change change = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.diameter"), new JsonPrimitive(8000));
+        assertNull(change.config());
+        assertTrue(change.problem().startsWith("the config file could not be saved ("), change.problem());
+        assertEquals("config.json.bak", change.backup());
+        assertEquals("{", Files.readString(dir.resolve("config.json.bak")));
+        assertEquals("{", Files.readString(file));
+    }
+
     // A .bak or timed copy that can't be compared, here a folder, counts as different: the startup keeps the typed file in
     // a new timed copy rather than stopping
     @Test

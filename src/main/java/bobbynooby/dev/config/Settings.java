@@ -63,8 +63,8 @@ public final class Settings {
             config = change.config();
         }
         if (change.backup() != null) {
-            Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {} and rewritten",
-                    key.path(), change.backup());
+            Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {}{}", key.path(), change.backup(),
+                    change.config() != null ? " and rewritten" : ", but " + change.problem());
         }
         return change;
     }

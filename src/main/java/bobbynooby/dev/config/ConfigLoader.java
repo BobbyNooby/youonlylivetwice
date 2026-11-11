@@ -39,7 +39,7 @@ public final class ConfigLoader {
     /**
      * What setting one key did. config is the new live config, and null when nothing changed: problem then says why, or
      * is null too when the key already had that value. backup names the copy kept of a file that couldn't be read before
-     * the whole config was written over it, and is null otherwise.
+     * the whole config was written over it, even if that write then failed, and is null otherwise.
      */
     public record Change(@Nullable YoltConfig config, String oldValue, String newValue, @Nullable String problem,
                          @Nullable String backup) {}
@@ -226,39 +226,41 @@ public final class ConfigLoader {
             }
         }
 
-        String backup;
+        // A file that can't be read is copied before the whole config goes over it, and the copy is named even when that
+        // write then fails, so the admin still learns where their file went
+        String backup = null;
         try {
-            backup = writeKey(file, key.path(), value, config);
+            JsonObject own = Files.exists(file) ? ownJson(file) : null;
+            if (own != null) {
+                put(own, key.path(), value);
+                writeText(file, GSON.toJson(own));
+            } else {
+                if (Files.exists(file)) {
+                    backup = backup(file, file.getFileName() + ".bak");
+                }
+                write(file, config);
+            }
         } catch (UncheckedIOException e) {
             String problem = "the config file could not be saved (" + e.getCause().getMessage() + ")";
-            return new Change(null, oldValue, typed, problem, null);
+            return new Change(null, oldValue, typed, problem, backup);
         }
         return new Change(config, oldValue, key.show(config), null, backup);
     }
 
     // Anywhere in the warning, since the End cap's begins with endScale but is as much about the diameter; and only the
-    // whole name, so graves.tellLocation isn't taken for graves.tellLocationDistance
-    private static boolean names(String warning, String path) {
-        return Pattern.compile("(?<![\\w.])" + Pattern.quote(path) + "(?![\\w.])").matcher(warning).find();
+    // whole name, so graves.tellLocation isn't taken for graves.tellLocationDistance. A full stop after it still counts,
+    // since a name can end a sentence.
+    static boolean names(String warning, String path) {
+        return Pattern.compile("(?<![\\w.])" + Pattern.quote(path) + "(?![\\w]|\\.\\w)").matcher(warning).find();
     }
 
-    // Returns the copy kept of a file that couldn't be read, or null
-    private static @Nullable String writeKey(Path file, String path, JsonPrimitive value, YoltConfig config) {
-        if (!Files.exists(file)) {
-            write(file, config);
+    // The file's own JSON, or null when it can't be read
+    private static @Nullable JsonObject ownJson(Path file) {
+        try {
+            return readObject(file);
+        } catch (JsonParseException | IOException e) {
             return null;
         }
-        JsonObject own;
-        try {
-            own = readObject(file);
-        } catch (JsonParseException | IOException e) {
-            String backup = backup(file, file.getFileName() + ".bak");
-            write(file, config);
-            return backup;
-        }
-        put(own, path, value);
-        writeText(file, GSON.toJson(own));
-        return null;
     }
 
     // Sets a dotted path, making any section on the way that is missing or isn't an object
