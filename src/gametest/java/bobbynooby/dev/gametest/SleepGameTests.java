@@ -375,14 +375,16 @@ public class SleepGameTests {
 
             config.sleep.noBedRespawn = true;
             int mark = TestPlayers.sentPackets(switchOn).size();
-            ServerPlayer back = dieAndRespawn(helper, switchOn);
+            ServerPlayer back = dieRevivedAndRespawn(helper, switchOn);
+            helper.assertTrue(back.connection.isAcceptingMessages(), "the respawn closed the connection, so no sound could be seen, with no-bed-respawn on");
             helper.assertTrue(back.level() != nether, "respawned at " + back.blockPosition() + " in the nether, by the old anchor point, with no-bed-respawn on");
             helper.assertValueEqual(nether.getBlockState(anchor).getValue(RespawnAnchorBlock.CHARGE), 2, "anchor charge after the respawn with no-bed-respawn on");
             helper.assertValueEqual(depleteSounds(back, mark), List.of(), "anchor deplete sounds with no-bed-respawn on");
 
             config.sleep.noBedRespawn = false;
             mark = TestPlayers.sentPackets(switchOff).size();
-            back = dieAndRespawn(helper, switchOff);
+            back = dieRevivedAndRespawn(helper, switchOff);
+            helper.assertTrue(back.connection.isAcceptingMessages(), "the respawn closed the connection, so no sound could be seen, with no-bed-respawn off");
             helper.assertTrue(back.level() == nether && back.position().distanceTo(Vec3.atCenterOf(anchor)) <= 2.0,
                     "respawned at " + back.blockPosition() + " in " + back.level().dimension().identifier()
                             + ", away from the anchor, with no-bed-respawn off");
@@ -720,9 +722,26 @@ public class SleepGameTests {
 
     // A real death, then the respawn the client asks for from the death screen
     private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
+        die(helper, player);
+        return respawnFromDeathScreen(helper, player);
+    }
+
+    // The same, with the death revived first. A respawn to the world spawn waits on the spawn search, and runs the
+    // server's queued work meanwhile, the death kick included, which would close the connection before the respawn's
+    // last packets. Revived, the kick finds nothing to keep the player out for.
+    private static ServerPlayer dieRevivedAndRespawn(GameTestHelper helper, ServerPlayer player) {
+        die(helper, player);
+        DeathLockout.revive(player.getUUID(), "Test", "console");
+        return respawnFromDeathScreen(helper, player);
+    }
+
+    private static void die(GameTestHelper helper, ServerPlayer player) {
         TestPlayers.markLoaded(player);
         player.kill(player.level());
         helper.assertTrue(player.isDeadOrDying(), player.getPlainTextName() + " did not die");
+    }
+
+    private static ServerPlayer respawnFromDeathScreen(GameTestHelper helper, ServerPlayer player) {
         player.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
         ServerPlayer respawned = helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID());
         helper.assertTrue(respawned != null && respawned != player && respawned.isAlive(), player.getPlainTextName() + " did not respawn");
