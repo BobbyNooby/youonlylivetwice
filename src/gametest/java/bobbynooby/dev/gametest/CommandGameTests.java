@@ -390,14 +390,15 @@ public class CommandGameTests {
 
     // Nobody could reach a grave outside the border to open it. Every border is centred, so a WIDE one holds everything
     // the tests have, and only this grave sits past it: a record alone, since the check reads the records. A refusal
-    // changes nothing, so no file is written.
+    // changes nothing, but a broken one would save the new diameter, so the setting and the file are put back.
     @GameTest
-    public void borderShrinkOverGraveNeedsConfirm(GameTestHelper helper) {
+    public void borderShrinkOverGraveNeedsConfirm(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
         boolean enabledBefore = border.enabled;
         int diameterBefore = border.diameter;
         double endScaleBefore = border.endScale;
+        String fileBefore = Files.readString(Settings.path());
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         GraveStore store = GraveStore.get(server);
         String owner = uniqueName("Buried");
@@ -417,7 +418,9 @@ public class CommandGameTests {
         } finally {
             store.remove(grave.id());
             border.enabled = enabledBefore;
+            border.diameter = diameterBefore;
             border.endScale = endScaleBefore;
+            Files.writeString(Settings.path(), fileBefore);
             restoreBorders(bordersBefore);
         }
         helper.succeed();
