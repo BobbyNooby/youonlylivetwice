@@ -89,15 +89,14 @@ public final class SkinCommands {
     }
 
     private static int setOther(CommandSourceStack source, String name, String mojangName) {
-        // First: on an online-mode server finding the player can ask Mojang about a name vanilla hasn't cached, which
-        // skins off must never do
+        // First, so with skins off that is the reply, whoever is named
         Optional<String> off = Skins.offReason();
         if (off.isPresent()) {
             return YoltCommands.fail(source, off.get());
         }
         Optional<NameAndId> who = YoltCommands.lookup(source.getServer(), name);
         if (who.isEmpty()) {
-            return YoltCommands.fail(source, "Player " + name + " not found.");
+            return YoltCommands.fail(source, YoltCommands.notJoined(name));
         }
         return choose(source, who.get(), mojangName, false);
     }
@@ -174,13 +173,12 @@ public final class SkinCommands {
     private static int clearOther(CommandSourceStack source, String name) {
         Optional<NameAndId> who = YoltCommands.lookup(source.getServer(), name);
         if (who.isEmpty()) {
-            return YoltCommands.fail(source, "Player " + name + " not found.");
+            return YoltCommands.fail(source, YoltCommands.notJoined(name));
         }
         return clear(source, who.get(), false);
     }
 
-    // The pick itself asks Mojang nothing, so this works with skins off too, though on an online-mode server finding
-    // another player by name can, as vanilla's own commands do. Going back to the default changes a locked skin too.
+    // Nothing here asks Mojang, so this works with skins off too. Going back to the default changes a locked skin too.
     private static int clear(CommandSourceStack source, NameAndId who, boolean own) {
         if (locked(source, who, own)) {
             return YoltCommands.fail(source, LOCKED);

@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.skins.SkinOwners;
 import bobbynooby.dev.skins.SkinStore;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -55,24 +56,33 @@ public final class YoltCommands {
         return 1;
     }
 
-    // Online players first, so the exact player is used even if the name cache is out of date. Then the death log: a
-    // locked-out player can't join, so the cache never refreshes them, and once their entry expires it may give
-    // another id for the name. An offline-mode server never asks Mojang: vanilla's cache would on a miss, on the
-    // server thread, and could give the account's online id, which an offline login never has. It takes the id the
-    // player last joined with, which a forwarding proxy may have given, else the one an offline login gets.
+    // The player a command names, from what this server knows, in any case. Mojang is never asked: vanilla's own
+    // lookup would on a miss, on the server thread, and on an offline-mode server could give the account's online id,
+    // which an offline login never has. Online players first, so the exact player is used. Then the ids vanilla's
+    // cache holds, the death log, which keeps a locked-out player who can't join, and the id each player last joined
+    // with, which a forwarding proxy may have given. A player who never joined has no save to act on, so is not found.
     static Optional<NameAndId> lookup(MinecraftServer server, String name) {
         ServerPlayer online = server.getPlayerList().getPlayerByName(name);
         if (online != null) {
             return Optional.of(online.nameAndId());
         }
+        // Only an id that played here: vanilla's own commands can leave an account's online id in an offline server's
+        // cache
+        Optional<NameAndId> cached = SkinOwners.cached(server.services().nameToIdCache(), name)
+                .filter(found -> SkinOwners.playedHere(server, found.id()));
+        if (cached.isPresent()) {
+            return cached;
+        }
         Optional<NameAndId> died = DeathLockout.latestByName(name);
         if (died.isPresent()) {
             return died;
         }
-        if (!server.usesAuthentication()) {
-            return Optional.of(SkinStore.get(server).joinedUnder(name).orElseGet(() -> NameAndId.createOffline(name)));
-        }
-        return server.services().nameToIdCache().get(name);
+        return SkinStore.get(server).joinedUnder(name);
+    }
+
+    /** The reply when lookup finds no one. */
+    static String notJoined(String name) {
+        return "No player named " + name + " has joined this server.";
     }
 
     static void reply(CommandSourceStack source, String message) {

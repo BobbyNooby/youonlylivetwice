@@ -386,9 +386,8 @@ public class SkinGameTests {
         String account = uniqueName("Acct");
         MOJANG.answer(name);
         MOJANG.answer(account);
-        GameProfile profile = TestLogins.offline(name);
+        GameProfile profile = joinedBefore(server, name);
         try {
-            // The console names the player, which an offline server turns into the same id their login gets
             helper.assertValueEqual(console(server, "yolt skin set " + name + " " + account),
                     List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."), "command output");
             assertEqual(helper, SkinStore.get(server).choice(profile.id()), account, "the picked account");
@@ -555,7 +554,7 @@ public class SkinGameTests {
         String name = uniqueName("Wait");
         String account = uniqueName("Acct");
         CompletableFuture<CachedSkin> mojang = MOJANG.hold(account);
-        UUID player = TestLogins.offline(name).id();
+        UUID player = joinedBefore(server, name).id();
         SkinStore store = SkinStore.get(server);
         List<String> output;
         try {
@@ -586,7 +585,7 @@ public class SkinGameTests {
         String saved = uniqueName("Acct");
         MOJANG.fail(unsaved);
         MOJANG.fail(saved);
-        UUID player = TestLogins.offline(name).id();
+        UUID player = joinedBefore(server, name).id();
         SkinStore store = SkinStore.get(server);
         store.putSkin(CachedSkin.found(saved, FakeSkinLookup.idOf(saved), FakeSkinLookup.texturesOf(saved), 0L));
         try {
@@ -859,7 +858,7 @@ public class SkinGameTests {
         GameProfile member = new GameProfile(UUID.randomUUID(), uniqueName("Member"));
         GameProfile borrower = TestLogins.offline(uniqueName("Borrow"));
         GameProfile away = TestLogins.offline(uniqueName("Away"));
-        GameProfile given = TestLogins.offline(uniqueName("Given"));
+        GameProfile given = joinedBefore(server, uniqueName("Given"));
         String otherAccount = uniqueName("Acct");
         List<String> answered = List.of(owner.name(), member.name(), borrower.name(), away.name(), given.name(), otherAccount);
         answered.forEach(MOJANG::answer);
@@ -994,9 +993,9 @@ public class SkinGameTests {
         helper.succeed();
     }
 
-    // An offline-mode server finds a player who isn't online by the id they last joined with, and a name nobody joined
-    // under by the id an offline login gets, never asking Mojang. Vanilla's cache can hold an account's online id for a
-    // name, which its own lookup on a miss would have put there; that id is never used.
+    // An offline-mode server finds a player who isn't online by the id they last joined with, never asking Mojang. A
+    // name nobody joined under is not found, so no id is made up for it, and an online id vanilla's own lookup could
+    // have cached for it is never used.
     @GameTest
     public void offlineServerFindsPlayersByNameWithoutMojang(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -1013,8 +1012,8 @@ public class SkinGameTests {
         SkinStore store = SkinStore.get(server);
         try {
             helper.assertValueEqual(console(server, "yolt skin set " + stranger + " " + account),
-                    List.of(stranger + "'s skin is now " + account + "'s. It shows once they rejoin."), "the pick for a stranger");
-            assertEqual(helper, store.choice(offlineId), account, "the stranger's pick under the offline id");
+                    List.of("No player named " + stranger + " has joined this server."), "the pick for a stranger");
+            assertEqual(helper, store.choice(offlineId), null, "the stranger's pick under the offline id");
             assertEqual(helper, store.choice(onlineId), null, "the stranger's pick under the cached online id");
 
             // A test player's id is made up, as a forwarding proxy's can be, so only the join record has it
@@ -1181,7 +1180,7 @@ public class SkinGameTests {
         String account = uniqueName("Acct");
         MOJANG.answer(name);
         MOJANG.answer(account);
-        GameProfile profile = TestLogins.offline(name);
+        GameProfile profile = joinedBefore(server, name);
         try {
             console(server, "yolt skin set " + name + " " + account);
             assertEqual(helper, SkinStore.get(server).choice(profile.id()), account, "the pick");
@@ -1211,6 +1210,14 @@ public class SkinGameTests {
         Path file = SkinStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
         CompoundTag saved = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
         return SkinStore.TYPE.codec().parse(NbtOps.INSTANCE, saved.get("data")).getOrThrow();
+    }
+
+    // A player who joined here before under the id an offline login gives the name, so a command can name them. YOLT's
+    // record of joins keeps them, as it keeps every test player who joined.
+    static GameProfile joinedBefore(MinecraftServer server, String name) {
+        GameProfile profile = TestLogins.offline(name);
+        SkinStore.get(server).noteJoin(profile.id(), profile.name());
+        return profile;
     }
 
     // As the player's client sends a typed command, so it is read against the tree that player has

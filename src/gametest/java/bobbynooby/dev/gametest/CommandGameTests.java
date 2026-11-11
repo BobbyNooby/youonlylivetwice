@@ -8,6 +8,7 @@ import bobbynooby.dev.lockout.Cooldown;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
+import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.world.LiveSettings;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
@@ -111,8 +112,8 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // The test server's name cache makes up an id for any name, so the death is recorded under that id. Other tests
-    // record "Ghost" too, and unkill finds a name in the death log first, so this one has a name of its own.
+    // The death is recorded under the id the test server's name cache makes up for any name, and unkill finds it in the
+    // death log. Other tests record "Ghost" too, so this one has a name of its own.
     @GameTest
     public void unkillEndsLockoutAndReplies(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -132,7 +133,10 @@ public class CommandGameTests {
     @GameTest
     public void unkillWithoutDeathFails(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
-        helper.assertValueEqual(run(server, "yolt unkill Ghost2"), List.of("Ghost2 has no death to undo."), "command output");
+        ServerPlayer player = TestPlayers.join(helper, "Undying", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        TestPlayers.leave(player);
+        helper.assertValueEqual(run(server, "yolt unkill " + name), List.of(name + " has no death to undo."), "command output");
         helper.succeed();
     }
 
@@ -488,9 +492,52 @@ public class CommandGameTests {
     @GameTest
     public void killUnknownNameChangesNothing(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
-        helper.assertValueEqual(run(server, "yolt kill NoSuchPlayer123"), List.of("Player NoSuchPlayer123 not found."), "command output");
-        // The test server's name lookup makes up an offline id for any name, so that id must not be locked out
+        helper.assertValueEqual(run(server, "yolt kill NoSuchPlayer123"),
+                List.of("No player named NoSuchPlayer123 has joined this server."), "command output");
+        // Nor under the id an offline login would get
         helper.assertTrue(DeathLockout.refusal(NameAndId.createOffline("NoSuchPlayer123").id(), "Test") == null, "a death was recorded");
+        helper.succeed();
+    }
+
+    // A command finds a player only where this server knows them: a name that joined here, typed in any case, and a name
+    // only the death log has. A name it doesn't know is not found, so no id is made up for it to act on.
+    @GameTest
+    public void namedPlayerIsFoundOnlyWhereThisServerKnowsThem(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        SkinStore store = SkinStore.get(server);
+        ServerPlayer player = TestPlayers.join(helper, "Cased", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String cased = player.nameAndId().name();
+        TestPlayers.leave(player);
+        helper.assertValueEqual(run(server, "yolt unkill " + cased.toLowerCase(Locale.ROOT)),
+                List.of(cased + " has no death to undo."), "unkill of a name typed in another case");
+
+        String logged = uniqueName("Logged");
+        UUID loggedId = UUID.randomUUID();
+        DeathLockout.recordDeath(loggedId, logged);
+        try {
+            store.choose(loggedId, uniqueName("Acct"));
+            try {
+                helper.assertValueEqual(run(server, "yolt skin clear " + logged),
+                        List.of(logged + "'s skin is back to the default. It shows once they rejoin."),
+                        "clear for a name only the death log has");
+                helper.assertTrue(store.choice(loggedId) == null, "the pick under the logged id is still there");
+            } finally {
+                store.clearChoice(loggedId);
+            }
+        } finally {
+            DeathLockout.revive(loggedId, logged, "console");
+        }
+
+        String unknown = uniqueName("Nobody");
+        List<String> notFound = List.of("No player named " + unknown + " has joined this server.");
+        for (String command : List.of("yolt kill ", "yolt unkill ", "yolt skin clear ")) {
+            helper.assertValueEqual(run(server, command + unknown), notFound, "output of " + command + "for an unknown name");
+        }
+        helper.assertValueEqual(run(server, "yolt skin set " + unknown + " " + uniqueName("Acct")), notFound,
+                "output of yolt skin set for an unknown name");
+        UUID madeUp = NameAndId.createOffline(unknown).id();
+        helper.assertTrue(DeathLockout.refusal(madeUp, "Test") == null, "a death was recorded under a made-up id");
+        helper.assertTrue(store.choice(madeUp) == null, "a pick was made under a made-up id");
         helper.succeed();
     }
 

@@ -55,11 +55,14 @@ final class LockoutCommands {
     private static int kill(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         Optional<NameAndId> who = YoltCommands.lookup(server, name);
+        if (who.isEmpty()) {
+            return YoltCommands.fail(source, YoltCommands.notJoined(name));
+        }
         // The kill's own death row is a new one, so it must come after the newest row now
-        OptionalLong before = who.map(found -> DeathLockout.newestDeathId(found.id(), found.name())).orElse(OptionalLong.empty());
+        OptionalLong before = DeathLockout.newestDeathId(who.get().id(), who.get().name());
         Kills.Result result;
         try {
-            result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);
+            result = Kills.kill(server, who.get());
         } catch (Kills.LoggedFailure e) {
             // The body death logged it already
             return YoltCommands.fail(source, "Could not kill " + name + "; see the server log.");
@@ -94,7 +97,7 @@ final class LockoutCommands {
     private static int unkill(CommandSourceStack source, String name) {
         Optional<NameAndId> who = YoltCommands.lookup(source.getServer(), name);
         if (who.isEmpty()) {
-            return YoltCommands.fail(source, "Player " + name + " not found.");
+            return YoltCommands.fail(source, YoltCommands.notJoined(name));
         }
         String found = who.get().name();
         return switch (DeathLockout.revive(who.get().id(), found, reviver(source))) {
