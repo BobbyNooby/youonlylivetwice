@@ -16,6 +16,7 @@
 			"bobbynooby.dev.gametest.BodyLifecycleGameTests",
 			"bobbynooby.dev.gametest.BodyMobGameTests",
 			"bobbynooby.dev.gametest.BodyStoreGameTests",
+			"bobbynooby.dev.gametest.BorderAndReloadGameTests",
 			"bobbynooby.dev.gametest.ChatGameTests",
 			"bobbynooby.dev.gametest.CommandGameTests",
 			"bobbynooby.dev.gametest.CommandRestrictionGameTests",
