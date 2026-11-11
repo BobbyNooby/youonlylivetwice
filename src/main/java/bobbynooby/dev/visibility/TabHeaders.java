@@ -3,8 +3,8 @@ package bobbynooby.dev.visibility;
 import bobbynooby.dev.config.Settings;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
@@ -21,10 +21,13 @@ import java.util.UUID;
  */
 public final class TabHeaders {
     // Over the picked line and as the footer. Decoration, not one of the lines.
-    private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "--------------";
+    private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString()
+            + "--------------";
 
     private static final Map<UUID, HeaderFooter> PLAYER_MAP = new HashMap<>();
     private static final Random RANDOM = new Random();
+
+    private TabHeaders() {}
 
     // A line starts from plain text, so the dashes' grey doesn't run into it
     private static HeaderFooter pick() {
