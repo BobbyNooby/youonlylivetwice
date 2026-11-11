@@ -6,12 +6,14 @@ import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MapItem;
 import net.minecraft.world.level.GameType;
@@ -81,6 +83,40 @@ public class MapGameTests {
                     "far player's marker on the map itself");
             List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
             helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER), 1, "player markers sent to the viewer");
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 0, "far player's marker sent to the viewer");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A framed copy's update, as ServerEntity sends it to every player in the level, comes through the same hook as a
+    // carried one: a viewer by the frame isn't sent a far holder's marker. Vanilla clients draw no player markers on a
+    // framed map, but the packet would still carry them. The frame's own marker shows the update went out.
+    @GameTest
+    public void farPlayerNotSentWithFramedMap(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.mapPlayers = true;
+            ItemStack map = newMap(helper);
+            ServerPlayer viewer = join(helper, joined, "mapframev", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapframefar", onMap(helper, map, new BlockPos(1, 0, 0)));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            carry(helper, map, List.of(far));
+            ItemFrame frame = new ItemFrame(helper.getLevel(), onMap(helper, map, new BlockPos(2, 0, 2)), Direction.NORTH);
+            MapItemSavedData data = data(helper, map);
+            data.tickCarriedBy(viewer, map.copy(), frame);
+
+            helper.assertValueEqual(count(data.getDecorations(), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
+                    "far player's marker on the map itself");
+            List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.FRAME), 1, "frame markers sent to the viewer");
             helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 0, "far player's marker sent to the viewer");
         } finally {
             hide.distantPlayers = distantBefore;
