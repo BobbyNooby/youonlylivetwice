@@ -1108,7 +1108,9 @@ public class CommandGameTests {
             Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 1000}}");
             List<String> output = run(server, "yolt reload");
             helper.assertTrue(output.contains("Config reloaded.") && output.stream().anyMatch(line -> line.contains(name)
-                    && line.contains("A restart will apply the config's border") && line.endsWith("or change the file.")),
+                    && line.startsWith("World border kept as it was, since the config's border would leave ")
+                    && line.endsWith(" outside it. Use /yolt border or endscaling with confirm to apply it now, or change the file,"
+                            + " then run /yolt reload.")),
                     "command output: " + output);
             helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
             helper.assertValueEqual(Settings.get().worldBorder.enabled, enabledBefore, "live border switch");
