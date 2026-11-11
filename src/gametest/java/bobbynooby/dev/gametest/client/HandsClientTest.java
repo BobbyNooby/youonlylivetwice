@@ -14,6 +14,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -126,6 +127,25 @@ public class HandsClientTest implements FabricClientGameTest {
             }
             if (!ItemStack.matches(mc.player.getOffhandItem(), torches())) {
                 throw new AssertionError("after the login the client's offhand holds " + mc.player.getOffhandItem());
+            }
+            // Nothing came back twice either, in another slot or split up. The one sword is the one in hand, checked above.
+            Inventory inventory = mc.player.getInventory();
+            int swords = 0;
+            int torches = 0;
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                ItemStack stack = inventory.getItem(slot);
+                if (stack.is(Items.DIAMOND_SWORD)) {
+                    swords++;
+                }
+                if (stack.is(Items.TORCH)) {
+                    torches += stack.getCount();
+                }
+            }
+            if (swords != 1) {
+                throw new AssertionError("after the login the client's inventory has " + swords + " diamond swords, not 1");
+            }
+            if (torches != TORCHES) {
+                throw new AssertionError("after the login the client's inventory has " + torches + " torches, not " + TORCHES);
             }
         });
         ClientTests.screenshot(ctx, "08-hands-after-relogin");
