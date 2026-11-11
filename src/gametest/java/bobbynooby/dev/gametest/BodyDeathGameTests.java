@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyChunks;
+import bobbynooby.dev.bodies.BodyDeath;
 import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
@@ -81,7 +82,7 @@ public class BodyDeathGameTests {
             Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "mob_experience"));
 
     // With death messages hidden the death screen is empty, so the lockout names no killer either: not for a player,
-    // and not for a body. The first pair, with the rule on, shows the killer does come through otherwise.
+    // and not for a body of either type. The first three, with the rule on, show the killer does come through otherwise.
     @GameTest(environment = DEATH_MESSAGES)
     public void hiddenDeathMessagesNameNoKiller(GameTestHelper helper) {
         GameRules rules = helper.getLevel().getGameRules();
@@ -97,6 +98,10 @@ public class BodyDeathGameTests {
             String body = bodyKilled(helper, "ShownBody", killer);
             helper.assertTrue(body.startsWith("You died: Killed while away (ShownBody")
                     && body.contains(" was slain by Slayer)\nTry again in "), "body's lockout with the rule on: " + body);
+            String playerBody = playerBodyKilled(helper, "ShownPB", killer);
+            helper.assertTrue(playerBody.startsWith("You died: Killed while away (ShownPB")
+                    && playerBody.contains(" was slain by Slayer)\nTry again in "),
+                    "player body's lockout with the rule on: " + playerBody);
 
             rules.set(GameRules.SHOW_DEATH_MESSAGES, false, server);
             player = killedOnline(helper, "Hidden", killer);
@@ -105,6 +110,10 @@ public class BodyDeathGameTests {
             body = bodyKilled(helper, "HiddenBody", killer);
             helper.assertTrue(body.startsWith("You died: Killed while away\nTry again in ") && !body.contains("Slayer")
                     && !body.contains("was slain"), "body's lockout with the rule off: " + body);
+            playerBody = playerBodyKilled(helper, "HiddenPB", killer);
+            helper.assertTrue(playerBody.startsWith("You died: Killed while away\nTry again in ")
+                    && !playerBody.contains("Slayer") && !playerBody.contains("was slain"),
+                    "player body's lockout with the rule off: " + playerBody);
         } finally {
             rules.set(GameRules.SHOW_DEATH_MESSAGES, ruleBefore, server);
             killer.discard();
@@ -139,6 +148,40 @@ public class BodyDeathGameTests {
         } finally {
             cleanUp(helper, owner, before);
         }
+    }
+
+    // The same with a player body, which dies the way a player does
+    private static String playerBodyKilled(GameTestHelper helper, String name, Zombie killer) {
+        ServerPlayer player = join(helper, name);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = BodyTestKit.usePlayerBodies();
+        try {
+            PlayerBody body = BodyTestKit.leavePlayerBody(helper, player);
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().mobAttack(killer), Float.MAX_VALUE);
+            helper.assertTrue(body.isDeadOrDying(), name + "'s body did not die");
+            return LockoutGameTests.refusalText(owner);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+    }
+
+    // A mannequin's own name is just "Mannequin", so the death log names a body by its owner; anything else by its uuid
+    @GameTest
+    public void bodyDeathLogNamesOwner(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "LogName");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(String.valueOf(BodyDeath.logName(body)), player.getGameProfile().name(), "a body's log name");
+            // Never added to the world
+            Mannequin plain = new Mannequin(EntityTypes.MANNEQUIN, helper.getLevel());
+            helper.assertValueEqual(String.valueOf(BodyDeath.logName(plain)), plain.getUUID().toString(),
+                    "a plain mannequin's log name");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
     }
 
     @GameTest

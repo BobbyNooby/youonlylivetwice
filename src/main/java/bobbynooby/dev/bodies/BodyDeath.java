@@ -25,7 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /** Kills a body's owner when the body dies, and kills a standing body for an offline /yolt kill. */
-final class BodyDeath {
+public final class BodyDeath {
     private BodyDeath() {}
 
     /**
@@ -52,8 +52,9 @@ final class BodyDeath {
     /**
      * Who a dying entity is in the death log: for a body its owner, from the body's record, since a mannequin's own name
      * is just "Mannequin"; for anything else its uuid. Worked out only when the line is written, as every death passes here.
+     * Public so the tests, which live in another package, can check it.
      */
-    static Object logName(LivingEntity entity) {
+    public static Object logName(LivingEntity entity) {
         return new Object() {
             @Override
             public String toString() {
