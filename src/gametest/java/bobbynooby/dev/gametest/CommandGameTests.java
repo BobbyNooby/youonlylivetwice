@@ -49,7 +49,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -57,7 +56,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
-import java.util.stream.Stream;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
 public class CommandGameTests {
@@ -768,22 +766,11 @@ public class CommandGameTests {
     // A death store of the test's own, swapped in for this one call so no other test's death lands in it. A closed
     // one makes every query throw, like a failing database.
     private static void withOwnDeathStore(boolean closed, Consumer<DeathStore> use) throws IOException {
-        Path dir = Files.createTempDirectory("yolt-death-store");
-        DeathStore store = DeathStore.open(dir.resolve("deaths.db"));
-        if (closed) {
-            store.close();
-        }
-        DeathStore real = DeathLockout.swapStoreForTesting(store);
-        try {
-            use.accept(store);
-        } finally {
-            DeathLockout.swapStoreForTesting(real);
-            store.close();
-            try (Stream<Path> files = Files.walk(dir)) {
-                for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
-                    Files.deleteIfExists(path);
-                }
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            if (closed) {
+                own.store().close();
             }
+            use.accept(own.store());
         }
     }
 
