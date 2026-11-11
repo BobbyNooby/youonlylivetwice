@@ -61,11 +61,9 @@ public final class GraveCompass {
             return false;
         }
         owed.forEach(grave -> store.put(grave.withCompassPending(false)));
-        // Only one grave owes a compass at a time; should more ever, the store keeps them oldest first
-        ItemStack compass = compassFor(owed.getLast());
-        if (!player.getInventory().add(compass)) {
-            player.drop(compass, false, Prediction.SERVER_ONLY);
-        }
+        // Only one grave owes a compass at a time; should more ever, the store keeps them oldest first. Dropped at the
+        // player when no slot takes it: Inventory.add would report a full creative inventory as taking it, and lose it.
+        player.getInventory().placeItemBackInInventory(compassFor(owed.getLast()), Prediction.SERVER_ONLY);
         return true;
     }
 

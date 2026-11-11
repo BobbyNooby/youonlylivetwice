@@ -231,33 +231,46 @@ public class GraveCompassGameTests {
         helper.succeed();
     }
 
+    // In creative too, where Inventory.add would report the full inventory as taking the compass, and lose it. That
+    // player dies in survival and comes back in creative, as after an admin's change.
     @GameTest(environment = FULL)
     public void compassDropsWhenInventoryFull(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         Runnable restore = keepSwitches(helper);
-        ServerPlayer player = join(helper, "CompassFull");
+        ServerPlayer survival = join(helper, "CompassFull");
+        ServerPlayer creative = join(helper, "CompassFullC");
+        List<ServerPlayer> players = List.of(survival, creative);
         try {
             config().graves.compass = true;
             config().deathLockout.enabled = false;
             server.getGameRules().set(GameRules.KEEP_INVENTORY, true, server);
-            Inventory inventory = player.getInventory();
-            for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
-                inventory.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+            for (ServerPlayer player : players) {
+                Inventory inventory = player.getInventory();
+                for (int slot = 0; slot < Inventory.INVENTORY_SIZE; slot++) {
+                    inventory.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+                }
+                GraveDeathGameTests.respawnBesideTest(helper, player);
+                kill(helper, player);
             }
-            ServerPlayer back = dieAndRespawn(helper, player);
-            helper.assertValueEqual(back.getInventory().getFreeSlot(), -1, "a free slot after the respawn");
-            helper.assertValueEqual(compasses(back).size(), 0, "compasses in the inventory");
+            creative.setGameMode(GameType.CREATIVE);
 
-            List<ItemEntity> dropped = droppedCompasses(helper);
-            helper.assertValueEqual(dropped.size(), 1, "compasses dropped");
-            helper.assertTrue(dropped.get(0).distanceTo(back) < 2.0, "the compass dropped "
-                    + dropped.get(0).distanceTo(back) + " blocks from the player");
-            helper.assertValueEqual(trackerOf(dropped.get(0).getItem()),
-                    pointingAt(onlyGrave(helper, player.getUUID())), "the dropped compass's tracker");
+            for (ServerPlayer player : players) {
+                String name = player.nameAndId().name();
+                ServerPlayer back = respawn(helper, player);
+                helper.assertValueEqual(back.isCreative(), player == creative, name + " is in creative");
+                helper.assertValueEqual(back.getInventory().getFreeSlot(), -1, name + "'s free slot after the respawn");
+                helper.assertValueEqual(compasses(back).size(), 0, "compasses in " + name + "'s inventory");
+                LodestoneTracker toGrave = pointingAt(onlyGrave(helper, player.getUUID()));
+                List<ItemEntity> dropped = droppedCompasses(helper).stream()
+                        .filter(item -> toGrave.equals(trackerOf(item.getItem()))).toList();
+                helper.assertValueEqual(dropped.size(), 1, "compasses dropped for " + name);
+                helper.assertTrue(dropped.get(0).distanceTo(back) < 2.0, name + "'s compass dropped "
+                        + dropped.get(0).distanceTo(back) + " blocks from them");
+            }
         } finally {
             restore.run();
             droppedCompasses(helper).forEach(Entity::discard);
-            cleanUp(helper, player.getUUID());
+            players.forEach(player -> cleanUp(helper, player.getUUID()));
         }
         helper.succeed();
     }
