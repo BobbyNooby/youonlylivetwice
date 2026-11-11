@@ -115,6 +115,8 @@ public class YoltConfig {
     public static class ServerListSection {
         // One line per hover entry; § colour codes work. An empty list keeps vanilla's sample
         public List<String> hoverLines = new ArrayList<>(List.of("You scream out for help, but no one answers."));
+        // The slot count the server list shows while hide.serverPlayerCount hides the real ones. The online count stays 0.
+        public int shownMaxPlayers = 1;
     }
 
     public static class SkinsSection {

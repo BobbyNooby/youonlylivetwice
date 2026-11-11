@@ -9,8 +9,8 @@ import java.util.UUID;
 
 /** The player counts the server list shows. */
 public final class PlayerCount {
-    // Clients show "0/1" for a server that has a slot but nobody on it, which tells nothing about the real numbers
-    public static final int SHOWN_MAX = 1;
+    // Nobody on, whatever the real number. The slot count shown is serverList.shownMaxPlayers, which tells nothing about
+    // who is online either.
     public static final int SHOWN_ONLINE = 0;
 
     private PlayerCount() {}
@@ -22,7 +22,7 @@ public final class PlayerCount {
 
     /** The slot count a server list, ping or query shows. */
     public static int max(int real) {
-        return hides() ? SHOWN_MAX : real;
+        return hides() ? Settings.get().serverList.shownMaxPlayers : real;
     }
 
     /** The player names the query port lists. */

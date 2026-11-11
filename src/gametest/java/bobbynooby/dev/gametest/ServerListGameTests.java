@@ -115,6 +115,36 @@ public class ServerListGameTests {
         helper.succeed();
     }
 
+    // serverList.shownMaxPlayers is the slot count every reply shows while the count is hidden: the status, the pre-1.7
+    // ping and the query. Flipped and restored inside one tick.
+    @GameTest
+    public void shownMaxPlayersSetsTheSlotCount(GameTestHelper helper) throws ReflectiveOperationException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Method version1 = LegacyQueryHandler.class.getDeclaredMethod("createVersion1Response", ServerInfo.class);
+        version1.setAccessible(true);
+        ServerStatus.Players players = new ServerStatus.Players(20, 5, List.of());
+        boolean before = Settings.get().hide.serverPlayerCount;
+        int maxBefore = Settings.get().serverList.shownMaxPlayers;
+        try {
+            Settings.get().hide.serverPlayerCount = true;
+            Settings.get().serverList.shownMaxPlayers = 50;
+            helper.assertValueEqual(players.max(), 50, "status max players");
+            helper.assertValueEqual(players.online(), 0, "status online players");
+            String legacy = (String) version1.invoke(null, server);
+            helper.assertTrue(legacy.endsWith("\u00000\u000050"), "legacy ping counts: " + legacy);
+            String query = queryRules(server, "nobody");
+            helper.assertTrue(query.contains("numplayers\u00000\u0000maxplayers\u000050\u0000"), "query counts: " + query);
+
+            // With the count shown, the real numbers go out whatever the key says
+            Settings.get().hide.serverPlayerCount = false;
+            helper.assertValueEqual(players.max(), 20, "status max players with the count shown");
+        } finally {
+            Settings.get().hide.serverPlayerCount = before;
+            Settings.get().serverList.shownMaxPlayers = maxBefore;
+        }
+        helper.succeed();
+    }
+
     // The pre-1.7 ping builds its reply from the server, not from the status record. The switch is flipped and
     // restored inside one tick, and the joined player leaves in the same tick.
     @GameTest

@@ -114,6 +114,10 @@ final class ConfigChecks {
             c.skins.refreshHours = fallback.skins.refreshHours;
             fellBack.accept("skins.refreshHours", "must be 0 or more");
         }
+        if (c.serverList.shownMaxPlayers < 0) {
+            c.serverList.shownMaxPlayers = fallback.serverList.shownMaxPlayers;
+            fellBack.accept("serverList.shownMaxPlayers", "must be 0 or more");
+        }
         // Like the End cap, what fits is kept rather than the whole list falling back
         List<String> lines = c.serverList.hoverLines;
         List<String> capped = new ArrayList<>();

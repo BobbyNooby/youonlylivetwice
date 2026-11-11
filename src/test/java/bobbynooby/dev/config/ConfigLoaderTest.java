@@ -168,6 +168,15 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void negativeShownMaxPlayersFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"shownMaxPlayers\":-1}}");
+        assertEquals(1, r.config().serverList.shownMaxPlayers);
+        assertTrue(r.warnings().contains("serverList.shownMaxPlayers: must be 0 or more, using default"), r.warnings().toString());
+        assertEquals(0, loadJson("{\"serverList\":{\"shownMaxPlayers\":0}}").config().serverList.shownMaxPlayers);
+        assertEquals(50, loadJson("{\"serverList\":{\"shownMaxPlayers\":50}}").config().serverList.shownMaxPlayers);
+    }
+
+    @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");
         JsonObject written = JsonParser.parseString(Files.readString(dir.resolve("config.json"))).getAsJsonObject();
