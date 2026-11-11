@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
+import net.minecraft.client.Minecraft;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.Direction;
 import net.minecraft.server.MinecraftServer;
@@ -42,35 +43,51 @@ public class BodyClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
-        ClientTests.withServer(ctx, (server, connection) -> {
-            boolean enabledWas = server.computeOnServer(s -> Settings.get().bodies.enabled);
-            YoltConfig.BodyPose poseWas = server.computeOnServer(s -> Settings.get().bodies.pose);
-            YoltConfig.BodyType typeWas = server.computeOnServer(s -> Settings.get().bodies.type);
-            // Only touched on the server thread
-            List<UUID> owners = new ArrayList<>();
-            try {
-                server.runOnServer(s -> Settings.get().bodies.enabled = true);
-                // Prone and standing share a width, so only the height tells them apart
-                showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.PRONE, 0.6, 0.6);
-                showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.SLEEPING, 0.2, 0.2);
-                showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.STANDING, 0.6, 1.8);
-                showPlayerBody(ctx, server, connection, owners);
-            } finally {
-                server.runOnServer(s -> {
-                    // Switched back first, so a test player still online leaves no body
-                    Settings.get().bodies.enabled = enabledWas;
-                    Settings.get().bodies.pose = poseWas;
-                    Settings.get().bodies.type = typeWas;
-                    for (UUID owner : owners) {
-                        ServerPlayer online = s.getPlayerList().getPlayer(owner);
-                        if (online != null) {
-                            TestPlayers.leave(online);
-                        }
-                        removeBody(s, owner);
+        // The config outlives each test's server, and between servers nothing else reads it
+        boolean tabListWas = Settings.get().hide.tabList;
+        try {
+            // With the tab list hidden every entry goes out unlisted, the body's too, so checking that the body is unlisted
+            // could never fail. With it shown the client's own entry is listed, and that entry only goes out at the join.
+            ClientTests.withServer(ctx, server -> server.runOnServer(s -> Settings.get().hide.tabList = false),
+                    (server, connection) -> showBodies(ctx, server, connection));
+        } finally {
+            // Only once the server is gone, so a join that failed can't leave it on for the tests after this one
+            Settings.get().hide.tabList = tabListWas;
+        }
+    }
+
+    private static void showBodies(ClientGameTestContext ctx, TestDedicatedServerContext server,
+                                   TestDedicatedServerConnection connection) {
+        boolean enabledWas = server.computeOnServer(s -> Settings.get().bodies.enabled);
+        YoltConfig.BodyPose poseWas = server.computeOnServer(s -> Settings.get().bodies.pose);
+        YoltConfig.BodyType typeWas = server.computeOnServer(s -> Settings.get().bodies.type);
+        // Only touched on the server thread
+        List<UUID> owners = new ArrayList<>();
+        try {
+            server.runOnServer(s -> Settings.get().bodies.enabled = true);
+            // Prone and standing share a width, so only the height tells them apart
+            showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.PRONE, 0.6, 0.6);
+            showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.SLEEPING, 0.2, 0.2);
+            showMannequin(ctx, server, connection, owners, YoltConfig.BodyPose.STANDING, 0.6, 1.8);
+            server.runOnServer(s -> Settings.get().bodies.type = YoltConfig.BodyType.PLAYER);
+            showPlayerBody(ctx, server, connection, owners, YoltConfig.BodyPose.PRONE, 0.6, 0.6, "04-body-player");
+            showPlayerBody(ctx, server, connection, owners, YoltConfig.BodyPose.SLEEPING, 0.2, 0.2, "04-body-player-sleeping");
+            showPlayerBody(ctx, server, connection, owners, YoltConfig.BodyPose.STANDING, 0.6, 1.8, "04-body-player-standing");
+        } finally {
+            server.runOnServer(s -> {
+                // Switched back first, so a test player still online leaves no body
+                Settings.get().bodies.enabled = enabledWas;
+                Settings.get().bodies.pose = poseWas;
+                Settings.get().bodies.type = typeWas;
+                for (UUID owner : owners) {
+                    ServerPlayer online = s.getPlayerList().getPlayer(owner);
+                    if (online != null) {
+                        TestPlayers.leave(online);
                     }
-                });
-            }
-        });
+                    removeBody(s, owner);
+                }
+            });
+        }
     }
 
     private static void showMannequin(ClientGameTestContext ctx, TestDedicatedServerContext server,
@@ -90,11 +107,13 @@ public class BodyClientTest implements FabricClientGameTest {
     }
 
     private static void showPlayerBody(ClientGameTestContext ctx, TestDedicatedServerContext server,
-                                       TestDedicatedServerConnection connection, List<UUID> owners) {
-        server.runOnServer(s -> Settings.get().bodies.type = YoltConfig.BodyType.PLAYER);
-        Body body = leaveBody(server, connection, owners, YoltConfig.BodyPose.PRONE);
+                                       TestDedicatedServerConnection connection, List<UUID> owners,
+                                       YoltConfig.BodyPose pose, double width, double height, String shot) {
+        Body body = leaveBody(server, connection, owners, pose);
         waitForBody(ctx, connection, EntityTypes.PLAYER);
-        ClientTests.waitUntilProne(ctx, body.entity());
+        if (pose == YoltConfig.BodyPose.PRONE) {
+            ClientTests.waitUntilProne(ctx, body.entity());
+        }
 
         if (!ctx.computeOnClient(mc -> mc.level.getEntity(body.entity()) instanceof Player)) {
             throw new AssertionError("the client has no player entity for the player body");
@@ -103,17 +122,27 @@ public class BodyClientTest implements FabricClientGameTest {
         if (!ctx.computeOnClient(mc -> mc.getConnection().getPlayerInfo(body.entity()) != null)) {
             throw new AssertionError("the client has no entry for the player body");
         }
-        boolean listed = ctx.computeOnClient(mc -> mc.getConnection().getListedOnlinePlayers().stream()
-                .anyMatch(info -> info.getProfile().id().equals(body.entity())));
-        if (listed) {
+        // The control: the tab list shows the client itself, so leaving the body out is the body's own rule
+        if (!ctx.computeOnClient(mc -> listed(mc, mc.player.getUUID()))) {
+            throw new AssertionError("the client doesn't list itself, so an unlisted body would prove nothing");
+        }
+        if (ctx.computeOnClient(mc -> listed(mc, body.entity()))) {
             throw new AssertionError("the client lists the player body in the tab list");
         }
         // The body has its own id, so the owner stays offline to the client
         if (!ctx.computeOnClient(mc -> mc.getConnection().getPlayerInfo(body.owner()) == null)) {
             throw new AssertionError("the client has an entry for the body's offline owner");
         }
-        checkHitbox(ctx, body.entity(), "player", 0.6, 0.6);
-        screenshot(ctx, "04-body-player");
+        checkHitbox(ctx, body.entity(), "player " + pose.name().toLowerCase(Locale.ROOT), width, height);
+        screenshot(ctx, shot);
+        // So the client never has two bodies in view
+        server.runOnServer(s -> removeBody(s, body.owner()));
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.level.getEntity(body.entity()) == null,
+                mc -> "the client still has the player body the server removed");
+    }
+
+    private static boolean listed(Minecraft mc, UUID id) {
+        return mc.getConnection().getListedOnlinePlayers().stream().anyMatch(info -> info.getProfile().id().equals(id));
     }
 
     // A test player in an iron chestplate logs out a few blocks in front of the client, and the client looks at the body
