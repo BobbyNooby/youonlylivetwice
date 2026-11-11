@@ -323,6 +323,23 @@ class ConfigLoaderTest {
         assertTrue(odd.diameter * odd.endScale > ConfigLoader.MAX_BORDER_DIAMETER - 1, "end border " + odd.diameter * odd.endScale);
     }
 
+    // On a reload a bad diameter keeps the live one, and the End cap works from that kept diameter: half of vanilla's
+    // largest border caps endScale at exactly 2. The default diameter would leave 3 alone.
+    @Test
+    void endCapOnReloadUsesTheKeptLiveDiameter() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"worldBorder\":{\"diameter\":0,\"endScale\":3.0}}");
+        YoltConfig live = new YoltConfig();
+        live.worldBorder.diameter = ConfigLoader.MAX_BORDER_DIAMETER / 2;
+        live.worldBorder.endScale = 1.0;
+
+        ConfigLoader.Result r = ConfigLoader.load(file, live, false);
+        assertEquals(ConfigLoader.MAX_BORDER_DIAMETER / 2, r.config().worldBorder.diameter);
+        assertEquals(2.0, r.config().worldBorder.endScale);
+        assertEquals(List.of("worldBorder.diameter: must be 1 to 59999968, using the current value",
+                "worldBorder.endScale: worldBorder.diameter times endScale can't pass 59999968, using 2.0"), r.warnings());
+    }
+
     // A startup leaves the world's own border alone when its border values aren't what the admin wrote
     @Test
     void borderProblemOnlyWhenBorderValuesFellBack() throws IOException {
