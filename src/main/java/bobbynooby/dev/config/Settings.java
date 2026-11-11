@@ -48,6 +48,19 @@ public final class Settings {
         return result;
     }
 
+    /**
+     * Sets one key in the file and the live config from what an admin typed. A text the key can't take, or a value its
+     * range check refuses, comes back as the problem and changes nothing; so does the value the key has already, with
+     * no problem. The caller then applies the new config with LiveSettings.applyAll.
+     */
+    public static ConfigLoader.Change set(ConfigKey key, String text) {
+        ConfigLoader.Change change = ConfigLoader.setText(path(), config, key, text);
+        if (change.config() != null) {
+            config = change.config();
+        }
+        return change;
+    }
+
     /** True while the border values in the config are startup fallbacks, so YOLT leaves the world's own border alone. */
     public static boolean borderHeld() {
         return borderHeld;

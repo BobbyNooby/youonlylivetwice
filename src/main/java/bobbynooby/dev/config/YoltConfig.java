@@ -5,7 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Mod settings. Field names are the JSON keys. */
+/** Mod settings. Field names are the JSON keys; @Applies marks a key whose change doesn't take effect at once. */
 public class YoltConfig {
     // A fresh file is written at the version this build reads
     public int configVersion = ConfigLoader.CURRENT_VERSION;
@@ -32,9 +32,9 @@ public class YoltConfig {
 
     public static class DeathLockoutSection {
         public boolean enabled = true;
-        public int cooldownDays = 7;
+        @Applies(Applies.When.NEW_DEATHS) public int cooldownDays = 7;
         // Off: a death in creative or spectator makes no lockout, grave or death record, and the player keeps their items
-        public boolean countCreativeAndSpectatorDeaths = false;
+        @Applies(Applies.When.NEW_DEATHS) public boolean countCreativeAndSpectatorDeaths = false;
     }
 
     public static class GravesSection {
@@ -42,9 +42,9 @@ public class YoltConfig {
         public EnderChestMode enderChestOnDeath = EnderChestMode.KEEP;
         // How often graves in loaded chunks get a missing head put back; 0 turns that off
         public int recheckSeconds = 5;
-        public TellLocation tellLocation = TellLocation.WHEN_MOVED;
+        @Applies(Applies.When.NEW_DEATHS) public TellLocation tellLocation = TellLocation.WHEN_MOVED;
         // How far from the death spot, in blocks, a grave must be for whenMoved to tell the dead player
-        public int tellLocationDistance = 16;
+        @Applies(Applies.When.NEW_DEATHS) public int tellLocationDistance = 16;
     }
 
     public static class ReviveSection {
@@ -77,12 +77,12 @@ public class YoltConfig {
 
     public static class BodiesSection {
         public boolean enabled = true;
-        public BodyType type = BodyType.MANNEQUIN;
+        @Applies(Applies.When.NEW_BODIES) public BodyType type = BodyType.MANNEQUIN;
         public BodyDuration duration = BodyDuration.OFFLINE;
-        public BodyPose pose = BodyPose.PRONE;
+        @Applies(Applies.When.NEW_BODIES) public BodyPose pose = BodyPose.PRONE;
         public boolean mobsAttack = true;
-        public boolean movable = true;
-        public boolean totems = true;
+        @Applies(Applies.When.NEW_BODIES) public boolean movable = true;
+        @Applies(Applies.When.NEW_BODIES) public boolean totems = true;
         public boolean armourWears = true;
         public boolean copyEffects = true;
         // Vanilla /kill leaves bodies standing; /yolt kill <player> is the way to kill one on purpose

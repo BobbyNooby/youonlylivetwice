@@ -1,6 +1,7 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.core.Migrations;
+import bobbynooby.dev.core.Yolt;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -31,6 +32,12 @@ public final class ConfigLoader {
      */
     public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem) {}
 
+    /**
+     * What setting one key did. config is the new live config, and null when nothing changed: problem then says why, or
+     * is null too when the key already had that value.
+     */
+    public record Change(@Nullable YoltConfig config, String oldValue, String newValue, @Nullable String problem) {}
+
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
 
@@ -43,6 +50,7 @@ public final class ConfigLoader {
     private static final String DURATION_PATH = "bodies.duration";
     private static final String VERSION_KEY = "configVersion";
     private static final String BORDER_SECTION = "worldBorder";
+    private static final String CURRENT_VALUE = "the current value";
     // Every file YOLT writes has the version, so a file without one is read as the first version
     private static final int FIRST_VERSION = 1;
 
@@ -73,11 +81,7 @@ public final class ConfigLoader {
 
         JsonObject user;
         try {
-            JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
-            if (!parsed.isJsonObject()) {
-                throw new JsonParseException("root is not an object");
-            }
-            user = parsed.getAsJsonObject();
+            user = readObject(file);
         } catch (JsonParseException | IOException e) {
             // A file that can't be read (not UTF-8, say) is as unusable as one that isn't JSON. The decoder only says
             // "Input length = 1", so that case is named here
@@ -103,7 +107,7 @@ public final class ConfigLoader {
         }
 
         YoltConfig fallback = base != null ? base : new YoltConfig();
-        String fallbackName = base != null ? "the current value" : "default";
+        String fallbackName = base != null ? CURRENT_VALUE : "default";
         // The keys the file gave but the config doesn't use (fallbacks and unknown keys), so a startup can tell whether
         // the border values are the file's own
         List<String> refused = new ArrayList<>();
@@ -164,13 +168,112 @@ public final class ConfigLoader {
         return FIRST_VERSION;
     }
 
+    private static JsonObject readObject(Path file) throws IOException {
+        JsonElement parsed = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+        if (!parsed.isJsonObject()) {
+            throw new JsonParseException("root is not an object");
+        }
+        return parsed.getAsJsonObject();
+    }
+
+    /** Settings.set without swapping the live config: reads the text, then sets the key unless it has that value already. */
+    static Change setText(Path file, YoltConfig live, ConfigKey key, String text) {
+        String current = key.show(live);
+        JsonPrimitive value;
+        try {
+            value = key.parse(text);
+        } catch (ConfigKey.BadValue e) {
+            return new Change(null, current, text, e.getMessage());
+        }
+        if (key.json(live).equals(value)) {
+            return new Change(null, current, current, null);
+        }
+        return setKey(file, live, key, value);
+    }
+
+    /**
+     * Checks the new value as a reload would, with the live config as the fallback, and refuses it if any warning names
+     * the key. Otherwise only that key changes in the file, so the admin's other edits and keys this build doesn't know
+     * stay. A file that can't be read is kept as a .bak and the whole new config written. live itself is not changed.
+     */
+    public static Change setKey(Path file, YoltConfig live, ConfigKey key, JsonPrimitive value) {
+        String oldValue = key.show(live);
+        String typed = value.getAsString();
+        JsonObject liveJson = GSON.toJsonTree(live).getAsJsonObject();
+        JsonObject edited = liveJson.deepCopy();
+        put(edited, key.path(), value);
+
+        List<String> warnings = new ArrayList<>();
+        JsonObject merged = merge(liveJson, edited, "", warnings, CURRENT_VALUE, new ArrayList<>());
+        YoltConfig config;
+        try {
+            config = GSON.fromJson(merged, YoltConfig.class);
+        } catch (JsonParseException e) {
+            return new Change(null, oldValue, typed, key.path() + ": " + e.getMessage());
+        }
+        ConfigChecks.validate(config, live, warnings, CURRENT_VALUE);
+        for (String warning : warnings) {
+            // Contains, not starts with: the End cap's warning begins with endScale but is as much about the diameter
+            if (warning.contains(key.path())) {
+                int tail = warning.lastIndexOf(", using ");
+                return new Change(null, oldValue, typed, tail < 0 ? warning : warning.substring(0, tail));
+            }
+        }
+
+        try {
+            writeKey(file, key.path(), value, config);
+        } catch (UncheckedIOException e) {
+            return new Change(null, oldValue, typed, "the config file could not be saved (" + e.getCause().getMessage() + ")");
+        }
+        return new Change(config, oldValue, key.show(config), null);
+    }
+
+    private static void writeKey(Path file, String path, JsonPrimitive value, YoltConfig config) {
+        if (!Files.exists(file)) {
+            write(file, config);
+            return;
+        }
+        JsonObject own;
+        try {
+            own = readObject(file);
+        } catch (JsonParseException | IOException e) {
+            String backup = file.getFileName() + ".bak";
+            backup(file, backup);
+            Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {} and the whole config"
+                    + " was written", path, backup);
+            write(file, config);
+            return;
+        }
+        put(own, path, value);
+        writeText(file, GSON.toJson(own));
+    }
+
+    // Sets a dotted path, making any section on the way that is missing or isn't an object
+    private static void put(JsonObject root, String path, JsonElement value) {
+        String[] parts = path.split("\\.");
+        JsonObject section = root;
+        for (int i = 0; i < parts.length - 1; i++) {
+            JsonElement child = section.get(parts[i]);
+            if (child == null || !child.isJsonObject()) {
+                child = new JsonObject();
+                section.add(parts[i], child);
+            }
+            section = child.getAsJsonObject();
+        }
+        section.add(parts[parts.length - 1], value);
+    }
+
     /** Writes a temp file first and moves it over the config, so a crash mid-write can't leave half a file. */
     public static void write(Path file, YoltConfig config) {
+        writeText(file, GSON.toJson(config));
+    }
+
+    private static void writeText(Path file, String text) {
         Path target = file.toAbsolutePath();
         Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
             Files.createDirectories(target.getParent());
-            Files.writeString(tmp, GSON.toJson(config), StandardCharsets.UTF_8);
+            Files.writeString(tmp, text, StandardCharsets.UTF_8);
             try {
                 Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException e) {

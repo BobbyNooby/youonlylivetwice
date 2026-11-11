@@ -4,6 +4,7 @@ import bobbynooby.dev.core.Migrations;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -487,5 +488,103 @@ class ConfigLoaderTest {
             assertEquals(new YoltConfig().serverList.hoverLines, r.config().serverList.hoverLines, bad);
             assertTrue(r.warnings().stream().anyMatch(w -> w.contains("serverList.hoverLines")), bad);
         }
+    }
+
+    private static ConfigKey key(String path) {
+        return ConfigKeys.find(path).orElseThrow(() -> new AssertionError("no key " + path));
+    }
+
+    private static JsonObject readJson(Path file) throws IOException {
+        return JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+    }
+
+    // The file has an edit not yet reloaded and a key this build doesn't know; setting another key keeps both
+    @Test
+    void setKeyChangesOnlyThatKeyInFile() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"chat\": {\"radius\": 20}, \"worldBorder\": {\"diameter\": 10000}, \"fromTheFuture\": 1}");
+        YoltConfig live = new YoltConfig();
+
+        ConfigLoader.Change change = ConfigLoader.setKey(file, live, key("worldBorder.diameter"), new JsonPrimitive(8000));
+        assertNull(change.problem());
+        assertEquals("10000", change.oldValue());
+        assertEquals("8000", change.newValue());
+        assertEquals(48, change.config().chat.radius);
+        assertEquals(8000, change.config().worldBorder.diameter);
+        assertEquals(10000, live.worldBorder.diameter, "the live config was changed in place");
+
+        JsonObject written = readJson(file);
+        assertEquals(20, written.getAsJsonObject("chat").get("radius").getAsInt());
+        assertEquals(8000, written.getAsJsonObject("worldBorder").get("diameter").getAsInt());
+        assertEquals(1, written.get("fromTheFuture").getAsInt());
+        // Nothing the file left out is filled in
+        assertFalse(written.has("hide"));
+    }
+
+    @Test
+    void setKeyRefusesOutOfRange() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] before = "{\"worldBorder\": {\"diameter\": 10000}}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, before);
+
+        ConfigLoader.Change change = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.diameter"), new JsonPrimitive(0));
+        assertEquals("worldBorder.diameter: must be 1 to 59999968", change.problem());
+        assertNull(change.config());
+        assertArrayEquals(before, Files.readAllBytes(file));
+    }
+
+    @Test
+    void setKeyOnUnparseableFileWritesWholeConfig() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{");
+
+        ConfigLoader.Change change = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.diameter"), new JsonPrimitive(8000));
+        assertNull(change.problem());
+        assertEquals("{", Files.readString(dir.resolve("config.json.bak")));
+        assertEquals(new Gson().toJsonTree(change.config()), readJson(file));
+        assertEquals(8000, readJson(file).getAsJsonObject("worldBorder").get("diameter").getAsInt());
+    }
+
+    // The End cap's warning starts with endScale but names the diameter too, so either change that hits it is refused
+    // rather than quietly moving the End border
+    @Test
+    void setKeyRefusesWhatTheEndCapWouldChange() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] before = "{}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, before);
+        String capped = "worldBorder.endScale: worldBorder.diameter times endScale can't pass 59999968";
+
+        ConfigLoader.Change diameter = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.diameter"),
+                new JsonPrimitive(ConfigLoader.MAX_BORDER_DIAMETER));
+        assertEquals(capped, diameter.problem());
+        assertNull(diameter.config());
+        ConfigLoader.Change endScale = ConfigLoader.setKey(file, new YoltConfig(), key("worldBorder.endScale"), new JsonPrimitive(1e7));
+        assertEquals(capped, endScale.problem());
+        assertArrayEquals(before, Files.readAllBytes(file));
+    }
+
+    // What Settings.set does before it swaps the live config
+    @Test
+    void setTextRefusesBadTextAndSkipsTheSameValue() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] before = "{\"chat\": {\"radius\": 20}}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, before);
+        YoltConfig live = new YoltConfig();
+
+        ConfigLoader.Change bad = ConfigLoader.setText(file, live, key("chat.radius"), "abc");
+        assertEquals(new ConfigLoader.Change(null, "48", "abc", "chat.radius takes a whole number, not 'abc'."), bad);
+        // 48 is the live value, whatever the file says, so nothing is written
+        assertEquals(new ConfigLoader.Change(null, "48", "48", null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
+        assertEquals(new ConfigLoader.Change(null, "2.0", "2.0", null),
+                ConfigLoader.setText(file, live, key("worldBorder.endScale"), "2"));
+        assertArrayEquals(before, Files.readAllBytes(file));
+
+        ConfigLoader.Change set = ConfigLoader.setText(file, live, key("chat.mode"), "global");
+        assertNull(set.problem());
+        assertEquals("proximity", set.oldValue());
+        assertEquals("global", set.newValue());
+        assertEquals(YoltConfig.ChatMode.GLOBAL, set.config().chat.mode);
+        assertEquals("global", readJson(file).getAsJsonObject("chat").get("mode").getAsString());
+        assertEquals(20, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
     }
 }
