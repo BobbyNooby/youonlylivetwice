@@ -195,10 +195,12 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // The owner is online and alive, with an older death the console ended: their own head does nothing, stays in the
-    // hand, and leaves that death as it was. Once they are out and locked out again, the same head revives them.
+    // Being alive is what keeps the head, not being online. The owner is online and alive, with an older death the
+    // console ended: their own head does nothing, stays in the hand, and leaves that death as it was. Then only one
+    // thing changes: the owner really dies and, in the same tick, is still online, before the death kick. The same head
+    // revives that death and is used up, as it would be after the kick.
     @GameTest
-    public void reviveHeadOnOnlineOwnerKeepsHead(GameTestHelper helper) {
+    public void reviveHeadOnLivingOwnerKeepsHead(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer owner = TestPlayers.join(helper, "Online", GameType.SURVIVAL, new BlockPos(3, 1, 3));
         TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Hopeful", GameType.SURVIVAL, new BlockPos(1, 1, 1));
@@ -216,19 +218,22 @@ public class ReviveGameTests {
             helper.assertTrue(server.getPlayerList().getPlayer(id) == owner, "the owner is no longer online");
             helper.assertValueEqual(DeathLockout.newestDeath(id).revivedBy(), "console", "who revived the owner's death");
 
-            // The control: the head itself works on this owner
-            TestPlayers.leave(owner);
-            DeathLockout.recordDeath(id, name);
+            TestPlayers.markLoaded(owner);
+            owner.kill(owner.level());
+            helper.assertTrue(owner.isDeadOrDying(), "the owner did not die");
+            helper.assertTrue(server.getPlayerList().getPlayer(id) == owner, "the owner left at the death, before the head was tried");
             int mark = user.messages.size();
-            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.REVIVED, "outcome with the owner out and locked out");
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.REVIVED, "outcome with the owner dead and still online");
             helper.assertValueEqual(head.getCount(), 0, "heads left after the revive");
             helper.assertValueEqual(said(user, mark), List.of(name + " can come back now."), "reply to the revive");
             helper.assertValueEqual(DeathLockout.newestDeath(id).revivedBy(), user.getGameProfile().name(), "who revived the owner's new death");
         } finally {
+            // Leaving first means the queued death kick finds nobody
             if (server.getPlayerList().getPlayer(id) == owner) {
                 TestPlayers.leave(owner);
             }
             TestPlayers.leave(user);
+            BodyTestKit.removeGraves(helper, id);
         }
         helper.succeed();
     }
