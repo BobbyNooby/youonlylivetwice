@@ -5,13 +5,18 @@ import bobbynooby.dev.config.YoltConfig;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.saveddata.WeatherData;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 // The night passing through the level's own tick. Each test holds the switch and the clock across ticks, so each has a
@@ -30,7 +35,7 @@ public class NightGameTests {
     @GameTest(environment = NIGHT, maxTicks = 140, skyAccess = true)
     public void nightDoesNotSkipWithEveryoneAsleep(GameTestHelper helper) {
         BlockPos head = SleepGameTests.placeBed(helper);
-        ServerPlayer sleeper = TestPlayers.join(helper, "NightOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "NightOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
         YoltConfig.SleepSection sleep = Settings.get().sleep;
         boolean before = sleep.noNightSkip;
         Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
@@ -63,7 +68,7 @@ public class NightGameTests {
     @GameTest(environment = NIGHT_SKIP, maxTicks = 140, skyAccess = true)
     public void nightSkipsWhenSwitchOff(GameTestHelper helper) {
         BlockPos head = SleepGameTests.placeBed(helper);
-        ServerPlayer sleeper = TestPlayers.join(helper, "EarlyBird", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "EarlyBird", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
         YoltConfig.SleepSection sleep = Settings.get().sleep;
         boolean before = sleep.noNightSkip;
         Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
@@ -93,7 +98,7 @@ public class NightGameTests {
     @GameTest(environment = NIGHT_THUNDER, maxTicks = 140, skyAccess = true)
     public void sleepingThroughThunderDoesNotClearWeather(GameTestHelper helper) {
         BlockPos head = SleepGameTests.placeBed(helper);
-        ServerPlayer sleeper = TestPlayers.join(helper, "StormOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "StormOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
         WeatherData weather = helper.getLevel().getWeatherData();
         YoltConfig.SleepSection sleep = Settings.get().sleep;
         boolean before = sleep.noNightSkip;
@@ -126,10 +131,21 @@ public class NightGameTests {
     }
 
     // Into bed at midnight, then the sleeper's tick from now on. Returns the clock at that point.
-    private static long goToSleep(GameTestHelper helper, ServerPlayer sleeper, BlockPos head) {
+    private static long goToSleep(GameTestHelper helper, TestPlayers.Recording sleeper, BlockPos head) {
         SleepGameTests.toMidnight(helper);
+        int from = sleeper.messages.size();
         SleepGameTests.useBed(helper, sleeper, head);
-        helper.assertTrue(sleeper.isSleeping(), "the sleeper could not get into the bed");
+        if (!sleeper.isSleeping()) {
+            // Vanilla says why on the action bar. A monster in the box it checks is one of its reasons.
+            List<String> said = sleeper.messages.subList(from, sleeper.messages.size()).stream()
+                    .map(line -> line.getContents() instanceof TranslatableContents text ? text.getKey() : line.getString())
+                    .toList();
+            AABB box = AABB.ofSize(Vec3.atBottomCenterOf(helper.absolutePos(head)), 16, 10, 16);
+            List<String> monsters = helper.getLevel().getEntitiesOfClass(Monster.class, box).stream()
+                    .map(monster -> monster.getType().getDescriptionId() + " at " + monster.blockPosition().toShortString())
+                    .toList();
+            helper.fail("the sleeper could not get into the bed: vanilla said " + said + ", monsters near the bed " + monsters);
+        }
         // Stops once the sleeper has left
         helper.onEachTick(() -> {
             if (!sleeper.isRemoved()) {
