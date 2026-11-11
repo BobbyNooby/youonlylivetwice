@@ -19,6 +19,7 @@
 			"bobbynooby.dev.gametest.ChatGameTests",
 			"bobbynooby.dev.gametest.CommandGameTests",
 			"bobbynooby.dev.gametest.CommandRestrictionGameTests",
+			"bobbynooby.dev.gametest.ConfigCommandGameTests",
 			"bobbynooby.dev.gametest.GraveCommandGameTests",
 			"bobbynooby.dev.gametest.GraveDeathGameTests",
 			"bobbynooby.dev.gametest.GraveItemsGameTests",

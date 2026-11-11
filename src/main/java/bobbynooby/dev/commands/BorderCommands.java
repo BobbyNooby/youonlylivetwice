@@ -5,6 +5,7 @@ import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.world.RandomSpawn;
@@ -81,7 +82,14 @@ final class BorderCommands {
      * read from the live config, so a change to it is made before asking.
      */
     static Outside stranded(MinecraftServer server, int diameter, double endScale) {
-        return stranded(server, sized(diameter, endScale, false), false);
+        return Settings.on(c -> c.worldBorder.enabled) ? stranded(server, sized(diameter, endScale, false), false) : Outside.NONE;
+    }
+
+    /** The same for a border section not saved yet, so its own switch counts: /yolt config can turn the feature on. */
+    static Outside stranded(MinecraftServer server, YoltConfig.WorldBorderSection border) {
+        return Settings.active() && border.enabled
+                ? stranded(server, sized(border.diameter, border.endScale, false), false)
+                : Outside.NONE;
     }
 
     /**
@@ -89,7 +97,7 @@ final class BorderCommands {
      * level's border is left out, so a bigger border is never refused for it.
      */
     static Outside newlyStranded(MinecraftServer server, int diameter, double endScale) {
-        return stranded(server, sized(diameter, endScale, true), true);
+        return Settings.on(c -> c.worldBorder.enabled) ? stranded(server, sized(diameter, endScale, true), true) : Outside.NONE;
     }
 
     // The border one level would have after a change, or null when the change leaves that level's border alone
@@ -117,10 +125,8 @@ final class BorderCommands {
         return border;
     }
 
+    // The caller has checked the border feature is on
     private static Outside stranded(MinecraftServer server, Proposal proposal, boolean newlyOnly) {
-        if (!Settings.on(c -> c.worldBorder.enabled)) {
-            return Outside.NONE;
-        }
         // Each level is checked against its own border as it is now. Vanilla's border answers "inside", so the edge is
         // the one border damage and block use go by.
         Map<ResourceKey<Level>, Edges> borders = new HashMap<>();
@@ -180,7 +186,7 @@ final class BorderCommands {
     }
 
     // Null when the change may go ahead
-    private static @Nullable String refusal(Outside outside, boolean confirmed) {
+    static @Nullable String refusal(Outside outside, boolean confirmed) {
         return confirmed || outside.names().isEmpty()
                 ? null
                 : "This would leave " + listed(outside.names()) + " outside the world border. Add confirm to the command to do it anyway.";

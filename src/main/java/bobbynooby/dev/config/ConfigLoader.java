@@ -21,6 +21,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -184,6 +185,11 @@ public final class ConfigLoader {
 
     /** Settings.set without swapping the live config: reads the text, then sets the key unless it has that value already. */
     static Change setText(Path file, YoltConfig live, ConfigKey key, String text) {
+        return setText(file, live, key, text, next -> null);
+    }
+
+    // The same, with the caller's own last check on the config the change gives (see setKey)
+    static Change setText(Path file, YoltConfig live, ConfigKey key, String text, Function<YoltConfig, @Nullable String> veto) {
         String current = key.show(live);
         JsonPrimitive value;
         try {
@@ -194,7 +200,7 @@ public final class ConfigLoader {
         if (key.json(live).equals(value)) {
             return new Change(null, current, current, null, null);
         }
-        return setKey(file, live, key, value);
+        return setKey(file, live, key, value, veto);
     }
 
     /**
@@ -204,6 +210,15 @@ public final class ConfigLoader {
      * itself is not changed.
      */
     public static Change setKey(Path file, YoltConfig live, ConfigKey key, JsonPrimitive value) {
+        return setKey(file, live, key, value, next -> null);
+    }
+
+    /**
+     * The same, and veto sees the config a good value gives before anything is written: a reason it returns refuses the
+     * change as a problem would, and null lets it through. A command uses it for checks of its own, such as who a new
+     * border would leave outside.
+     */
+    static Change setKey(Path file, YoltConfig live, ConfigKey key, JsonPrimitive value, Function<YoltConfig, @Nullable String> veto) {
         String oldValue = key.show(live);
         String typed = value.getAsString();
         JsonObject liveJson = GSON.toJsonTree(live).getAsJsonObject();
@@ -224,6 +239,10 @@ public final class ConfigLoader {
                 int tail = warning.lastIndexOf(", using ");
                 return new Change(null, oldValue, typed, tail < 0 ? warning : warning.substring(0, tail), null);
             }
+        }
+        String refused = veto.apply(config);
+        if (refused != null) {
+            return new Change(null, oldValue, typed, refused, null);
         }
 
         // A file that can't be read is copied before the whole config goes over it, and the copy is named even when that

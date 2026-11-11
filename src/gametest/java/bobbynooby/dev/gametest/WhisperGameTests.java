@@ -433,7 +433,7 @@ public class WhisperGameTests {
     }
 
     // What the server answers a client's suggestion request with. A real connection ticks its own provider.
-    private static List<String> suggestions(GameTestHelper helper, ServerPlayer player, String command) {
+    static List<String> suggestions(GameTestHelper helper, ServerPlayer player, String command) {
         ServerCommandSuggestionsProvider provider = new ServerCommandSuggestionsProvider(player);
         CompletableFuture<Suggestions> answer = provider.request(command);
         provider.tick();

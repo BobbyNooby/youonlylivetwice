@@ -6,6 +6,7 @@ import net.minecraft.server.MinecraftServer;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /** Holds the live config that every feature reads while the server runs. */
@@ -58,7 +59,15 @@ public final class Settings {
      * the new config with LiveSettings.applyAll.
      */
     public static ConfigLoader.Change set(ConfigKey key, String text) {
-        ConfigLoader.Change change = ConfigLoader.setText(path(), config, key, text);
+        return set(key, text, next -> null);
+    }
+
+    /**
+     * The same, and veto sees the config a good value would give before anything is saved: a reason it returns refuses
+     * the change as the problem, and null lets it through.
+     */
+    public static ConfigLoader.Change set(ConfigKey key, String text, Function<YoltConfig, @Nullable String> veto) {
+        ConfigLoader.Change change = ConfigLoader.setText(path(), config, key, text, veto);
         if (change.config() != null) {
             config = change.config();
         }

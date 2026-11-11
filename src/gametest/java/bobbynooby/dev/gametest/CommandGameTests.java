@@ -824,6 +824,9 @@ public class CommandGameTests {
                 yolt grave remove <pos> | minecraft:block_pos | level 0 | runs
                 yolt adminview | literal | level 2 | runs
                 yolt reload | literal | level 2 | runs
+                yolt config | literal | level 2
+                yolt config <key> | brigadier:string {"type":"word"} | own suggestions | level 0 | runs
+                yolt config <key> <value> | brigadier:string {"type":"greedy"} | own suggestions | level 0 | runs
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0
                 yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
@@ -1222,16 +1225,16 @@ public class CommandGameTests {
 
     // A startup load that refuses a value keeps the file it rewrites as a .bak, or beside it with the time added when the
     // .bak holds something else. bytes is null when there was no .bak.
-    private record SavedBackups(Path bak, byte[] bytes, List<Path> timed) {}
+    record SavedBackups(Path bak, byte[] bytes, List<Path> timed) {}
 
-    private static SavedBackups saveBackups(Path config) throws IOException {
+    static SavedBackups saveBackups(Path config) throws IOException {
         Path bak = config.resolveSibling(config.getFileName() + ".bak");
         return new SavedBackups(bak, Files.exists(bak) ? Files.readAllBytes(bak) : null, timedCopies(bak));
     }
 
     // Puts back the .bak a test's startup loads may have written, or removes it if there was none, and removes the timed
     // copies they made
-    private static void restoreBackups(SavedBackups saved) throws IOException {
+    static void restoreBackups(SavedBackups saved) throws IOException {
         if (saved.bytes() == null) {
             Files.deleteIfExists(saved.bak());
         } else {
@@ -1257,7 +1260,7 @@ public class CommandGameTests {
     }
 
     // Every level's border centre and size, for restoreBorders
-    private static Map<ServerLevel, double[]> saveBorders(MinecraftServer server) {
+    static Map<ServerLevel, double[]> saveBorders(MinecraftServer server) {
         Map<ServerLevel, double[]> saved = new HashMap<>();
         for (ServerLevel level : server.getAllLevels()) {
             WorldBorder border = level.getWorldBorder();
@@ -1274,7 +1277,7 @@ public class CommandGameTests {
         LiveSettings.applyAll(server);
     }
 
-    private static void restoreBorders(Map<ServerLevel, double[]> saved) {
+    static void restoreBorders(Map<ServerLevel, double[]> saved) {
         saved.forEach((level, border) -> {
             level.getWorldBorder().setCenter(border[0], border[1]);
             level.getWorldBorder().setSize(border[2]);
@@ -1343,12 +1346,12 @@ public class CommandGameTests {
     }
 
     // Runs the command as the console and returns every line it sent back
-    private static List<String> run(MinecraftServer server, String command) {
+    static List<String> run(MinecraftServer server, String command) {
         return run(server, command, value -> {});
     }
 
     // The same, and hands the command's return value to result
-    private static List<String> run(MinecraftServer server, String command, IntConsumer result) {
+    static List<String> run(MinecraftServer server, String command, IntConsumer result) {
         List<String> output = new ArrayList<>();
         CommandSource capture = new CommandSource() {
             @Override

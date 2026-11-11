@@ -590,6 +590,32 @@ class ConfigLoaderTest {
         assertEquals(20, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
     }
 
+    // A command's own check, such as who a border would leave outside, sees the new config and can refuse it before the
+    // file is touched. A value the key's own checks refuse never reaches it.
+    @Test
+    void vetoRefusesTheChangeBeforeTheWrite() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] before = "{}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, before);
+        List<Integer> seen = new ArrayList<>();
+
+        ConfigLoader.Change refused = ConfigLoader.setText(file, new YoltConfig(), key("worldBorder.diameter"), "500", next -> {
+            seen.add(next.worldBorder.diameter);
+            return "too small";
+        });
+        assertEquals(new ConfigLoader.Change(null, "10000", "500", "too small", null), refused);
+        assertEquals(List.of(500), seen);
+        assertArrayEquals(before, Files.readAllBytes(file));
+
+        ConfigLoader.Change outOfRange = ConfigLoader.setText(file, new YoltConfig(), key("worldBorder.diameter"), "0",
+                next -> fail("the veto saw a value the checks refuse"));
+        assertEquals("worldBorder.diameter: must be 1 to 59999968", outOfRange.problem());
+
+        ConfigLoader.Change allowed = ConfigLoader.setText(file, new YoltConfig(), key("worldBorder.diameter"), "500", next -> null);
+        assertEquals(500, allowed.config().worldBorder.diameter);
+        assertEquals(500, readJson(file).getAsJsonObject("worldBorder").get("diameter").getAsInt());
+    }
+
     private List<Path> timedCopies() throws IOException {
         try (Stream<Path> files = Files.list(dir)) {
             return new ArrayList<>(files.filter(path -> path.getFileName().toString().matches("config\\.json\\.bak-\\d+"))
