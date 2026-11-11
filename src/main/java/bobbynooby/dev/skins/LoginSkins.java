@@ -13,6 +13,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 
 /**
  * One joining player's skin, worked out as vanilla starts checking their login: the account they picked, else the
@@ -22,12 +23,15 @@ import java.util.concurrent.TimeUnit;
  * saved before, or none.
  */
 public final class LoginSkins {
+    // What the wall-clock cap reads, so a test can move time on instead of waiting it out
+    private static volatile LongSupplier clock = System::nanoTime;
+
     private final MinecraftServer server;
     private final SocketAddress address;
     private final GameProfile profile;
     private final int ticksAllowed;
     private final long nanosAllowed;
-    private final long startedAt = System.nanoTime();
+    private final long startedAt = clock.getAsLong();
     private int ticksWaited;
     // Set once Mojang has failed or run out of time, so from then on only saved answers are used
     private boolean savedOnly;
@@ -48,6 +52,13 @@ public final class LoginSkins {
         int seconds = Settings.get().skins.lookupTimeoutSeconds;
         this.ticksAllowed = seconds * SharedConstants.TICKS_PER_SECOND;
         this.nanosAllowed = TimeUnit.SECONDS.toNanos(seconds);
+    }
+
+    /** For the tests: the clock, in nanoseconds, that logins from now on read. Returns the clock it replaced. */
+    public static LongSupplier useClockForTesting(LongSupplier testClock) {
+        LongSupplier before = clock;
+        clock = testClock;
+        return before;
     }
 
     public static LoginSkins start(MinecraftServer server, SocketAddress address, GameProfile profile) {
@@ -158,7 +169,7 @@ public final class LoginSkins {
             return;
         }
         boolean ticksLeft = ticksWaited++ < ticksAllowed;
-        if (ticksLeft && System.nanoTime() - startedAt < nanosAllowed) {
+        if (ticksLeft && clock.getAsLong() - startedAt < nanosAllowed) {
             return;
         }
         String name = asked;
