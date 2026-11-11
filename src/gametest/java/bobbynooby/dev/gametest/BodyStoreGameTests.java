@@ -13,7 +13,9 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerPlayer;
@@ -25,6 +27,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.SavedDataStorage;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -231,6 +234,44 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // A body file from a newer YOLT, its format one past this one's, as the body file of a data storage of the test's
+    // own. get reads what it can and keeps a copy of the file before anything saves over it.
+    @GameTest
+    public void newerBodyFileCopiedThroughGet(GameTestHelper helper) throws IOException {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyRecord record = record(Map.of(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET)));
+        CompoundTag data = storeData(BodyRecord.CODEC.encodeStart(ops, record).getOrThrow());
+        data.putInt("format", BodyStore.FORMAT + 1);
+        CompoundTag root = new CompoundTag();
+        root.put("data", data);
+        NbtUtils.addCurrentDataVersion(root);
+        Path folder = Files.createTempDirectory("yolt-store-test-");
+        Path file = BodyStore.TYPE.id().withSuffix(".dat").resolveAgainst(folder);
+        try {
+            Files.createDirectories(file.getParent());
+            NbtIo.writeCompressed(root, file);
+            byte[] written = Files.readAllBytes(file);
+            SavedDataStorage storage = GraveStoreGameTests.freshStorage(helper, folder);
+            List<BodyStore> got = new ArrayList<>();
+            List<String> log = OfflineGameTests.yoltLog(() -> got.add(BodyStore.get(storage, folder)));
+            BodyStore store = got.get(0);
+            helper.assertTrue(store.fromNewer(), "the newer file did not read as newer");
+            helper.assertTrue(store.byOwner(record.owner()).map(found -> found.snapshot().gear().get(EquipmentSlot.HEAD))
+                    .filter(helmet -> helmet.is(Items.IRON_HELMET)).isPresent(), "the newer file's record was not read");
+            List<Path> copies = copiesOf(file, ".newer-");
+            helper.assertValueEqual(copies.size(), 1, "copies of the newer file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copies.get(0)), written), "the copy differs from the file");
+            helper.assertTrue(copiesOf(file, ".unreadable-").isEmpty(), "the newer file was also kept as unreadable");
+            String line = "The body file " + file + " is from a newer version, so a copy of it is kept at " + copies.get(0)
+                    + " before it is saved over";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith("The body file ")).toList(), List.of(line),
+                    "the copy's log lines");
+        } finally {
+            GraveStoreGameTests.deleteFolder(folder);
+        }
+        helper.succeed();
+    }
+
     // The second record has no owner, so it can't be read at all
     @GameTest
     public void skippedBodyRecordKeepsFileCopy(GameTestHelper helper) throws IOException {
@@ -319,7 +360,11 @@ public class BodyStoreGameTests {
     }
 
     private static List<Path> copiesOf(Path file) throws IOException {
-        String prefix = file.getFileName() + ".unreadable-";
+        return copiesOf(file, ".unreadable-");
+    }
+
+    private static List<Path> copiesOf(Path file, String kind) throws IOException {
+        String prefix = file.getFileName() + kind;
         try (Stream<Path> files = Files.list(file.getParent())) {
             return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
         }

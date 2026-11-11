@@ -25,6 +25,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -32,6 +33,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -184,6 +186,36 @@ public class GraveStoreGameTests {
         helper.succeed();
     }
 
+    // Junk as the grave file of a data storage of the test's own, so get reads it the way the server reads its own at
+    // start: the store starts empty, and a copy of the file is kept once
+    @GameTest
+    public void unreadableGraveFileCopiedThroughGet(GameTestHelper helper) throws IOException {
+        Path folder = Files.createTempDirectory("yolt-store-test-");
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(folder);
+        byte[] junk = {1, 2, 3, 4, 5};
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, junk);
+            SavedDataStorage storage = freshStorage(helper, folder);
+            List<GraveStore> got = new ArrayList<>();
+            List<String> log = OfflineGameTests.yoltLog(() -> got.add(GraveStore.get(storage, folder)));
+            GraveStore store = got.get(0);
+            helper.assertTrue(store.all().isEmpty(), "graves read from junk: " + store.all());
+            List<Path> copies = copiesOf(file);
+            helper.assertValueEqual(copies.size(), 1, "copies next to the broken file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copies.get(0)), junk), "the copy differs from the file");
+            String line = "Could not read the grave file " + file + ", so graves start empty. A copy of it is kept at " + copies.get(0);
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith("Could not read the grave file ")).toList(),
+                    List.of(line), "the copy's log lines");
+            // Checked on first use only, so a second get keeps no second copy
+            helper.assertTrue(GraveStore.get(storage, folder) == store, "a second get made a new store");
+            helper.assertValueEqual(copiesOf(file).size(), 1, "copies after a second get");
+        } finally {
+            deleteFolder(folder);
+        }
+        helper.succeed();
+    }
+
     // The second grave has no position, so it can't be read at all
     @GameTest
     public void skippedGraveRecordKeepsFileCopy(GameTestHelper helper) throws IOException {
@@ -283,6 +315,20 @@ public class GraveStoreGameTests {
             helper.assertTrue(copiesOf(file).isEmpty(), "a copy was kept of a file read whole");
         } finally {
             deleteWithCopies(file);
+        }
+    }
+
+    // A data storage like the server's own, over the folder, which it reads its files from on first use
+    static SavedDataStorage freshStorage(GameTestHelper helper, Path folder) {
+        MinecraftServer server = helper.getLevel().getServer();
+        return new SavedDataStorage(folder, server.getFixerUpper(), server.registryAccess());
+    }
+
+    static void deleteFolder(Path folder) throws IOException {
+        try (Stream<Path> paths = Files.walk(folder)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
         }
     }
 
