@@ -138,20 +138,15 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
-    // A closed store makes every query throw, like a failing database would
+    // A closed store makes every query throw, like a failing database would. Its folder goes when the test ends.
     @GameTest
-    public void storeFailureLetsPlayerIn(GameTestHelper helper) throws java.io.IOException {
+    public void storeFailureLetsPlayerIn(GameTestHelper helper) throws IOException {
         UUID uuid = UUID.randomUUID();
-        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("yolt-broken-store");
-        DeathStore broken = DeathStore.open(dir.resolve("broken.db"));
-        broken.close();
-        DeathStore real = DeathLockout.swapStoreForTesting(broken);
-        try {
+        try (OwnStore broken = new OwnStore()) {
+            broken.store().close();
             helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "player refused while the store is failing");
             DeathLockout.recordDeath(uuid, "Ghost");
             helper.assertValueEqual(DeathLockout.revive(uuid, "Test", "console"), DeathLockout.ReviveResult.FAILED, "revive result on a failing store");
-        } finally {
-            DeathLockout.swapStoreForTesting(real);
         }
         helper.succeed();
     }
