@@ -556,6 +556,36 @@ public class BorderAndReloadGameTests {
         helper.succeed();
     }
 
+    // A reload whose rewrite fails still applies the file, and says the file is as it was, rather than failing the
+    // command. The write goes through a temp file, which can't be made where a folder is.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadThatCantRewriteTheFileStillApplies(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+        Path inTmp = tmp.resolve("inside");
+        // The border stays off, as the test server needs
+        String typed = "{\"randomSpawn\": false, \"worldBorder\": {\"enabled\": false}}";
+        try {
+            Settings.get().randomSpawn = true;
+            Files.writeString(path, typed);
+            Files.createDirectories(inTmp);
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.size() == 2 && output.get(0).equals("Config reloaded.")
+                    && output.get(1).startsWith("The config file could not be rewritten (")
+                    && output.get(1).endsWith("), so it is left as it was."), "command output: " + output);
+            helper.assertFalse(Settings.get().randomSpawn, "randomSpawn still on after reload");
+            helper.assertValueEqual(Files.readString(path), typed, "config file");
+        } finally {
+            Files.deleteIfExists(inTmp);
+            Files.deleteIfExists(tmp);
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+        }
+        helper.succeed();
+    }
+
     // One typo in the file must not reset a running server, or undo the test server's border override. Should the
     // check fail, the reload swaps the whole config object, so it runs with the tests that do.
     @GameTest(environment = CONFIG_COMMAND)

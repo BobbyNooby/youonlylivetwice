@@ -885,6 +885,26 @@ class ConfigLoaderTest {
         assertEquals("{", Files.readString(file));
     }
 
+    // A reload whose rewrite fails still gives back what it read, and says the file is as it was. The write goes through
+    // a temp file, which can't be made where a folder is.
+    @Test
+    void reloadThatCantRewriteTheFileStillApplies() throws IOException {
+        Path file = dir.resolve("config.json");
+        String typed = "{\"chat\": {\"radius\": 20}}";
+        Files.writeString(file, typed);
+        Files.createDirectories(dir.resolve("config.json.tmp").resolve("inside"));
+
+        ConfigLoader.Result r = ConfigLoader.load(file, new YoltConfig(), false);
+        assertEquals(20, r.config().chat.radius);
+        assertFalse(r.unparseable());
+        assertFalse(r.rewritten());
+        assertEquals(1, r.warnings().size(), r.warnings().toString());
+        String warning = r.warnings().get(0);
+        assertTrue(warning.startsWith("The config file could not be rewritten (") && warning.endsWith("), so it is left as it was."),
+                warning);
+        assertEquals(typed, Files.readString(file));
+    }
+
     // A .bak or timed copy that can't be compared, here a folder, counts as different: the startup keeps the typed file in
     // a new timed copy rather than stopping
     @Test

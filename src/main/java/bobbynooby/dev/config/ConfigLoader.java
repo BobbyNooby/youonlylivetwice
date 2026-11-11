@@ -31,8 +31,8 @@ public final class ConfigLoader {
      * unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to
      * write defaults. borderProblem, when not null, says why the worldBorder values are fallbacks rather than the file's
      * own: the whole file, or a worldBorder key that was refused or unknown. rewritten says whether the file now holds
-     * what was loaded: a newer config is left as it is, and so is a file a reload couldn't read or didn't find. backup
-     * names the copy kept of the file before this load wrote over it, or is null.
+     * what was loaded: a newer config is left as it is, and so is a file a reload couldn't read, didn't find or couldn't
+     * write. backup names the copy kept of the file before this load wrote over it, or is null.
      */
     public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem,
                          boolean rewritten, @Nullable String backup) {}
@@ -147,7 +147,17 @@ public final class ConfigLoader {
             backup = backup(file, file.getFileName() + ".bak");
             warnings.add("old file saved as " + backup + " before the rewrite");
         }
-        write(file, config);
+        try {
+            write(file, config);
+        } catch (UncheckedIOException e) {
+            // A reload still applies what it read, as a set key whose write fails is reported rather than thrown. The
+            // write goes through a temp file, so the config file is as it was.
+            if (base == null) {
+                throw e;
+            }
+            warnings.add("The config file could not be rewritten (" + e.getCause().getMessage() + "), so it is left as it was.");
+            return new Result(config, warnings, false, borderProblem, false, backup);
+        }
         return new Result(config, warnings, false, borderProblem, true, backup);
     }
 

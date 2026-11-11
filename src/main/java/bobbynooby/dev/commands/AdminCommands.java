@@ -60,7 +60,7 @@ final class AdminCommands {
                 warnings.add(held + " The reload saved the value in use over it, so set it again in the file, then reload."
                         + (backup == null ? "" : " The file as it was at startup is in " + backup + "."));
             } else {
-                // A newer config is never rewritten, so the typo is still in the file
+                // A newer config is never rewritten, and a failed rewrite leaves the file as it was, so the typo is still in it
                 warnings.add(held + " Fix it, then reload again.");
             }
         } else {
