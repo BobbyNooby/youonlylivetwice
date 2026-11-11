@@ -659,6 +659,41 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // The same dead joiner, whose body's empty head a dispenser filled since. That helmet is real and no takeover hands
+    // it over, so it drops where the body stood, for good.
+    @GameTest
+    public void deadJoinerGetsDispensedGearDropped(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "DeadDrop", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            around = new AABB(body.blockPosition()).inflate(2.0);
+            MinecraftServer server = helper.getLevel().getServer();
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
+                    Profiles.of(server, player.nameAndId()), null);
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.isDeadOrDying(), "dead player came back alive");
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "the dead player got the helmet");
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
+                    drop -> drop.getItem().is(Items.IRON_HELMET));
+            helper.assertValueEqual(drops.size(), 1, "helmets dropped at the body");
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped helmet's age");
+        } finally {
+            if (around != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_HELMET))
+                        .forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // The record is what a login uses while the chunk stays unloaded, so the stop brings it up to date
     @GameTest(environment = PlayerBodyGameTests.BODY_RESTART)
     public void stopSavesMannequinState(GameTestHelper helper) {

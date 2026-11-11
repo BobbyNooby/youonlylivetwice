@@ -59,6 +59,8 @@ public final class BodyLogin {
         } else {
             // The body goes, and its last ground with it: the player notes their own from here
             LastGround.forget(record.owner());
+            // No takeover hands over what a dispenser put on it
+            Bodies.dropAddedGear(server, record, snapshot);
         }
     }
 

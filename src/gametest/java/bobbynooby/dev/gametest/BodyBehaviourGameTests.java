@@ -629,6 +629,47 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // The same dead save, with a chestplate a dispenser put in the body's empty chest slot. That one is real and the
+    // save isn't written, so it drops where the body stood, for good.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void expiryOfDeadSaveDropsDispensedGear(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "DeadGear", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        AABB around = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            CompoundTag dead = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            dead.putFloat("Health", 0.0F);
+            OfflinePlayerData.save(server, owner, dead);
+            byte[] saveBefore = Files.readAllBytes(saveFile(helper, owner));
+            body.setItemSlot(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 7));
+            expiredLogout(helper, owner);
+            around = new AABB(body.blockPosition()).inflate(2.0);
+
+            List<String> log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server));
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "dead owner's save changed");
+            List<ItemEntity> drops = chestplatesIn(helper, around);
+            helper.assertValueEqual(drops.size(), 1, "chestplates dropped at the body");
+            helper.assertValueEqual(drops.get(0).getItem().getDamageValue(), 7, "dropped chestplate's damage");
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "dropped chestplate's age");
+            String line = name + "'s body got an item in slot chest after they logged out, ";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(line)).count(), 1L,
+                    "warnings for the chestplate: " + log);
+        } finally {
+            if (around != null) {
+                chestplatesIn(helper, around).forEach(Entity::discard);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // A body in a chunk that isn't loaded is only its record, so the save gets the record's state. Standing in for the
     // unload: the hook saves the body's state, then the body leaves the world.
     @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
@@ -805,7 +846,7 @@ public class BodyBehaviourGameTests {
         BodyStore store = store(helper);
         BodyRecord record = store.byOwner(owner).orElseThrow();
         store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
-                System.currentTimeMillis() - 61_000L, false, record.snapshot()));
+                System.currentTimeMillis() - 61_000L, false, record.snapshot(), record.skin(), record.emptyAtLogout()));
     }
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {

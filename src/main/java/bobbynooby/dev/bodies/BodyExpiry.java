@@ -127,6 +127,9 @@ public final class BodyExpiry {
                 undoDrop.run();
                 throw e;
             }
+        } else {
+            // Nothing goes into the save, so what a dispenser put on the body would go with it
+            Bodies.dropAddedGear(server, record, snapshot);
         }
         // The record goes first, so the discard's unload no longer counts this as a body. One that isn't loaded
         // goes when it next loads, since no record points at it.

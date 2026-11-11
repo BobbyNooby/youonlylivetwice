@@ -2,6 +2,8 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.LastGround;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -14,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -23,7 +26,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 /** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
 public final class Bodies {
@@ -96,6 +101,31 @@ public final class Bodies {
     /** The record's body in any dimension, or null when it isn't loaded. */
     static @Nullable Entity entityOf(MinecraftServer server, BodyRecord record) {
         return server.overworld().getEntityInAnyDimension(record.bodyEntity());
+    }
+
+    /**
+     * For a body that goes without its owner taking it over: what fills a slot that was empty at its logout is real, as
+     * only a dispenser fills one, so it drops for good where the body stands. Each item is logged, so one that can't be
+     * dropped is at least in the log.
+     */
+    static void dropAddedGear(MinecraftServer server, BodyRecord record, BodySnapshot now) {
+        Map<EquipmentSlot, ItemStack> added = new EnumMap<>(EquipmentSlot.class);
+        for (EquipmentSlot slot : GearSync.SLOTS) {
+            ItemStack item = now.gear().getOrDefault(slot, ItemStack.EMPTY);
+            if (record.emptyAtLogout().contains(slot) && !item.isEmpty()) {
+                added.put(slot, item.copy());
+            }
+        }
+        try {
+            dropForGood(server, now.dimension(), now.pos(), List.copyOf(added.values()));
+            added.forEach((slot, item) -> Yolt.LOGGER.warn("{}'s body got an item in slot {} after they logged out, "
+                    + "and the body goes without them taking it over, so the item drops where the body stood: {}",
+                    record.ownerName(), slot.getName(), Stacks.saved(item, server.registryAccess())));
+        } catch (RuntimeException e) {
+            added.forEach((slot, item) -> Yolt.LOGGER.warn("{}'s body got an item in slot {} after they logged out, "
+                    + "and the body goes without them taking it over, but the item could not be dropped: {}",
+                    record.ownerName(), slot.getName(), Stacks.saved(item, server.registryAccess()), e));
+        }
     }
 
     /**
