@@ -4,6 +4,8 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.skins.Skins;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.gametest.framework.GameTestServer;
+import net.minecraft.world.level.gamerules.GameRules;
 
 public class TestServerSetup implements ModInitializer {
     @Override
@@ -12,6 +14,13 @@ public class TestServerSetup implements ModInitializer {
         Skins.useLookupForTesting(FakeSkinLookup.INSTANCE);
         // SERVER_STARTING runs before the border is applied on SERVER_STARTED.
         ServerLifecycleEvents.SERVER_STARTING.register(server -> applyTestSettings());
+        // A monster that wanders near a bed makes vanilla refuse to sleep there, so none spawn on their own. Tests that
+        // need one spawn it.
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            if (server instanceof GameTestServer) {
+                server.getGameRules().set(GameRules.SPAWN_MONSTERS, false, server);
+            }
+        });
     }
 
     // Test structures sit millions of blocks out, so YOLT's border would kill anything living in a test.
