@@ -57,15 +57,19 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
+import org.apache.logging.log4j.core.LogEvent;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -358,6 +362,67 @@ public class GraveDeathGameTests {
         } finally {
             cleanUp(helper, player);
             walls.forEach(wall -> level.setBlock(wall, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL));
+        }
+        helper.succeed();
+    }
+
+    // The border is one column wide and the death column is stone from the bottom of the world to the top, so no block
+    // anywhere can take a grave and the placement throws. The death then drops the items where they last, each stack
+    // once. Set and put back in this tick.
+    @GameTest(skyAccess = true)
+    public void noFreeBlockForAGraveDropsTheItemsInstead(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos death = helper.absolutePos(new BlockPos(3, 0, 3));
+        Map<BlockPos, BlockState> before = new HashMap<>();
+        AABB around = new AABB(death).inflate(2);
+        ServerPlayer player = TestPlayers.join(level.getServer(), "Columnless", GameType.SURVIVAL, death);
+        String name = player.getGameProfile().name();
+        try {
+            for (int y = level.getMinY(); y <= level.getMaxY(); y++) {
+                VoidGraveGameTests.setRemembered(level, death.atY(y), Blocks.STONE, before);
+            }
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            player.getInventory().add(new ItemStack(Items.IRON_SWORD));
+            border.setCenter(death.getX() + 0.5, death.getZ() + 0.5);
+            border.setSize(1);
+            List<LogEvent> log = OfflineGameTests.yoltEvents(() -> kill(helper, player));
+
+            List<LogEvent> failed = log.stream()
+                    .filter(event -> event.getMessage().getFormattedMessage().startsWith("Could not make a grave for "))
+                    .toList();
+            helper.assertValueEqual(failed.stream().map(event -> event.getMessage().getFormattedMessage()).toList(),
+                    List.of("Could not make a grave for " + name + ", dropping their items instead"), "the failed grave's log lines");
+            Throwable thrown = failed.get(0).getThrown();
+            helper.assertTrue(thrown instanceof IllegalStateException, "the failed grave's error: " + thrown);
+            helper.assertValueEqual(thrown.getMessage(),
+                    "No free block for a grave in the column at " + level.dimension().identifier() + " " + death,
+                    "the failed grave's error");
+            helper.assertValueEqual(log.stream().map(event -> event.getMessage().getFormattedMessage())
+                            .filter(line -> line.startsWith("Dropped ")).toList(),
+                    List.of("Dropped " + name + "'s items at " + level.dimension().identifier() + " " + death
+                            + ", since their grave could not be made"), "the drop's log lines");
+
+            helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "a grave was made");
+            helper.assertTrue(level.getBlockState(death).is(Blocks.STONE), "the block at the death spot changed");
+            helper.assertTrue(player.getInventory().isEmpty(), "the dead player still holds items");
+            List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive);
+            helper.assertValueEqual(drops.size(), 2, "stacks dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, death, 2.0), 3, "diamonds dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.IRON_SWORD, death, 2.0), 1, "swords dropped");
+            for (ItemEntity drop : drops) {
+                helper.assertValueEqual(drop.blockPosition(), death, drop.getItem() + "'s spot");
+                helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, drop.getItem() + "'s age");
+            }
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            VoidGraveGameTests.putBack(level, before);
+            level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, player);
         }
         helper.succeed();
     }
