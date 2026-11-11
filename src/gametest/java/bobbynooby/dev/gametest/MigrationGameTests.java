@@ -286,8 +286,9 @@ public class MigrationGameTests {
         helper.succeed();
     }
 
-    // Only the copy helper: the live stores load at server start, so a newer file can't be handed to get() here.
-    // Junk in a temp file stands in for a store file saved by a newer version.
+    // Only the copy helper, here for its one copy per file content. A newer file handed to get(storage, folder) is
+    // BodyStoreGameTests' newerBodyFileCopiedThroughGet. Junk in a temp file stands in for a store file saved by a newer
+    // version.
     @GameTest
     public void newerCopyIsKeptOncePerFileContent(GameTestHelper helper) throws IOException {
         Path dir = helper.getLevel().getServer().getWorldPath(LevelResource.DATA);
