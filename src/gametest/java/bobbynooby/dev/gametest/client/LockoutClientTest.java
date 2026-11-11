@@ -60,7 +60,9 @@ public class LockoutClientTest implements FabricClientGameTest {
     private static String showKicked(ClientGameTestContext ctx, TestDedicatedServerContext server, UUID self) {
         // Not closed by a try: the kick ends it, and closing a connection the server has ended throws
         TestDedicatedServerConnection connection = server.connect();
+        int chatBefore;
         try {
+            chatBefore = ctx.computeOnClient(ChatStoryClientTest::chatLogEnd);
             connection.waitForChunksRender();
             server.runOnServer(s -> {
                 ServerPlayer player = connection.getServerPlayer();
@@ -86,6 +88,11 @@ public class LockoutClientTest implements FabricClientGameTest {
             }
             return death.deathMessage();
         });
+        // The record builds the reason too, so the death line the client itself got in chat is what shows it is right.
+        // Only lines from after the join, since an earlier test's death can read the same.
+        if (!ctx.computeOnClient(mc -> ChatStoryClientTest.chatLogHasAfter(mc, chatBefore, died))) {
+            throw new AssertionError("the client's chat never said \"" + died + "\", the death the lockout recorded");
+        }
         checkTitle(ctx, LOST);
         checkReason(ctx, died);
         ClientTests.screenshot(ctx, "06-lockout-kicked");

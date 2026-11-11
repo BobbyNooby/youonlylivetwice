@@ -306,13 +306,24 @@ public class ChatStoryClientTest implements FabricClientGameTest {
 
     // The same on the client thread, for a wait's condition
     static boolean chatLogHas(Minecraft mc, String text) {
+        return chatLogHasAfter(mc, -1, text);
+    }
+
+    // Only the lines logged after the one chatLogEnd named. Every test server has the same address, so the log goes on
+    // from one test to the next and can hold the same line from an earlier one.
+    static boolean chatLogHasAfter(Minecraft mc, int after, String text) {
         ChatLog log = mc.getReportingContext().chatLog();
-        for (int id = log.start(); id <= log.end(); id++) {
+        for (int id = Math.max(log.start(), after + 1); id <= log.end(); id++) {
             if (log.lookup(id) instanceof LoggedChatMessage message && message.toContentComponent().getString().contains(text)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // The id of the newest line in the chat log, or -1 while it is empty
+    static int chatLogEnd(Minecraft mc) {
+        return mc.getReportingContext().chatLog().end();
     }
 
     // Typed into the chat box and sent with Enter, like a player would
