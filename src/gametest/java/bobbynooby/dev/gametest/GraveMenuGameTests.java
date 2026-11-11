@@ -143,6 +143,32 @@ public class GraveMenuGameTests {
         helper.succeed();
     }
 
+    // Q on a grave slot throws one item, as from any chest: exactly one item entity, and the grave holds one fewer
+    @GameTest
+    public void throwFromGraveDropsOne(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 3));
+        ServerPlayer player = join(helper, "Thrower");
+        AABB around = new AABB(player.blockPosition()).inflate(4.0);
+        try {
+            GraveMenus.open(player, grave);
+            AbstractContainerMenu menu = player.containerMenu;
+            // Button 0 is Q on its own, which throws one item; with Ctrl it would be button 1, the whole stack
+            menu.clicked(1, 0, ContainerInput.THROW, player);
+
+            List<ItemEntity> thrown = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive);
+            helper.assertValueEqual(thrown.size(), 1, "item entities thrown");
+            ItemStack item = thrown.get(0).getItem();
+            helper.assertTrue(item.is(Items.DIAMOND) && item.getCount() == 1, "the thrown item: " + item);
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.DIAMOND), 2, "diamonds in the grave");
+            helper.assertValueEqual(countIn(List.of(menu.getSlot(1).getItem()), Items.DIAMOND), 2, "diamonds in the menu slot");
+            helper.assertValueEqual(count(player, Items.DIAMOND), 0, "diamonds the player has");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void takingLastItemRemovesHead(GameTestHelper helper) {
         Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND), new ItemStack(Items.IRON_SWORD));
