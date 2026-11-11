@@ -111,7 +111,7 @@ public final class Revive {
     }
 
     // Right-clicking with a revive head always means trying to revive, so the clicked block never reacts. A grave
-    // head passes: the block reacts as usual, and GraveBlocks.refusePlacement stops it being placed.
+    // head passes: the block reacts as usual, and GraveBlocks.refusePlacementAndResend stops it being placed.
     private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
         if (!Settings.active() || !(player instanceof ServerPlayer user) || user.isSpectator()) {
             return InteractionResult.PASS;

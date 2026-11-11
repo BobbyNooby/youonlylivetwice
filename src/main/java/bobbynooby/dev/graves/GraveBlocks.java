@@ -33,10 +33,11 @@ public final class GraveBlocks {
     }
 
     /**
-     * True when the item about to be placed is a grave or revive head, which must stay an item. A placed head
-     * drops back with only its profile, name and note sound, so its marker would be lost for good.
+     * True when the item about to be placed is a grave or revive head, which must stay an item; the placer's inventory
+     * is then sent again. A placed head drops back with only its profile, name and note sound, so its marker would be
+     * lost for good.
      */
-    public static boolean refusePlacement(BlockPlaceContext context) {
+    public static boolean refusePlacementAndResend(BlockPlaceContext context) {
         // The client's own prediction is left alone; the server's answer undoes it
         if (!Settings.active() || context.getLevel().isClientSide()) {
             return false;
