@@ -288,8 +288,7 @@ public class CommandRestrictionGameTests {
 
         @Override
         public ArgumentBuilder<CommandSourceStack, ?> createArgument(String id, ArgumentType<?> type, Identifier suggestionId) {
-            RequiredArgumentBuilder<CommandSourceStack, ?> argument = RequiredArgumentBuilder.argument(id, type);
-            return argument;
+            return RequiredArgumentBuilder.argument(id, type);
         }
 
         @Override
