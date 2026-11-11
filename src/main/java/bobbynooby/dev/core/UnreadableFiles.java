@@ -8,8 +8,7 @@ import java.util.stream.Stream;
 
 /** Keeps a copy of a store file this version couldn't fully read, so the next save doesn't overwrite what is in it. */
 public final class UnreadableFiles {
-    private UnreadableFiles() {
-    }
+    private UnreadableFiles() {}
 
     /**
      * A store that wasn't read from its file while the file is there means the file couldn't be read, and the next

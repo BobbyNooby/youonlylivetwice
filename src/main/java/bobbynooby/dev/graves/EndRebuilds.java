@@ -50,8 +50,7 @@ final class EndRebuilds {
      */
     static final int SPIKE_REACH = SPIKE_TOP_REACH;
 
-    private EndRebuilds() {
-    }
+    private EndRebuilds() {}
 
     /** True when pos is in the End and vanilla rebuilds it, deleting whatever stands there. */
     static boolean wipes(ServerLevel level, BlockPos pos) {

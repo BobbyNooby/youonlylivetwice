@@ -11,8 +11,7 @@ import java.util.UUID;
 
 // Totals rather than "is it there", so an item copied twice or half lost fails the check
 final class GraveAsserts {
-    private GraveAsserts() {
-    }
+    private GraveAsserts() {}
 
     static int count(List<ItemStack> items, Item item) {
         return items.stream().filter(stack -> stack.is(item)).mapToInt(ItemStack::getCount).sum();

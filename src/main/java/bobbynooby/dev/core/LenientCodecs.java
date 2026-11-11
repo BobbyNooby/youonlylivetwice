@@ -12,8 +12,7 @@ import java.util.Optional;
 
 /** Codecs that read what they can from a file instead of failing on the first bad part. */
 public final class LenientCodecs {
-    private LenientCodecs() {
-    }
+    private LenientCodecs() {}
 
     /**
      * A list inside a record that decodes each element on its own: a bad element is logged ("what" names the kind) and

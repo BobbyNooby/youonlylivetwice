@@ -36,8 +36,7 @@ public final class StoreVersions {
 
     private static final AtomicLong FIXED_ITEMS = new AtomicLong();
 
-    private StoreVersions() {
-    }
+    private StoreVersions() {}
 
     /** A loaded store's records, and whether the file came from a newer YOLT or Minecraft than this one. */
     public record Loaded<R>(R records, boolean fromNewer) {

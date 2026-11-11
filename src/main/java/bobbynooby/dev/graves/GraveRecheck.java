@@ -35,8 +35,7 @@ public final class GraveRecheck {
     private record Logged(UUID grave, Failure failure) {
     }
 
-    private GraveRecheck() {
-    }
+    private GraveRecheck() {}
 
     static void init() {
         ServerTickEvents.END_SERVER_TICK.register(GraveRecheck::tick);

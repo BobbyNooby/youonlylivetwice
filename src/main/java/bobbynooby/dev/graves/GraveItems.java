@@ -24,8 +24,7 @@ public final class GraveItems {
     private static final String REVIVE = "revive";
     private static final String GRAVE_ID = "grave";
 
-    private GraveItems() {
-    }
+    private GraveItems() {}
 
     public static ItemStack graveHead(ResolvableProfile profile) {
         ItemStack stack = new ItemStack(Items.PLAYER_HEAD);

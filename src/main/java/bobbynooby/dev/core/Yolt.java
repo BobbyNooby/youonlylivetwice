@@ -10,8 +10,7 @@ public final class Yolt {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    private Yolt() {
-    }
+    private Yolt() {}
 
     public static Identifier id(String path) {
         return Identifier.fromNamespaceAndPath(MOD_ID, path);

@@ -25,8 +25,7 @@ public final class LastGround {
     // Owner to the block they last stood in. Server thread only.
     private static final Map<UUID, GlobalPos> LAST = new HashMap<>();
 
-    private LastGround() {
-    }
+    private LastGround() {}
 
     static void init() {
         ServerTickEvents.END_SERVER_TICK.register(server -> {

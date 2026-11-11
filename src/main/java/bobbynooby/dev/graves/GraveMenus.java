@@ -19,8 +19,7 @@ public final class GraveMenus {
     // One container per grave while anyone has it open, keyed by grave id. Only this class writes it.
     private static final Map<UUID, SharedGraveContainer> OPEN = new HashMap<>();
 
-    private GraveMenus() {
-    }
+    private GraveMenus() {}
 
     static void init() {
         // A container must never outlive its server and save into the next one started in the same game

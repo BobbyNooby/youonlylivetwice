@@ -30,8 +30,7 @@ public final class GraveNotice {
     // The first grave of each dead player's death, told at their respawn. Server thread only.
     private static final Map<UUID, UUID> AT_RESPAWN = new HashMap<>();
 
-    private GraveNotice() {
-    }
+    private GraveNotice() {}
 
     static void init() {
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {

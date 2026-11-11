@@ -4,8 +4,7 @@ import java.util.List;
 
 /** Takes back what a failed multi-step change already did. */
 public final class Undo {
-    private Undo() {
-    }
+    private Undo() {}
 
     /**
      * Runs every step, since one failing must not leave another's changes in place. A failure is logged with

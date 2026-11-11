@@ -29,8 +29,7 @@ import java.util.UUID;
 
 /** The grave head blocks: setting, clearing and restoring them, and what a click or a placement does. */
 public final class GraveBlocks {
-    private GraveBlocks() {
-    }
+    private GraveBlocks() {}
 
     /**
      * True when the item about to be placed is a grave or revive head, which must stay an item; the placer's inventory

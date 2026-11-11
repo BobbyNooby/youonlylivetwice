@@ -6,8 +6,7 @@ import java.util.function.UnaryOperator;
 
 /** Ordered upgrade steps for a saved file, so a file from an older YOLT can be brought up to the current layout. */
 public final class Migrations {
-    private Migrations() {
-    }
+    private Migrations() {}
 
     /** Moves data saved at version {@code from} to version {@code from + 1}. */
     public record Step<T>(int from, UnaryOperator<T> apply) {

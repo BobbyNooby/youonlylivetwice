@@ -46,8 +46,7 @@ public final class GravePlacement {
     private record VoidColumns(int radius, List<BlockPos> offsets) {
     }
 
-    private GravePlacement() {
-    }
+    private GravePlacement() {}
 
     /** Where a new grave goes, for a death with no known last ground. */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, GraveStore store) {

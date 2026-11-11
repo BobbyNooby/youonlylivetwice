@@ -36,8 +36,7 @@ public final class GraveDeath {
     private static ServerPlayer collectingFor;
     private static List<ItemStack> collected = new ArrayList<>();
 
-    private GraveDeath() {
-    }
+    private GraveDeath() {}
 
     /** True when the items went into a grave, so vanilla must not drop them as well. */
     public static boolean onPlayerDeathDrops(ServerPlayer player, ServerLevel level) {

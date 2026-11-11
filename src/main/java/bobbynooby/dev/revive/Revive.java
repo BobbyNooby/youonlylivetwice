@@ -43,8 +43,7 @@ public final class Revive {
     // old object's entry until then. Server thread only.
     private static final Map<ServerPlayer, Integer> ANSWERED_TICKS = new WeakHashMap<>();
 
-    private Revive() {
-    }
+    private Revive() {}
 
     // Right-click in the air, and on a block. The block hook only runs when the grave one passes, so a click on a
     // grave opens it instead.

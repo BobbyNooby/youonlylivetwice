@@ -4,8 +4,7 @@ import java.util.Arrays;
 
 /** Keeps a failure in one of our handlers from escaping into the vanilla code that called it. */
 public final class Guard {
-    private Guard() {
-    }
+    private Guard() {}
 
     /** Runs the task; a RuntimeException is logged as an error with the message and args, and swallowed. */
     public static void run(Runnable task, String message, Object... args) {

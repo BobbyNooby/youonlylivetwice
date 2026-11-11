@@ -33,8 +33,7 @@ public final class GraveCompass {
     private static final String GRAVE_COMPASS = "grave_compass";
     private static final String NAME_END = "'s grave";
 
-    private GraveCompass() {
-    }
+    private GraveCompass() {}
 
     public static void init() {
         ServerPlayerEvents.JOIN.register(GraveCompass::offerSafely);

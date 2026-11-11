@@ -39,8 +39,7 @@ public final class Graves {
     // A grave opens as a 6-row chest menu
     private static final int SLOTS_PER_GRAVE = GraveMenu.GRAVE_SLOTS;
 
-    private Graves() {
-    }
+    private Graves() {}
 
     // Grave event handlers register here. The death hook is a mixin, since no Fabric event runs before the drops,
     // and so are the protection hooks for explosions, pistons, fluids, the Wither and the dragon.
