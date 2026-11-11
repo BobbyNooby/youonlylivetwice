@@ -21,6 +21,9 @@ final class ConfigChecks {
     // searchRadius of 3 means no wide search. At 32 it checks up to 37,584 spots on the server thread (9 layers of the
     // rings 4 to 32 out), four times the 9,360 at the default 16.
     static final int MIN_GRAVE_SEARCH_RADIUS = 3;
+    // A death over the void has no first search and goes straight to the land search, so a voidSearchRadius of 1 or 2
+    // is a real, smaller search. At 32 it reads up to 4,225 columns.
+    static final int MIN_VOID_SEARCH_RADIUS = 1;
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
 
     private ConfigChecks() {}
@@ -83,13 +86,13 @@ final class ConfigChecks {
             c.graves.tellLocationDistance = fallback.graves.tellLocationDistance;
             fellBack.accept("graves.tellLocationDistance", "must be 0 or more");
         }
-        if (outsideGraveSearch(c.graves.searchRadius)) {
+        if (c.graves.searchRadius < MIN_GRAVE_SEARCH_RADIUS || c.graves.searchRadius > MAX_GRAVE_SEARCH_RADIUS) {
             c.graves.searchRadius = fallback.graves.searchRadius;
             fellBack.accept("graves.searchRadius", "must be " + MIN_GRAVE_SEARCH_RADIUS + " to " + MAX_GRAVE_SEARCH_RADIUS);
         }
-        if (outsideGraveSearch(c.graves.voidSearchRadius)) {
+        if (c.graves.voidSearchRadius < MIN_VOID_SEARCH_RADIUS || c.graves.voidSearchRadius > MAX_GRAVE_SEARCH_RADIUS) {
             c.graves.voidSearchRadius = fallback.graves.voidSearchRadius;
-            fellBack.accept("graves.voidSearchRadius", "must be " + MIN_GRAVE_SEARCH_RADIUS + " to " + MAX_GRAVE_SEARCH_RADIUS);
+            fellBack.accept("graves.voidSearchRadius", "must be " + MIN_VOID_SEARCH_RADIUS + " to " + MAX_GRAVE_SEARCH_RADIUS);
         }
         if (c.chat.mode == null) {
             c.chat.mode = fallback.chat.mode;
@@ -141,10 +144,6 @@ final class ConfigChecks {
         }
         warnings.add(path + ": at most " + maxLines + " lines of " + maxLength + " characters each, the rest was dropped");
         return capped;
-    }
-
-    private static boolean outsideGraveSearch(int radius) {
-        return radius < MIN_GRAVE_SEARCH_RADIUS || radius > MAX_GRAVE_SEARCH_RADIUS;
     }
 
     // Never between the two halves of a character outside the basic range, such as an emoji

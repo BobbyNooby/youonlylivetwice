@@ -135,18 +135,25 @@ class ConfigLoaderTest {
                 loadJson("{\"graves\":{\"tellLocation\":\"whenMoved\"}}").config().graves.tellLocation);
     }
 
+    // The void search has no first search before it, so it goes down to 1
     @Test
     void graveSearchRadiiOutOfRangeFallBack() throws IOException {
         for (int bad : new int[] {2, 33}) {
-            ConfigLoader.Result r = loadJson("{\"graves\":{\"searchRadius\":" + bad + ",\"voidSearchRadius\":" + bad + "}}");
+            ConfigLoader.Result r = loadJson("{\"graves\":{\"searchRadius\":" + bad + "}}");
             assertEquals(16, r.config().graves.searchRadius, "searchRadius " + bad);
-            assertEquals(16, r.config().graves.voidSearchRadius, "voidSearchRadius " + bad);
             assertTrue(r.warnings().contains("graves.searchRadius: must be 3 to 32, using default"), r.warnings().toString());
-            assertTrue(r.warnings().contains("graves.voidSearchRadius: must be 3 to 32, using default"), r.warnings().toString());
+        }
+        for (int bad : new int[] {0, 33}) {
+            ConfigLoader.Result r = loadJson("{\"graves\":{\"voidSearchRadius\":" + bad + "}}");
+            assertEquals(16, r.config().graves.voidSearchRadius, "voidSearchRadius " + bad);
+            assertTrue(r.warnings().contains("graves.voidSearchRadius: must be 1 to 32, using default"), r.warnings().toString());
         }
         YoltConfig.GravesSection edges = loadJson("{\"graves\":{\"searchRadius\":3,\"voidSearchRadius\":32}}").config().graves;
         assertEquals(3, edges.searchRadius);
         assertEquals(32, edges.voidSearchRadius);
+        edges = loadJson("{\"graves\":{\"searchRadius\":32,\"voidSearchRadius\":1}}").config().graves;
+        assertEquals(32, edges.searchRadius);
+        assertEquals(1, edges.voidSearchRadius);
 
         // A reload keeps the live radius
         Path file = dir.resolve("config.json");
