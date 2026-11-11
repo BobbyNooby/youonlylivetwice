@@ -82,7 +82,7 @@ public final class BodyStore extends SavedData {
      * can't lose the rest: the file couldn't be read at all, it came from a newer version, or part of it was skipped.
      */
     public void checkFile(Path file) {
-        UnreadableFiles.keepCopy(file, fromDisk, "body");
+        UnreadableFiles.keepCopy(file, fromDisk, "body", "bodies");
         if (fromNewer) {
             UnreadableFiles.keepNewerCopy(file, "body");
         } else if (partlyRead) {

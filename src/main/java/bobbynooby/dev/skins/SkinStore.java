@@ -175,7 +175,7 @@ public final class SkinStore extends SavedData {
 
     // The same copies the body and grave files get, so the next save can't lose what this version didn't read
     private void checkFile(Path file) {
-        UnreadableFiles.keepCopy(file, fromDisk, "skin");
+        UnreadableFiles.keepCopy(file, fromDisk, "skin", "skins");
         if (fromNewer) {
             UnreadableFiles.keepNewerCopy(file, "skin");
         } else if (partlyRead) {

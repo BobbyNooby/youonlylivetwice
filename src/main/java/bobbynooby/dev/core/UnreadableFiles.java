@@ -14,13 +14,12 @@ public final class UnreadableFiles {
     /**
      * A store that wasn't read from its file while the file is there means the file couldn't be read, and the next
      * save would overwrite it with nothing. So a copy is kept next to it. Returns the copy, if one was made.
-     * "what" is the singular kind ("grave", "body"), used in the log text.
+     * "what" and "plural" name the kind ("grave" and "graves"), for the log text.
      */
-    public static Optional<Path> keepCopy(Path file, boolean fromDisk, String what) {
+    public static Optional<Path> keepCopy(Path file, boolean fromDisk, String what, String plural) {
         if (fromDisk || !Files.exists(file)) {
             return Optional.empty();
         }
-        String plural = what.endsWith("y") ? what.substring(0, what.length() - 1) + "ies" : what + "s";
         Path copy = file.resolveSibling(file.getFileName() + ".unreadable-" + System.currentTimeMillis());
         try {
             Files.copy(file, copy);
