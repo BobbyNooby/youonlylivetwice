@@ -59,10 +59,21 @@ public final class GravePlacement {
      */
     public static BlockPos find(ServerLevel level, BlockPos deathPos, @Nullable BlockPos lastGround, GraveStore store) {
         BlockPos start = start(level, deathPos, lastGround, store);
-        return search(level, start, store)
-                .or(() -> wideSearch(level, start, store))
-                .or(() -> offLoneBlock(level, start, store))
-                .orElseGet(() -> lastResort(level, start, store));
+        Optional<BlockPos> near = nearby(level, start, store);
+        if (near.isPresent()) {
+            return near.get();
+        }
+        Optional<BlockPos> moved = offLoneBlock(level, start, store);
+        if (moved.isEmpty()) {
+            return lastResort(level, start, store);
+        }
+        // From there on as for a death over the void, last resort included
+        BlockPos from = moved.get();
+        return nearby(level, from, store).orElseGet(() -> lastResort(level, from, store));
+    }
+
+    private static Optional<BlockPos> nearby(ServerLevel level, BlockPos start, GraveStore store) {
+        return search(level, start, store).or(() -> wideSearch(level, start, store));
     }
 
     /**
@@ -314,16 +325,15 @@ public final class GravePlacement {
         return true;
     }
 
-    // A start on a block with nothing under it, such as one in the top layer over the void, where no head fits on top:
-    // the nearest land, else the fixed spot, as for a death over the void. Over anything else, such as a lava sea, the
-    // last resort keeps the grave by the death.
+    // Where a start on a block with nothing under it moves to, such as one in the top layer over the void, where no head
+    // fits on top: the nearest land, else the fixed spot, as for a death over the void. Over anything else, such as a
+    // lava sea, nothing moves and the last resort keeps the grave by the death.
     private static Optional<BlockPos> offLoneBlock(ServerLevel level, BlockPos start, GraveStore store) {
         if (start.getY() <= level.getMinY() || !isVoidColumn(level, start.below())) {
             return Optional.empty();
         }
         BlockPos land = nearestLand(level, start, store).orElseGet(() -> fallback(level, start, store));
-        BlockPos from = besideSpike(level, land, store);
-        return search(level, from, store).or(() -> wideSearch(level, from, store));
+        return Optional.of(besideSpike(level, land, store));
     }
 
     // Nothing near is safe. A safe spot anywhere up the start column comes first, such as a cave above a lava sea.
