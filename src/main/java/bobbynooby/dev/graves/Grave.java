@@ -25,6 +25,7 @@ import java.util.UUID;
 /**
  * A dead player's items, kept at one block until someone revives them or breaks the grave. deathPos is where the owner
  * died, so they can be told when the grave is far from there; null for a grave made before graves kept it.
+ * compassPending is true while the owner is still owed a compass to this grave.
  */
 public record Grave(
         UUID id,
@@ -35,7 +36,8 @@ public record Grave(
         BlockPos pos,
         List<ItemStack> items,
         long createdAt,
-        @Nullable GlobalPos deathPos
+        @Nullable GlobalPos deathPos,
+        boolean compassPending
 ) {
     // Compact constructor: an empty stack can't be encoded and would crash the world save
     public Grave {
@@ -48,6 +50,12 @@ public record Grave(
         this(id, owner, ownerName, profile, dimension, pos, items, createdAt, null);
     }
 
+    /** A grave that owes no compass. */
+    public Grave(UUID id, UUID owner, String ownerName, ResolvableProfile profile, ResourceKey<Level> dimension, BlockPos pos,
+                 List<ItemStack> items, long createdAt, @Nullable GlobalPos deathPos) {
+        this(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos, false);
+    }
+
     private static final Codec<Grave> STRICT_CODEC = RecordCodecBuilder.create(i -> i.group(
             UUIDUtil.CODEC.fieldOf("id").forGetter(Grave::id),
             UUIDUtil.CODEC.fieldOf("owner").forGetter(Grave::owner),
@@ -58,16 +66,19 @@ public record Grave(
             ItemStack.CODEC.listOf().fieldOf("items").forGetter(Grave::items),
             Codec.LONG.fieldOf("created_at").forGetter(Grave::createdAt),
             // Optional, so a grave saved before it was kept still reads
-            GlobalPos.CODEC.optionalFieldOf("death_pos").forGetter(grave -> Optional.ofNullable(grave.deathPos()))
-    ).apply(i, (id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos) ->
-            new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos.orElse(null))));
+            GlobalPos.CODEC.optionalFieldOf("death_pos").forGetter(grave -> Optional.ofNullable(grave.deathPos())),
+            // Optional too, for a grave saved before compasses. False isn't written, so a grave owing none saves as before.
+            Codec.BOOL.optionalFieldOf("compass_pending", false).forGetter(Grave::compassPending)
+    ).apply(i, (id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos, compassPending) ->
+            new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos.orElse(null), compassPending)));
 
     // Same fields, but items stay undecoded so one bad stack can be skipped instead of failing the grave. A grave that
     // left out an item, or part of one, comes back as an error that still carries it, so its store knows. The death
-    // spot too: one that can't be read is only a hint lost, so the grave reads whole without it.
+    // spot too: one that can't be read is only a hint lost, so the grave reads whole without it. So is a compass flag
+    // that can't be read, which reads as no compass owed.
     private record Raw(UUID id, UUID owner, String ownerName, ResolvableProfile profile,
                        ResourceKey<Level> dimension, BlockPos pos, List<Dynamic<?>> items, long createdAt,
-                       Optional<Dynamic<?>> deathPos) {
+                       Optional<Dynamic<?>> deathPos, boolean compassPending) {
         static final Codec<Raw> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(Raw::id),
                 UUIDUtil.CODEC.fieldOf("owner").forGetter(Raw::owner),
@@ -77,7 +88,8 @@ public record Grave(
                 BlockPos.CODEC.fieldOf("pos").forGetter(Raw::pos),
                 Codec.PASSTHROUGH.listOf().fieldOf("items").forGetter(Raw::items),
                 Codec.LONG.fieldOf("created_at").forGetter(Raw::createdAt),
-                Codec.PASSTHROUGH.optionalFieldOf("death_pos").forGetter(Raw::deathPos)
+                Codec.PASSTHROUGH.optionalFieldOf("death_pos").forGetter(Raw::deathPos),
+                Codec.BOOL.lenientOptionalFieldOf("compass_pending", false).forGetter(Raw::compassPending)
         ).apply(i, Raw::new));
 
         DataResult<Grave> toGrave() {
@@ -95,7 +107,7 @@ public record Grave(
             GlobalPos died = deathPos.flatMap(entry -> GlobalPos.CODEC.parse(entry).resultOrPartial(error -> Yolt.LOGGER.warn(
                     "Ignoring the unreadable death spot of {}'s grave at {} {}: {}", ownerName, dimension.identifier(), pos, error)))
                     .orElse(null);
-            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, died);
+            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, died, compassPending);
             int left = unread;
             return left == 0 ? DataResult.success(grave)
                     : DataResult.error(() -> left + " items in the grave of " + ownerName + " could not be read whole", grave);
@@ -111,10 +123,14 @@ public record Grave(
     });
 
     public Grave withItems(List<ItemStack> items) {
-        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos);
+        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos, compassPending);
     }
 
     public Grave withPos(BlockPos pos) {
-        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos);
+        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos, compassPending);
+    }
+
+    public Grave withCompassPending(boolean compassPending) {
+        return new Grave(id, owner, ownerName, profile, dimension, pos, items, createdAt, deathPos, compassPending);
     }
 }
