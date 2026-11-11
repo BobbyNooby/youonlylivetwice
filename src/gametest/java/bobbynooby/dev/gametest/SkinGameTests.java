@@ -432,8 +432,10 @@ public class SkinGameTests {
             store.choose(other.getUUID(), account);
             type(player, "yolt skin clear " + otherName);
             assertEqual(helper, store.choice(other.getUUID()), account, "a non-op cleared another player's pick");
+            // A border change that got through would swap in a new live config, so it is read again
             type(player, "yolt border 5000");
-            helper.assertValueEqual(config.worldBorder.diameter, diameterBefore, "the border diameter after a non-op's /yolt border");
+            helper.assertTrue(Settings.get() == config, "a non-op's /yolt border replaced the live config");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "the border diameter after a non-op's /yolt border");
 
             player.messages.clear();
             type(player, "yolt skin clear");
