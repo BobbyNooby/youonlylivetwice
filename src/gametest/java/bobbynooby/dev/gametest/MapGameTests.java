@@ -77,6 +77,8 @@ public class MapGameTests {
             helper.assertTrue(PlayerVisibility.known(viewer).contains(far.getUUID()), "the viewer's client has no entry for the far player");
             carry(helper, map, List.of(viewer, far));
 
+            helper.assertValueEqual(count(data(helper, map).getDecorations(), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
+                    "far player's marker on the map itself");
             List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
             helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER), 1, "player markers sent to the viewer");
             helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 0, "far player's marker sent to the viewer");
