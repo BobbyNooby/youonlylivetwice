@@ -3,6 +3,7 @@ package bobbynooby.dev.visibility;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
@@ -24,6 +25,12 @@ import java.util.WeakHashMap;
 public final class MapPlayers {
     // Each holder's near-drop count when its markers last went out
     private static final Map<MapItemSavedData.HoldingPlayer, Integer> SENT = new WeakHashMap<>();
+    // By key, since checking one holder against another is deprecated
+    private static final ResourceKey<MapDecorationType> PLAYER = MapDecorationTypes.PLAYER.unwrapKey().orElseThrow();
+    private static final ResourceKey<MapDecorationType> PLAYER_OFF_MAP =
+            MapDecorationTypes.PLAYER_OFF_MAP.unwrapKey().orElseThrow();
+    private static final ResourceKey<MapDecorationType> PLAYER_OFF_LIMITS =
+            MapDecorationTypes.PLAYER_OFF_LIMITS.unwrapKey().orElseThrow();
 
     private MapPlayers() {}
 
@@ -70,8 +77,7 @@ public final class MapPlayers {
     // Frames, banners and an explorer map's targets aren't players
     private static boolean isPlayer(MapDecoration marker) {
         Holder<MapDecorationType> type = marker.type();
-        return type.is(MapDecorationTypes.PLAYER) || type.is(MapDecorationTypes.PLAYER_OFF_MAP)
-                || type.is(MapDecorationTypes.PLAYER_OFF_LIMITS);
+        return type.is(PLAYER) || type.is(PLAYER_OFF_MAP) || type.is(PLAYER_OFF_LIMITS);
     }
 
     // The near set, not the client's entries: with hide.distantPlayers off a client has everyone's entry, which says
