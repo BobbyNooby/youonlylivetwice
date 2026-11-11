@@ -450,7 +450,8 @@ class ConfigLoaderTest {
         assertFalse(r.config().randomSpawn);
     }
 
-    // Only a damaged file has these, so they read as a missing version: no backup and no upgrade
+    // Only a damaged file has these, so they read as a missing version, with a warning that names the value: no backup
+    // and no upgrade
     @Test
     void zeroOrNegativeConfigVersionReadsAsMissing() throws IOException {
         Path file = dir.resolve("config.json");
@@ -458,6 +459,8 @@ class ConfigLoaderTest {
             Files.writeString(file, "{\"configVersion\": " + version + ", \"randomSpawn\": false}");
             ConfigLoader.Result r = ConfigLoader.load(file, null, true);
             assertFalse(r.config().randomSpawn);
+            assertEquals(List.of("configVersion: " + version + " is not a version, read as version 1"), r.warnings(),
+                    "warnings for " + version);
             JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             assertEquals(ConfigLoader.CURRENT_VERSION, written.get("configVersion").getAsInt(), "written for " + version);
             try (Stream<Path> files = Files.list(dir)) {

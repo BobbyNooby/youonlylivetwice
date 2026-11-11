@@ -106,7 +106,7 @@ public final class ConfigLoader {
             return new Result(writeDefaults(file), warnings, true, problem, true, backup);
         }
 
-        int version = fileVersion(user);
+        int version = fileVersion(user, warnings);
         String backup = null;
         if (version < currentVersion) {
             // Copied before anything is written, so the upgraded file never replaces the only copy of the old one
@@ -185,17 +185,19 @@ public final class ConfigLoader {
         return border.isEmpty() ? null : "the config has a bad " + String.join(" and ", border);
     }
 
-    // A missing or unusable version reads as the first one; merge still warns about one that isn't a number. Zero or
-    // below can only be a damaged file.
-    private static int fileVersion(JsonObject user) {
+    // A missing or unusable version reads as the first one. merge warns about one that isn't a whole number that fits in
+    // an int; zero or below can only be a damaged file, so that is warned about here.
+    private static int fileVersion(JsonObject user, List<String> warnings) {
         JsonElement value = user.get(VERSION_KEY);
-        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
-            double version = value.getAsDouble();
-            if (version == Math.floor(version) && version >= FIRST_VERSION && version <= Integer.MAX_VALUE) {
-                return (int) version;
-            }
+        if (value == null || primitiveProblem(VERSION_KEY, new JsonPrimitive(FIRST_VERSION), value) != null) {
+            return FIRST_VERSION;
         }
-        return FIRST_VERSION;
+        int version = value.getAsInt();
+        if (version < FIRST_VERSION) {
+            warnings.add(VERSION_KEY + ": " + value.getAsString() + " is not a version, read as version " + FIRST_VERSION);
+            return FIRST_VERSION;
+        }
+        return version;
     }
 
     private static JsonObject readObject(Path file) throws IOException {
