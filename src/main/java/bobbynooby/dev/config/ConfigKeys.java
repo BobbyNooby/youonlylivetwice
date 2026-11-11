@@ -16,7 +16,7 @@ public final class ConfigKeys {
     // The file's layout, not a setting
     private static final String VERSION = "configVersion";
     // One typed value can't hold a list, so these are changed in the file
-    private static final Set<String> FILE_ONLY = Set.of("serverList.hoverLines");
+    private static final Set<String> FILE_ONLY = Set.of("serverList.hoverLines", "hide.tabHeaderLines");
     private static final Pattern LOG_FORM = Pattern.compile("([\\w.]+): (.+)");
 
     private ConfigKeys() {}

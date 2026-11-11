@@ -9,6 +9,10 @@ final class ConfigChecks {
     // Vanilla's own sample never has more than 12 names. Past these, a long list could push the status reply over its size limit.
     static final int MAX_HOVER_LINES = 12;
     static final int MAX_HOVER_LINE_LENGTH = 256;
+    // A player is sent only one line, so the count just keeps the list a sane size, with room over the 13 lines YOLT
+    // ships with. A line is cut where a hover line is.
+    static final int MAX_TAB_HEADER_LINES = 64;
+    static final int MAX_TAB_HEADER_LINE_LENGTH = 256;
     // A login waits on a skin for at most this long. Vanilla ends a login 600 ticks after it began and a connection 30
     // seconds after the client's last packet, and online-mode checks and other mods' login steps come before the wait,
     // so this leaves two thirds of both for them.
@@ -118,18 +122,24 @@ final class ConfigChecks {
             c.serverList.shownMaxPlayers = fallback.serverList.shownMaxPlayers;
             fellBack.accept("serverList.shownMaxPlayers", "must be 0 or more");
         }
-        // Like the End cap, what fits is kept rather than the whole list falling back
-        List<String> lines = c.serverList.hoverLines;
-        List<String> capped = new ArrayList<>();
-        for (String line : lines.subList(0, Math.min(lines.size(), MAX_HOVER_LINES))) {
-            capped.add(cut(line));
-        }
-        if (!capped.equals(lines)) {
-            c.serverList.hoverLines = capped;
-            warnings.add("serverList.hoverLines: at most " + MAX_HOVER_LINES + " lines of " + MAX_HOVER_LINE_LENGTH
-                    + " characters each, the rest was dropped");
-        }
+        c.serverList.hoverLines = capped(c.serverList.hoverLines, MAX_HOVER_LINES, MAX_HOVER_LINE_LENGTH,
+                "serverList.hoverLines", warnings);
+        c.hide.tabHeaderLines = capped(c.hide.tabHeaderLines, MAX_TAB_HEADER_LINES, MAX_TAB_HEADER_LINE_LENGTH,
+                "hide.tabHeaderLines", warnings);
         return reset;
+    }
+
+    // Like the End cap, what fits is kept rather than the whole list falling back. A list that fits comes back as it is.
+    private static List<String> capped(List<String> lines, int maxLines, int maxLength, String path, List<String> warnings) {
+        List<String> capped = new ArrayList<>();
+        for (String line : lines.subList(0, Math.min(lines.size(), maxLines))) {
+            capped.add(cut(line, maxLength));
+        }
+        if (capped.equals(lines)) {
+            return lines;
+        }
+        warnings.add(path + ": at most " + maxLines + " lines of " + maxLength + " characters each, the rest was dropped");
+        return capped;
     }
 
     private static boolean outsideGraveSearch(int radius) {
@@ -137,11 +147,11 @@ final class ConfigChecks {
     }
 
     // Never between the two halves of a character outside the basic range, such as an emoji
-    private static String cut(String line) {
-        if (line.length() <= MAX_HOVER_LINE_LENGTH) {
+    private static String cut(String line, int maxLength) {
+        if (line.length() <= maxLength) {
             return line;
         }
-        boolean split = Character.isHighSurrogate(line.charAt(MAX_HOVER_LINE_LENGTH - 1));
-        return line.substring(0, split ? MAX_HOVER_LINE_LENGTH - 1 : MAX_HOVER_LINE_LENGTH);
+        boolean split = Character.isHighSurrogate(line.charAt(maxLength - 1));
+        return line.substring(0, split ? maxLength - 1 : maxLength);
     }
 }

@@ -76,6 +76,22 @@ public class YoltConfig {
         public boolean serverPlayerCount = true;
         public boolean gameMessages = true;
         public boolean tabHeader = true;
+        // Each player's tab-list header is one of these, picked at random, under a row of dashes; § colour codes work.
+        // A reload gives a player whose line is gone a new one. An empty list shows no header.
+        public List<String> tabHeaderLines = new ArrayList<>(List.of(
+                "\u00a79The cold atmosphere of a new land... it fills you with determination.",
+                "\u00a7cYou scream out for help, but no one answers.",
+                "\u00a78You are surrounded by darkness. You cannot see anything.",
+                "\u00a7bThe horizon stretches far ahead, and you wonder what awaits.",
+                "\u00a7aThe map is incomplete. Where will you go next?",
+                "\u00a7eThe path ahead is unclear, but your journey must continue.",
+                "\u00a7dEvery step into the unknown feels like a new discovery.",
+                "\u00a76A new land lies before you. What secrets will it reveal?",
+                "\u00a7cThe world is vast and uncharted. Adventure calls.",
+                "\u00a77Who knows what lies beyond the next ridge?",
+                "\u00a7fWith every sunrise, the unknown becomes a little clearer.",
+                "\u00a72You're not sure what you'll find, but you're ready to explore.",
+                "\u00a73The world is filled with possibilities... and dangers."));
         public boolean distantPlayers = true;
         public boolean locatorBar = true;
         public boolean globalSounds = true;

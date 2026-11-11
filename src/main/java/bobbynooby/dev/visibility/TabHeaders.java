@@ -7,36 +7,33 @@ import net.minecraft.network.protocol.game.ClientboundTabListPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
-/** Gives each player a random tab-list header and footer, sent on join and when the switch changes. Server thread only. */
+/**
+ * Gives each player a tab-list header picked at random from hide.tabHeaderLines, sent on join and whenever the live
+ * settings are applied. Server thread only.
+ */
 public final class TabHeaders {
+    // Over the picked line and as the footer. Decoration, not one of the lines.
     private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "--------------";
 
     private static final Map<UUID, HeaderFooter> PLAYER_MAP = new HashMap<>();
     private static final Random RANDOM = new Random();
-    private static final String[] TAB_HEADERS = {
-            ChatFormatting.RESET.toString() + ChatFormatting.BLUE.toString() + "The cold atmosphere of a new land... it fills you with determination.",
-            ChatFormatting.RESET.toString() + ChatFormatting.RED.toString() + "You scream out for help, but no one answers.",
-            ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString() + "You are surrounded by darkness. You cannot see anything.",
-            ChatFormatting.RESET.toString() + ChatFormatting.AQUA.toString() + "The horizon stretches far ahead, and you wonder what awaits.",
-            ChatFormatting.RESET.toString() + ChatFormatting.GREEN.toString() + "The map is incomplete. Where will you go next?",
-            ChatFormatting.RESET.toString() + ChatFormatting.YELLOW.toString() + "The path ahead is unclear, but your journey must continue.",
-            ChatFormatting.RESET.toString() + ChatFormatting.LIGHT_PURPLE.toString() + "Every step into the unknown feels like a new discovery.",
-            ChatFormatting.RESET.toString() + ChatFormatting.GOLD.toString() + "A new land lies before you. What secrets will it reveal?",
-            ChatFormatting.RESET.toString() + ChatFormatting.RED.toString() + "The world is vast and uncharted. Adventure calls.",
-            ChatFormatting.RESET.toString() + ChatFormatting.GRAY.toString() + "Who knows what lies beyond the next ridge?",
-            ChatFormatting.RESET.toString() + ChatFormatting.WHITE.toString() + "With every sunrise, the unknown becomes a little clearer.",
-            ChatFormatting.RESET.toString() + ChatFormatting.DARK_GREEN.toString() + "You're not sure what you'll find, but you're ready to explore.",
-            ChatFormatting.RESET.toString() + ChatFormatting.DARK_AQUA.toString() + "The world is filled with possibilities... and dangers."
-    };
 
-    private static String getRandomHeader() {
-        return HEADER_FOOTER + "\n" + TAB_HEADERS[RANDOM.nextInt(TAB_HEADERS.length)];
+    // A line starts from plain text, so the dashes' grey doesn't run into it
+    private static HeaderFooter pick() {
+        List<String> lines = Settings.get().hide.tabHeaderLines;
+        if (lines.isEmpty()) {
+            return HeaderFooter.NONE;
+        }
+        String line = lines.get(RANDOM.nextInt(lines.size()));
+        return new HeaderFooter(line, HEADER_FOOTER + "\n" + ChatFormatting.RESET + line, HEADER_FOOTER);
     }
 
     // The client keeps a header until it disconnects, so one send per join is enough.
@@ -51,25 +48,35 @@ public final class TabHeaders {
         if (!Settings.active()) {
             return;
         }
-        HeaderFooter headerFooter = PLAYER_MAP.computeIfAbsent(player.getUUID(), id -> new HeaderFooter(getRandomHeader(), HEADER_FOOTER));
-        if (Settings.get().hide.tabHeader) {
-            player.connection.send(new ClientboundTabListPacket(Component.literal(headerFooter.header()), Component.literal(headerFooter.footer())));
+        HeaderFooter headerFooter = PLAYER_MAP.computeIfAbsent(player.getUUID(), id -> pick());
+        // A client starts with no header, so with no line there is nothing to send
+        if (Settings.get().hide.tabHeader && headerFooter.line() != null) {
+            player.connection.send(packet(headerFooter));
         }
     }
 
-    /** At startup and on /yolt reload: each player's header with the switch on, and none with it off. */
+    /**
+     * At startup and on /yolt reload: each player's header with the switch on, and none with it off. A player whose line
+     * is no longer in hide.tabHeaderLines gets a new one first, so a changed list shows at once.
+     */
     public static void applyAll(MinecraftServer server) {
         if (!Settings.active()) {
             return;
         }
+        List<String> lines = Settings.get().hide.tabHeaderLines;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (Settings.get().hide.tabHeader) {
-                send(player);
-            } else {
-                // Empty text is how the client is told to show no header
-                player.connection.send(new ClientboundTabListPacket(Component.empty(), Component.empty()));
-            }
+            HeaderFooter headerFooter = PLAYER_MAP.compute(player.getUUID(),
+                    (id, had) -> had != null && had.pickedFrom(lines) ? had : pick());
+            player.connection.send(packet(Settings.get().hide.tabHeader ? headerFooter : HeaderFooter.NONE));
         }
+    }
+
+    // Empty text is how the client is told to show no header
+    private static ClientboundTabListPacket packet(HeaderFooter headerFooter) {
+        if (headerFooter.line() == null) {
+            return new ClientboundTabListPacket(Component.empty(), Component.empty());
+        }
+        return new ClientboundTabListPacket(Component.literal(headerFooter.header()), Component.literal(headerFooter.footer()));
     }
 
     public static boolean has(UUID uuid) {
@@ -80,6 +87,13 @@ public final class TabHeaders {
         PLAYER_MAP.remove(uuid);
     }
 
-    public record HeaderFooter(String header, String footer) {
+    /** A player's header: the configured line it shows, or null for none, and the texts sent for it. */
+    public record HeaderFooter(@Nullable String line, String header, String footer) {
+        static final HeaderFooter NONE = new HeaderFooter(null, "", "");
+
+        // Still one of the lines, or still no line while the list is empty
+        boolean pickedFrom(List<String> lines) {
+            return line == null ? lines.isEmpty() : lines.contains(line);
+        }
     }
 }

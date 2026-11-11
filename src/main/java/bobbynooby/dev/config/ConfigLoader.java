@@ -53,7 +53,9 @@ public final class ConfigLoader {
     // Each step upgrades the file's JSON from its version to the next
     static final List<Migrations.Step<JsonObject>> STEPS = List.of();
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    // Without HTML escaping, so an apostrophe in a text, as in a tab header's "You're", is written as typed and not as
+    // an escape code
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final String DURATION_PATH = "bodies.duration";
     private static final String VERSION_KEY = "configVersion";
     private static final String BORDER_SECTION = "worldBorder";

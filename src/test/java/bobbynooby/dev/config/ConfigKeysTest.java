@@ -60,9 +60,10 @@ class ConfigKeysTest {
 
         Set<String> leaves = new HashSet<>();
         leaves(new Gson().toJsonTree(new YoltConfig()).getAsJsonObject(), "", leaves);
-        // The version is no setting, and a list can't be typed as one value, so those two stay in the file
+        // The version is no setting, and a list can't be typed as one value, so those stay in the file
         assertTrue(leaves.remove("configVersion"));
         assertTrue(leaves.remove("serverList.hoverLines"));
+        assertTrue(leaves.remove("hide.tabHeaderLines"));
         assertEquals(leaves, new HashSet<>(paths));
         assertEquals(leaves.size(), paths.size(), "a path is listed twice: " + paths);
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
@@ -70,9 +71,11 @@ class ConfigKeysTest {
 
     // /yolt config can then say to change the list in the file rather than call it unknown
     @Test
-    void hoverLinesIsFileOnly() {
+    void listsAreFileOnly() {
         assertTrue(ConfigKeys.fileOnly("serverList.hoverLines"));
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
+        assertTrue(ConfigKeys.fileOnly("hide.tabHeaderLines"));
+        assertTrue(ConfigKeys.find("hide.tabHeaderLines").isEmpty());
         // The version is no setting at all, and a real key or a typo is not file-only
         assertFalse(ConfigKeys.fileOnly("configVersion"));
         assertFalse(ConfigKeys.fileOnly("chat.radius"));

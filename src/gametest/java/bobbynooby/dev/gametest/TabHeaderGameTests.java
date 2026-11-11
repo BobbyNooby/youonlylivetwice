@@ -5,6 +5,7 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.Packet;
@@ -23,6 +24,7 @@ public class TabHeaderGameTests {
     private static final String TAB_HEADER = "you-only-live-twice-gametest:tab_header";
     private static final String TAB_HEADER_OFF = "you-only-live-twice-gametest:tab_header_off";
     private static final String TAB_HEADER_ON = "you-only-live-twice-gametest:tab_header_on";
+    private static final String TAB_HEADER_LINES = "you-only-live-twice-gametest:tab_header_lines";
 
     @GameTest
     public void headerEntryRemovedOnLeave(GameTestHelper helper) {
@@ -116,6 +118,49 @@ public class TabHeaderGameTests {
             hide.tabHeader = before;
             LiveSettings.applyAll(server);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // hide.tabHeaderLines: a custom list reaches a joining player's header, a reload's new list replaces the line of a
+    // player already on, and an empty list clears the header. A batch of its own, since applying the live settings
+    // reaches every online player.
+    @GameTest(environment = TAB_HEADER_LINES)
+    public void customHeaderLinesReachPlayers(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean switchBefore = hide.tabHeader;
+        List<String> linesBefore = hide.tabHeaderLines;
+        String dashes = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY + "--------------";
+        String first = ChatFormatting.GREEN + "First custom line";
+        String second = ChatFormatting.AQUA + "Second custom line";
+        ServerPlayer player = null;
+        try {
+            hide.tabHeader = true;
+            hide.tabHeaderLines = List.of(first);
+            player = TestPlayers.join(helper, "tablines", GameType.SURVIVAL, BlockPos.ZERO);
+            List<ClientboundTabListPacket> sent = tabListPackets(player);
+            helper.assertValueEqual(sent.size(), 1, "tab list packets at the join");
+            helper.assertValueEqual(sent.get(0).header().getString(), dashes + "\n" + ChatFormatting.RESET + first, "header at the join");
+            helper.assertValueEqual(sent.get(0).footer().getString(), dashes, "footer at the join");
+
+            hide.tabHeaderLines = List.of(second);
+            LiveSettings.applyAll(server);
+            ClientboundTabListPacket reloaded = tabListPackets(player).getLast();
+            helper.assertValueEqual(reloaded.header().getString(), dashes + "\n" + ChatFormatting.RESET + second, "header after the list changed");
+
+            hide.tabHeaderLines = List.of();
+            LiveSettings.applyAll(server);
+            ClientboundTabListPacket cleared = tabListPackets(player).getLast();
+            helper.assertValueEqual(cleared.header().getString(), "", "header with an empty list");
+            helper.assertValueEqual(cleared.footer().getString(), "", "footer with an empty list");
+        } finally {
+            hide.tabHeader = switchBefore;
+            hide.tabHeaderLines = linesBefore;
+            LiveSettings.applyAll(server);
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
         }
         helper.succeed();
     }

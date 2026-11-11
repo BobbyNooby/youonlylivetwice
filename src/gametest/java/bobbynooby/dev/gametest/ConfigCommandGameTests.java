@@ -133,6 +133,8 @@ public class ConfigCommandGameTests {
             assertRefused(helper, server, fileBefore, "yolt config configVersion 2", "No config key is named configVersion.");
             assertRefused(helper, server, fileBefore, "yolt config serverList.hoverLines hello", fileOnly);
             assertRefused(helper, server, fileBefore, "yolt config serverList.hoverLines", fileOnly);
+            assertRefused(helper, server, fileBefore, "yolt config hide.tabHeaderLines hello",
+                    "hide.tabHeaderLines can only be changed in the config file. Change it there, then run /yolt reload.");
         } finally {
             restore(server, fileBefore);
         }

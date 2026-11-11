@@ -514,6 +514,29 @@ class ConfigLoaderTest {
         assertTrue(fitting.warnings().isEmpty(), fitting.warnings().toString());
     }
 
+    // The tab header list is cut the same way, with room for more lines, and the 13 lines YOLT ships with fit
+    @Test
+    void tabHeaderLinesAreCapped() throws IOException {
+        List<String> typed = new ArrayList<>();
+        for (int i = 0; i < ConfigChecks.MAX_TAB_HEADER_LINES + 2; i++) {
+            typed.add(i == 1 ? "x".repeat(300) : "line" + i);
+        }
+        ConfigLoader.Result r = loadJson("{\"hide\":{\"tabHeaderLines\":" + new Gson().toJson(typed) + "}}");
+        List<String> lines = r.config().hide.tabHeaderLines;
+        assertEquals(ConfigChecks.MAX_TAB_HEADER_LINES, lines.size());
+        assertEquals("line0", lines.get(0));
+        assertEquals("x".repeat(ConfigChecks.MAX_TAB_HEADER_LINE_LENGTH), lines.get(1));
+        assertEquals(List.of("hide.tabHeaderLines: at most 64 lines of 256 characters each, the rest was dropped"),
+                r.warnings().stream().filter(w -> w.startsWith("hide.tabHeaderLines")).toList());
+
+        ConfigLoader.Result shipped = loadJson("{}");
+        assertEquals(13, shipped.config().hide.tabHeaderLines.size());
+        assertTrue(shipped.warnings().isEmpty(), shipped.warnings().toString());
+        // The rewrite keeps an apostrophe as typed
+        assertTrue(Files.readString(dir.resolve("config.json"), StandardCharsets.UTF_8).contains("You're not sure"));
+        assertEquals(List.of(), loadJson("{\"hide\":{\"tabHeaderLines\":[]}}").config().hide.tabHeaderLines);
+    }
+
     // A cut never leaves half of a character such as an emoji
     @Test
     void hoverLineCutKeepsWholeCharacters() throws IOException {
