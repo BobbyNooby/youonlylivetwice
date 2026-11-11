@@ -22,6 +22,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /** Reads the config key by key, so one bad value only resets that value. */
 public final class ConfigLoader {
@@ -92,16 +93,15 @@ public final class ConfigLoader {
                 warnings.add(problem);
                 return new Result(null, warnings, true, null);
             }
-            backup(file, file.getFileName() + ".bak");
-            warnings.add(problem + ", old file saved as " + file.getFileName() + ".bak, using defaults");
+            String backup = backup(file, file.getFileName() + ".bak");
+            warnings.add(problem + ", old file saved as " + backup + ", using defaults");
             return new Result(writeDefaults(file), warnings, true, problem);
         }
 
         int version = fileVersion(user);
         if (version < currentVersion) {
             // Copied before anything is written, so the upgraded file never replaces the only copy of the old one
-            String backup = file.getFileName() + ".v" + version + ".bak";
-            backup(file, backup);
+            String backup = backup(file, file.getFileName() + ".v" + version + ".bak");
             user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
             warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
         }
@@ -139,8 +139,7 @@ public final class ConfigLoader {
         // startup the admin's file is kept first, under the same name as one that can't be read. A reload keeps the live
         // values and writes no copy.
         if (writeDefaultsOnError && warnings.size() > warningsBeforeMerge) {
-            String backup = file.getFileName() + ".bak";
-            backup(file, backup);
+            String backup = backup(file, file.getFileName() + ".bak");
             warnings.add("old file saved as " + backup + " before the rewrite");
         }
         write(file, config);
@@ -237,8 +236,7 @@ public final class ConfigLoader {
         try {
             own = readObject(file);
         } catch (JsonParseException | IOException e) {
-            String backup = file.getFileName() + ".bak";
-            backup(file, backup);
+            String backup = backup(file, file.getFileName() + ".bak");
             Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {} and the whole config"
                     + " was written", path, backup);
             write(file, config);
@@ -295,12 +293,46 @@ public final class ConfigLoader {
         return config;
     }
 
-    private static void backup(Path file, String name) {
+    /**
+     * Copies the file to name. A name that already holds other bytes, perhaps the admin's whole config from an earlier
+     * start, is never written over: the copy goes beside it with the time added. A copy with these bytes already there
+     * is used as it is. Returns the name of the copy.
+     */
+    private static String backup(Path file, String name) {
         try {
-            Files.copy(file, file.resolveSibling(name), StandardCopyOption.REPLACE_EXISTING);
+            if (!Files.exists(file.resolveSibling(name))) {
+                Files.copy(file, file.resolveSibling(name));
+                return name;
+            }
+            String same = sameCopy(file, name);
+            if (same != null) {
+                return same;
+            }
+            long time = System.currentTimeMillis();
+            while (Files.exists(file.resolveSibling(name + "-" + time))) {
+                time++;
+            }
+            Files.copy(file, file.resolveSibling(name + "-" + time));
+            return name + "-" + time;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    // name, or one of its copies with the time added, when it already holds the file's bytes
+    private static @Nullable String sameCopy(Path file, String name) throws IOException {
+        if (Files.mismatch(file, file.resolveSibling(name)) == -1) {
+            return name;
+        }
+        try (Stream<Path> siblings = Files.list(file.toAbsolutePath().getParent())) {
+            for (Path sibling : siblings.toList()) {
+                String siblingName = sibling.getFileName().toString();
+                if (siblingName.startsWith(name + "-") && Files.mismatch(file, sibling) == -1) {
+                    return siblingName;
+                }
+            }
+        }
+        return null;
     }
 
     private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName,

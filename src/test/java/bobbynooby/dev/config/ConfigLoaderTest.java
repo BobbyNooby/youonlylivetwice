@@ -587,4 +587,56 @@ class ConfigLoaderTest {
         assertEquals("global", readJson(file).getAsJsonObject("chat").get("mode").getAsString());
         assertEquals(20, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
     }
+
+    private List<Path> timedCopies() throws IOException {
+        try (Stream<Path> files = Files.list(dir)) {
+            return new ArrayList<>(files.filter(path -> path.getFileName().toString().matches("config\\.json\\.bak-\\d+"))
+                    .sorted().toList());
+        }
+    }
+
+    // A .bak can hold the admin's whole config from an earlier start, so a different file never goes over it: it is kept
+    // beside it with the time added, and the same file again makes no new copy
+    @Test
+    void backupNeverReplacesADifferentCopy() throws IOException {
+        Path file = dir.resolve("config.json");
+        Path bak = dir.resolve("config.json.bak");
+        byte[] first = "{\"chat\": {\"radius\": 2.5}}".getBytes(StandardCharsets.UTF_8);
+        byte[] second = "{\"chat\": {\"radius\": 3.5}}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, first);
+        ConfigLoader.load(file, null, true);
+        assertArrayEquals(first, Files.readAllBytes(bak));
+
+        Files.write(file, second);
+        ConfigLoader.Result refused = ConfigLoader.load(file, null, true);
+        assertArrayEquals(first, Files.readAllBytes(bak));
+        List<Path> timed = timedCopies();
+        assertEquals(1, timed.size(), timed.toString());
+        assertArrayEquals(second, Files.readAllBytes(timed.get(0)));
+        String savedSecond = "old file saved as " + timed.get(0).getFileName() + " before the rewrite";
+        assertTrue(refused.warnings().contains(savedSecond), refused.warnings().toString());
+
+        Files.write(file, second);
+        assertTrue(ConfigLoader.load(file, null, true).warnings().contains(savedSecond));
+        assertEquals(timed, timedCopies());
+
+        // A file that isn't JSON, at startup or under a key being set, keeps its copy the same way
+        Files.writeString(file, "{not json");
+        ConfigLoader.Result broken = ConfigLoader.load(file, null, true);
+        List<Path> brokenCopies = timedCopies();
+        brokenCopies.removeAll(timed);
+        assertEquals(1, brokenCopies.size(), brokenCopies.toString());
+        assertEquals("{not json", Files.readString(brokenCopies.get(0)));
+        assertTrue(broken.warnings().get(0).endsWith(", old file saved as " + brokenCopies.get(0).getFileName() + ", using defaults"),
+                broken.warnings().toString());
+
+        Files.writeString(file, "{");
+        ConfigLoader.setKey(file, new YoltConfig(), key("chat.radius"), new JsonPrimitive(20));
+        List<Path> setCopies = timedCopies();
+        setCopies.removeAll(timed);
+        setCopies.removeAll(brokenCopies);
+        assertEquals(1, setCopies.size(), setCopies.toString());
+        assertEquals("{", Files.readString(setCopies.get(0)));
+        assertArrayEquals(first, Files.readAllBytes(bak));
+    }
 }
