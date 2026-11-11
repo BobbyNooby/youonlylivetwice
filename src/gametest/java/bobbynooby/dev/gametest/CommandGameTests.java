@@ -30,6 +30,7 @@ import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -227,6 +228,38 @@ public class CommandGameTests {
         } finally {
             graves.enabled = gravesBefore;
             DeathLockout.revive(who.id(), "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // A body whose death could not kill its owner: that death logs it, so the command only replies and nothing is logged
+    // twice. A non-empty folder where the old save gets moved makes the save swap fail. Bodies are on for this tick only.
+    @GameTest
+    public void killThroughABodyThatCouldNotKillRepliesOnce(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "BodyKill", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            BodyTestKit.leaveBody(helper, player);
+            Path blocker = server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(who.id() + ".dat_old");
+            Path blockerContent = blocker.resolve("blocker");
+            Files.createDirectories(blocker);
+            Files.writeString(blockerContent, "");
+            List<String> output = new ArrayList<>();
+            List<String> log;
+            try {
+                log = OfflineGameTests.yoltLog(() -> output.addAll(run(server, "yolt kill " + who.name())));
+            } finally {
+                Files.delete(blockerContent);
+                Files.delete(blocker);
+            }
+            helper.assertValueEqual(output, List.of("Could not kill " + who.name() + "; see the server log."), "command output");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains("could not kill") || line.contains("could not be killed")).toList(),
+                    List.of("The body of " + who.name() + " died, but they could not be killed"), "the failure's log lines");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "the failed kill locked " + who.name() + " out");
+        } finally {
+            BodyTestKit.cleanUp(helper, who.id(), before);
         }
         helper.succeed();
     }
