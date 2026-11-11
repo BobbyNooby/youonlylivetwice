@@ -105,8 +105,14 @@ public final class BodyExpiry {
                 // The body and record stay, and the next try starts again from a freshly loaded save
                 long wait = retry == null ? FIRST_RETRY_MILLIS : Math.min(retry.waitMillis() * 2, MAX_RETRY_MILLIS);
                 RETRIES.put(record.bodyEntity(), new Retry(now + wait, wait));
-                Yolt.LOGGER.error("Could not remove the expired body of {}; it stays, and this is tried again in {} "
-                        + "minutes", record.ownerName(), wait / MINUTE_MILLIS, e);
+                String line = "Could not remove the expired body of {}; it stays, and this is tried again in {} "
+                        + "minutes";
+                if (retry == null) {
+                    Yolt.LOGGER.error(line, record.ownerName(), wait / MINUTE_MILLIS, e);
+                } else {
+                    // Most likely the same failure again, so its trace is only logged the first time
+                    Yolt.LOGGER.error(line, record.ownerName(), wait / MINUTE_MILLIS);
+                }
             }
         }
     }

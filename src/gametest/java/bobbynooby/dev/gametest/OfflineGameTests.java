@@ -434,13 +434,19 @@ public class OfflineGameTests {
     // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console. Other
     // test classes use it too.
     static List<String> yoltLog(Runnable action) {
+        return yoltEvents(action).stream().map(event -> event.getMessage().getFormattedMessage()).toList();
+    }
+
+    // The same, whole, for a test that checks what came with a line, such as its stack trace
+    static List<LogEvent> yoltEvents(Runnable action) {
         LoggerConfig config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
-        List<String> lines = new CopyOnWriteArrayList<>();
+        List<LogEvent> events = new CopyOnWriteArrayList<>();
         AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
             @Override
             public void append(LogEvent event) {
                 if (Yolt.MOD_ID.equals(event.getLoggerName())) {
-                    lines.add(event.getMessage().getFormattedMessage());
+                    // Log4j can reuse the event it hands over, so a copy is kept
+                    events.add(event.toImmutable());
                 }
             }
         };
@@ -452,7 +458,7 @@ public class OfflineGameTests {
             config.removeAppender(appender.getName());
             appender.stop();
         }
-        return lines;
+        return events;
     }
 
     // No item has this id, so the entry can't be read back

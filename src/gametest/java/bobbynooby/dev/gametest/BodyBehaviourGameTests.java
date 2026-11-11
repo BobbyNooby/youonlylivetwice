@@ -44,6 +44,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.apache.logging.log4j.core.LogEvent;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -786,8 +787,8 @@ public class BodyBehaviourGameTests {
     }
 
     // With no save to load, every try fails. Each failure names the wait before the next try, which doubles from 5
-    // minutes up to a day, so vanilla doesn't copy an unreadable save every few minutes for good. The clock is stepped
-    // by hand, a millisecond short of each try first.
+    // minutes up to a day, so vanilla doesn't copy an unreadable save every few minutes for good. Only the first carries
+    // the stack trace. The clock is stepped by hand, a millisecond short of each try first.
     @GameTest(environment = BODY_RETRY)
     public void failedExpiryWaitDoublesUpToADay(GameTestHelper helper) throws IOException {
         ServerPlayer player = join(helper, "Backoff", new BlockPos(1, 1, 1));
@@ -806,11 +807,17 @@ public class BodyBehaviourGameTests {
             Files.deleteIfExists(file.resolveSibling(owner + ".dat_old"));
 
             long at = System.currentTimeMillis();
+            boolean first = true;
             for (long wait : List.of(5L, 10L, 20L, 40L, 80L, 160L, 320L, 640L, 1280L, 1440L, 1440L)) {
                 long tryAt = at;
-                List<String> log = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server, tryAt));
-                helper.assertValueEqual(log.stream().filter(line -> line.startsWith(failed)).toList(),
+                List<LogEvent> errors = OfflineGameTests.yoltEvents(() -> BodyExpiry.tick(server, tryAt)).stream()
+                        .filter(event -> event.getMessage().getFormattedMessage().startsWith(failed))
+                        .toList();
+                helper.assertValueEqual(errors.stream().map(event -> event.getMessage().getFormattedMessage()).toList(),
                         List.of(failed + "it stays, and this is tried again in " + wait + " minutes"), "errors of the failed try");
+                helper.assertValueEqual(errors.get(0).getThrown() != null, first,
+                        "a stack trace on the error naming " + wait + " minutes");
+                first = false;
                 at += wait * 60_000L;
                 long early = at - 1;
                 List<String> waiting = OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server, early));
