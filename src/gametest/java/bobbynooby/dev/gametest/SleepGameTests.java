@@ -26,6 +26,7 @@ import net.minecraft.server.players.SleepStatus;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.WorldClock;
@@ -285,6 +286,57 @@ public class SleepGameTests {
         } finally {
             sleep.noBedRespawn = before;
             nether.setBlockAndUpdate(anchor, replaced);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The anchor hook sits after vanilla's check for a dimension where anchors work, so anywhere else a charged anchor
+    // still blows up when used. The barriers round the test hold the blast in.
+    @GameTest
+    public void anchorStillExplodesInOverworld(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 1, 4));
+        // Glass drops nothing, so the blast leaves no item behind
+        BlockPos glass = anchor.east();
+        ServerPlayer player = TestPlayers.join(helper, "Boom", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean before = sleep.noBedRespawn;
+        try {
+            level.setBlockAndUpdate(anchor, Blocks.RESPAWN_ANCHOR.defaultBlockState().setValue(RespawnAnchorBlock.CHARGE, 1));
+            level.setBlockAndUpdate(glass, Blocks.GLASS.defaultBlockState());
+            sleep.noBedRespawn = true;
+            InteractionResult result = rightClick(level, player, anchor);
+            // Vanilla's answer for the blast; the hook answers CONSUME
+            helper.assertValueEqual(result, InteractionResult.SUCCESS_SERVER, "anchor use in the overworld with no-bed-respawn on");
+            helper.assertFalse(level.getBlockState(anchor).is(Blocks.RESPAWN_ANCHOR), "the anchor is still there");
+            helper.assertFalse(level.getBlockState(glass).is(Blocks.GLASS), "the glass beside the anchor is still there, so nothing blew up");
+        } finally {
+            sleep.noBedRespawn = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Glowstone goes through the anchor's item use, which the hook leaves alone, so charging works with the switch on
+    @GameTest(dimension = "minecraft:the_nether")
+    public void anchorStillChargesWithGlowstone(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel();
+        helper.assertValueEqual(nether.dimension(), Level.NETHER, "the test's dimension");
+        BlockPos anchor = helper.absolutePos(new BlockPos(3, 1, 3));
+        ServerPlayer player = TestPlayers.join(helper, "Charger", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        boolean before = sleep.noBedRespawn;
+        try {
+            nether.setBlockAndUpdate(anchor, Blocks.RESPAWN_ANCHOR.defaultBlockState());
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.GLOWSTONE, 2));
+            sleep.noBedRespawn = true;
+            InteractionResult result = rightClick(nether, player, anchor);
+            helper.assertTrue(result.consumesAction(), "the glowstone was not used on the anchor: " + result);
+            helper.assertValueEqual(nether.getBlockState(anchor).getValue(RespawnAnchorBlock.CHARGE), 1, "anchor charge after one glowstone");
+            helper.assertValueEqual(player.getMainHandItem().getCount(), 1, "glowstone left in the hand");
+        } finally {
+            sleep.noBedRespawn = before;
             TestPlayers.leave(player);
         }
         helper.succeed();
@@ -638,6 +690,12 @@ public class SleepGameTests {
 
     private static InteractionResult useBlock(ServerLevel level, ServerPlayer player, BlockPos pos) {
         return level.getBlockState(pos).useWithoutItem(level, player, new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
+    }
+
+    // A right click on top of the block with whatever is in the main hand, the way the server takes it from a client
+    private static InteractionResult rightClick(ServerLevel level, ServerPlayer player, BlockPos pos) {
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos).add(0.0, 0.5, 0.0), Direction.UP, pos, false);
+        return player.gameMode.useItemOn(player, level, player.getMainHandItem(), InteractionHand.MAIN_HAND, hit);
     }
 
     // Getting out of bed the way the client asks for it
