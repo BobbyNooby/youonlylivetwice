@@ -150,6 +150,8 @@ public class GraveDeathGameTests {
                     .toList();
             helper.assertValueEqual(onDisk.size(), 1, "copies of the grave on disk after the next save");
             helper.assertValueEqual(GraveAsserts.countInGraves(onDisk, Items.DIAMOND), 2, "diamonds in the grave on disk");
+            store.saveNow(server);
+            helper.assertFalse(store.isDirty(), "a save at once that worked left the grave store marked to save");
         } finally {
             if (Files.isDirectory(file)) {
                 Files.delete(file);
