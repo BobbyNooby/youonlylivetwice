@@ -240,10 +240,16 @@ public class CommandRestrictionGameTests {
                         "/w in the tree resent after a reload with whispers " + (whispers ? "on" : "off"));
             }
         } finally {
-            // The settings go back before the player leaves
-            Files.writeString(path, fileBefore);
-            CommandGameTests.restoreConfig(server);
-            TestPlayers.leave(player);
+            // The settings go back before the player leaves, each step on its own, so a failed write still does the rest
+            try {
+                Files.writeString(path, fileBefore);
+            } finally {
+                try {
+                    CommandGameTests.restoreConfig(server);
+                } finally {
+                    TestPlayers.leave(player);
+                }
+            }
         }
         helper.succeed();
     }
