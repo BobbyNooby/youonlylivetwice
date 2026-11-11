@@ -21,6 +21,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /** Reads the config key by key, so one bad value only resets that value. */
@@ -219,8 +220,7 @@ public final class ConfigLoader {
         }
         ConfigChecks.validate(config, live, warnings, CURRENT_VALUE);
         for (String warning : warnings) {
-            // Contains, not starts with: the End cap's warning begins with endScale but is as much about the diameter
-            if (warning.contains(key.path())) {
+            if (names(warning, key.path())) {
                 int tail = warning.lastIndexOf(", using ");
                 return new Change(null, oldValue, typed, tail < 0 ? warning : warning.substring(0, tail), null);
             }
@@ -234,6 +234,12 @@ public final class ConfigLoader {
             return new Change(null, oldValue, typed, problem, null);
         }
         return new Change(config, oldValue, key.show(config), null, backup);
+    }
+
+    // Anywhere in the warning, since the End cap's begins with endScale but is as much about the diameter; and only the
+    // whole name, so graves.tellLocation isn't taken for graves.tellLocationDistance
+    private static boolean names(String warning, String path) {
+        return Pattern.compile("(?<![\\w.])" + Pattern.quote(path) + "(?![\\w.])").matcher(warning).find();
     }
 
     // Returns the copy kept of a file that couldn't be read, or null

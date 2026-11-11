@@ -691,4 +691,22 @@ class ConfigLoaderTest {
         // Only that section's name: another unknown top-level key leaves the border alone
         assertNull(loadJson("{\"worldBorderX\": {}, \"chatt\": {}}").borderProblem());
     }
+
+    // graves.tellLocation is the start of graves.tellLocationDistance, so only a warning naming the whole key refuses it.
+    // A live config always passes its checks, so the other key's warning is set up by giving the live one a bad value.
+    @Test
+    void setKeyIgnoresAWarningForALongerKeyName() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{}");
+        YoltConfig live = new YoltConfig();
+        live.graves.tellLocationDistance = -1;
+
+        ConfigLoader.Change change = ConfigLoader.setKey(file, live, key("graves.tellLocation"), new JsonPrimitive("always"));
+        assertNull(change.problem());
+        assertEquals(YoltConfig.TellLocation.ALWAYS, change.config().graves.tellLocation);
+        assertEquals("always", readJson(file).getAsJsonObject("graves").get("tellLocation").getAsString());
+
+        ConfigLoader.Change distance = ConfigLoader.setKey(file, live, key("graves.tellLocationDistance"), new JsonPrimitive(-2));
+        assertEquals("graves.tellLocationDistance: must be 0 or more", distance.problem());
+    }
 }
