@@ -22,6 +22,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.SignableCommand;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
+import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -90,6 +94,56 @@ public class CommandRestrictionGameTests {
                 scoreboard.removeObjective(objective);
             }
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The commands that would tell a non-op who is online, or reach someone out of earshot, sent the way a client sends a
+    // command its tree doesn't have. Restricted, none of them answers or reaches anyone. The same packets unrestricted,
+    // in the same tick, show what each would have done.
+    @GameTest
+    public void nonOpGetsNoListMsgTellMeOrTrigger(GameTestHelper helper) {
+        Scoreboard scoreboard = helper.getLevel().getServer().getScoreboard();
+        TestPlayers.Recording sender = TestPlayers.joinRecording(helper, "Leaky", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        TestPlayers.Recording near = TestPlayers.joinRecording(helper, "Listener", GameType.SURVIVAL, new BlockPos(2, 1, 1));
+        String target = near.nameAndId().name();
+        List<String> commands = List.of("list", "msg " + target + " leak by msg", "tell " + target + " leak by tell",
+                "me leak by me", "trigger yolt_leak set 1");
+        boolean before = Settings.get().restrictCommands;
+        Objective objective = null;
+        try {
+            objective = scoreboard.addObjective("yolt_leak", ObjectiveCriteria.TRIGGER, Component.literal("yolt_leak"),
+                    ObjectiveCriteria.RenderType.INTEGER, false, null);
+            ScoreAccess score = scoreboard.getOrCreatePlayerScore(sender, objective);
+            score.unlock();
+
+            Settings.get().restrictCommands = true;
+            int senderFrom = TestPlayers.sentPackets(sender).size();
+            int nearFrom = TestPlayers.sentPackets(near).size();
+            commands.forEach(command -> sendCommand(sender, command));
+            helper.assertValueEqual(chatLines(sender, senderFrom), List.of(), "what the restricted sender was told");
+            helper.assertValueEqual(chatLines(near, nearFrom), List.of(), "what the near player got from the restricted sender");
+            helper.assertValueEqual(score.get(), 0, "score after the restricted trigger");
+
+            Settings.get().restrictCommands = false;
+            senderFrom = TestPlayers.sentPackets(sender).size();
+            nearFrom = TestPlayers.sentPackets(near).size();
+            commands.forEach(command -> sendCommand(sender, command));
+            List<String> told = chatLines(sender, senderFrom);
+            helper.assertTrue(told.stream().anyMatch(line -> line.startsWith("There are ") && line.contains(target)),
+                    "the unrestricted /list named no one: " + told);
+            List<String> heard = chatLines(near, nearFrom);
+            for (String text : List.of("leak by msg", "leak by tell", "leak by me")) {
+                helper.assertTrue(heard.stream().anyMatch(line -> line.contains(text)), "the near player missed '" + text + "': " + heard);
+            }
+            helper.assertValueEqual(score.get(), 1, "score after the unrestricted trigger");
+        } finally {
+            Settings.get().restrictCommands = before;
+            if (objective != null) {
+                scoreboard.removeObjective(objective);
+            }
+            TestPlayers.leave(sender);
+            TestPlayers.leave(near);
         }
         helper.succeed();
     }
@@ -275,6 +329,27 @@ public class CommandRestrictionGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // What a client sends for a command it has no signature for, as a vanilla client does for one its tree lacks
+    private static void sendCommand(ServerPlayer player, String command) {
+        player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));
+    }
+
+    // Every chat line, system message and command reply sent to the player from packet number "from" on
+    private static List<String> chatLines(ServerPlayer player, int from) {
+        List<Packet<?>> packets = TestPlayers.sentPackets(player);
+        List<String> lines = new ArrayList<>();
+        for (Packet<?> packet : packets.subList(from, packets.size())) {
+            if (packet instanceof ClientboundSystemChatPacket system) {
+                lines.add(system.content().getString());
+            } else if (packet instanceof ClientboundPlayerChatPacket chat) {
+                lines.add(chat.body().content());
+            } else if (packet instanceof ClientboundDisguisedChatPacket disguised) {
+                lines.add(disguised.message().getString());
+            }
+        }
+        return lines;
     }
 
     // What an op-placed sign runs its click command as (vanilla's SignBlockEntity)
