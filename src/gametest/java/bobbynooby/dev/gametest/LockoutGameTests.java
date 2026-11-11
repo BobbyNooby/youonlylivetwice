@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
@@ -23,6 +24,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.UserBanList;
+import net.minecraft.server.players.UserBanListEntry;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
@@ -80,6 +83,58 @@ public class LockoutGameTests {
             DeathLockout.recordDeath(uuid, "Ghost");
             helper.assertTrue(refusedForLockout(loginRefusal(server, new NameAndId(uuid, "Ghost"))),
                     "a full server hid the lockout message");
+        } finally {
+            TestPlayers.leave(holder);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla's own refusals before "server full" still win: a banned or unlisted player is told that, not that they died.
+    // Once the ban is lifted, the lockout refuses them, so the death was there all along. The ban goes in the same tick.
+    @GameTest(environment = LOGIN_CHECK)
+    public void banBeatsLockout(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        NameAndId who = new NameAndId(UUID.randomUUID(), "Banned");
+        DeathLockout.recordDeath(who.id(), who.name());
+        UserBanList bans = server.getPlayerList().getBans();
+        bans.add(new UserBanListEntry(who));
+        try {
+            helper.assertValueEqual(refusalKey(loginRefusal(server, who)), "multiplayer.disconnect.banned.reason",
+                    "refusal of a banned player who is locked out");
+        } finally {
+            bans.remove(who);
+        }
+        helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused for the lockout once the ban is lifted");
+        helper.succeed();
+    }
+
+    // The whitelist goes back off in the same tick
+    @GameTest(environment = LOGIN_CHECK)
+    public void whitelistBeatsLockout(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        NameAndId who = new NameAndId(UUID.randomUUID(), "Unlisted");
+        DeathLockout.recordDeath(who.id(), who.name());
+        boolean whitelistBefore = server.isUsingWhitelist();
+        server.setUsingWhitelist(true);
+        try {
+            helper.assertValueEqual(refusalKey(loginRefusal(server, who)), "multiplayer.disconnect.not_whitelisted",
+                    "refusal of an unlisted player who is locked out");
+        } finally {
+            server.setUsingWhitelist(whitelistBefore);
+        }
+        helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused for the lockout with the whitelist off");
+        helper.succeed();
+    }
+
+    // The lockout only takes over "server full" for a player it keeps out: one who never died is still told it's full
+    @GameTest(environment = LOGIN_CHECK)
+    public void livingPlayerOnFullServerIsToldItIsFull(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer holder = TestPlayers.join(helper, "Holder", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            helper.assertTrue(server.getPlayerList().getPlayers().size() >= server.getMaxPlayers(), "the server is not full");
+            helper.assertValueEqual(refusalKey(loginRefusal(server, new NameAndId(UUID.randomUUID(), "Living"))),
+                    "multiplayer.disconnect.server_full", "refusal of a living player on a full server");
         } finally {
             TestPlayers.leave(holder);
         }
@@ -782,6 +837,14 @@ public class LockoutGameTests {
 
     static Component loginRefusal(MinecraftServer server, NameAndId who) {
         return server.getPlayerList().canPlayerLogin(ADDRESS, who);
+    }
+
+    // The translation key of one of vanilla's refusals, or the text of any other
+    static String refusalKey(Component refusal) {
+        if (refusal != null && refusal.getContents() instanceof TranslatableContents translatable) {
+            return translatable.getKey();
+        }
+        return refusal == null ? "(let in)" : refusal.getString();
     }
 
     // Our refusal, not vanilla's (server full, banned, whitelist)
