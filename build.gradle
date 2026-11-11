@@ -35,14 +35,11 @@ fabricApi {
     }
 }
 
-// Without a report file the GameTest results only exist in the console log
 loom.runs.named("gameTest") { run ->
+    // Without a report file the GameTest results only exist in the console log
     run.systemProperties.put("fabric-api.gametest.report-file",
             layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
-}
-
-// Gradle's -D flags don't reach the forked test server, so the flake-hunt ones are handed over here
-loom.runs.named("gameTest") { run ->
+    // Gradle's -D flags don't reach the forked test server, so the flake-hunt ones are handed over here
     ["filter", "verify"].each { key ->
         def value = System.getProperty("fabric-api.gametest." + key)
         if (value) {
