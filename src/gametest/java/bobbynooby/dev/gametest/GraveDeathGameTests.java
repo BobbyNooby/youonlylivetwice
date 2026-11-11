@@ -227,13 +227,13 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
-    // Standing on a block in the top layer, so the player is above the build limit. No head can go up there, and the
-    // one-block platform leaves the column below open, so the grave goes where items fall: the floor under the death.
+    // Standing on a block in the top layer, so the player is above the build limit. No head can go up there, but the
+    // one-block platform's own layer is the nearest height a head fits, so the grave goes beside the platform, where items
+    // dropped from it still fall to the floor.
     @GameTest(skyAccess = true)
-    public void deathAtBuildLimitGraveOnTheGroundBelow(GameTestHelper helper) {
+    public void deathAboveBuildLimitGraveBesideThePlatform(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos ground = helper.absolutePos(new BlockPos(3, 0, 3));
-        BlockPos top = ground.atY(level.getMaxY());
+        BlockPos top = helper.absolutePos(new BlockPos(3, 0, 3)).atY(level.getMaxY());
         ServerPlayer player = TestPlayers.join(level.getServer(), "BuildLimit", GameType.SURVIVAL, top.above());
         try {
             level.setBlock(top, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
@@ -241,12 +241,47 @@ public class GraveDeathGameTests {
             kill(helper, player);
 
             Grave grave = onlyGrave(helper, player);
-            helper.assertValueEqual(grave.pos(), ground, "grave position");
-            assertReachableAndItemSafe(helper, grave);
+            BlockPos pos = grave.pos();
+            helper.assertValueEqual(pos.getY(), level.getMaxY(), "grave height");
+            helper.assertValueEqual(Math.max(Math.abs(pos.getX() - top.getX()), Math.abs(pos.getZ() - top.getZ())), 1,
+                    "blocks from the platform to the grave " + pos);
+            assertHeadBlock(helper, grave);
+            BlockPos floor = pos.below();
+            while (floor.getY() > level.getMinY() && level.getBlockState(floor).isAir()) {
+                floor = floor.below();
+            }
+            helper.assertTrue(level.getBlockState(floor).isFaceSturdy(level, floor, Direction.UP),
+                    "items dropped from the grave at " + pos + " would not land on a floor");
             helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
         } finally {
             cleanUp(helper, player);
             level.setBlock(top, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.succeed();
+    }
+
+    // Standing on a floor in the layer below the top, so the feet are in the top layer, which is inside the world: the
+    // grave takes the death spot on the floor rather than a spot off its edge.
+    @GameTest(skyAccess = true)
+    public void deathInTopLayerGraveAtTheDeathSpot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos death = helper.absolutePos(new BlockPos(3, 0, 3)).atY(level.getMaxY());
+        BlockPos floorCorner = death.offset(-3, -1, -3);
+        BlockPos.betweenClosed(floorCorner, floorCorner.offset(6, 0, 6))
+                .forEach(pos -> level.setBlock(pos, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL));
+        ServerPlayer player = TestPlayers.join(level.getServer(), "TopLayer", GameType.SURVIVAL, death);
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), death, "grave position");
+            assertReachableAndItemSafe(helper, grave);
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+        } finally {
+            cleanUp(helper, player);
+            BlockPos.betweenClosed(floorCorner, floorCorner.offset(6, 0, 6))
+                    .forEach(pos -> level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL));
         }
         helper.succeed();
     }

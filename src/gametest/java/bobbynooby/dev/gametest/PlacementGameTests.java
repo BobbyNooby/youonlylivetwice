@@ -390,7 +390,7 @@ public class PlacementGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos death = helper.absolutePos(new BlockPos(1, 1, 1)).atY(level.getMaxY() + 10);
         BlockPos result = GravePlacement.find(level, death, store(helper));
-        helper.assertTrue(result.getY() <= level.getMaxY() - 1, "grave above the build limit: " + result);
+        helper.assertTrue(result.getY() <= level.getMaxY(), "grave above the build limit: " + result);
         helper.succeed();
     }
 

@@ -217,7 +217,7 @@ public final class GravePlacement {
     }
 
     private static BlockPos clamped(ServerLevel level, BlockPos pos) {
-        int y = Math.clamp(pos.getY(), level.getMinY(), level.getMaxY() - 1);
+        int y = Math.clamp(pos.getY(), level.getMinY(), level.getMaxY());
         return insideBorder(level, pos.atY(y));
     }
 
@@ -245,7 +245,7 @@ public final class GravePlacement {
     // The highest block a grave may take. With a roof, such as the Nether's bedrock, that is under the roof, where the
     // owner can dig to it, unless the death itself was up on top. Vanilla's portal search stops at the same height.
     private static int topY(ServerLevel level, int fromY) {
-        int top = level.getMaxY() - 1;
+        int top = level.getMaxY();
         int roof = level.getMinY() + level.getLogicalHeight() - 1;
         return fromY <= roof ? Math.min(top, roof) : top;
     }
@@ -498,7 +498,7 @@ public final class GravePlacement {
                 .orElseGet(() -> {
                     // Not even room under the roof, so the column's top as before, roof or not
                     int top = Math.max(level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z), level.getMinY() + 1);
-                    return new BlockPos(x, Math.min(top, level.getMaxY() - 1), z);
+                    return new BlockPos(x, Math.min(top, level.getMaxY()), z);
                 });
     }
 
