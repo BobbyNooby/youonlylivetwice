@@ -1,18 +1,18 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerInfo;
 import net.minecraft.server.ServerInterface;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.LegacyQueryHandler;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.rcon.thread.QueryThreadGs4;
 import net.minecraft.world.level.GameType;
-import net.fabricmc.fabric.api.gametest.v1.GameTest;
-import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.network.protocol.status.ServerStatus;
-import net.minecraft.server.players.NameAndId;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;

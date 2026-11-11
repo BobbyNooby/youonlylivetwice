@@ -1,9 +1,9 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.visibility.PlayerCount;
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.minecraft.server.ServerInterface;
 import net.minecraft.server.rcon.thread.QueryThreadGs4;
 import org.spongepowered.asm.mixin.Mixin;

@@ -2,8 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
-import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
