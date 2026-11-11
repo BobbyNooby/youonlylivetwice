@@ -558,6 +558,52 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // A player's wait goes when they leave, so the server keeps one only for players who are on: back at once, they pick
+    // again without waiting. The test server turns the wait off; it is put back for this tick only.
+    @GameTest
+    public void leavingEndsTheWaitBetweenSkinPicks(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
+        String first = uniqueName("Acct");
+        String second = uniqueName("Acct");
+        MOJANG.answer(first);
+        MOJANG.answer(second);
+        GameProfile profile = TestLogins.offline(uniqueName("Back"));
+        SkinStore store = SkinStore.get(server);
+        Duration waitBefore = SkinCommands.useCooldownForTesting(Duration.ofSeconds(5));
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.lockAfterFirstChoice = false;
+            try {
+                ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+                type(player, "yolt skin set " + first);
+                assertEqual(helper, store.choice(profile.id()), first, "the first pick");
+                TestPlayers.leave(player);
+                ServerPlayer back = TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+                type(back, "yolt skin set " + second);
+                assertEqual(helper, store.choice(profile.id()), second, "the pick at once after rejoining");
+            } finally {
+                ServerPlayer still = server.getPlayerList().getPlayer(profile.id());
+                if (still != null) {
+                    TestPlayers.leave(still);
+                }
+            }
+        } finally {
+            SkinCommands.useCooldownForTesting(waitBefore);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            store.clearChoice(profile.id());
+            MOJANG.forget(first);
+            MOJANG.forget(second);
+        }
+        helper.succeed();
+    }
+
     // Mojang answers a pick only later, off the server thread, so the reply comes once it has
     @GameTest(maxTicks = 20)
     public void pickRepliesOnceMojangAnswers(GameTestHelper helper) {

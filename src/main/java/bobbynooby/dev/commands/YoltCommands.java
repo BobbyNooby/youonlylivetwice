@@ -24,6 +24,7 @@ public final class YoltCommands {
     private YoltCommands() {}
 
     public static void register() {
+        SkinCommands.init();
         CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
             LiteralArgumentBuilder<CommandSourceStack> yolt = Commands.literal("yolt")
                     // Commands are registered before any server exists, so single-player is checked on each use. A

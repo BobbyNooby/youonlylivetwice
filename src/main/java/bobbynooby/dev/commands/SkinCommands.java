@@ -8,6 +8,7 @@ import bobbynooby.dev.skins.Skins;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
@@ -34,11 +35,17 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
  */
 public final class SkinCommands {
     private static final String LOCKED = "Your skin is locked. Ask an op to change it.";
-    // When each non-op last had a name looked up, so nobody can send Mojang name after name. Server thread only.
+    // When each non-op last had a name looked up, so nobody can send Mojang name after name. Only players who are on,
+    // so it can't grow with every player who ever picked. Server thread only.
     private static final Map<UUID, Long> LAST_PICK = new HashMap<>();
     private static volatile Duration pickCooldown = Duration.ofSeconds(5);
 
     private SkinCommands() {}
+
+    // Run once, at startup
+    static void init() {
+        ServerPlayerEvents.LEAVE.register(player -> LAST_PICK.remove(player.getUUID()));
+    }
 
     /** For the tests: the wait between a non-op's picks from now on. Returns the wait it replaced. */
     public static Duration useCooldownForTesting(Duration cooldown) {

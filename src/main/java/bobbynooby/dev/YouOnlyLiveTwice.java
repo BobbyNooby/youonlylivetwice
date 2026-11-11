@@ -36,7 +36,8 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::onServerStarted);
         // AdminView: registers its saved flag, which must happen before any player save is read
         AdminView.init();
-        // Commands: built on each command registration, so their place here doesn't matter
+        // Commands: built on each command registration, and their one hook, a LEAVE that forgets a skin pick's wait,
+        // touches nothing another hook reads, so their place here doesn't matter
         YoltCommands.register();
         // DeathLockout: its JOIN, which kicks a player who died while joining, must run before the body handover in Bodies
         DeathLockout.init();
