@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerCon
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.state.level.FirstPersonHandsAndItemsRenderState;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -19,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -26,18 +28,28 @@ import java.util.function.Supplier;
 public final class ClientTests {
     // The screen is 35 degrees tall each way at the default field of view, so this keeps an entity fully on it
     private static final double MAX_VIEW_ANGLE = 30.0;
+    // The hand's height goes from 0 when lowered to 1 when fully up
+    private static final float HAND_UP = 0.99F;
 
     private ClientTests() {
     }
 
     // The server runs inside the client process, but it is a real dedicated server, so YOLT is active on it
     public static void withServer(ClientGameTestContext ctx, BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
-        try (TestDedicatedServerContext server = ctx.worldBuilder().createServer();
-             TestDedicatedServerConnection connection = server.connect()) {
-            connection.waitForChunksRender();
-            // Join toasts (offline chat warning, social tutorial) would cover the top right of every screenshot
-            ctx.runOnClient(mc -> mc.gui.toastManager().clear());
-            body.accept(server, connection);
+        withServer(ctx, server -> {}, body);
+    }
+
+    // beforeConnect runs once the server is up and before the client joins, for settings that only count at a join
+    public static void withServer(ClientGameTestContext ctx, Consumer<TestDedicatedServerContext> beforeConnect,
+                                  BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
+        try (TestDedicatedServerContext server = ctx.worldBuilder().createServer()) {
+            beforeConnect.accept(server);
+            try (TestDedicatedServerConnection connection = server.connect()) {
+                connection.waitForChunksRender();
+                // Join toasts (offline chat warning, social tutorial) would cover the top right of every screenshot
+                ctx.runOnClient(mc -> mc.gui.toastManager().clear());
+                body.accept(server, connection);
+            }
         }
     }
 
@@ -127,6 +139,15 @@ public final class ClientTests {
         } finally {
             bodies.enabled = enabled;
         }
+    }
+
+    // A newly held item lowers the hand and brings it back up, so a shot of it waits until the hand is all the way up
+    public static void waitUntilHandUp(ClientGameTestContext ctx) {
+        waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> {
+            FirstPersonHandsAndItemsRenderState hands = new FirstPersonHandsAndItemsRenderState();
+            mc.player.firstPersonHandsAndItems().extractRenderState(mc.player, 1.0F, hands);
+            return hands.mainHandItem == mc.player.getMainHandItem() && hands.mainHandHeight >= HAND_UP;
+        }, mc -> "the hand never came all the way up with " + mc.player.getMainHandItem());
     }
 
     // A new prone body on the client tips over into its pose over about half a second
