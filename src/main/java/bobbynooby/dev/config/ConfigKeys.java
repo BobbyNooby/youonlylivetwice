@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Every config key, found from the config's own fields, so a new key can be read and set without more code. */
 public final class ConfigKeys {
@@ -15,6 +17,7 @@ public final class ConfigKeys {
     private static final String VERSION = "configVersion";
     // One typed value can't hold a list, so these are changed in the file
     private static final Set<String> FILE_ONLY = Set.of("serverList.hoverLines");
+    private static final Pattern LOG_FORM = Pattern.compile("([\\w.]+): (.+)");
 
     private ConfigKeys() {}
 
@@ -30,6 +33,32 @@ public final class ConfigKeys {
     /** True for a setting that has no key here because it is changed only in the file, then reloaded. */
     public static boolean fileOnly(String path) {
         return FILE_ONLY.contains(path);
+    }
+
+    /**
+     * A problem from the config, in its log form "<key>: <problem>", written as a reply: "<key> <problem>.", or the
+     * problem alone when another key is its subject, as in the End cap's. A plain word at the start gets a capital, and a
+     * key's name keeps its case. Keys are told by their names, since some have no dot.
+     */
+    public static String asReply(String problem) {
+        String text = problem;
+        Matcher logForm = LOG_FORM.matcher(problem);
+        if (logForm.matches()) {
+            String rest = logForm.group(2);
+            text = isKey(firstWord(rest)) ? rest : logForm.group(1) + " " + rest;
+        }
+        if (Character.isLowerCase(text.charAt(0)) && !isKey(firstWord(text))) {
+            text = Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        }
+        return text.endsWith(".") ? text : text + ".";
+    }
+
+    private static boolean isKey(String word) {
+        return find(word).isPresent() || fileOnly(word);
+    }
+
+    private static String firstWord(String text) {
+        return text.split(" ", 2)[0];
     }
 
     /**

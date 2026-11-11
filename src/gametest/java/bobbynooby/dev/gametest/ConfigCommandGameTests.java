@@ -93,6 +93,8 @@ public class ConfigCommandGameTests {
         byte[] fileBefore = Files.readAllBytes(Settings.path());
         try {
             assertRefused(helper, server, fileBefore, "yolt config chat.radius abc", "chat.radius takes a whole number, not 'abc'.");
+            // A key at the top of the file has no dot, and keeps its name as it is
+            assertRefused(helper, server, fileBefore, "yolt config randomSpawn maybe", "randomSpawn takes true or false, not 'maybe'.");
             helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
         } finally {
             restore(server, fileBefore);

@@ -171,4 +171,18 @@ class ConfigKeysTest {
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());
         assertEquals(" (applies to deaths from now on)", Applies.When.NEW_DEATHS.note());
     }
+
+    // A reply keeps a key's name as it is, dotted or not, and drops the log form's colon
+    @Test
+    void problemsReadAsReplies() {
+        assertEquals("randomSpawn takes true or false, not 'maybe'.", ConfigKeys.asReply("randomSpawn takes true or false, not 'maybe'."));
+        assertEquals("worldBorder.diameter must be 1 to 59999968.", ConfigKeys.asReply("worldBorder.diameter: must be 1 to 59999968"));
+        assertEquals("randomSpawn expected true or false.", ConfigKeys.asReply("randomSpawn: expected true or false"));
+        assertEquals("worldBorder.diameter times endScale can't pass 59999968.",
+                ConfigKeys.asReply("worldBorder.endScale: worldBorder.diameter times endScale can't pass 59999968"));
+        // A word that only looks like a key isn't one
+        assertEquals("chat.radius 0.5 is not a whole number.", ConfigKeys.asReply("chat.radius: 0.5 is not a whole number"));
+        assertEquals("The config file could not be saved (a.tmp: Is a directory).",
+                ConfigKeys.asReply("the config file could not be saved (a.tmp: Is a directory)"));
+    }
 }
