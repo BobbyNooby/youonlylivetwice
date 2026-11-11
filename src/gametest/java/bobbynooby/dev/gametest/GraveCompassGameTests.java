@@ -17,6 +17,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,6 +29,7 @@ import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
@@ -99,7 +101,8 @@ public class GraveCompassGameTests {
             helper.assertValueEqual(compass.get(DataComponents.CUSTOM_NAME),
                     Component.literal(name + "'s grave").withStyle(style -> style.withItalic(false)), "the compass's name");
             helper.assertValueEqual(compass.getHoverName().getString(), name + "'s grave", "the name the compass shows");
-            helper.assertTrue(compass.get(DataComponents.LORE) == null, "the compass has lore");
+            // Every item carries an empty lore by default
+            helper.assertValueEqual(compass.get(DataComponents.LORE), ItemLore.EMPTY, "the compass's lore");
             CompoundTag marker = new CompoundTag();
             marker.putString("grave_compass", grave.id().toString());
             CompoundTag expected = new CompoundTag();
@@ -125,7 +128,9 @@ public class GraveCompassGameTests {
         try {
             config().graves.compass = true;
             assertLockoutOn(helper);
-            ServerPlayer back = dieAndRespawn(helper, player);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            kill(helper, player);
+            ServerPlayer back = respawnByButton(player);
             helper.assertValueEqual(compasses(back).size(), 0, "compasses at the respawn while locked out");
             Grave first = onlyGrave(helper, owner);
             helper.assertTrue(first.compassPending(), "the first grave owes no compass");
@@ -405,6 +410,14 @@ public class GraveCompassGameTests {
     // Back through the death screen's respawn
     private static ServerPlayer respawn(GameTestHelper helper, ServerPlayer player) {
         return helper.getLevel().getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+    }
+
+    // As the death screen's button does it. The connection then takes the new player, and stops waiting for a respawn,
+    // which a respawn straight through the player list leaves it doing, so that player can't be hurt.
+    private static ServerPlayer respawnByButton(ServerPlayer player) {
+        player.connection.handleClientCommand(
+                new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+        return player.connection.player;
     }
 
     // Killed, then back at a respawn point beside the test, so no random spot is searched
