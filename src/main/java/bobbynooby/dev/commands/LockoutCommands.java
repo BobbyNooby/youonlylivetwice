@@ -5,7 +5,6 @@ import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
-import bobbynooby.dev.lockout.DeathLog;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -16,6 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
@@ -55,8 +55,8 @@ final class LockoutCommands {
     private static int kill(CommandSourceStack source, String name) {
         MinecraftServer server = source.getServer();
         Optional<NameAndId> who = YoltCommands.lookup(server, name);
-        // The kill's own death row is a new one, so the newest row now is what it must differ from
-        DeathLog before = who.map(found -> DeathLockout.newestDeath(found.id())).orElse(null);
+        // The kill's own death row is a new one, so it must come after the newest row now
+        OptionalLong before = who.map(found -> DeathLockout.newestDeathId(found.id(), found.name())).orElse(OptionalLong.empty());
         Kills.Result result;
         try {
             result = who.map(found -> Kills.kill(server, found)).orElse(Kills.Result.NOT_FOUND);

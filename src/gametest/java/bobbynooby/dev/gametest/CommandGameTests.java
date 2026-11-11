@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -226,6 +227,43 @@ public class CommandGameTests {
         } finally {
             graves.enabled = gravesBefore;
             DeathLockout.revive(who.id(), "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // A death alike in every value to the one before it, as two in the same millisecond with the same message would be,
+    // is still a new one: a kill is confirmed by the death's row, not by what the row holds
+    @GameTest
+    public void killConfirmsANewDeathAlikeTheOneBefore(GameTestHelper helper) throws IOException {
+        UUID id = UUID.randomUUID();
+        String name = uniqueName("Twin");
+        withOwnDeathStore(false, store -> {
+            long now = System.currentTimeMillis();
+            store.recordDeath(id, name, now, 7, name + " was killed");
+            OptionalLong before = DeathLockout.newestDeathId(id, name);
+            helper.assertFalse(DeathLockout.deathRecordedAfter(id, name, before), "confirmed with no new death");
+            store.recordDeath(id, name, now, 7, name + " was killed");
+            helper.assertTrue(DeathLockout.deathRecordedAfter(id, name, before), "the second of two alike deaths was not confirmed");
+        });
+        helper.succeed();
+    }
+
+    // A read that failed before the kill can't tell the kill's death from an older one, so the kill is not confirmed,
+    // though the store works again afterwards and holds an older death that still locks the player out
+    @GameTest
+    public void killNotConfirmedWhenTheReadBeforeItFailed(GameTestHelper helper) throws IOException {
+        UUID id = UUID.randomUUID();
+        String name = uniqueName("Unread");
+        try (LockoutGameTests.OwnStore working = new LockoutGameTests.OwnStore()) {
+            working.store().recordDeath(id, name, System.currentTimeMillis(), 7, name + " drowned");
+            OptionalLong before;
+            try (LockoutGameTests.OwnStore failing = new LockoutGameTests.OwnStore()) {
+                failing.store().close();
+                before = DeathLockout.newestDeathId(id, name);
+            }
+            helper.assertTrue(before.isEmpty(), "the read before the kill worked on a closed store");
+            helper.assertTrue(DeathLockout.refusal(id, "Test") != null, "the older death does not lock " + name + " out");
+            helper.assertFalse(DeathLockout.deathRecordedAfter(id, name, before), "the kill was confirmed by an older death");
         }
         helper.succeed();
     }

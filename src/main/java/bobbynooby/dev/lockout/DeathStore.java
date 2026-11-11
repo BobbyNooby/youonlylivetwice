@@ -242,6 +242,22 @@ public final class DeathStore {
                 uuid.toString(), "Could not read death log for " + uuid);
     }
 
+    /**
+     * The row id of the player's newest death, 0 when they have none. Rows are never deleted, so a later death always has
+     * a higher id, even one alike in every value.
+     */
+    public synchronized long latestId(UUID uuid) {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?")) {
+            statement.setString(1, uuid.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                // The MAX of no rows is null, which getLong reads as 0
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not read death log for " + uuid, e);
+        }
+    }
+
     /** The newest death recorded under this name, ignoring case: whoever last died as it. */
     public synchronized Optional<DeathLog> latestByName(String name) {
         return newest("SELECT " + COLUMNS + " FROM death_logs WHERE username = ? COLLATE NOCASE ORDER BY ROWID DESC LIMIT 1",

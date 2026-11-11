@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
@@ -197,10 +198,7 @@ public final class DeathLockout {
         }
     }
 
-    /**
-     * The player's newest death, read before a kill so the kill's own row can be told apart afterwards. Null when
-     * there is none, or the store can't be read; the check after the kill reports a store that can't.
-     */
+    /** The player's newest death. Null when there is none, or the store is closed or can't be read. */
     public static @Nullable DeathLog newestDeath(UUID uuid) {
         DeathStore open = store;
         if (open == null) {
@@ -214,21 +212,43 @@ public final class DeathLockout {
     }
 
     /**
-     * Whether a death that locks the player out was stored since {@code before} was read: the newest row differs from
-     * it and isn't revived. True with the lockout off, when nothing is stored. A kill records its death inside the
-     * death event, where no result can reach the caller, so the caller asks afterwards.
+     * The row id of the player's newest death, 0 when there is none, read before a kill so the kill's own row can be
+     * told apart afterwards, even from an older one alike in every value. Empty when the store is closed or can't be
+     * read: the kill then can't be confirmed.
      */
-    public static boolean deathRecordedAfter(UUID uuid, String name, @Nullable DeathLog before) {
+    public static OptionalLong newestDeathId(UUID uuid, String name) {
+        DeathStore open = store;
+        if (open == null) {
+            return OptionalLong.empty();
+        }
+        try {
+            return OptionalLong.of(open.latestId(uuid));
+        } catch (RuntimeException e) {
+            Yolt.LOGGER.error("Could not read the death log of {} before the kill", name, e);
+            return OptionalLong.empty();
+        }
+    }
+
+    /**
+     * Whether a death that locks the player out was stored since {@code before} was read: the newest row is a later
+     * one and isn't revived. True with the lockout off, when nothing is stored; false when before couldn't be read. A
+     * kill records its death inside the death event, where no result can reach the caller, so the caller asks
+     * afterwards.
+     */
+    public static boolean deathRecordedAfter(UUID uuid, String name, OptionalLong before) {
         if (!enabled()) {
             return true;
         }
         DeathStore open = store;
-        if (open == null) {
+        if (open == null || before.isEmpty()) {
             return false;
         }
         try {
+            if (open.latestId(uuid) <= before.getAsLong()) {
+                return false;
+            }
             Optional<DeathLog> now = open.latest(uuid);
-            return now.isPresent() && !now.get().revived() && !now.get().equals(before);
+            return now.isPresent() && !now.get().revived();
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not read back the death of {}", name, e);
             return false;
