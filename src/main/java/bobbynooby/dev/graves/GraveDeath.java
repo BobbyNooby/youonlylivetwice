@@ -42,7 +42,9 @@ public final class GraveDeath {
     /** True when the items went into a grave, so vanilla must not drop them as well. */
     public static boolean onPlayerDeathDrops(ServerPlayer player, ServerLevel level) {
         // Before every switch: a player body only wears copies of its owner's saved gear, and the owner's real
-        // grave comes from the body's death. Dropping the copies would make the items exist twice.
+        // grave comes from the body's death. Dropping the copies would make the items exist twice. While YOLT is on,
+        // BodyDeathLootMixin stops a tagged body's drops before this hook, so this only runs for a body that lost its
+        // tag, or with YOLT off.
         if (StandIn.is(player)) {
             player.getInventory().clearContent();
             return true;

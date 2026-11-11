@@ -31,7 +31,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** Makes and removes graves. Its init wires the use-block, block-break and chunk hooks; the rest are mixins. */
+/**
+ * Makes and removes graves. Its init wires the use-block, block-break and chunk hooks, and those of the menus, last
+ * ground, re-check and respawn notice; the rest are mixins.
+ */
 public final class Graves {
     // A grave opens as a 6-row chest menu
     private static final int SLOTS_PER_GRAVE = GraveMenu.GRAVE_SLOTS;

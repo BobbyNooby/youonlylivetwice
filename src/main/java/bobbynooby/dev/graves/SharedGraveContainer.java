@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-// Every viewer of a grave clicks into this one container, so two looters can never both take a stack
+/** Every viewer of a grave clicks into this one container, so two looters can never both take a stack. */
 final class SharedGraveContainer extends SimpleContainer {
     private final MinecraftServer server;
     private final UUID graveId;
