@@ -144,7 +144,7 @@ public final class LoginSkins {
             boolean pick = askedForPick;
             CachedSkin before = earlier;
             clearAsked();
-            CachedSkin got = answered(done, name);
+            CachedSkin got = answered(done, name, pick);
             if (got == null) {
                 savedOnly = true;
             }
@@ -157,14 +157,18 @@ public final class LoginSkins {
             ready = profile;
             return;
         }
-        if (ticksWaited++ < ticksAllowed && System.nanoTime() - startedAt < nanosAllowed) {
+        boolean ticksLeft = ticksWaited++ < ticksAllowed;
+        if (ticksLeft && System.nanoTime() - startedAt < nanosAllowed) {
             return;
         }
         String name = asked;
         boolean pick = askedForPick;
         CachedSkin before = earlier;
-        Yolt.LOGGER.warn("Mojang took more than {} seconds over the skin of {}, so {} joins with the skin saved before, or none",
-                TimeUnit.NANOSECONDS.toSeconds(nanosAllowed), name, profile.name());
+        // The cap that ran out is the one named
+        long seconds = TimeUnit.NANOSECONDS.toSeconds(nanosAllowed);
+        String waited = ticksLeft ? seconds + (seconds == 1 ? " second" : " seconds") : ticksAllowed + " ticks";
+        Yolt.LOGGER.warn("Mojang gave no answer about the skin of {} within {}, so {} joins with {}", name, waited,
+                profile.name(), fallback(name, pick));
         // A late answer is still kept, for their next join
         answer.thenAcceptAsync(skin -> SkinStore.get(server).putSkin(skin), server);
         clearAsked();
@@ -179,16 +183,23 @@ public final class LoginSkins {
     }
 
     // Null when Mojang couldn't be asked
-    private @Nullable CachedSkin answered(CompletableFuture<CachedSkin> done, String name) {
+    private @Nullable CachedSkin answered(CompletableFuture<CachedSkin> done, String name, boolean pick) {
         try {
             CachedSkin skin = done.join();
             SkinStore.get(server).putSkin(skin);
             return skin;
         } catch (CompletionException | CancellationException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            Yolt.LOGGER.warn("Could not ask Mojang for the skin of {}, so {} joins with the skin saved before, or none: {}",
-                    name, profile.name(), cause.toString());
+            Yolt.LOGGER.warn("Could not ask Mojang for the skin of {}, so {} joins with {}: {}", name, profile.name(),
+                    fallback(name, pick), cause.toString());
             return null;
         }
+    }
+
+    // What use() gives once Mojang is out: the name's saved skin, and for a pick without one, the player's own
+    private String fallback(String name, boolean pick) {
+        return pick
+                ? "the skin saved before for " + name + ", else their own, or none"
+                : "the skin saved before for their name, or none";
     }
 }

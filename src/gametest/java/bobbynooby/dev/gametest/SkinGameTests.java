@@ -133,13 +133,72 @@ public class SkinGameTests {
                 login.tick();
             }
             helper.assertTrue(login.finished().isEmpty(), "the login went on before the timeout");
-            login.tick();
+            List<String> log = OfflineGameTests.yoltLog(login::tick);
             Optional<GameProfile> told = login.finished();
             helper.assertTrue(told.isPresent(), "the login did not go through after the timeout");
             assertEqual(helper, textures(told.get()), null, "textures after the timeout");
             helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked");
+            // The test ticks far faster than real time, so it is the ticks that run out
+            helper.assertValueEqual(log, List.of("Mojang gave no answer about the skin of " + name + " within " + ticks
+                    + " ticks, so " + name + " joins with the skin saved before for their name, or none"), "log");
         } finally {
             MOJANG.forget(name);
+        }
+        helper.succeed();
+    }
+
+    // The wait is plain time too, so slow ticks can't stretch it: with a 1 second cap the login gives up after its
+    // second tick, once a second has gone by, long before 20 ticks. The setting goes back in the same tick.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void lookupTimeoutCountsPlainTimeToo(GameTestHelper helper) throws InterruptedException {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Clock");
+        MOJANG.neverAnswer(name);
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        int before = skins.lookupTimeoutSeconds;
+        skins.lookupTimeoutSeconds = 1;
+        try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+            login.tick();
+            helper.assertTrue(login.finished().isEmpty(), "the login went on before the second was up");
+            Thread.sleep(1100);
+            List<String> log = OfflineGameTests.yoltLog(login::tick);
+            helper.assertTrue(login.finished().isPresent(), "the login did not go through once the second was up");
+            helper.assertValueEqual(log, List.of("Mojang gave no answer about the skin of " + name + " within 1 second, so "
+                    + name + " joins with the skin saved before for their name, or none"), "log");
+        } finally {
+            skins.lookupTimeoutSeconds = before;
+            MOJANG.forget(name);
+        }
+        helper.succeed();
+    }
+
+    // Mojang can't be reached about a picked account the server has saved no skin for, so the player joins with the
+    // stale skin saved before for their own name, which Mojang isn't asked about again, and the warning says so
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void unreachablePickFallsBackToOwnSavedSkin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Own");
+        String account = uniqueName("Acct");
+        MOJANG.fail(account);
+        MOJANG.answer(name);
+        GameProfile profile = TestLogins.offline(name);
+        SkinStore store = SkinStore.get(server);
+        SkinTextures stale = new SkinTextures("stale textures of " + name, "stale signature of " + name);
+        store.putSkin(CachedSkin.found(name, stale, 0L));
+        store.choose(profile.id(), account);
+        try (TestLogins.Login login = TestLogins.start(server, profile)) {
+            List<String> log = OfflineGameTests.yoltLog(login::tick);
+            Optional<GameProfile> told = login.finished();
+            helper.assertTrue(told.isPresent(), "the login did not go through");
+            assertEqual(helper, textures(told.get()), stale, "textures once Mojang could not be reached");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked about the player's own name");
+            helper.assertValueEqual(log, List.of("Could not ask Mojang for the skin of " + account + ", so " + name
+                    + " joins with the skin saved before for " + account + ", else their own, or none:"
+                    + " java.io.IOException: Mojang is unreachable"), "log");
+        } finally {
+            store.clearChoice(profile.id());
+            MOJANG.forget(name);
+            MOJANG.forget(account);
         }
         helper.succeed();
     }
