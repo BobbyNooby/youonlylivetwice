@@ -95,9 +95,13 @@ public final class TestPlayers {
         player.level().getServer().getPlayerList().deop(player.nameAndId());
     }
 
+    // Closing the fake client's end, as a real client's going does, ends Fabric's networking session for the connection
     public static void leave(ServerPlayer player) {
         player.level().getServer().getPlayerList().remove(player);
-        CHANNELS.remove(player.getUUID());
+        EmbeddedChannel channel = CHANNELS.remove(player.getUUID());
+        if (channel != null) {
+            channel.close();
+        }
     }
 
     // The part of a client's disconnect that changes the player, as ServerGamePacketListenerImpl.removePlayerFromWorld
