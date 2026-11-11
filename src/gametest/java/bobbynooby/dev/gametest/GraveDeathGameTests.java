@@ -15,6 +15,7 @@ import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -222,6 +223,63 @@ public class GraveDeathGameTests {
         } finally {
             cleanUp(helper, first);
             cleanUp(helper, second);
+        }
+        helper.succeed();
+    }
+
+    // Standing on a block in the top layer, so the player is above the build limit. No head can go up there, and the
+    // one-block platform leaves the column below open, so the grave goes where items fall: the floor under the death.
+    @GameTest(skyAccess = true)
+    public void deathAtBuildLimitGraveOnTheGroundBelow(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos ground = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos top = ground.atY(level.getMaxY());
+        ServerPlayer player = TestPlayers.join(level.getServer(), "BuildLimit", GameType.SURVIVAL, top.above());
+        try {
+            level.setBlock(top, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), ground, "grave position");
+            assertReachableAndItemSafe(helper, grave);
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+        } finally {
+            cleanUp(helper, player);
+            level.setBlock(top, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.succeed();
+    }
+
+    // At the bottom of a shaft one block wide and two deep: the grave takes the death spot, where the shaft's open top
+    // still reaches it
+    @GameTest
+    public void deathInOneByOneHoleGraveAtTheBottom(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos bottom = helper.absolutePos(new BlockPos(3, 0, 3));
+        List<BlockPos> walls = new ArrayList<>();
+        for (int dy = 0; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        walls.add(bottom.offset(dx, dy, dz));
+                    }
+                }
+            }
+        }
+        ServerPlayer player = TestPlayers.join(level.getServer(), "Hole", GameType.SURVIVAL, bottom);
+        try {
+            walls.forEach(wall -> level.setBlock(wall, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL));
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            kill(helper, player);
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.pos(), bottom, "grave position");
+            assertReachableAndItemSafe(helper, grave);
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 3, "diamonds in the grave");
+        } finally {
+            cleanUp(helper, player);
+            walls.forEach(wall -> level.setBlock(wall, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL));
         }
         helper.succeed();
     }
@@ -1149,6 +1207,18 @@ public class GraveDeathGameTests {
         for (int i = fromSlot; i < toSlot; i++) {
             helper.assertFalse(menu.getSlot(i).hasItem(), "menu slot " + i + " still holds an item");
         }
+    }
+
+    // The grave's head stands inside the world with open air above it, so a player can get at it, on a solid floor that
+    // its items would rest on if it were removed
+    private static void assertReachableAndItemSafe(GameTestHelper helper, Grave grave) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = grave.pos();
+        assertHeadBlock(helper, grave);
+        helper.assertTrue(level.isInsideBuildHeight(pos), "grave outside the build height at " + pos);
+        helper.assertTrue(level.getBlockState(pos.above()).isAir(), "no open air above the grave at " + pos);
+        helper.assertTrue(level.getBlockState(pos.below()).isFaceSturdy(level, pos.below(), Direction.UP),
+                "no solid floor under the grave at " + pos);
     }
 
     // 26 stacks of 64 diamonds and the named sword, as the box was packed
