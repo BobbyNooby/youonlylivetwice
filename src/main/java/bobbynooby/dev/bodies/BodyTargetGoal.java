@@ -45,6 +45,8 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
                 && !(mob instanceof Guardian && target.distanceToSqr(mob) <= 9.0));
     }
 
+    // The light call is deprecated in 26.3 with nothing to replace it, and vanilla's own spider goal still uses it
+    @SuppressWarnings("deprecation")
     @Override
     public boolean canUse() {
         // The spider's own rule: no hunting in daylight

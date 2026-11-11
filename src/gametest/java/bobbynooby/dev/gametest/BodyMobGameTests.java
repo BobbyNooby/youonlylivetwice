@@ -157,6 +157,8 @@ public class BodyMobGameTests {
     // only starts once its chunks are loaded, and the idle test server can run thousands of ticks before that, into
     // the night or a thunderstorm, where a spider hunts. A storm from the batch just before, such as night_thunder's,
     // still darkens the sky while its rain and thunder fade, up to 100 ticks, so the spider comes once they have.
+    // The light call is deprecated in 26.3 with nothing to replace it; it is the one the spider's rule reads
+    @SuppressWarnings("deprecation")
     @GameTest(maxTicks = 320, skyAccess = true, environment = DAYLIGHT)
     public void spiderIgnoresBodyInDaylight(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
