@@ -3,7 +3,9 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.lockout.Cooldown;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.offline.OfflinePlayerData;
@@ -17,6 +19,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
@@ -25,12 +28,26 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 // Uses fresh random uuids, so tests never collide
 public class LockoutGameTests {
@@ -134,6 +151,186 @@ public class LockoutGameTests {
             helper.assertValueEqual(DeathLockout.revive(uuid, "Test", "console"), DeathLockout.ReviveResult.FAILED, "revive result on a failing store");
         } finally {
             DeathLockout.swapStoreForTesting(real);
+        }
+        helper.succeed();
+    }
+
+    // A death recorded while the lockout was on counts again once it is back on, though the player joined and played
+    // while it was off
+    @GameTest(environment = LOGIN_CHECK)
+    public void lockoutOffThenOnStillRefuses(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID uuid = UUID.randomUUID();
+        GameProfile profile = new GameProfile(uuid, "OffOn" + uuid.toString().substring(0, 8));
+        NameAndId who = new NameAndId(uuid, profile.name());
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean before = lockout.enabled;
+        try {
+            lockout.enabled = true;
+            DeathLockout.recordDeath(uuid, who.name(), who.name() + " was slain");
+            helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused with the lockout on");
+
+            lockout.enabled = false;
+            helper.assertTrue(loginRefusal(server, who) == null, "refused with the lockout off");
+            TestPlayers.leave(TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1)));
+
+            lockout.enabled = true;
+            Component refusal = loginRefusal(server, who);
+            String text = refusal == null ? "" : refusal.getString();
+            helper.assertTrue(text.startsWith("You died: " + who.name() + " was slain\nTry again in "),
+                    "refusal once the lockout is back on: " + text);
+        } finally {
+            lockout.enabled = before;
+            ServerPlayer online = server.getPlayerList().getPlayer(uuid);
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+        }
+        helper.succeed();
+    }
+
+    // With no death store, as when it could not be opened at startup, the lockout lets everyone in rather than no one.
+    // The death is still there once the store is back.
+    @GameTest(environment = LOGIN_CHECK)
+    public void missingDeathStoreLetsLockedOutPlayerIn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        NameAndId who = new NameAndId(UUID.randomUUID(), "Ghost");
+        DeathLockout.recordDeath(who.id(), who.name());
+        helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused with the store there");
+        DeathStore real = DeathLockout.swapStoreForTesting(null);
+        try {
+            helper.assertTrue(loginRefusal(server, who) == null, "refused with no death store");
+        } finally {
+            DeathLockout.swapStoreForTesting(real);
+        }
+        helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused once the store is back");
+        helper.succeed();
+    }
+
+    // Another program holding the database's write lock, as a backup tool or an SQLite browser can: the check waits
+    // out SQLite's busy timeout, fails, and lets the player in rather than keeping everyone out
+    @GameTest(environment = LOGIN_CHECK)
+    public void lockedDeathStoreLetsLockedOutPlayerIn(GameTestHelper helper) throws IOException, SQLException {
+        MinecraftServer server = helper.getLevel().getServer();
+        NameAndId who = new NameAndId(UUID.randomUUID(), "Ghost");
+        try (OwnStore own = new OwnStore()) {
+            DeathLockout.recordDeath(who.id(), who.name());
+            helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused with the database free");
+            try (Connection lock = DriverManager.getConnection(own.url()); Statement statement = lock.createStatement()) {
+                statement.execute("BEGIN EXCLUSIVE");
+                helper.assertTrue(loginRefusal(server, who) == null, "refused while the database is locked");
+                statement.execute("ROLLBACK");
+            }
+            helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused once the lock is gone");
+        }
+        helper.succeed();
+    }
+
+    // Ops get no way round the lockout, not even from their own /yolt kill; the console's /yolt unkill lets them back in
+    @GameTest(environment = LOGIN_CHECK)
+    public void opCanLockThemselvesOut(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer op = TestPlayers.join(helper, "SelfKill", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = op.nameAndId();
+        try {
+            TestPlayers.op(op);
+            TestPlayers.markLoaded(op);
+            helper.assertValueEqual(SkinGameTests.console(op.createCommandSourceStack(), "yolt kill " + who.name()),
+                    List.of("Killed " + who.name() + "."), "the op's own /yolt kill");
+            helper.assertTrue(op.isDeadOrDying(), "the op did not die");
+            // Gone before the kick comes, and still an op
+            TestPlayers.leave(op);
+            helper.assertTrue(server.getPlayerList().isOp(who), "the op is no longer an op");
+
+            Component refusal = loginRefusal(server, who);
+            String text = refusal == null ? "" : refusal.getString();
+            helper.assertTrue(text.startsWith("You died: " + who.name() + " was killed\nTry again in "), "the op's login refusal: " + text);
+            helper.assertValueEqual(SkinGameTests.console(server, "yolt unkill " + who.name()), List.of("Revived " + who.name() + "."),
+                    "the console's /yolt unkill");
+            helper.assertTrue(loginRefusal(server, who) == null, "the op is still refused after the console's unkill");
+        } finally {
+            TestPlayers.deop(op);
+            leaveIfOnline(op);
+            BodyTestKit.removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // The End's void hurts a player 4 at a time, every 10 ticks or so, until they die, and then once in a while after.
+    // One death, recorded once, with the void as its cause. Graves are off for it, in this tick: the grave side is
+    // VoidGraveGameTests'.
+    @GameTest(dimension = "minecraft:the_end")
+    public void endVoidDeathIsRecordedOnce(GameTestHelper helper) throws IOException, SQLException {
+        ServerLevel end = helper.getLevel();
+        helper.assertValueEqual(end.dimension(), Level.END, "the test's dimension");
+        ServerPlayer player = TestPlayers.join(helper, "EndVoid", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.getGameProfile().name();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        try (OwnStore own = new OwnStore()) {
+            player.snapTo(player.getX(), end.getMinY() - 70, player.getZ());
+            TestPlayers.markLoaded(player);
+            int hits = 0;
+            graves.enabled = false;
+            try {
+                // Each hit stands in for the ten ticks between two of the void's hits, which let the next one through
+                while (!player.isDeadOrDying() && hits < 10) {
+                    hitByVoid(end, player);
+                    hits++;
+                }
+                for (int i = 0; i < 3; i++) {
+                    hitByVoid(end, player);
+                }
+            } finally {
+                graves.enabled = gravesBefore;
+            }
+            helper.assertTrue(player.isDeadOrDying(), "the void did not kill the player in " + hits + " hits");
+            helper.assertTrue(hits > 1, "the first hit killed the player, so no hit before the death was tried");
+            helper.assertValueEqual(own.rows(player.getUUID()),
+                    List.of(name + " fell out of the world | " + Settings.get().deathLockout.cooldownDays), "death rows");
+        } finally {
+            leaveIfOnline(player);
+        }
+        helper.succeed();
+    }
+
+    // The newest death decides, even one shorter than the death before it. Both in this tick, the second after a
+    // respawn, as for a player whose first death didn't kick them. The days go back in this tick too.
+    @GameTest
+    public void laterOfTwoDeathsCounts(GameTestHelper helper) throws IOException, SQLException {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = TestPlayers.join(helper, "Twice", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        String name = player.getGameProfile().name();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        int daysBefore = lockout.cooldownDays;
+        try (OwnStore own = new OwnStore()) {
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            lockout.cooldownDays = 7;
+            killWithoutGrave(helper, player);
+            ServerPlayer back = level.getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            TestPlayers.markLoaded(back);
+            lockout.cooldownDays = 1;
+            YoltConfig.GravesSection graves = Settings.get().graves;
+            boolean gravesBefore = graves.enabled;
+            graves.enabled = false;
+            try {
+                back.hurtServer(level, level.damageSources().fellOutOfWorld(), Float.MAX_VALUE);
+            } finally {
+                graves.enabled = gravesBefore;
+                lockout.cooldownDays = daysBefore;
+            }
+            helper.assertTrue(back.isDeadOrDying(), "the respawned player did not die");
+
+            helper.assertValueEqual(own.rows(uuid), List.of(name + " was killed | 7", name + " fell out of the world | 1"), "death rows");
+            String refusal = refusalText(uuid);
+            helper.assertTrue(refusal.startsWith("You died: " + name + " fell out of the world\nTry again in "), "refusal: " + refusal);
+            DeathLog newest = DeathLockout.newestDeath(uuid);
+            helper.assertTrue(newest != null && Cooldown.remainingMillis(newest, System.currentTimeMillis()) <= Duration.ofDays(1).toMillis(),
+                    "the wait is longer than the newest death's day: " + refusal);
+        } finally {
+            lockout.cooldownDays = daysBefore;
+            leaveIfOnline(player);
         }
         helper.succeed();
     }
@@ -445,6 +642,64 @@ public class LockoutGameTests {
             discardOrbsNear(helper, at);
         }
         helper.succeed();
+    }
+
+    // One hit of the void's, as a player below the world takes it each tick; no cooldown left from the hit before
+    private static void hitByVoid(ServerLevel level, ServerPlayer player) {
+        player.damageCooldownTime = 0;
+        player.hurtServer(level, level.damageSources().fellOutOfWorld(), 4.0F);
+    }
+
+    // A death store of the test's own, swapped in until it is closed, so the rows it holds are the test's. Within one
+    // tick, since a death another test records meanwhile would land in it.
+    static final class OwnStore implements AutoCloseable {
+        private final Path dir;
+        private final Path file;
+        private final DeathStore store;
+        private final DeathStore real;
+
+        OwnStore() throws IOException {
+            dir = Files.createTempDirectory("yolt-own-deaths");
+            file = dir.resolve("deaths.db");
+            store = DeathStore.open(file);
+            real = DeathLockout.swapStoreForTesting(store);
+        }
+
+        DeathStore store() {
+            return store;
+        }
+
+        String url() {
+            return "jdbc:sqlite:" + file.toAbsolutePath();
+        }
+
+        // The player's rows, oldest first, as "message | days"
+        List<String> rows(UUID uuid) throws SQLException {
+            List<String> rows = new ArrayList<>();
+            try (Connection connection = DriverManager.getConnection(url());
+                 PreparedStatement query = connection.prepareStatement(
+                         "SELECT death_message, cooldown_days FROM death_logs WHERE uuid = ? ORDER BY ROWID")) {
+                query.setString(1, uuid.toString());
+                try (ResultSet result = query.executeQuery()) {
+                    while (result.next()) {
+                        rows.add(result.getString(1) + " | " + result.getInt(2));
+                    }
+                }
+            }
+            return rows;
+        }
+
+        // Closing a store twice does nothing, so a test may close it early to make every query fail
+        @Override
+        public void close() throws IOException {
+            DeathLockout.swapStoreForTesting(real);
+            store.close();
+            try (Stream<Path> files = Files.walk(dir)) {
+                for (Path path : files.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
     }
 
     // XP orbs near an absolute position
