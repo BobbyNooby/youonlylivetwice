@@ -21,9 +21,10 @@ on:
         default: false
 
 # Each push's run is that commit's proof, so pushes get a group per commit (a queued run is otherwise
-# replaced by the next one); only superseded pull request runs are cancelled
+# replaced by the next one), and each manual run one of its own, since flake hunts start several on one commit; only
+# superseded pull request runs are cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ github.event_name != 'pull_request' && format('-{0}', github.sha) || '' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ github.event_name != 'pull_request' && format('-{0}', github.sha) || '' }}${{ github.event_name == 'workflow_dispatch' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
