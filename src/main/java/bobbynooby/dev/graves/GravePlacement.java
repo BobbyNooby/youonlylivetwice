@@ -61,11 +61,12 @@ public final class GravePlacement {
         BlockPos start = start(level, deathPos, lastGround, store);
         return search(level, start, store)
                 .or(() -> wideSearch(level, start, store))
+                .or(() -> offLoneBlock(level, start, store))
                 .orElseGet(() -> lastResort(level, start, store));
     }
 
     /**
-     * The spot find would pick near pos, or nothing when only its wider search or last resort is left. With mayLoad
+     * The spot find would pick near pos, or nothing when only its wider searches or last resort are left. With mayLoad
      * false only loaded chunks are read, so it never loads one: then also nothing when the chunks round pos aren't
      * loaded, or pos is over the void with no loaded land near, where it would load its fixed spot.
      */
@@ -311,6 +312,18 @@ public final class GravePlacement {
             }
         }
         return true;
+    }
+
+    // A start on a block with nothing under it, such as one in the top layer over the void, where no head fits on top:
+    // the nearest land, else the fixed spot, as for a death over the void. Over anything else, such as a lava sea, the
+    // last resort keeps the grave by the death.
+    private static Optional<BlockPos> offLoneBlock(ServerLevel level, BlockPos start, GraveStore store) {
+        if (start.getY() <= level.getMinY() || !isVoidColumn(level, start.below())) {
+            return Optional.empty();
+        }
+        BlockPos land = nearestLand(level, start, store).orElseGet(() -> fallback(level, start, store));
+        BlockPos from = besideSpike(level, land, store);
+        return search(level, from, store).or(() -> wideSearch(level, from, store));
     }
 
     // Nothing near is safe. A safe spot anywhere up the start column comes first, such as a cave above a lava sea.
