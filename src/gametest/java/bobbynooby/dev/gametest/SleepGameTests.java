@@ -31,6 +31,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.InsideBlockEffectApplier;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.DyeColor;
@@ -44,6 +45,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -641,6 +643,69 @@ public class SleepGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // An old build's bed point is lost the same way through the End's exit portal, which asks for the point too. With
+    // the switch off the portal takes the player to the bed, as in vanilla.
+    @GameTest
+    public void endExitIgnoresOldBedPoint(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel overworld = server.overworld();
+        ServerLevel end = server.getLevel(Level.END);
+        helper.assertTrue(end != null, "no End to leave");
+        BlockPos head = placeBed(helper);
+        floorRoundBed(helper);
+        Vec3 bed = Vec3.atCenterOf(helper.absolutePos(head));
+        // In the air over the End's floor, away from every other test there
+        BlockPos portal = new BlockPos(-2000, 100, -2000);
+        BlockState replaced = end.getBlockState(portal);
+        ServerPlayer switchOn = TestPlayers.join(helper, "EndExitOn", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        ServerPlayer switchOff = TestPlayers.join(helper, "EndExitOff", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+        YoltConfig config = Settings.get();
+        boolean respawnBefore = config.sleep.noBedRespawn;
+        boolean randomBefore = config.randomSpawn;
+        try {
+            end.setBlockAndUpdate(portal, Blocks.END_PORTAL.defaultBlockState());
+            config.randomSpawn = true;
+            storeOldBedPoint(helper, switchOn, head);
+            storeOldBedPoint(helper, switchOff, head);
+
+            config.sleep.noBedRespawn = true;
+            throughExitPortal(helper, switchOn, end, portal);
+            BlockPos feet = switchOn.blockPosition();
+            helper.assertTrue(switchOn.level() == overworld, "left the End to " + switchOn.level().dimension().identifier());
+            helper.assertTrue(switchOn.position().distanceTo(bed) > 8.0,
+                    "left the End to " + feet.toShortString() + ", by the old bed point, with no-bed-respawn on");
+            // The random spawn, not vanilla's spot round the world spawn
+            BlockPos spawn = overworld.getRespawnData().pos();
+            int radius = overworld.getGameRules().get(GameRules.RESPAWN_RADIUS);
+            helper.assertTrue(Math.max(Math.abs(feet.getX() - spawn.getX()), Math.abs(feet.getZ() - spawn.getZ())) > radius + 1,
+                    "left the End to " + feet.toShortString() + ", where vanilla puts a player round the world spawn " + spawn.toShortString());
+
+            config.sleep.noBedRespawn = false;
+            throughExitPortal(helper, switchOff, end, portal);
+            helper.assertTrue(switchOff.level() == overworld && switchOff.position().distanceTo(bed) <= 3.0,
+                    "left the End to " + switchOff.blockPosition().toShortString() + " in " + switchOff.level().dimension().identifier()
+                            + ", away from the old bed point, with no-bed-respawn off");
+        } finally {
+            config.sleep.noBedRespawn = respawnBefore;
+            config.randomSpawn = randomBefore;
+            end.setBlockAndUpdate(portal, replaced);
+            TestPlayers.leave(switchOn);
+            TestPlayers.leave(switchOff);
+        }
+        helper.succeed();
+    }
+
+    // Into the End and its exit portal, as a player who has seen the credits, then the player's tick, in which the portal
+    // takes them out: EndPortalBlock asks findRespawnPositionAndUseSpawnBlock where to
+    private static void throughExitPortal(GameTestHelper helper, ServerPlayer player, ServerLevel end, BlockPos portal) {
+        player.teleportTo(end, portal.getX() + 0.5, portal.getY(), portal.getZ() + 0.5, Set.of(), 0.0F, 0.0F, true);
+        helper.assertTrue(player.level() == end, player.getPlainTextName() + " did not reach the End");
+        player.seenCredits = true;
+        end.getBlockState(portal).entityInside(end, portal, player, InsideBlockEffectApplier.NOOP, true);
+        player.doTick();
+        helper.assertTrue(player.level() != end, "the exit portal did not take " + player.getPlainTextName() + " out of the End");
     }
 
     private static void storeOldBedPoint(GameTestHelper helper, ServerPlayer player, BlockPos head) {
