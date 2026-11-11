@@ -282,6 +282,37 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // The same block, in a chunk of its own. The wide search's outer rings reach the chunks beside it, where the test
+    // world's land under open air would take a grave, but reading them would load them on the server thread. So they
+    // stay unloaded, and the grave goes beside the exit portal.
+    @GameTest
+    public void wideSearchLeavesUnloadedChunksAlone(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(-312, 0);
+        BlockPos block = new BlockPos(chunk.getMiddleBlockX(), end.getMaxY(), chunk.getMiddleBlockZ());
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        List<Grave> made = new ArrayList<>();
+        try {
+            emptyLoneChunk(helper, end, chunk, before, 1);
+            setRemembered(end, block, Blocks.OBSIDIAN, before);
+            withoutLastResort(helper, () -> made.add(graveFor(end, block.above())));
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        helper.assertTrue(end.getChunkSource().getChunkNow(chunk.x() + dx, chunk.z() + dz) == null,
+                                "the placement loaded the chunk beside " + chunk + " at " + dx + ", " + dz);
+                    }
+                }
+            }
+            long fromPodium = flatDistanceSqr(made.getFirst().pos(), EnderDragonFight.getPodiumLocation(BlockPos.ZERO));
+            helper.assertTrue(fromPodium <= 49, "grave not beside the exit portal: " + made.getFirst().pos());
+        } finally {
+            made.forEach(grave -> removeGrave(end, grave));
+            putBack(end, before);
+        }
+        helper.succeed();
+    }
+
     // The same, with a torch on the ledge, which no head may replace. The grave still moves to the ledge, but no search
     // from there finds a spot, so the last resort runs from the ledge, not from the block the death was on: the grave
     // goes under the ledge, in its column.
