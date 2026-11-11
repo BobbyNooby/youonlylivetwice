@@ -74,19 +74,15 @@ public class BodyClientTest implements FabricClientGameTest {
             showPlayerBody(ctx, server, connection, owners, YoltConfig.BodyPose.SLEEPING, 0.2, 0.2, "04-body-player-sleeping");
             showPlayerBody(ctx, server, connection, owners, YoltConfig.BodyPose.STANDING, 0.6, 1.8, "04-body-player-standing");
         } finally {
-            server.runOnServer(s -> {
-                // Switched back first, so a test player still online leaves no body
-                Settings.get().bodies.enabled = enabledWas;
-                Settings.get().bodies.pose = poseWas;
-                Settings.get().bodies.type = typeWas;
-                for (UUID owner : owners) {
-                    ServerPlayer online = s.getPlayerList().getPlayer(owner);
-                    if (online != null) {
-                        TestPlayers.leave(online);
-                    }
-                    removeBody(s, owner);
-                }
-            });
+            ClientTests.runAll(List.of(
+                    // Switched back first, so a test player still online leaves no body
+                    () -> server.runOnServer(s -> Settings.get().bodies.enabled = enabledWas),
+                    () -> server.runOnServer(s -> Settings.get().bodies.pose = poseWas),
+                    () -> server.runOnServer(s -> Settings.get().bodies.type = typeWas),
+                    // A step for each test player, so one that fails still leaves the others cleaned up
+                    () -> server.runOnServer(s -> ClientTests.runAll(owners.stream()
+                            .<Runnable>map(owner -> () -> cleanUp(s, owner))
+                            .toList()))));
         }
     }
 
@@ -201,6 +197,14 @@ public class BodyClientTest implements FabricClientGameTest {
 
     private static boolean near(double actual, double expected) {
         return Math.abs(actual - expected) < TOLERANCE;
+    }
+
+    private static void cleanUp(MinecraftServer server, UUID owner) {
+        ServerPlayer online = server.getPlayerList().getPlayer(owner);
+        if (online != null) {
+            TestPlayers.leave(online);
+        }
+        removeBody(server, owner);
     }
 
     private static void removeBody(MinecraftServer server, UUID owner) {
