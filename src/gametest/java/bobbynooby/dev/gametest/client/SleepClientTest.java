@@ -52,7 +52,8 @@ public class SleepClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         // Before the server, so a rename fails with its own message rather than as a wait that never ended
-        Field actionBar = actionBarField();
+        Field actionBar = hudField("overlayMessageString");
+        Field actionBarTime = hudField("overlayMessageTime");
         ClientTests.withServer(ctx, (server, connection) -> {
             boolean hideWas = server.computeOnServer(s -> Settings.get().sleep.hideSleepers);
             boolean noSkipWas = server.computeOnServer(s -> Settings.get().sleep.noNightSkip);
@@ -65,7 +66,7 @@ public class SleepClientTest implements FabricClientGameTest {
                     s.getGameRules().set(GameRules.ADVANCE_TIME, true, s);
                 });
                 BlockPos bed = placeBed(server, connection);
-                Component refused = refusedByDay(ctx, server, connection, actionBar, bed);
+                Component refused = refusedByDay(ctx, server, connection, actionBar, actionBarTime, bed);
                 showSleepingThroughNight(ctx, server, connection, actionBar, bed, refused);
             } finally {
                 ClientTests.runAll(List.of(
@@ -99,7 +100,8 @@ public class SleepClientTest implements FabricClientGameTest {
 
     // By day the bed says no on the action bar, which shows the action bar is read right. Returns that line.
     private static Component refusedByDay(ClientGameTestContext ctx, TestDedicatedServerContext server,
-                                          TestDedicatedServerConnection connection, Field actionBar, BlockPos bed) {
+                                          TestDedicatedServerConnection connection, Field actionBar, Field actionBarTime,
+                                          BlockPos bed) {
         moveClock(server, connection, ClockTimeMarkers.DAY, true);
         Component before = ctx.computeOnClient(mc -> actionBarLine(actionBar, mc));
         useBed(ctx, bed);
@@ -112,6 +114,9 @@ public class SleepClientTest implements FabricClientGameTest {
         }
         Component refused = ctx.computeOnClient(mc -> actionBarLine(actionBar, mc));
         Yolt.LOGGER.info("By day the bed told the client \"{}\"", refused.getString());
+        // Gone before the night, so the shot in bed shows only what comes with getting in
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> actionBarTicks(actionBarTime, mc) == 0,
+                mc -> "the bed's line from the day never faded from the client's action bar");
         return refused;
     }
 
@@ -123,6 +128,16 @@ public class SleepClientTest implements FabricClientGameTest {
         ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.isSleeping(),
                 mc -> "the client did not get into the bed at midnight; its action bar says " + describe(actionBarLine(actionBar, mc)));
         long asleepAt = ctx.computeOnClient(mc -> mc.level.getDefaultClockTime());
+        // Vanilla sends the sleeper count as someone gets into bed, and the action bar shows it for three seconds, so this
+        // is when it would be on screen
+        connection.waitForClientboundPackets();
+        ctx.runOnClient(mc -> {
+            Component shown = actionBarLine(actionBar, mc);
+            if (shown != refused) {
+                throw new AssertionError("getting into bed put \"" + describe(shown) + "\" on the client's action bar");
+            }
+        });
+        ClientTests.screenshot(ctx, "09-sleep-in-bed");
         // Where vanilla would move the clock on and wake everyone
         ClientTests.waitOnServer(server, SLEEP_TIMEOUT, s -> connection.getServerPlayer().isSleepingLongEnough(),
                 s -> "the client's player never slept long enough for a night to skip");
@@ -181,14 +196,15 @@ public class SleepClientTest implements FabricClientGameTest {
         return line == null ? "nothing" : line.getString();
     }
 
-    // The action bar's last line, which the HUD keeps after it fades. Private, so it is read by name.
-    private static Field actionBarField() {
+    // The action bar's last line, which the HUD keeps after it fades, and the ticks it has left on screen. Private, so
+    // they are read by name.
+    private static Field hudField(String name) {
         try {
-            Field field = Hud.class.getDeclaredField("overlayMessageString");
+            Field field = Hud.class.getDeclaredField(name);
             field.setAccessible(true);
             return field;
         } catch (NoSuchFieldException e) {
-            throw new AssertionError("the HUD has no overlayMessageString to read the action bar from", e);
+            throw new AssertionError("the HUD has no " + name + " to read the action bar from", e);
         }
     }
 
@@ -197,6 +213,14 @@ public class SleepClientTest implements FabricClientGameTest {
             return (Component) actionBar.get(mc.gui.hud);
         } catch (IllegalAccessException e) {
             throw new AssertionError("could not read the client's action bar", e);
+        }
+    }
+
+    private static int actionBarTicks(Field actionBarTime, Minecraft mc) {
+        try {
+            return actionBarTime.getInt(mc.gui.hud);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError("could not read how long the client's action bar shows its line", e);
         }
     }
 }
