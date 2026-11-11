@@ -39,6 +39,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
@@ -60,6 +61,7 @@ import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
 import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
 import static bobbynooby.dev.gametest.BodyTestKit.leavePlayerBody;
+import static bobbynooby.dev.gametest.BodyTestKit.once;
 import static bobbynooby.dev.gametest.BodyTestKit.removeBodies;
 import static bobbynooby.dev.gametest.BodyTestKit.restore;
 import static bobbynooby.dev.gametest.BodyTestKit.store;
@@ -563,6 +565,69 @@ public class BodyLifecycleGameTests {
             cleanUp(helper, owner, before);
         }
         helper.succeed();
+    }
+
+    // The same with a mannequin, the default type. Vanilla moves an entity that isn't a player to another dimension by
+    // making a new one there with the same id, which only counts once its chunk is loaded. So the Nether chunk is kept
+    // loaded, and the login waits for the body to be there. Immovable, so it can't fall in the Nether; the switches are
+    // only on for the logout.
+    @GameTest(maxTicks = 100)
+    public void mannequinTakeoverAcrossDimensions(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "NetherDoll", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        // Away from the spot other tests send players to
+        Vec3 to = new Vec3(40.5, 64.0, 40.5);
+        ChunkPos chunk = ChunkPos.containing(BlockPos.containing(to));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Mannequin body;
+        try {
+            Settings.get().bodies.movable = false;
+            body = leaveBody(helper, player);
+        } finally {
+            Settings.get().bodies = before;
+        }
+        // Only a chunk this test forced is let go again
+        boolean forced = nether.setChunkForced(chunk.x(), chunk.z(), true);
+        Runnable cleanUp = once(() -> {
+            try {
+                cleanUp(helper, owner);
+            } finally {
+                if (forced) {
+                    nether.setChunkForced(chunk.x(), chunk.z(), false);
+                }
+            }
+        });
+        boolean waiting = false;
+        try {
+            // What a /tp into another dimension runs
+            helper.assertTrue(body.teleportTo(nether, to.x, to.y, to.z, Set.of(), 0.0F, 0.0F, true), "the body did not move");
+            helper.assertTrue(body.isRemoved(), "the body is still in the overworld");
+            helper.runBeforeTestEnd(cleanUp);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(nether.getEntity(body.getUUID()) instanceof Mannequin,
+                            "the body is not in the Nether yet"))
+                    .thenExecute(() -> {
+                        try {
+                            Vec3 at = nether.getEntity(body.getUUID()).position();
+                            ServerPlayer back = rejoin(helper, player);
+                            helper.assertValueEqual(back.level().dimension(), Level.NETHER, "dimension after login");
+                            helper.assertTrue(back.position().distanceTo(at) <= 1.0, "position after login " + back.position()
+                                    + ", the body's " + at);
+                            helper.assertTrue(nether.getEntity(body.getUUID()) == null, "body still in the Nether");
+                            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+                        } finally {
+                            cleanUp.run();
+                        }
+                    })
+                    .thenSucceed();
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // Absorption is held to a cap only an effect raises, so the body has Absorption II, a cap of 8, with 4 left. The
