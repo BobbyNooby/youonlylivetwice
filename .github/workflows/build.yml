@@ -111,8 +111,15 @@ jobs:
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       # OpenGL finds no GLX visual under xvfb, so the client falls back to Vulkan on Mesa's software driver
+      # The runner's Ubuntu mirror sometimes fails to resolve for a few minutes, so try again before giving up
       - name: install xvfb and software vulkan
-        run: sudo apt-get update && sudo apt-get install -y xvfb mesa-vulkan-drivers
+        run: |
+          for try in 1 2 3; do
+            sudo apt-get update -o Acquire::Retries=3 && sudo apt-get install -y -o Acquire::Retries=3 xvfb mesa-vulkan-drivers && exit 0
+            echo "apt failed on try $try, waiting before the next one"
+            sleep 60
+          done
+          exit 1
       - name: run client game tests
         run: ./gradlew runProductionClientGameTest
       - name: store screenshots
