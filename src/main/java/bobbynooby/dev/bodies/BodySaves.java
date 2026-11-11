@@ -85,11 +85,8 @@ public final class BodySaves {
                                                 HolderLookup.Provider registries, String owner) {
         // The body only keeps which way it faces, so the saved pitch stays
         OfflinePlayerData.writePosition(tag, snapshot.dimension(), snapshot.pos(), snapshot.yRot());
-        tag.putFloat(OfflinePlayerData.HEALTH, snapshot.health());
-        tag.putFloat(OfflinePlayerData.ABSORPTION, snapshot.absorption());
-        tag.putDouble(OfflinePlayerData.FALL_DISTANCE, snapshot.fallDistance());
-        tag.putShort(OfflinePlayerData.FIRE, (short) snapshot.fireTicks());
-        tag.putShort(OfflinePlayerData.AIR, (short) snapshot.air());
+        OfflinePlayerData.writeVitals(tag, snapshot.health(), snapshot.absorption(), snapshot.fallDistance(),
+                snapshot.fireTicks(), snapshot.air());
         if (copyEffects) {
             List<MobEffectInstance> before = OfflinePlayerData.readEffects(tag, registries);
             List<AttributeInstance.Packed> attributes = OfflinePlayerData.readAttributes(tag, registries);

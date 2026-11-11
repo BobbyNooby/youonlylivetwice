@@ -48,11 +48,11 @@ import java.util.UUID;
 
 /** Reads and edits the save file of a player who is not online. Key names follow vanilla's Player save code. */
 public final class OfflinePlayerData {
-    public static final String HEALTH = "Health";
-    public static final String ABSORPTION = "AbsorptionAmount";
-    public static final String FALL_DISTANCE = "fall_distance";
-    public static final String FIRE = "Fire";
-    public static final String AIR = "Air";
+    private static final String HEALTH = "Health";
+    private static final String ABSORPTION = "AbsorptionAmount";
+    private static final String FALL_DISTANCE = "fall_distance";
+    private static final String FIRE = "Fire";
+    private static final String AIR = "Air";
     private static final String INVENTORY = "Inventory";
     private static final String EQUIPMENT = "equipment";
     private static final String SELECTED_SLOT = "SelectedItemSlot";
@@ -332,6 +332,7 @@ public final class OfflinePlayerData {
         return tag.read(EFFECTS, MobEffectInstance.CODEC.listOf(), ops(registries)).orElse(List.of());
     }
 
+    /** Replaces the saved effects. Loading doesn't add their attribute modifiers again: those go in writeAttributes. */
     public static void writeEffects(CompoundTag tag, List<MobEffectInstance> effects, HolderLookup.Provider registries) {
         // Vanilla leaves the key out when there are no effects
         if (effects.isEmpty()) {
@@ -346,9 +347,20 @@ public final class OfflinePlayerData {
         return tag.read(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops(registries)).orElse(List.of());
     }
 
+    /** Replaces the saved attributes, the base values and modifiers together. */
     public static void writeAttributes(CompoundTag tag, List<AttributeInstance.Packed> attributes,
                                        HolderLookup.Provider registries) {
         tag.store(ATTRIBUTES, AttributeInstance.Packed.LIST_CODEC, ops(registries), attributes);
+    }
+
+    /** Writes the health, absorption, fall distance, fire ticks and air, in the types vanilla saves them as. */
+    public static void writeVitals(CompoundTag tag, float health, float absorption, double fallDistance, int fireTicks,
+                                   int air) {
+        tag.putFloat(HEALTH, health);
+        tag.putFloat(ABSORPTION, absorption);
+        tag.putDouble(FALL_DISTANCE, fallDistance);
+        tag.putShort(FIRE, (short) fireTicks);
+        tag.putShort(AIR, (short) air);
     }
 
     /** Moves the saved player to pos in dimension, facing yRot. The saved pitch stays. */
