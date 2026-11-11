@@ -59,6 +59,7 @@
 			"bobbynooby.dev.gametest.client.DebugPrivacyClientTest",
 			"bobbynooby.dev.gametest.client.GraveClientTest",
 			"bobbynooby.dev.gametest.client.JoinClientTest",
+			"bobbynooby.dev.gametest.client.ServerListClientTest",
 			"bobbynooby.dev.gametest.client.SingleplayerClientTest",
 			"bobbynooby.dev.gametest.client.VisibilityClientTest"
 		]
