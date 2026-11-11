@@ -388,7 +388,7 @@ public class BodyStoryClientTest implements FabricClientGameTest {
         return entity.onGround() && entity.getDeltaMovement().horizontalDistanceSqr() < 1.0E-4 && entity.hurtTime == 0;
     }
 
-    private static double flatDistance(Vec3 a, Vec3 b) {
+    static double flatDistance(Vec3 a, Vec3 b) {
         return Math.hypot(a.x - b.x, a.z - b.z);
     }
 

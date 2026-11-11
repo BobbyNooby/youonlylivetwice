@@ -301,15 +301,18 @@ public class ChatStoryClientTest implements FabricClientGameTest {
 
     // Everything the client showed in its chat, player chat and server lines alike. VisibilityClientTest reads it too.
     static boolean chatLogHas(ClientGameTestContext ctx, String text) {
-        return ctx.computeOnClient(mc -> {
-            ChatLog log = mc.getReportingContext().chatLog();
-            for (int id = log.start(); id <= log.end(); id++) {
-                if (log.lookup(id) instanceof LoggedChatMessage message && message.toContentComponent().getString().contains(text)) {
-                    return true;
-                }
+        return ctx.computeOnClient(mc -> chatLogHas(mc, text));
+    }
+
+    // The same on the client thread, for a wait's condition
+    static boolean chatLogHas(Minecraft mc, String text) {
+        ChatLog log = mc.getReportingContext().chatLog();
+        for (int id = log.start(); id <= log.end(); id++) {
+            if (log.lookup(id) instanceof LoggedChatMessage message && message.toContentComponent().getString().contains(text)) {
+                return true;
             }
-            return false;
-        });
+        }
+        return false;
     }
 
     // Typed into the chat box and sent with Enter, like a player would
