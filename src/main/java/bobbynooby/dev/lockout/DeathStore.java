@@ -4,6 +4,7 @@ import bobbynooby.dev.core.Migrations;
 import bobbynooby.dev.core.Yolt;
 import org.jspecify.annotations.Nullable;
 import org.sqlite.SQLiteConfig;
+import org.sqlite.SQLiteConnection;
 import org.sqlite.SQLiteErrorCode;
 import org.sqlite.SQLiteException;
 
@@ -38,6 +39,12 @@ public final class DeathStore {
     private static final String COLUMNS = "uuid, username, death_time_ms, cooldown_days, bypass, death_message, revived_at, revived_by";
     /** The longest death message kept, in characters. */
     static final int MAX_DEATH_MESSAGE = 256;
+    // How long a query waits while another program, such as a backup tool, holds a lock on the file: SQLite's busy
+    // timeout, set through sqlite-jdbc's SQLiteConnection.setBusyTimeout. Every login and kick check reads on the server
+    // thread, and a failed read lets the player in, so reads give up soon. Writes keep sqlite-jdbc's default of 3 s,
+    // since a death that isn't recorded locks nobody out.
+    static final int READ_WAIT_MILLIS = 250;
+    static final int WRITE_WAIT_MILLIS = 3000;
 
     private final Connection connection;
 
@@ -215,7 +222,7 @@ public final class DeathStore {
 
     public synchronized void recordDeath(UUID uuid, String name, long nowMillis, int cooldownDays, @Nullable String deathMessage) {
         String sql = "INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass, death_message) VALUES (?, ?, ?, ?, 0, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = statement(sql, WRITE_WAIT_MILLIS)) {
             statement.setString(1, uuid.toString());
             statement.setString(2, name);
             statement.setLong(3, nowMillis);
@@ -247,7 +254,7 @@ public final class DeathStore {
      * a higher id, even one alike in every value.
      */
     public synchronized long latestId(UUID uuid) {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?")) {
+        try (PreparedStatement statement = statement("SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?", READ_WAIT_MILLIS)) {
             statement.setString(1, uuid.toString());
             try (ResultSet rs = statement.executeQuery()) {
                 // The MAX of no rows is null, which getLong reads as 0
@@ -265,7 +272,7 @@ public final class DeathStore {
     }
 
     private Optional<DeathLog> newest(String sql, String key, String failure) {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = statement(sql, READ_WAIT_MILLIS)) {
             statement.setString(1, key);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(read(rs)) : Optional.empty();
@@ -288,7 +295,7 @@ public final class DeathStore {
     public synchronized boolean revive(UUID uuid, long nowMillis, String by) {
         String sql = "UPDATE death_logs SET bypass = 1, revived_at = ?, revived_by = ? "
                 + "WHERE ROWID = (SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = statement(sql, WRITE_WAIT_MILLIS)) {
             statement.setLong(1, nowMillis);
             statement.setString(2, by);
             statement.setString(3, uuid.toString());
@@ -296,6 +303,12 @@ public final class DeathStore {
         } catch (SQLException e) {
             throw new IllegalStateException("Could not revive " + uuid, e);
         }
+    }
+
+    // Each statement sets its own wait, so a read never waits as long as the write before it could
+    private PreparedStatement statement(String sql, int waitMillis) throws SQLException {
+        connection.unwrap(SQLiteConnection.class).setBusyTimeout(waitMillis);
+        return connection.prepareStatement(sql);
     }
 
     public synchronized void close() {

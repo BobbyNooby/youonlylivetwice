@@ -204,7 +204,8 @@ public class LockoutGameTests {
     }
 
     // Another program holding the database's write lock, as a backup tool or an SQLite browser can: the check waits
-    // out SQLite's busy timeout, fails, and lets the player in rather than keeping everyone out
+    // out the store's short read wait, fails, and lets the player in rather than keeping everyone out. A death recorded
+    // meanwhile waits the longer write wait, and the next check is still quick.
     @GameTest(environment = LOGIN_CHECK)
     public void lockedDeathStoreLetsLockedOutPlayerIn(GameTestHelper helper) throws IOException, SQLException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -212,11 +213,27 @@ public class LockoutGameTests {
         try (OwnStore own = new OwnStore()) {
             DeathLockout.recordDeath(who.id(), who.name());
             helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused with the database free");
+            long readMillis;
+            long writeMillis;
+            long nextReadMillis;
             try (Connection lock = DriverManager.getConnection(own.url()); Statement statement = lock.createStatement()) {
                 statement.execute("BEGIN EXCLUSIVE");
+                long start = System.nanoTime();
                 helper.assertTrue(loginRefusal(server, who) == null, "refused while the database is locked");
+                readMillis = (System.nanoTime() - start) / 1_000_000;
+                start = System.nanoTime();
+                DeathLockout.recordDeath(UUID.randomUUID(), "Locked");
+                writeMillis = (System.nanoTime() - start) / 1_000_000;
+                start = System.nanoTime();
+                helper.assertTrue(loginRefusal(server, who) == null, "refused while the database is still locked");
+                nextReadMillis = (System.nanoTime() - start) / 1_000_000;
                 statement.execute("ROLLBACK");
             }
+            // DeathStore waits 250 ms for a read and 3 s for a write
+            helper.assertTrue(readMillis >= 200 && readMillis < 1500, "the login check waited " + readMillis + " ms");
+            helper.assertTrue(writeMillis >= 2500, "the death's write waited only " + writeMillis + " ms");
+            helper.assertTrue(nextReadMillis >= 200 && nextReadMillis < 1500,
+                    "the login check after the write waited " + nextReadMillis + " ms");
             helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused once the lock is gone");
         }
         helper.succeed();
