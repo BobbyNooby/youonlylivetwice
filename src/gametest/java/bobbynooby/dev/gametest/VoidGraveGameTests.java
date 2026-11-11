@@ -16,6 +16,7 @@ import bobbynooby.dev.offline.OfflinePlayerData;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -139,33 +140,84 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
-    // The same 7 by 7 hole. graves.voidSearchRadius at exactly 4 finds the land 4 out, and at 3, one short, the grave
-    // goes to the fixed spot beside the exit portal. Set and put back in this tick.
-    @GameTest(dimension = "minecraft:the_end", skyAccess = true)
-    public void voidSearchRadiusReachesLandExactlyAtIt(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos middle = helper.absolutePos(new BlockPos(3, 0, 3));
+    // Far out over the End's void, in a chunk loaded for this test alone and dug out wherever the land search reads,
+    // with a block of land on one side of the death's column at a time. graves.voidSearchRadius 2 finds the land 2 out
+    // on each side, and not 3 out, where the grave goes beside the exit portal instead. Each side on its own, so a
+    // bound that is off on one side only fails too; 2, so every column the search reads stays inside the chunk. Set and
+    // put back in this tick.
+    @GameTest
+    public void voidSearchRadiusReachesLandExactlyAtItOnEachSide(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(0, 312);
+        BlockPos column = new BlockPos(chunk.getMiddleBlockX(), 64, chunk.getMiddleBlockZ());
+        BlockPos death = belowWorld(end, column);
+        BlockPos podium = EnderDragonFight.getPodiumLocation(BlockPos.ZERO);
         YoltConfig.GravesSection graves = Settings.get().graves;
         int radiusBefore = graves.voidSearchRadius;
         Map<BlockPos, BlockState> before = new LinkedHashMap<>();
         try {
-            for (int dx = -3; dx <= 3; dx++) {
-                for (int dz = -3; dz <= 3; dz++) {
-                    dig(level, middle.offset(dx, 0, dz), before);
-                }
-            }
-            graves.voidSearchRadius = 4;
-            BlockPos atRadius = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
-            helper.assertValueEqual(flatDistanceSqr(atRadius, middle), 16L, "grave's distance from the hole's middle, squared, at 4");
-            assertOnSolid(helper, level, atRadius);
+            emptyLoneChunk(helper, end, chunk, before);
+            graves.voidSearchRadius = 2;
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos land = column.relative(side, 2);
+                setRemembered(end, land, Blocks.OBSIDIAN, before);
+                BlockPos atRadius = withoutLastResort(helper, () -> GravePlacement.find(end, death, store(end)));
+                helper.assertValueEqual(atRadius, land.above(), "grave position with land 2 out to the " + side);
+                end.setBlock(land, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 
-            graves.voidSearchRadius = 3;
-            BlockPos fixed = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
-            long fromPortal = flatDistanceSqr(fixed, EnderDragonFight.getPodiumLocation(BlockPos.ZERO));
-            helper.assertTrue(fromPortal <= 49, "grave not beside the exit portal at 3: " + fixed);
+                BlockPos further = column.relative(side, 3);
+                setRemembered(end, further, Blocks.OBSIDIAN, before);
+                BlockPos fixed = withoutLastResort(helper, () -> GravePlacement.find(end, death, store(end)));
+                helper.assertTrue(flatDistanceSqr(fixed, podium) <= 49,
+                        "grave not beside the exit portal with land 3 out to the " + side + ": " + fixed);
+                end.setBlock(further, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            }
         } finally {
             graves.voidSearchRadius = radiusBefore;
-            putBack(level, before);
+            putBack(end, before);
+        }
+        helper.succeed();
+    }
+
+    // A block in the End's top layer over the void, far out, in a chunk loaded for this test alone and dug out wherever
+    // the wide search reads, with a block of land under that layer on one side at a time. graves.searchRadius 4 reaches
+    // the spot over the land 4 out on each side, and not 5 out, where the grave goes beside the exit portal instead.
+    // Each side on its own, so a bound that is off on one side only fails too. voidSearchRadius 3 keeps the land
+    // search short of the land. Set and put back in this tick.
+    @GameTest
+    public void searchRadiusReachesLandExactlyAtItOnEachSide(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(0, -312);
+        BlockPos block = new BlockPos(chunk.getMiddleBlockX(), end.getMaxY(), chunk.getMiddleBlockZ());
+        BlockPos podium = EnderDragonFight.getPodiumLocation(BlockPos.ZERO);
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int searchBefore = graves.searchRadius;
+        int voidBefore = graves.voidSearchRadius;
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        try {
+            emptyLoneChunk(helper, end, chunk, before, 1);
+            setRemembered(end, block, Blocks.OBSIDIAN, before);
+            graves.searchRadius = 4;
+            graves.voidSearchRadius = 3;
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos land = block.relative(side, 4).below();
+                setRemembered(end, land, Blocks.OBSIDIAN, before);
+                // Standing on the block, so the death is above the build height
+                BlockPos atRadius = withoutLastResort(helper, () -> GravePlacement.find(end, block.above(), store(end)));
+                helper.assertValueEqual(atRadius, land.above(), "grave position with land 4 out to the " + side);
+                end.setBlock(land, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+
+                BlockPos further = block.relative(side, 5).below();
+                setRemembered(end, further, Blocks.OBSIDIAN, before);
+                BlockPos fixed = withoutLastResort(helper, () -> GravePlacement.find(end, block.above(), store(end)));
+                helper.assertTrue(flatDistanceSqr(fixed, podium) <= 49,
+                        "grave not beside the exit portal with land 5 out to the " + side + ": " + fixed);
+                end.setBlock(further, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            }
+        } finally {
+            graves.searchRadius = searchBefore;
+            graves.voidSearchRadius = voidBefore;
+            putBack(end, before);
         }
         helper.succeed();
     }

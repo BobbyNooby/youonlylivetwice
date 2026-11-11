@@ -530,35 +530,6 @@ public class PlacementGameTests {
         helper.succeed();
     }
 
-    // The rim of the same pool is 4 out from the death. graves.searchRadius at exactly 4 reaches it, and at 3, one short,
-    // the grave goes to the last resort in the death's own column. Set and put back in this tick.
-    @GameTest(skyAccess = true)
-    public void searchRadiusReachesLandExactlyAtIt(GameTestHelper helper) {
-        YoltConfig.GravesSection graves = Settings.get().graves;
-        int before = graves.searchRadius;
-        List<BlockPos> placed = new ArrayList<>();
-        BlockPos death = helper.absolutePos(LAVA_DEATH);
-        try {
-            graves.searchRadius = 4;
-            BlockPos atRadius = VoidGraveGameTests.withoutLastResort(helper, () -> findInWideLavaPool(helper, placed));
-            int out = Math.max(Math.abs(atRadius.getX() - death.getX()), Math.abs(atRadius.getZ() - death.getZ()));
-            helper.assertValueEqual(out, 4, "how far out the grave is at radius 4");
-            assertOnFirmGround(helper, atRadius);
-
-            graves.searchRadius = 3;
-            List<BlockPos> found = new ArrayList<>(1);
-            List<String> log = OfflineGameTests.yoltLog(() -> found.add(GravePlacement.find(helper.getLevel(), death, store(helper))));
-            BlockPos oneShort = found.getFirst();
-            helper.assertTrue(log.stream().anyMatch(line -> line.startsWith("No spot near")), "no last resort at radius 3: " + log);
-            helper.assertValueEqual(oneShort.getX(), death.getX(), "grave x at radius 3");
-            helper.assertValueEqual(oneShort.getZ(), death.getZ(), "grave z at radius 3");
-        } finally {
-            graves.searchRadius = before;
-            clear(helper, placed);
-        }
-        helper.succeed();
-    }
-
     // The same pool under a roof like the Nether's bedrock: the heightmap is the roof's top, which nobody can reach in
     // survival, so the grave must stay under it
     @GameTest(dimension = "minecraft:the_nether", skyAccess = true)
