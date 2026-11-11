@@ -48,9 +48,11 @@ final class SharedGraveContainer extends SimpleContainer {
 
     /**
      * Takes the grave's share of a closing menu's cursor stack back in, out of that stack: never more of the item than
-     * has left the grave since this container was filled, so the looter's own items stay theirs. It goes onto a stack
-     * of the same item first, then into an empty slot. Returns any of the share that found no room, which shouldn't
-     * happen: only the grave's own items come back, never more than left, so they only fill room that leaving made.
+     * has left the grave since this container was filled, through any viewer. So the grave never holds more than it did
+     * then, and the room it needs is always there. With one looter their own items stay theirs; with several, one
+     * looter's own items can stand in for the same items another took. It goes onto a stack of the same item first,
+     * then into an empty slot. Returns any of the share that found no room, which only happens if something else wrote
+     * the container.
      */
     ItemStack takeBack(ItemStack carried) {
         int share = Math.min(carried.getCount(), count(filledWith, carried) - count(getItems(), carried));
