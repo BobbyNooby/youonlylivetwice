@@ -23,6 +23,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -92,6 +93,85 @@ public class GraveProtectionGameTests {
             removeGraves(helper, List.of(grave));
         }
         helper.succeed();
+    }
+
+    // An op in creative clicks the grave through the start-break packet's whole path. Creative breaks at once, as the
+    // stone beside the grave shows; only /yolt grave remove takes a grave away.
+    @GameTest
+    public void creativeOpCannotBreakGraveByHand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos stone = helper.absolutePos(new BlockPos(4, 0, 3));
+        ServerPlayer op = TestPlayers.join(helper, "OpBreaker", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        try {
+            TestPlayers.op(op);
+            level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            startBreaking(op, stone);
+            helper.assertTrue(level.getBlockState(stone).isAir(), "the op's click did not break the stone beside the grave");
+
+            startBreaking(op, grave.pos());
+            assertGraveIntact(helper, grave);
+            List<ItemStack> items = GraveStore.get(level.getServer()).byId(grave.id()).orElseThrow().items();
+            helper.assertValueEqual(items.size(), 2, "stacks in the grave");
+            helper.assertValueEqual(GraveAsserts.count(items, Items.DIAMOND), 1, "diamonds in the grave");
+        } finally {
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+            removeGraves(helper, List.of(grave));
+            level.setBlock(stone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        helper.succeed();
+    }
+
+    // A hopper pulls from a container or from loose items above it, and a grave head is neither. The hopper under the
+    // chest beside it shows the hoppers did run.
+    @GameTest(maxTicks = 20)
+    public void hopperUnderGravePullsNothing(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos under = helper.absolutePos(new BlockPos(3, 0, 3));
+        BlockPos chest = helper.absolutePos(new BlockPos(5, 1, 5));
+        BlockPos chestHopper = chest.below();
+        level.setBlock(under, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+        // On stone, since a new grave keeps off block entities; the hopper goes in under it after
+        Grave grave = makeGrave(helper, new BlockPos(3, 1, 3));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            removeGraves(helper, List.of(grave));
+            // Emptied first, or taking the blocks away would spill what they hold
+            for (BlockPos pos : List.of(under, chestHopper, chest)) {
+                if (level.getBlockEntity(pos) instanceof Container container) {
+                    container.clearContent();
+                }
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        });
+        boolean waiting = false;
+        try {
+            level.setBlock(under, Blocks.HOPPER.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(chestHopper, Blocks.HOPPER.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(chest, Blocks.CHEST.defaultBlockState(), Block.UPDATE_ALL);
+            ((Container) level.getBlockEntity(chest)).setItem(0, new ItemStack(Items.EMERALD));
+            // A hopper tries every tick until it moves something, then every 8
+            helper.runAfterDelay(10, () -> {
+                try {
+                    helper.assertValueEqual(((Container) level.getBlockEntity(chestHopper)).countItem(Items.EMERALD), 1,
+                            "emeralds the chest's hopper pulled");
+                    Container hopper = (Container) level.getBlockEntity(under);
+                    helper.assertTrue(hopper.isEmpty(), "the hopper under the grave pulled " + hopper.getItem(0));
+                    assertGraveIntact(helper, grave);
+                    List<ItemStack> items = GraveStore.get(level.getServer()).byId(grave.id()).orElseThrow().items();
+                    helper.assertValueEqual(items.size(), 2, "stacks in the grave");
+                    helper.assertValueEqual(GraveAsserts.count(items, Items.DIAMOND), 1, "diamonds in the grave");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     @GameTest
@@ -850,6 +930,12 @@ public class GraveProtectionGameTests {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Could not set " + owner.getSimpleName() + "." + name, e);
         }
+    }
+
+    // What a client's start-break packet runs
+    private static void startBreaking(ServerPlayer player, BlockPos pos) {
+        player.gameMode.handleBlockBreakAction(pos, ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, Direction.UP,
+                player.level().getMaxY(), 0);
     }
 
     private static void removeGraves(GameTestHelper helper, List<Grave> graves) {
