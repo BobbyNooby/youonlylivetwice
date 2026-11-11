@@ -188,7 +188,8 @@ public class LockoutClientTest implements FabricClientGameTest {
             mc.level.disconnect(Component.literal("Disconnecting"));
             mc.disconnectWithSavingScreen();
         });
-        ctx.waitFor(mc -> mc.level == null);
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.level == null,
+                mc -> "the client is still in its world, on " + screenName(mc));
     }
 
     private static String screenName(Minecraft mc) {
