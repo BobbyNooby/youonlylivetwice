@@ -305,8 +305,10 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
-    // Border on, and the overworld's centre put 150 blocks west of the player, so a 100 block border ends 100 blocks short
-    // of them. A refusal leaves the live config, the file and the world as they were.
+    // The overworld's centre is put 150 blocks west of the player, so a 100 block border ends 100 blocks short of them.
+    // First the live switch is off and the change turns it on, so only a check of the new config's own switch refuses
+    // it. Then, with the border on, a diameter of 120 still leaves them outside. A refusal leaves the live config, the
+    // file and the world as they were.
     @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
     public void configBorderKeyNeedsConfirm(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -316,36 +318,49 @@ public class ConfigCommandGameTests {
         ServerPlayer player = TestPlayers.join(helper, "PastEdge", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         String name = player.nameAndId().name();
         try {
-            Settings.get().worldBorder.enabled = true;
-            YoltConfig before = Settings.get();
-            int diameterBefore = before.worldBorder.diameter;
+            Settings.get().worldBorder.enabled = false;
+            Settings.get().worldBorder.diameter = 100;
             WorldBorder overworld = server.overworld().getWorldBorder();
             overworld.setCenter(player.getX() - 150, player.getZ());
             double sizeBefore = overworld.getSize();
 
-            int[] result = {-1};
-            List<String> refused = run(server, "yolt config worldBorder.diameter 100", value -> result[0] = value);
-            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave ") && refused.get(0).contains(name)
-                    && refused.get(0).endsWith(" outside the world border. Add confirm to the command to do it anyway."), "refusal: " + refused);
-            helper.assertValueEqual(result[0], 0, "result of the refused command");
-            helper.assertTrue(Settings.get() == before, "the live config was replaced");
-            helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter after the refusal");
-            helper.assertTrue(Arrays.equals(Files.readAllBytes(path), fileBefore), "the config file changed");
-            helper.assertValueEqual(overworld.getSize(), sizeBefore, "overworld border size after the refusal");
-
+            assertStrandingRefused(helper, server, "yolt config worldBorder.enabled true", name, sizeBefore);
             // The world spawn sits among the test structures, so a note about it may follow
-            List<String> confirmed = run(server, "yolt config worldBorder.diameter 100 confirm");
-            helper.assertTrue(!confirmed.isEmpty() && confirmed.get(0).equals("worldBorder.diameter changed from " + diameterBefore + " to 100."),
-                    "output with confirm: " + confirmed);
-            helper.assertValueEqual(Settings.get().worldBorder.diameter, 100, "live diameter with confirm");
-            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 100, "diameter in the file");
-            helper.assertValueEqual(overworld.getSize(), 100.0, "overworld border size with confirm");
+            List<String> switchedOn = run(server, "yolt config worldBorder.enabled true confirm");
+            helper.assertTrue(!switchedOn.isEmpty() && switchedOn.get(0).equals("worldBorder.enabled changed from false to true."),
+                    "output turning the border on with confirm: " + switchedOn);
+            helper.assertTrue(Settings.get().worldBorder.enabled, "the border is still off with confirm");
+            helper.assertValueEqual(overworld.getSize(), 100.0, "overworld border size once the border is on");
+
+            assertStrandingRefused(helper, server, "yolt config worldBorder.diameter 120", name, 100.0);
+            List<String> resized = run(server, "yolt config worldBorder.diameter 120 confirm");
+            helper.assertTrue(!resized.isEmpty() && resized.get(0).equals("worldBorder.diameter changed from 100 to 120."),
+                    "output with confirm: " + resized);
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 120, "live diameter with confirm");
+            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 120, "diameter in the file");
+            helper.assertValueEqual(overworld.getSize(), 120.0, "overworld border size with confirm");
         } finally {
             restore(server, fileBefore);
             CommandGameTests.restoreBorders(bordersBefore);
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // A border change refused for leaving the player outside, with the live config, the file and the overworld border as they were
+    private static void assertStrandingRefused(GameTestHelper helper, MinecraftServer server, String command, String name, double size)
+            throws IOException {
+        YoltConfig before = Settings.get();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        int[] result = {-1};
+        List<String> refused = run(server, command, value -> result[0] = value);
+        helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave ") && refused.get(0).contains(name)
+                && refused.get(0).endsWith(" outside the world border. Add confirm to the command to do it anyway."),
+                command + " was not refused for the player: " + refused);
+        helper.assertValueEqual(result[0], 0, "result of " + command);
+        helper.assertTrue(Settings.get() == before, command + " replaced the live config");
+        helper.assertTrue(Arrays.equals(Files.readAllBytes(Settings.path()), fileBefore), command + " changed the config file");
+        helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), size, "overworld border size after " + command);
     }
 
     // A startup with a typo in the border holds it. The change is saved, but the world keeps its border, and the reply
