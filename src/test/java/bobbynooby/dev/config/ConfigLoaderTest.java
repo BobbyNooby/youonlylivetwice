@@ -523,6 +523,22 @@ class ConfigLoaderTest {
         }
     }
 
+    // One past int max can't be a version either, but merge already refuses it as it would any int key: one warning,
+    // and like any refused value the typed file is kept
+    @Test
+    void configVersionAboveIntMaxIsWarnedOnceByMerge() throws IOException {
+        Path file = dir.resolve("config.json");
+        String typed = "{\"configVersion\": 2147483648, \"randomSpawn\": false}";
+        Files.writeString(file, typed);
+
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true);
+        assertFalse(r.config().randomSpawn);
+        assertEquals(List.of("configVersion: expected a whole number that fits in an int, using default",
+                "old file saved as config.json.bak before the rewrite"), r.warnings());
+        assertEquals(typed, Files.readString(dir.resolve("config.json.bak")));
+        assertEquals(ConfigLoader.CURRENT_VERSION, readJson(file).get("configVersion").getAsInt());
+    }
+
     @Test
     void newerConfigVersionLeavesFileAlone() throws IOException {
         Path file = dir.resolve("config.json");
