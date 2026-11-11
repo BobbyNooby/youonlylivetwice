@@ -558,6 +558,7 @@ public final class GravePlacement {
         return level.dimension() == Level.OVERWORLD && spawn.dimension() == Level.OVERWORLD ? spawn.pos() : BlockPos.ZERO;
     }
 
+    // The sort keeps the scan order for ties, so the pick never varies
     private static List<BlockPos> nearestFirst(int radius) {
         List<BlockPos> offsets = new ArrayList<>();
         for (int dx = -radius; dx <= radius; dx++) {
