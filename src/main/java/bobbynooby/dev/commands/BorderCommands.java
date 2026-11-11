@@ -184,6 +184,11 @@ final class BorderCommands {
             }
         }
         for (BodyRecord body : BodyStore.get(server).all()) {
+            // A pending record's owner took the body over already. Its body waits in an unloaded chunk and goes as soon as
+            // that chunk loads, so the border can't strand it.
+            if (body.pendingRemoval()) {
+                continue;
+            }
             BodySnapshot snapshot = body.snapshot();
             if (strands(borders, snapshot.dimension(), snapshot.pos().x, snapshot.pos().z)) {
                 names.add(body.ownerName() + "'s body");

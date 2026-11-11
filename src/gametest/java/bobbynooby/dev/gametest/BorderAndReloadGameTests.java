@@ -1,6 +1,9 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.YouOnlyLiveTwice;
+import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodySnapshot;
+import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -18,6 +21,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
@@ -26,6 +30,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -379,6 +384,43 @@ public class BorderAndReloadGameTests {
                     "overworld border size after the refusal");
         } finally {
             store.remove(grave.id());
+            Files.writeString(Settings.path(), fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // A pending record's owner took its body over already; the body waits in an unloaded chunk and goes when that loads.
+    // So a border that leaves it outside strands nobody, while the same record not taken over needs confirm. Every border
+    // is centred, so a WIDE one holds everything the tests have, and only this record sits past it.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderShrinkOverTakenOverBodyNeedsNoConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        BodyStore store = BodyStore.get(server);
+        String owner = uniqueName("TakenOver");
+        BodySnapshot snapshot = new BodySnapshot(Level.OVERWORLD, new Vec3(BEYOND, 64, 0), 0f, 20f, 0f, 0.0, 0,
+                Entity.TOTAL_AIR_SUPPLY, List.of(), Map.of());
+        BodyRecord standing = new BodyRecord(UUID.randomUUID(), owner, UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN,
+                System.currentTimeMillis(), false, snapshot);
+
+        border.enabled = true;
+        border.endScale = 1.0;
+        try {
+            centreAll(server);
+            store.put(standing);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("This would leave " + owner
+                    + "'s body outside the world border. Add confirm to the command to do it anyway."), "refusal over the body");
+
+            store.put(standing.withPendingRemoval(true));
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "."),
+                    "output over the taken-over body");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
+        } finally {
+            store.remove(standing.owner());
             Files.writeString(Settings.path(), fileBefore);
             restoreConfig(server);
             restoreBorders(bordersBefore);
