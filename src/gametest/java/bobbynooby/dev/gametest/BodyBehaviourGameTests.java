@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.BodyChunks;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRules;
@@ -622,6 +623,85 @@ public class BodyBehaviourGameTests {
             helper.assertTrue(body.isRemoved(), "body still in the world");
             helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
             helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "dead owner's save changed");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A body in a chunk that isn't loaded is only its record, so the save gets the record's state. Standing in for the
+    // unload: the hook saves the body's state, then the body leaves the world.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void expiryOfUnloadedBodyUsesRecordSnapshot(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unloaded", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(7.0F);
+            BodyChunks.onBodyUnload(body);
+            body.discard();
+            expiredLogout(helper, owner);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 7.0F, "saved health");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // An owner who is online isn't away, and their save is theirs to write. As after a login that couldn't remove the
+    // record: it is put back, due.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void expirySkipsOnlineOwner(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "Online", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            leaveBody(helper, player);
+            BodyStore store = store(helper);
+            BodyRecord record = store.byOwner(owner).orElseThrow();
+            TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            store.put(record);
+            expiredLogout(helper, owner);
+            byte[] saveBefore = Files.readAllBytes(saveFile(helper, owner));
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(store.byOwner(owner).isPresent(), "an online owner's record was removed");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "an online owner's save changed");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // The death path owns a dying body, so the expiry leaves its record and the save alone. At 0 health, as a body is
+    // while its death plays out.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void expirySkipsDyingBody(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "Dying", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            expiredLogout(helper, owner);
+            byte[] saveBefore = Files.readAllBytes(saveFile(helper, owner));
+            body.setHealth(0.0F);
+            helper.assertTrue(body.isDeadOrDying(), "the body is not dying");
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "a dying body's record was removed");
+            helper.assertFalse(body.isRemoved(), "a dying body was removed");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(saveFile(helper, owner)), saveBefore), "the owner's save changed");
         } finally {
             cleanUp(helper, owner, before);
         }

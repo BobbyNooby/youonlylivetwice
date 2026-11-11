@@ -305,6 +305,105 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // A start that couldn't bring the body back, say with its dimension gone, leaves only the record. The owner's login
+    // takes over its state, the record goes, and no body comes with it.
+    @GameTest(environment = BODY_RESTART)
+    public void playerRecordWithoutBodyDroppedAtLogin(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "NotBack", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leavePlayerBody(helper, player);
+            body.setHealth(12.0F);
+            BodyStore store = store(helper);
+            store.put(store.byOwner(owner).orElseThrow().withSnapshot(BodySnapshot.of(body)));
+            body.discard();
+
+            ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, ON_FLOOR);
+            helper.assertTrue(store.byOwner(owner).isEmpty(), "body record kept");
+            helper.assertValueEqual(back.getHealth(), 12.0F, "health after login");
+            helper.assertTrue(playerBodiesOf(helper, owner).isEmpty(), "a body came with the login");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A body that stands already is never made twice. The world would refuse a second entity with its id, and the
+    // start would log that as a failure, so the log is checked as well as the count.
+    @GameTest(environment = BODY_RESTART)
+    public void restoreSkipsBodyAlreadyThere(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "BackOnce", ON_FLOOR);
+        UUID owner = player.getUUID();
+        String failed = "Could not bring back the body of " + player.getGameProfile().name();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leavePlayerBody(helper, player);
+            BodyRestart.snapshotBodies(server);
+            body.discard();
+
+            List<String> log = OfflineGameTests.yoltLog(() -> {
+                BodyRestart.restorePlayerBodies(server);
+                BodyRestart.restorePlayerBodies(server);
+            });
+            List<PlayerBody> bodies = playerBodiesOf(helper, owner);
+            helper.assertValueEqual(bodies.size(), 1, "the owner's bodies");
+            helper.assertTrue(bodies.get(0) != body, "the body was not brought back");
+            helper.assertTrue(log.stream().noneMatch(line -> line.equals(failed) || line.startsWith(failed + ":")),
+                    "a start logged a failure: " + log);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A body comes back even where no one has loaded the world. Being a player, it loads the chunks round itself; once
+    // its own is in, there is still one body, and the record stays. Immovable, so it stays where the record says
+    // whatever the ground is there. The switches are only on while it is made.
+    @GameTest(environment = BODY_RESTART, maxTicks = 100)
+    public void restoreIntoUnloadedChunk(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Faraway", ON_FLOOR);
+        UUID owner = player.getUUID();
+        ServerLevel level = helper.getLevel();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        Runnable cleanUp = BodyTestKit.once(() -> cleanUp(helper, owner, before));
+        boolean waiting = false;
+        try {
+            Settings.get().bodies.movable = false;
+            PlayerBody body = leavePlayerBody(helper, player);
+            // Tests are laid out in rows of eight along x, so this far along it no test is near
+            Vec3 far = body.position().add(4096.0, 0.0, 0.0);
+            BlockPos farBlock = BlockPos.containing(far);
+            helper.assertFalse(level.isLoaded(farBlock), "the far chunk is loaded already");
+            BodyStore store = store(helper);
+            BodySnapshot now = BodySnapshot.of(body);
+            store.put(store.byOwner(owner).orElseThrow().withSnapshot(new BodySnapshot(now.dimension(), far, now.yRot(),
+                    now.health(), now.absorption(), now.fallDistance(), now.fireTicks(), now.air(), now.effects(), now.gear())));
+            body.discard();
+
+            BodyRestart.restorePlayerBodies(level.getServer());
+            Settings.get().bodies = before;
+            helper.runBeforeTestEnd(cleanUp);
+            helper.succeedWhen(() -> {
+                helper.assertTrue(level.isLoaded(farBlock), "the body's chunk has not loaded");
+                List<PlayerBody> bodies = playerBodiesOf(helper, owner);
+                helper.assertValueEqual(bodies.size(), 1, "the owner's bodies");
+                helper.assertValueEqual(bodies.get(0).position(), far, "the body's position");
+                Optional<BodyRecord> record = store.byOwner(owner);
+                helper.assertTrue(record.isPresent() && !record.get().pendingRemoval()
+                        && record.get().bodyEntity().equals(bodies.get(0).getUUID()), "the body's record: " + record);
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // A body keeps carrying its owner's copy, so its marker only goes to holders who see the body
     @GameTest
     public void bodyOnSharedMapOnlyForThoseWhoKnowIt(GameTestHelper helper) {
@@ -877,6 +976,19 @@ public class PlayerBodyGameTests {
         Field field = PlayerList.class.getDeclaredField(name);
         field.setAccessible(true);
         return (Map<?, ?>) field.get(server.getPlayerList());
+    }
+
+    // In every dimension, since a body can be moved to another
+    private static List<PlayerBody> playerBodiesOf(GameTestHelper helper, UUID owner) {
+        List<PlayerBody> bodies = new ArrayList<>();
+        for (ServerLevel level : helper.getLevel().getServer().getAllLevels()) {
+            for (ServerPlayer player : level.players()) {
+                if (player instanceof PlayerBody body && body.owner().equals(owner)) {
+                    bodies.add(body);
+                }
+            }
+        }
+        return bodies;
     }
 
     private static int expiredOf(BodyStore store, List<ServerPlayer> owners) {

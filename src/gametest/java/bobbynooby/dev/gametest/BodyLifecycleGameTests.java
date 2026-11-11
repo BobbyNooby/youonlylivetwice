@@ -7,6 +7,7 @@ import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRestart;
 import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.GearSync;
+import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
@@ -20,8 +21,11 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -36,6 +40,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -47,16 +52,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static bobbynooby.dev.gametest.BodyTestKit.bodiesOf;
 import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
 import static bobbynooby.dev.gametest.BodyTestKit.leaveBody;
+import static bobbynooby.dev.gametest.BodyTestKit.leavePlayerBody;
 import static bobbynooby.dev.gametest.BodyTestKit.removeBodies;
 import static bobbynooby.dev.gametest.BodyTestKit.restore;
 import static bobbynooby.dev.gametest.BodyTestKit.store;
 import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
+import static bobbynooby.dev.gametest.BodyTestKit.usePlayerBodies;
 
 // The test server keeps bodies off. Each test runs with the default body switches (bodies on) and puts the
 // server's own back in the same tick, before any other test runs. The tests that wait only wait for the
@@ -456,6 +464,98 @@ public class BodyLifecycleGameTests {
             helper.assertValueEqual(back.fallDistance, 6.0, "fall distance after login");
             helper.assertValueEqual(back.getRemainingFireTicks(), 60, "fire ticks after login");
             helper.assertValueEqual(back.getAirSupply(), 90, "air after login");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // With copyEffects off the body gets none of its owner's effects, and the login leaves the save's own: one the body
+    // gained doesn't come over either. The switch is off only within this tick.
+    @GameTest
+    public void copyEffectsOffLeavesOwnerEffects(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "OwnEffects", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.copyEffects = false;
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 12000));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(body.getActiveEffects().isEmpty(), "the body got effects: " + body.getActiveEffects());
+            body.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 12000));
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.hasEffect(MobEffects.SPEED), "the save's speed is gone after login");
+            helper.assertFalse(back.hasEffect(MobEffects.REGENERATION), "the body's regeneration came over");
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // The owner takes over the body's effects as they are now: one it gained comes over, one that went is gone
+    @GameTest
+    public void takeoverReplacesEffectsWithBodys(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "BodyEffects", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 12000));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(body.hasEffect(MobEffects.SPEED), "the body did not get the speed");
+            body.removeEffect(MobEffects.SPEED);
+            body.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 12000));
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.hasEffect(MobEffects.REGENERATION), "the body's regeneration did not come over");
+            helper.assertFalse(back.hasEffect(MobEffects.SPEED), "the speed the body lost came back");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // An admin moved the body to the Nether, so the owner logs in there, not where their save left them. A player
+    // body, which a teleport keeps the same entity and in the world wherever it goes.
+    @GameTest
+    public void takeoverAcrossDimensions(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Netherward", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leavePlayerBody(helper, player);
+            ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+            helper.assertTrue(nether != null, "no nether to go to");
+            // What a /tp into another dimension runs
+            body.teleportTo(nether, 0.5, 64.0, 0.5, Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(body.level() == nether, "the body did not change dimension");
+            Vec3 at = body.position();
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.level().dimension(), Level.NETHER, "dimension after login");
+            helper.assertTrue(back.position().distanceTo(at) <= 1.0, "position after login " + back.position()
+                    + ", the body's " + at);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Absorption is held to a cap only an effect raises, so the body has Absorption II, a cap of 8, with 4 left. The
+    // effect alone would start the owner at 8.
+    @GameTest
+    public void absorptionCarriesOver(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Absorbed", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.addEffect(new MobEffectInstance(MobEffects.ABSORPTION, 12000, 1));
+            body.setAbsorptionAmount(4.0F);
+            helper.assertValueEqual(body.getAbsorptionAmount(), 4.0F, "body absorption");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.getAbsorptionAmount(), 4.0F, "absorption after login");
         } finally {
             cleanUp(helper, player.getUUID(), before);
         }
