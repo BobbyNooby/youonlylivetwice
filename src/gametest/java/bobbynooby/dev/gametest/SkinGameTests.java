@@ -222,6 +222,52 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // Mojang answers only after the login gave up on it: the player joins with the stale skin saved before for their
+    // name, and the late answer is kept for their next join, on the server thread after this tick
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK, maxTicks = 20)
+    public void lateAnswerIsKeptAfterTheLoginGaveUp(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Late");
+        CompletableFuture<CachedSkin> mojang = MOJANG.hold(name);
+        SkinStore store = SkinStore.get(server);
+        SkinTextures stale = new SkinTextures("stale textures of " + name, "stale signature of " + name);
+        store.putSkin(CachedSkin.found(name, stale, 0L));
+        int ticks = Settings.get().skins.lookupTimeoutSeconds * SharedConstants.TICKS_PER_SECOND;
+        CachedSkin late = CachedSkin.found(name, FakeSkinLookup.idOf(name), FakeSkinLookup.texturesOf(name), System.currentTimeMillis());
+        try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+            for (int tick = 0; tick <= ticks; tick++) {
+                login.tick();
+            }
+            Optional<GameProfile> told = login.finished();
+            helper.assertTrue(told.isPresent(), "the login did not go through after the timeout");
+            assertEqual(helper, textures(told.get()), stale, "textures after the timeout");
+            mojang.complete(late);
+        } finally {
+            MOJANG.forget(name);
+        }
+        helper.succeedWhen(() -> assertEqual(helper, store.skin(name), late, "the answer saved for the name"));
+    }
+
+    // Mojang can't be reached about the player's own name, so they join with the stale skin saved before for it
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void unreachableMojangJoinsWithTheStaleSavedSkin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Down");
+        MOJANG.fail(name);
+        SkinTextures stale = new SkinTextures("stale textures of " + name, "stale signature of " + name);
+        SkinStore.get(server).putSkin(CachedSkin.found(name, stale, 0L));
+        try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+            login.tick();
+            Optional<GameProfile> told = login.finished();
+            helper.assertTrue(told.isPresent(), "the login did not go through");
+            assertEqual(helper, textures(told.get()), stale, "textures once Mojang could not be reached");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked");
+        } finally {
+            MOJANG.forget(name);
+        }
+        helper.succeed();
+    }
+
     @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
     public void modeOffNeverLooksUp(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -296,7 +342,9 @@ public class SkinGameTests {
     @GameTest
     public void nameOnlyHeadUsesCache(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
-        ServerPlayer player = TestPlayers.join(helper, "Head", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        // A name of its own, since the skin saved for it stays in the store
+        ServerPlayer player = TestPlayers.join(helper, new GameProfile(UUID.randomUUID(), uniqueName("Head")), GameType.SURVIVAL,
+                new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
         // Something to carry, so the death leaves a grave
         player.getInventory().add(new ItemStack(Items.DIRT));
@@ -495,6 +543,97 @@ public class SkinGameTests {
             TestPlayers.leave(op);
             MOJANG.forget(first);
             MOJANG.forget(second);
+        }
+        helper.succeed();
+    }
+
+    // Mojang answers a pick only later, off the server thread, so the reply comes once it has
+    @GameTest(maxTicks = 20)
+    public void pickRepliesOnceMojangAnswers(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Wait");
+        String account = uniqueName("Acct");
+        CompletableFuture<CachedSkin> mojang = MOJANG.hold(account);
+        UUID player = TestLogins.offline(name).id();
+        SkinStore store = SkinStore.get(server);
+        List<String> output;
+        try {
+            output = console(server, "yolt skin set " + name + " " + account);
+            helper.assertValueEqual(output, List.of(), "reply before Mojang answered");
+            assertEqual(helper, store.choice(player), null, "the pick before Mojang answered");
+            mojang.complete(CachedSkin.found(account, FakeSkinLookup.idOf(account), FakeSkinLookup.texturesOf(account),
+                    System.currentTimeMillis()));
+        } finally {
+            MOJANG.forget(account);
+        }
+        List<String> reply = output;
+        helper.succeedWhen(() -> {
+            helper.assertValueEqual(reply, List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."),
+                    "reply once Mojang answered");
+            assertEqual(helper, store.choice(player), account, "the pick once Mojang answered");
+            store.clearChoice(player);
+        });
+    }
+
+    // Mojang can't be reached: with no skin saved for the account, nothing changes and the reply says to try later.
+    // With one saved before, stale as it is, the pick is made from it.
+    @GameTest
+    public void unreachableMojangPicksFromTheSkinSavedBefore(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Down");
+        String unsaved = uniqueName("Acct");
+        String saved = uniqueName("Acct");
+        MOJANG.fail(unsaved);
+        MOJANG.fail(saved);
+        UUID player = TestLogins.offline(name).id();
+        SkinStore store = SkinStore.get(server);
+        store.putSkin(CachedSkin.found(saved, FakeSkinLookup.idOf(saved), FakeSkinLookup.texturesOf(saved), 0L));
+        try {
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + unsaved),
+                    List.of("Could not reach Mojang to look up " + unsaved + ", so nothing changed. Try again later."),
+                    "reply with no skin saved");
+            assertEqual(helper, store.choice(player), null, "the pick with no skin saved");
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + saved),
+                    List.of(name + "'s skin is now " + saved + "'s. It shows once they rejoin."), "reply with a skin saved before");
+            assertEqual(helper, store.choice(player), saved, "the pick from the skin saved before");
+            helper.assertValueEqual(MOJANG.timesAsked(saved), 1, "times Mojang was asked about the saved account");
+        } finally {
+            store.clearChoice(player);
+            MOJANG.forget(unsaved);
+            MOJANG.forget(saved);
+        }
+        helper.succeed();
+    }
+
+    // An op types both forms of set: two words pick for that player, and one word is the op's own pick of that account,
+    // even when it is an online player's name
+    @GameTest
+    public void opTypedSetPicksTheRightForm(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        TestPlayers.Recording op = TestPlayers.joinRecording(helper, "FormOp", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer target = TestPlayers.join(helper, "FormTarget", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String targetName = target.nameAndId().name();
+        MOJANG.answer(targetName);
+        SkinStore store = SkinStore.get(server);
+        try {
+            TestPlayers.op(op);
+            type(op, "yolt skin set " + targetName + " " + account);
+            assertEqual(helper, store.choice(target.getUUID()), account, "the pick for the named player");
+            assertEqual(helper, store.choice(op.getUUID()), null, "the op's own pick after picking for another");
+
+            type(op, "yolt skin set " + targetName);
+            assertEqual(helper, store.choice(op.getUUID()), targetName, "the op's own pick of an online player's name");
+            assertEqual(helper, store.choice(target.getUUID()), account, "the named player's pick after the op's own");
+        } finally {
+            store.clearChoice(op.getUUID());
+            store.clearChoice(target.getUUID());
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+            TestPlayers.leave(target);
+            MOJANG.forget(account);
+            MOJANG.forget(targetName);
         }
         helper.succeed();
     }
