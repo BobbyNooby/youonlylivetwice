@@ -17,7 +17,6 @@ import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Optional;
@@ -77,25 +76,35 @@ public final class SkinOwners {
         UserNameToIdResolver names = server.services().nameToIdCache();
         cachedId(names, asked).ifPresent(ids::add);
         cachedId(names, name).ifPresent(ids::add);
-        Path saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
         for (UUID id : ids) {
-            if (!id.equals(by.id()) && (store.joined(id) || Files.exists(saves.resolve(id + ".dat")))) {
+            if (!id.equals(by.id()) && playedHere(server, id)) {
                 return true;
             }
         }
         return false;
     }
 
-    /**
-     * The id vanilla's name cache holds for the name, in any case, read straight from the cache: its own lookup asks
-     * Mojang on a miss, which would hold up the server thread. Empty for a cache of another kind.
-     */
+    /** True when the id is in YOLT's record of joins or has a save in players/data, which only a join writes. */
+    public static boolean playedHere(MinecraftServer server, UUID id) {
+        return SkinStore.get(server).joined(id)
+                || Files.exists(server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(id + ".dat"));
+    }
+
+    /** The id vanilla's name cache holds for the name, in any case. See cached. */
     public static Optional<UUID> cachedId(UserNameToIdResolver names, String name) {
+        return cached(names, name).map(NameAndId::id);
+    }
+
+    /**
+     * The name and id vanilla's name cache holds for the name, in any case, read straight from the cache: its own lookup
+     * asks Mojang on a miss, which would hold up the server thread. Empty for a cache of another kind.
+     */
+    public static Optional<NameAndId> cached(UserNameToIdResolver names, String name) {
         if (!(names instanceof CachedUserNameToIdResolver cache)) {
             return Optional.empty();
         }
         Object entry = ((NameCacheAccessor) cache).yoltProfilesByName().get(name.toLowerCase(Locale.ROOT));
-        return entry == null ? Optional.empty() : Optional.of(((NameCacheEntryAccessor) entry).yoltNameAndId().id());
+        return entry == null ? Optional.empty() : Optional.of(((NameCacheEntryAccessor) entry).yoltNameAndId());
     }
 
     /**
