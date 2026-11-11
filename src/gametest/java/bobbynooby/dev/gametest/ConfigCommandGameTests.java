@@ -106,8 +106,11 @@ public class ConfigCommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         byte[] fileBefore = Files.readAllBytes(Settings.path());
         try {
-            assertRefused(helper, server, fileBefore, "yolt config worldBorder.diameter 0", "worldBorder.diameter: must be 1 to 59999968.");
-            assertRefused(helper, server, fileBefore, "yolt config chat.radius 0", "chat.radius: must be 1 or more.");
+            assertRefused(helper, server, fileBefore, "yolt config worldBorder.diameter 0", "worldBorder.diameter must be 1 to 59999968.");
+            assertRefused(helper, server, fileBefore, "yolt config chat.radius 0", "chat.radius must be 1 or more.");
+            // The End cap's problem has the diameter as its subject, so it reads on its own
+            assertRefused(helper, server, fileBefore, "yolt config worldBorder.endScale 10000",
+                    "worldBorder.diameter times endScale can't pass 59999968.");
             assertRefused(helper, server, fileBefore, "yolt config worldBorder.endScale 1e400",
                     "worldBorder.endScale takes a number, not '1e400'.");
         } finally {
@@ -396,7 +399,7 @@ public class ConfigCommandGameTests {
             Files.writeString(path, "{");
             Files.createDirectories(inTmp);
             List<String> failed = run(server, "yolt config chat.radius 20");
-            helper.assertTrue(failed.size() == 2 && failed.get(0).startsWith("the config file could not be saved (")
+            helper.assertTrue(failed.size() == 2 && failed.get(0).startsWith("The config file could not be saved (")
                     && failed.get(0).endsWith(").") && failed.get(1).equals(kept + "."), "output when the rewrite fails: " + failed);
             helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius after the failed rewrite");
             helper.assertValueEqual(Files.readString(path), "{", "config file after the failed rewrite");

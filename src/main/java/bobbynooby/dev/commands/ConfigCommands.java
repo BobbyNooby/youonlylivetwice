@@ -14,6 +14,8 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
@@ -21,6 +23,8 @@ import static bobbynooby.dev.core.Yolt.LOGGER;
 final class ConfigCommands {
     private static final String BORDER_KEYS = "worldBorder.";
     private static final String CONFIRM = " confirm";
+    private static final Pattern LOG_FORM = Pattern.compile("([\\w.]+): (.+)");
+    private static final Pattern STARTS_WITH_KEY = Pattern.compile("\\w+\\.[\\w.]+ .*");
     private static final String HELD = "The world border is still held as the world saved it, since the config's border couldn't"
             + " be used at startup. Run /yolt reload to apply the file's border, or /yolt border to set one now.";
 
@@ -121,8 +125,18 @@ final class ConfigCommands {
         return 0;
     }
 
-    // A reply ends with a full stop, which the config's range problems don't have
-    private static String sentence(String text) {
+    // The config's own problems are in its log form, "<key>: <problem>". A reply reads "<key> <problem>.", or the problem
+    // alone when another key is its subject, as in the End cap's. A plain word at the start gets a capital; a key keeps its case.
+    private static String sentence(String problem) {
+        String text = problem;
+        Matcher logForm = LOG_FORM.matcher(problem);
+        if (logForm.matches()) {
+            String rest = logForm.group(2);
+            text = STARTS_WITH_KEY.matcher(rest).matches() ? rest : logForm.group(1) + " " + rest;
+        }
+        if (Character.isLowerCase(text.charAt(0)) && !text.split(" ", 2)[0].contains(".")) {
+            text = Character.toUpperCase(text.charAt(0)) + text.substring(1);
+        }
         return text.endsWith(".") ? text : text + ".";
     }
 
