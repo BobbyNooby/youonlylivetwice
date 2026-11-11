@@ -400,7 +400,7 @@ public class VisibilityGameTests {
         helper.succeed();
     }
 
-    // Plan 04's bodies are players outside the player list, and pairing with them runs the same way.
+    // Player bodies are players outside the player list, and pairing with them runs the same way.
     // A player who has left stands in for one, with the pairing calls made directly.
     @GameTest
     public void unlistedPlayerIsDroppedEvenForAdmins(GameTestHelper helper) {
