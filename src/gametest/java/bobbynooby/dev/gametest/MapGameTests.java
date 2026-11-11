@@ -12,6 +12,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.item.ItemStack;
@@ -297,9 +298,11 @@ public class MapGameTests {
     }
 
     static int count(Iterable<MapDecoration> markers, Holder<MapDecorationType> type) {
+        // By key, since checking one holder against another is deprecated
+        ResourceKey<MapDecorationType> key = type.unwrapKey().orElseThrow();
         int count = 0;
         for (MapDecoration marker : markers) {
-            if (marker.type().is(type)) {
+            if (marker.type().is(key)) {
                 count++;
             }
         }
