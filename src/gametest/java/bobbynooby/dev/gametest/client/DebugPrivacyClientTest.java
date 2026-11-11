@@ -50,23 +50,27 @@ public class DebugPrivacyClientTest implements FabricClientGameTest {
                 boolean wasOp = server.computeOnServer(s -> s.getPlayerList().isOp(connection.getServerPlayer().nameAndId()));
                 try {
                     showCompassNorth(ctx, server, connection);
+                    emptyHand(ctx, server, connection);
                     showReducedDebugScreen(ctx);
                     showAdminDebugScreen(ctx, server, connection);
                 } finally {
                     ClientTests.runAll(List.of(
                             // The client keeps the overlay up into the tests after this one otherwise
                             () -> ctx.runOnClient(mc -> mc.debugEntries.setOverlayVisible(false)),
+                            // Toggled, so the client is sent the reduced screen and the north target again
                             () -> server.runOnServer(s -> {
                                 ServerPlayer self = connection.getServerPlayer();
-                                // Toggled, so the client is sent the reduced screen and the north target again
                                 if (self.getAttachedOrElse(AdminView.ATTACHMENT, false)) {
                                     AdminView.toggle(self);
                                 }
-                                // Only undo the op this test gave
+                            }),
+                            // Only undo the op this test gave. A step of its own: ops.json outlives the server, so a
+                            // toggle that throws mustn't leave every later client test running as an op.
+                            () -> {
                                 if (!wasOp) {
-                                    TestPlayers.deop(self);
+                                    server.runOnServer(s -> TestPlayers.deop(connection.getServerPlayer()));
                                 }
-                            })));
+                            }));
                 }
             });
         } finally {
@@ -92,12 +96,21 @@ public class DebugPrivacyClientTest implements FabricClientGameTest {
             checkNorthTarget(ctx, server, connection);
             ClientTests.screenshot(ctx, "07-compass-north");
         } finally {
-            // A new server's ticks run
+            // The F3 shots after this one need running ticks, or their server line would say frozen
             server.runOnServer(s -> s.tickRateManager().setFrozen(false));
         }
-        // Otherwise the debug screen's server line would still say frozen
+        // The client hears of it a moment later
         ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.level.tickRateManager().runsNormally(),
                 mc -> "the client's ticks stayed frozen");
+    }
+
+    // After the unfreeze the needle swings on from where it was, which the F3 shots would show as a compass pointing wrong
+    private static void emptyHand(ClientGameTestContext ctx, TestDedicatedServerContext server,
+                                  TestDedicatedServerConnection connection) {
+        server.runOnServer(s -> connection.getServerPlayer().setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY));
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.getMainHandItem().isEmpty(),
+                mc -> "the client still holds " + mc.player.getMainHandItem());
+        ClientTests.waitUntilHandsUp(ctx);
     }
 
     private static void checkNorthTarget(ClientGameTestContext ctx, TestDedicatedServerContext server,
