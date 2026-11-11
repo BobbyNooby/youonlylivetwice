@@ -59,8 +59,12 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,6 +114,44 @@ public class GraveDeathGameTests {
             helper.assertValueEqual(GraveAsserts.countInGraves(onDisk, Items.DIAMOND), 1, "diamonds in the grave on disk");
         } finally {
             cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // A folder stands where the grave file goes, so the death's save of its grave fails. The storage counts the grave
+    // store as saved anyway, so the store must be marked again: the next save then writes the grave. Without that, a
+    // restart would find the emptied player and no grave. The file is written again in this tick.
+    @GameTest
+    public void graveTheDeathCouldNotWriteIsWrittenByTheNextSave(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        GraveStore store = GraveStore.get(server);
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        ServerPlayer player = join(helper, "Unwritten");
+        String name = player.getGameProfile().name();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            Files.deleteIfExists(file);
+            Files.createDirectories(file);
+            List<String> log = OfflineGameTests.yoltLog(() -> kill(helper, player));
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(log.stream().filter(line -> line.startsWith("Could not write ")).toList(),
+                    List.of("Could not write " + name + "'s grave to disk, it is kept in memory until the next save"),
+                    "the failed write's log lines");
+            helper.assertTrue(store.isDirty(), "the failed write left the grave store marked as saved");
+
+            Files.delete(file);
+            server.getDataStorage().saveAndJoin();
+            List<Grave> onDisk = GraveStoreGameTests.onDisk(server).stream()
+                    .filter(saved -> saved.id().equals(grave.id()))
+                    .toList();
+            helper.assertValueEqual(onDisk.size(), 1, "copies of the grave on disk after the next save");
+            helper.assertValueEqual(GraveAsserts.countInGraves(onDisk, Items.DIAMOND), 2, "diamonds in the grave on disk");
+        } finally {
+            if (Files.isDirectory(file)) {
+                Files.delete(file);
+            }
+            cleanUp(helper, player);
+            store.saveNow(server);
         }
         helper.succeed();
     }

@@ -124,7 +124,19 @@ public final class GraveStore extends SavedData {
      */
     public void saveNow(MinecraftServer server) {
         setDirty();
-        server.getDataStorage().saveAndJoin();
+        try {
+            server.getDataStorage().saveAndJoin();
+            checkOnDisk(server);
+        } catch (RuntimeException e) {
+            // The storage counts the store as saved before it writes, so it is marked again for the next save to
+            // write. Only on a failure: a good save leaves it clean, since encoding every grave again takes time.
+            setDirty();
+            throw e;
+        }
+    }
+
+    // Throws unless the grave file holds exactly this store
+    private void checkOnDisk(MinecraftServer server) {
         Path file = file(server);
         Tag expected = CODEC.encodeStart(server.registryAccess().createSerializationContext(NbtOps.INSTANCE), this).getOrThrow();
         try {
