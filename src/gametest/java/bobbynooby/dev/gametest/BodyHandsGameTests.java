@@ -137,6 +137,10 @@ public class BodyHandsGameTests {
                     int wear = body.getOffhandItem().getDamageValue();
                     helper.assertTrue(wear > shield.getDamageValue(), "the shield took no wear from the hit");
                     helper.assertTrue(ItemStack.matches(body.getMainHandItem(), sword), "the hit changed the body's sword");
+                    // Only the wear may come back, so anything else changed on the body's copies must stay there
+                    body.getOffhandItem().set(DataComponents.CUSTOM_NAME, Component.literal("Dented"));
+                    body.getMainHandItem().remove(DataComponents.ENCHANTMENTS);
+                    helper.assertFalse(body.getMainHandItem().isEnchanted(), "the body's sword is still enchanted");
 
                     ServerPlayer back = rejoin(helper, player);
                     ItemStack worn = shield.copy();
