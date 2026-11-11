@@ -29,7 +29,7 @@ public final class BodyLogout {
     public static Optional<Entity> onLogout(ServerPlayer player) {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
-        if (!Settings.on(c -> c.bodies.enabled) || player.isDeadOrDying()
+        if (!Settings.active() || !cfg.enabled || player.isDeadOrDying()
                 || DeathLockout.refusal(player.getUUID(), player.nameAndId().name()) != null) {
             return Optional.empty();
         }

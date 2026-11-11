@@ -61,6 +61,11 @@ public final class BodyRules {
         };
     }
 
+    /** True unless damageTaken cut the hit to nothing, as on Peaceful: then, as for a player, it doesn't land. */
+    public static boolean hitLands(float damage, float taken) {
+        return !(taken == 0.0F && damage > 0.0F);
+    }
+
     /** True when the entity carries our tag and a record still points at it. */
     public static boolean isBody(Entity entity) {
         return entity.entityTags().contains(Bodies.TAG) && entity.level() instanceof ServerLevel level

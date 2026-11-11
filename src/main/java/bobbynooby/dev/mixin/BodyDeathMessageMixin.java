@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.core.StandIn;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.minecraft.server.level.ServerPlayer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,6 +13,6 @@ public abstract class BodyDeathMessageMixin {
     @ModifyExpressionValue(method = "die", at = @At(value = "INVOKE", ordinal = 0,
             target = "Lnet/minecraft/world/level/gamerules/GameRules;get(Lnet/minecraft/world/level/gamerules/GameRule;)Ljava/lang/Object;"))
     private Object noDeathMessageForBody(Object showDeathMessages) {
-        return (Object) this instanceof PlayerBody ? Boolean.FALSE : showDeathMessages;
+        return StandIn.is((ServerPlayer) (Object) this) ? Boolean.FALSE : showDeathMessages;
     }
 }

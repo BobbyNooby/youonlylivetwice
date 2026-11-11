@@ -15,8 +15,7 @@ public abstract class BodyDifficultyDamageMixin {
     @WrapMethod(method = "hurtServer")
     private boolean scaleBodyDamage(ServerLevel level, DamageSource source, float damage, Operation<Boolean> original) {
         float taken = BodyRules.damageTaken((LivingEntity) (Object) this, level, source, damage);
-        // As for a player: a hit scaled down to nothing, as on Peaceful, doesn't land at all
-        if (taken == 0.0F && damage > 0.0F) {
+        if (!BodyRules.hitLands(damage, taken)) {
             return false;
         }
         return original.call(level, source, taken);

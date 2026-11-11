@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.core.StandIn;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class BodyPickupMixin {
     @Inject(method = "touch", at = @At("HEAD"), cancellable = true)
     private void noPickupForBody(Entity entity, CallbackInfo ci) {
-        if ((Object) this instanceof PlayerBody) {
+        if (StandIn.is((Player) (Object) this)) {
             ci.cancel();
         }
     }
