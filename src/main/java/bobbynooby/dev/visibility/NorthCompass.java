@@ -1,9 +1,8 @@
-package bobbynooby.dev.world;
+package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
-import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;

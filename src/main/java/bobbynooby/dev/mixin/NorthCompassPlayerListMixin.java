@@ -1,6 +1,6 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.world.NorthCompass;
+import bobbynooby.dev.visibility.NorthCompass;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerLevel;

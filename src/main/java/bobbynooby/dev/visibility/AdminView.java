@@ -1,7 +1,6 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.core.Yolt;
-import bobbynooby.dev.world.NorthCompass;
 import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;

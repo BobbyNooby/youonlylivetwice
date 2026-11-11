@@ -3,6 +3,7 @@ package bobbynooby.dev.world;
 import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
+import bobbynooby.dev.visibility.NorthCompass;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import bobbynooby.dev.visibility.TabHeaders;
 import net.minecraft.server.MinecraftServer;
