@@ -23,6 +23,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Util;
@@ -195,9 +196,10 @@ public class ReviveGameTests {
     }
 
     // The owner is online and alive, with an older death the console ended: their own head does nothing, stays in the
-    // hand, and leaves that death as it was
+    // hand, and leaves that death as it was. Once they are out and locked out again, the same head revives them.
     @GameTest
     public void reviveHeadOnOnlineOwnerKeepsHead(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer owner = TestPlayers.join(helper, "Online", GameType.SURVIVAL, new BlockPos(3, 1, 3));
         TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Hopeful", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         UUID id = owner.getUUID();
@@ -211,10 +213,21 @@ public class ReviveGameTests {
             helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.NOT_DEAD, "outcome");
             helper.assertValueEqual(head.getCount(), 1, "heads left");
             helper.assertValueEqual(said(user, from), List.of(name + " is not dead."), "reply");
-            helper.assertTrue(helper.getLevel().getServer().getPlayerList().getPlayer(id) == owner, "the owner is no longer online");
+            helper.assertTrue(server.getPlayerList().getPlayer(id) == owner, "the owner is no longer online");
             helper.assertValueEqual(DeathLockout.newestDeath(id).revivedBy(), "console", "who revived the owner's death");
-        } finally {
+
+            // The control: the head itself works on this owner
             TestPlayers.leave(owner);
+            DeathLockout.recordDeath(id, name);
+            int mark = user.messages.size();
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.REVIVED, "outcome with the owner out and locked out");
+            helper.assertValueEqual(head.getCount(), 0, "heads left after the revive");
+            helper.assertValueEqual(said(user, mark), List.of(name + " can come back now."), "reply to the revive");
+            helper.assertValueEqual(DeathLockout.newestDeath(id).revivedBy(), user.getGameProfile().name(), "who revived the owner's new death");
+        } finally {
+            if (server.getPlayerList().getPlayer(id) == owner) {
+                TestPlayers.leave(owner);
+            }
             TestPlayers.leave(user);
         }
         helper.succeed();
