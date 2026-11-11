@@ -70,8 +70,9 @@ final class ConfigCommands {
         // Set by the check, which runs once the value has passed the config's own checks and before anything is saved
         BorderCommands.Outside[] outside = {BorderCommands.Outside.NONE};
         ConfigLoader.Change change = Settings.set(key, text, next -> {
-            // A held border isn't applied, and a reload or border command checks it before it is
-            if (!border || Settings.borderHeld()) {
+            // A held border isn't applied, and a reload or border command checks it before it is. A value already live,
+            // only missing from the file, moves no border.
+            if (!border || Settings.borderHeld() || key.show(next).equals(key.show(Settings.get()))) {
                 return null;
             }
             outside[0] = BorderCommands.stranded(server, next.worldBorder);
@@ -82,6 +83,13 @@ final class ConfigCommands {
         }
         if (change.config() == null) {
             return YoltCommands.done(source, name + " is already " + change.newValue() + ".");
+        }
+        // The live config had it already and only the file was behind, so there is nothing to apply
+        if (change.oldValue().equals(change.newValue())) {
+            LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
+            YoltCommands.reply(source, name + " is already " + change.newValue() + ", and the config file now says so too.");
+            tellBackup(source, change);
+            return 1;
         }
 
         // Only a border key moves the border. Applying it for any other key could put back a border a reload refused.

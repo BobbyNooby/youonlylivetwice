@@ -187,6 +187,44 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // The file says otherwise for each key, edited but not reloaded. Each command still writes the value the live config
+    // already has, or the next reload would bring the file's value back after a reply that said it was set.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void liveValueIsWrittenWhenTheFileHasAnother(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        String borderOff = " The world border feature is off, so YOLT sizes no border.";
+        try {
+            YoltConfig live = Settings.get();
+            helper.assertTrue(live.chat.radius == 48 && live.worldBorder.diameter == 10000 && live.worldBorder.endScale == 2.0
+                    && live.deathLockout.cooldownDays == 7, "the test server's live values");
+            JsonObject edited = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
+            edited.getAsJsonObject("chat").addProperty("radius", 20);
+            edited.getAsJsonObject("worldBorder").addProperty("diameter", 20000);
+            edited.getAsJsonObject("worldBorder").addProperty("endScale", 3.0);
+            edited.getAsJsonObject("deathLockout").addProperty("cooldownDays", 3);
+            Files.writeString(path, edited.toString());
+
+            helper.assertValueEqual(run(server, "yolt config chat.radius 48"),
+                    List.of("chat.radius is already 48, and the config file now says so too."), "/yolt config output");
+            helper.assertValueEqual(fileValue("chat.radius").getAsInt(), 48, "chat.radius in the file");
+            helper.assertValueEqual(run(server, "yolt border 10000"), List.of("World border diameter set to 10000." + borderOff),
+                    "/yolt border output");
+            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 10000, "diameter in the file");
+            helper.assertValueEqual(run(server, "yolt endscaling 2.0"), List.of("End world border scaling factor set to 2.0." + borderOff),
+                    "/yolt endscaling output");
+            helper.assertValueEqual(fileValue("worldBorder.endScale").getAsDouble(), 2.0, "endScale in the file");
+            helper.assertValueEqual(run(server, "yolt respawncooldown 7"),
+                    List.of("Respawn cooldown set to 7 days. It applies to deaths from now on; use /yolt unkill for the rest."),
+                    "/yolt respawncooldown output");
+            helper.assertValueEqual(fileValue("deathLockout.cooldownDays").getAsInt(), 7, "cooldownDays in the file");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
     // /yolt border writes only its own key, so an edit to the file that wasn't reloaded yet stays in the file and stays
     // out of the live config
     @GameTest(environment = CommandGameTests.CONFIG_COMMAND)

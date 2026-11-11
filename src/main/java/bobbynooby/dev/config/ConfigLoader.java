@@ -183,7 +183,11 @@ public final class ConfigLoader {
         return parsed.getAsJsonObject();
     }
 
-    /** Settings.set without swapping the live config: reads the text, then sets the key unless it has that value already. */
+    /**
+     * Settings.set without swapping the live config: reads the text, then sets the key unless both the live config and
+     * the file have that value already. When only the file differs, the key is still written, so the next load doesn't
+     * bring the file's value back; oldValue and newValue are then the same.
+     */
     static Change setText(Path file, YoltConfig live, ConfigKey key, String text) {
         return setText(file, live, key, text, next -> null);
     }
@@ -197,10 +201,22 @@ public final class ConfigLoader {
         } catch (ConfigKey.BadValue e) {
             return new Change(null, current, text, e.getMessage(), null);
         }
-        if (key.json(live).equals(value)) {
+        if (key.json(live).equals(value) && value.equals(fileValue(file, key.path()))) {
             return new Change(null, current, current, null, null);
         }
         return setKey(file, live, key, value, veto);
+    }
+
+    // The key's value in the file's own JSON, or null when the file doesn't have it or can't be read
+    private static @Nullable JsonElement fileValue(Path file, String path) {
+        JsonElement value = ownJson(file);
+        for (String part : path.split("\\.")) {
+            if (value == null || !value.isJsonObject()) {
+                return null;
+            }
+            value = value.getAsJsonObject().get(part);
+        }
+        return value;
     }
 
     /**

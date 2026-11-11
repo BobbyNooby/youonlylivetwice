@@ -565,20 +565,22 @@ class ConfigLoaderTest {
         assertArrayEquals(before, Files.readAllBytes(file));
     }
 
-    // What Settings.set does before it swaps the live config
+    // What Settings.set does before it swaps the live config. The file holds 2 for endScale, which is the live 2.0.
     @Test
     void setTextRefusesBadTextAndSkipsTheSameValue() throws IOException {
         Path file = dir.resolve("config.json");
-        byte[] before = "{\"chat\": {\"radius\": 20}}".getBytes(StandardCharsets.UTF_8);
+        byte[] before = "{\"chat\": {\"radius\": 20, \"mode\": \"proximity\"}, \"worldBorder\": {\"endScale\": 2}}"
+                .getBytes(StandardCharsets.UTF_8);
         Files.write(file, before);
         YoltConfig live = new YoltConfig();
 
         ConfigLoader.Change bad = ConfigLoader.setText(file, live, key("chat.radius"), "abc");
         assertEquals(new ConfigLoader.Change(null, "48", "abc", "chat.radius takes a whole number, not 'abc'.", null), bad);
-        // 48 is the live value, whatever the file says, so nothing is written
-        assertEquals(new ConfigLoader.Change(null, "48", "48", null, null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
+        // The live config and the file both have these already, so nothing is written
         assertEquals(new ConfigLoader.Change(null, "2.0", "2.0", null, null),
                 ConfigLoader.setText(file, live, key("worldBorder.endScale"), "2"));
+        assertEquals(new ConfigLoader.Change(null, "proximity", "proximity", null, null),
+                ConfigLoader.setText(file, live, key("chat.mode"), "proximity"));
         assertArrayEquals(before, Files.readAllBytes(file));
 
         ConfigLoader.Change set = ConfigLoader.setText(file, live, key("chat.mode"), "global");
@@ -588,6 +590,39 @@ class ConfigLoaderTest {
         assertEquals(YoltConfig.ChatMode.GLOBAL, set.config().chat.mode);
         assertEquals("global", readJson(file).getAsJsonObject("chat").get("mode").getAsString());
         assertEquals(20, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
+    }
+
+    // The live config has 48 already, but the file says 20, which the next load would bring back. So 48 is written, and
+    // only once both agree is the same value skipped.
+    @Test
+    void setTextWritesTheLiveValueWhenTheFileHasAnother() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"chat\": {\"radius\": 20}, \"fromTheFuture\": 1}");
+        YoltConfig live = new YoltConfig();
+
+        ConfigLoader.Change written = ConfigLoader.setText(file, live, key("chat.radius"), "48");
+        assertNull(written.problem());
+        assertNotNull(written.config());
+        assertEquals("48", written.oldValue());
+        assertEquals("48", written.newValue());
+        assertEquals(48, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
+        assertEquals(1, readJson(file).get("fromTheFuture").getAsInt());
+
+        byte[] after = Files.readAllBytes(file);
+        assertEquals(new ConfigLoader.Change(null, "48", "48", null, null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
+        assertArrayEquals(after, Files.readAllBytes(file));
+
+        // A key the file leaves out is written too
+        ConfigLoader.Change missing = ConfigLoader.setText(file, live, key("chat.allowWhispers"), "false");
+        assertNotNull(missing.config());
+        assertFalse(readJson(file).getAsJsonObject("chat").get("allowWhispers").getAsBoolean());
+
+        // The other way round: the file's 20 isn't live yet, so setting 20 changes the live config
+        Files.writeString(file, "{\"chat\": {\"radius\": 20}}");
+        ConfigLoader.Change toFileValue = ConfigLoader.setText(file, live, key("chat.radius"), "20");
+        assertEquals(20, toFileValue.config().chat.radius);
+        assertEquals("48", toFileValue.oldValue());
+        assertEquals("20", toFileValue.newValue());
     }
 
     // A command's own check, such as who a border would leave outside, sees the new config and can refuse it before the
