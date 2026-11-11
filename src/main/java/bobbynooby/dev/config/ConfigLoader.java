@@ -123,15 +123,11 @@ public final class ConfigLoader {
         int warningsBeforeMerge = warnings.size();
         JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused);
 
-        YoltConfig config;
-        String borderProblem = null;
-        try {
-            config = GSON.fromJson(merged, YoltConfig.class);
-        } catch (JsonParseException e) {
-            // merge already checked the types, so this should not happen
-            borderProblem = "config could not be read (" + e.getMessage() + ")";
+        Read read = read(merged);
+        YoltConfig config = read.config();
+        String borderProblem = read.problem();
+        if (borderProblem != null) {
             warnings.add(borderProblem + ", using defaults");
-            config = new YoltConfig();
         }
         refused.addAll(ConfigChecks.validate(config, fallback, warnings, fallbackName));
         if (borderProblem == null) {
@@ -153,6 +149,18 @@ public final class ConfigLoader {
         }
         write(file, config);
         return new Result(config, warnings, false, borderProblem, true, backup);
+    }
+
+    /** The merged tree as a config, and why it couldn't be read, or null when it could. */
+    record Read(YoltConfig config, @Nullable String problem) {}
+
+    // merge already checked the types, so this should not fail
+    static Read read(JsonObject merged) {
+        try {
+            return new Read(GSON.fromJson(merged, YoltConfig.class), null);
+        } catch (JsonParseException e) {
+            return new Read(new YoltConfig(), "config could not be read (" + e.getMessage() + ")");
+        }
     }
 
     // Null when every worldBorder value is the file's own. A top-level "worldborder" counts too: it is most likely the
