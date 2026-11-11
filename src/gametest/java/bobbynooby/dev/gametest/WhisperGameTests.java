@@ -378,6 +378,44 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // With a player online a few blocks away, tab-complete after /w offers no names, for a bare /w or the start of that
+    // player's name. The server's own /w, which ops use, offers none either.
+    @GameTest
+    public void whisperTabCompleteOffersNoNames(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        boolean skinChoiceBefore = config.skins.allowPlayerChoice;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.skins.allowPlayerChoice = false;
+            ServerPlayer nonOp = joinRecording(helper, joined, "wtab", BlockPos.ZERO);
+            ServerPlayer near = joinRecording(helper, joined, "wtabnear", new BlockPos(2, 0, 0));
+            op = joinRecording(helper, joined, "wtabop", new BlockPos(1, 0, 0));
+            TestPlayers.op(op);
+            String name = near.getGameProfile().name();
+
+            // So the answers below come from a tree that has /w in it
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "w"), "a non-op's commands");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/w "), List.of(), "a non-op's suggestions for /w");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/w " + name.substring(0, 4)), List.of(),
+                    "a non-op's suggestions for the start of a name");
+            helper.assertValueEqual(suggestions(helper, op, "/w "), List.of(), "an op's suggestions for /w");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.skins.allowPlayerChoice = skinChoiceBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     private static List<String> childNames(RootCommandNode<CommandSourceStack> root) {
         List<String> names = new ArrayList<>();
         for (CommandNode<CommandSourceStack> child : root.getChildren()) {
