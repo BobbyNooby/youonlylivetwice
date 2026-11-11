@@ -199,6 +199,34 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // A block in the End's top layer over the void, far out, in a chunk loaded for this test alone and dug out wherever
+    // the searches read. No head fits on the block and nothing near holds items, so the grave goes beside the exit
+    // portal as for a death over the void, not under the block by the last resort.
+    @GameTest
+    public void topLayerBlockOverEndVoidGraveBesideExitPortal(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(-312, 312);
+        BlockPos block = new BlockPos(chunk.getMiddleBlockX(), end.getMaxY(), chunk.getMiddleBlockZ());
+        BlockPos podium = EnderDragonFight.getPodiumLocation(BlockPos.ZERO);
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        List<Grave> made = new ArrayList<>();
+        try {
+            emptyLoneChunk(helper, end, chunk, before, 1);
+            setRemembered(end, block, Blocks.OBSIDIAN, before);
+            // Standing on the block, so the death is above the build height
+            withoutLastResort(helper, () -> made.add(graveFor(end, block.above())));
+            Grave grave = made.getFirst();
+            long fromPodium = flatDistanceSqr(grave.pos(), podium);
+            helper.assertTrue(fromPodium >= 13, "grave inside the exit portal's ring at " + grave.pos());
+            helper.assertTrue(fromPodium <= 49, "grave not beside the exit portal: " + grave.pos());
+            assertOnSolid(helper, end, grave.pos());
+        } finally {
+            made.forEach(grave -> removeGrave(end, grave));
+            putBack(end, before);
+        }
+        helper.succeed();
+    }
+
     // The same in the Nether, with the fallback column at 0, 0 filled up to a bedrock roof, so it has no room under the
     // roof. The columns beside it have, so the grave goes there and not up on the roof.
     @GameTest
@@ -802,9 +830,15 @@ public class VoidGraveGameTests {
         });
     }
 
-    // A chunk far from every test, loaded on its own, with every column the void search could read in it dug out: those
-    // whose search reaches no further than the chunk itself
+    // A chunk far from every test, loaded on its own, with every column a search could read in it dug out: those whose
+    // search reaches no further than the chunk itself. That is 4 in from the edges for the void search, which reads
+    // the rings round a column, and 1 in for the wide search, which only reads the blocks beside each spot.
     private static void emptyLoneChunk(GameTestHelper helper, ServerLevel level, ChunkPos chunk, Map<BlockPos, BlockState> before) {
+        emptyLoneChunk(helper, level, chunk, before, 4);
+    }
+
+    private static void emptyLoneChunk(GameTestHelper helper, ServerLevel level, ChunkPos chunk, Map<BlockPos, BlockState> before,
+                                       int margin) {
         level.getChunk(chunk.x(), chunk.z());
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -814,8 +848,8 @@ public class VoidGraveGameTests {
                 }
             }
         }
-        for (int x = 4; x <= 11; x++) {
-            for (int z = 4; z <= 11; z++) {
+        for (int x = margin; x <= 15 - margin; x++) {
+            for (int z = margin; z <= 15 - margin; z++) {
                 BlockPos column = chunk.getBlockAt(x, 0, z);
                 dig(level, column.atY(level.getHeight(Heightmap.Types.MOTION_BLOCKING, column.getX(), column.getZ())), before);
             }
