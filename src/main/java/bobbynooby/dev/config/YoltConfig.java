@@ -66,6 +66,8 @@ public class YoltConfig {
         public ChatMode mode = ChatMode.PROXIMITY;
         public int radius = 48;
         public boolean allowWhispers = false;
+        // How close, in blocks, a whisper's target must be; 0 uses radius. Global chat has no range for either.
+        public int whisperRadius = 0;
     }
 
     public static class HideSection {

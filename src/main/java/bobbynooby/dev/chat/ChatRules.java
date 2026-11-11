@@ -33,6 +33,11 @@ public final class ChatRules {
         return mode == YoltConfig.ChatMode.GLOBAL || inRange(sender, target, radius);
     }
 
+    /** How close a whisper's target must be: the whisper radius, or the chat radius when that is 0. */
+    public static int whisperRange(int chatRadius, int whisperRadius) {
+        return whisperRadius > 0 ? whisperRadius : chatRadius;
+    }
+
     private static boolean inRange(Listener a, Listener b, int radius) {
         if (!a.dimension().equals(b.dimension())) return false;
         double dx = a.x() - b.x(), dy = a.y() - b.y(), dz = a.z() - b.z();

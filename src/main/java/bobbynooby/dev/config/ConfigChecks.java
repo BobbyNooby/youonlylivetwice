@@ -58,6 +58,10 @@ final class ConfigChecks {
             c.chat.radius = fallback.chat.radius;
             fellBack.accept("chat.radius", "must be 1 or more");
         }
+        if (c.chat.whisperRadius < 0) {
+            c.chat.whisperRadius = fallback.chat.whisperRadius;
+            fellBack.accept("chat.whisperRadius", "must be 0 or more");
+        }
         if (c.graves.enderChestOnDeath == null) {
             c.graves.enderChestOnDeath = fallback.graves.enderChestOnDeath;
             fellBack.accept("graves.enderChestOnDeath", "unknown value");

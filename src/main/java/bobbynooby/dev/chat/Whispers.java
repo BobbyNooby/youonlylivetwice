@@ -77,7 +77,7 @@ public final class Whispers {
         ServerPlayer target = sender.level().getServer().getPlayerList().getPlayerByName(targetName);
         YoltConfig.ChatSection chat = Settings.get().chat;
         if (target != null && ChatRules.whisperArrives(ChatDelivery.listener(sender), ChatDelivery.listener(target),
-                chat.mode, chat.radius)) {
+                chat.mode, ChatRules.whisperRange(chat.radius, chat.whisperRadius))) {
             target.sendSystemMessage(whisper(senderName + " whispers to you: " + message));
         }
     }

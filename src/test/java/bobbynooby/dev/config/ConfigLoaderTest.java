@@ -159,6 +159,15 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void negativeWhisperRadiusFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":{\"whisperRadius\":-1}}");
+        assertEquals(0, r.config().chat.whisperRadius);
+        assertTrue(r.warnings().contains("chat.whisperRadius: must be 0 or more, using default"), r.warnings().toString());
+        assertEquals(0, loadJson("{\"chat\":{\"whisperRadius\":0}}").config().chat.whisperRadius);
+        assertEquals(10, loadJson("{\"chat\":{\"whisperRadius\":10}}").config().chat.whisperRadius);
+    }
+
+    @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");
         JsonObject written = JsonParser.parseString(Files.readString(dir.resolve("config.json"))).getAsJsonObject();

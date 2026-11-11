@@ -165,6 +165,45 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // chat.whisperRadius 10 keeps a whisper from a player 20 blocks off, well inside the chat radius; at 0 the chat
+    // radius counts again and it arrives
+    @GameTest
+    public void whisperRadiusShortensTheRange(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        int whisperRadiusBefore = config.chat.whisperRadius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.chat.radius = 48;
+            config.chat.whisperRadius = 10;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wshort", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wshortto", BlockPos.ZERO);
+            target.teleportTo(sender.getX() + 20, sender.getY(), sender.getZ());
+            String targetName = target.nameAndId().name();
+            sender.messages.clear();
+            target.messages.clear();
+
+            run(sender, "w " + targetName + " hi");
+            helper.assertValueEqual(texts(target), List.of(), "target messages with whisperRadius 10");
+
+            config.chat.whisperRadius = 0;
+            run(sender, "w " + targetName + " hi");
+            helper.assertValueEqual(texts(target), List.of(sender.nameAndId().name() + " whispers to you: hi"),
+                    "target messages with whisperRadius 0");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            config.chat.whisperRadius = whisperRadiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     // With restrictCommands off a non-op gets the full tree, so /w itself has to refuse
     @GameTest
     public void whisperRefusedWhenOffWithoutRestriction(GameTestHelper helper) {

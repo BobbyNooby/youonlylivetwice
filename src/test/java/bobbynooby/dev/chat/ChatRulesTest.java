@@ -98,6 +98,18 @@ class ChatRulesTest {
         assertFalse(ChatRules.whisperArrives(sender, at(NETHER, 20, false), ChatMode.PROXIMITY, 48));
     }
 
+    // A whisper radius of its own wins over the chat radius, and 0 leaves the chat radius in charge
+    @Test
+    void whisperRadiusOverridesChatRadius() {
+        assertEquals(10, ChatRules.whisperRange(48, 10));
+        assertEquals(48, ChatRules.whisperRange(48, 0));
+        assertEquals(60, ChatRules.whisperRange(48, 60));
+        Listener sender = at(OVERWORLD, 0, false);
+        Listener twenty = at(OVERWORLD, 20, false);
+        assertFalse(ChatRules.whisperArrives(sender, twenty, ChatMode.PROXIMITY, ChatRules.whisperRange(48, 10)));
+        assertTrue(ChatRules.whisperArrives(sender, twenty, ChatMode.PROXIMITY, ChatRules.whisperRange(48, 0)));
+    }
+
     @Test
     void globalWhisperHasNoRange() {
         Listener sender = at(OVERWORLD, 0, false);
