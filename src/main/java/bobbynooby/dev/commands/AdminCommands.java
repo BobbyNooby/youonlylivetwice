@@ -73,7 +73,8 @@ final class AdminCommands {
                 // The world's borders stay exactly as they are, and the live values as they were
                 Settings.get().worldBorder = liveBorder;
                 applyBorder = false;
-                // A restart checks the same border again, so it is no way round this
+                // A restart checks it again for the world spawn, the End platform, bodies and graves, but not for players,
+                // who are all offline then: a border kept only for online players is applied at the next restart
                 warnings.add("World border kept as it was, since the config's border would leave " + BorderCommands.listed(outside.names())
                         + " outside it. Use /yolt border or endscaling with confirm to apply it now, or change the file, then run"
                         + " /yolt reload.");
