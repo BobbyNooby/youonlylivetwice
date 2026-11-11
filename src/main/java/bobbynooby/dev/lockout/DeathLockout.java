@@ -120,7 +120,7 @@ public final class DeathLockout {
 
     private static @Nullable LockedOut lockedOut(UUID uuid, String name) {
         DeathStore open = store;
-        if (open == null || !Settings.get().deathLockout.enabled) {
+        if (open == null || !enabled()) {
             return null;
         }
         Optional<DeathLog> log;
