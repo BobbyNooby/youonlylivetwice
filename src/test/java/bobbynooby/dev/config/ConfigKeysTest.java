@@ -186,4 +186,10 @@ class ConfigKeysTest {
         assertEquals("The config file could not be saved (a.tmp: Is a directory).",
                 ConfigKeys.asReply("the config file could not be saved (a.tmp: Is a directory)"));
     }
+
+    // No problem text is empty today, but the method is public
+    @Test
+    void emptyProblemStaysEmpty() {
+        assertEquals("", ConfigKeys.asReply(""));
+    }
 }

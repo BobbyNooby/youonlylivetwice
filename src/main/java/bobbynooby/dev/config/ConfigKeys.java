@@ -38,9 +38,12 @@ public final class ConfigKeys {
     /**
      * A problem from the config, in its log form "<key>: <problem>", written as a reply: "<key> <problem>.", or the
      * problem alone when another key is its subject, as in the End cap's. A plain word at the start gets a capital, and a
-     * key's name keeps its case. Keys are told by their names, since some have no dot.
+     * key's name keeps its case. Keys are told by their names, since some have no dot. An empty problem stays empty.
      */
     public static String asReply(String problem) {
+        if (problem.isEmpty()) {
+            return problem;
+        }
         String text = problem;
         Matcher logForm = LOG_FORM.matcher(problem);
         if (logForm.matches()) {
