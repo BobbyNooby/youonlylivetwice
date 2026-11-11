@@ -68,6 +68,9 @@
 			"bobbynooby.dev.gametest.client.VisibilityClientTest"
 		]
 	},
+	"mixins": [
+		"you-only-live-twice-gametest.mixins.json"
+	],
 	"depends": {
 		"you-only-live-twice": "*",
 		"fabric-gametest-api-v1": "*"

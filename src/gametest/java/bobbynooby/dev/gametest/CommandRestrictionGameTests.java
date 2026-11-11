@@ -4,6 +4,7 @@ import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.gametest.mixin.ServerGamePacketListenerInvoker;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -30,7 +31,6 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec2;
@@ -40,7 +40,6 @@ import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -199,7 +198,7 @@ public class CommandRestrictionGameTests {
     // /msg with a signature error. Read against the restricted player's own tree it fails at once, with nothing to sign.
     // The test server is offline, so the signature check itself can't run here.
     @GameTest
-    public void restrictedParseFailsAtFirstWord(GameTestHelper helper) throws ReflectiveOperationException {
+    public void restrictedParseFailsAtFirstWord(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Parse", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         boolean before = Settings.get().restrictCommands;
         try {
@@ -365,11 +364,8 @@ public class CommandRestrictionGameTests {
     }
 
     // The private step every typed command goes through, before vanilla checks its signatures
-    @SuppressWarnings("unchecked")
-    private static ParseResults<CommandSourceStack> parseCommand(ServerPlayer player, String command) throws ReflectiveOperationException {
-        Method parse = ServerGamePacketListenerImpl.class.getDeclaredMethod("parseCommand", String.class);
-        parse.setAccessible(true);
-        return (ParseResults<CommandSourceStack>) parse.invoke(player.connection, command);
+    private static ParseResults<CommandSourceStack> parseCommand(ServerPlayer player, String command) {
+        return ((ServerGamePacketListenerInvoker) player.connection).yoltParseCommand(command);
     }
 
     private static void run(ServerPlayer player, String command) {

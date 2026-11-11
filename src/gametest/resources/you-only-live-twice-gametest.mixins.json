@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "bobbynooby.dev.gametest.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "ServerGamePacketListenerInvoker"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
