@@ -639,4 +639,41 @@ class ConfigLoaderTest {
         assertEquals("{", Files.readString(setCopies.get(0)));
         assertArrayEquals(first, Files.readAllBytes(bak));
     }
+
+    // /yolt reload's held-border reply says where the typo is: still in a newer file, or written over with the copy the
+    // startup kept
+    @Test
+    void resultSaysWhetherTheFileWasRewrittenAndWhereItsCopyIs() throws IOException {
+        Path file = dir.resolve("config.json");
+        String typo = "{\"worldBorder\": {\"diameter\": \"2OOOO\"}}";
+        Files.writeString(file, typo);
+        ConfigLoader.Result startup = ConfigLoader.load(file, null, true);
+        assertTrue(startup.rewritten());
+        assertEquals("config.json.bak", startup.backup());
+
+        Files.writeString(file, typo);
+        ConfigLoader.Result reload = ConfigLoader.load(file, startup.config(), false);
+        assertTrue(reload.rewritten());
+        assertNull(reload.backup());
+
+        String newer = "{\"configVersion\": " + (ConfigLoader.CURRENT_VERSION + 1) + ", \"worldBorder\": {\"diameter\": \"2OOOO\"}}";
+        Files.writeString(file, newer);
+        ConfigLoader.Result newerStartup = ConfigLoader.load(file, null, true);
+        assertNotNull(newerStartup.borderProblem());
+        assertFalse(newerStartup.rewritten());
+        assertNull(newerStartup.backup());
+        assertFalse(ConfigLoader.load(file, newerStartup.config(), false).rewritten());
+        assertEquals(newer, Files.readString(file));
+
+        Files.writeString(file, "{not json");
+        ConfigLoader.Result broken = ConfigLoader.load(file, null, true);
+        assertTrue(broken.rewritten());
+        assertNotNull(broken.backup());
+        assertEquals("{not json", Files.readString(dir.resolve(broken.backup())));
+        Files.writeString(file, "{not json");
+        assertFalse(ConfigLoader.load(file, broken.config(), false).rewritten());
+        Files.delete(file);
+        assertFalse(ConfigLoader.load(file, broken.config(), false).rewritten());
+        assertTrue(ConfigLoader.load(file, null, true).rewritten());
+    }
 }

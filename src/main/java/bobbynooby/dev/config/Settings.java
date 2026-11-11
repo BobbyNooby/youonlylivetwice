@@ -3,6 +3,7 @@ package bobbynooby.dev.config;
 import bobbynooby.dev.core.Yolt;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.function.Predicate;
@@ -15,6 +16,7 @@ public final class Settings {
     // Set when the startup's border values fell back to defaults, which could strand players: the world then keeps the
     // border it saved until a reload or a border command applies one checked for who it leaves outside
     private static volatile boolean borderHeld;
+    private static volatile @Nullable String startupBackup;
 
     private Settings() {}
 
@@ -33,6 +35,7 @@ public final class Settings {
             Yolt.LOGGER.warn("Config: {}", warning);
         }
         borderHeld = result.borderProblem() != null;
+        startupBackup = result.backup();
         if (borderHeld) {
             Yolt.LOGGER.warn("Config: {}, so YOLT left the world border as the world saved it. Fix the config, then run /yolt reload.",
                     result.borderProblem());
@@ -64,6 +67,11 @@ public final class Settings {
     /** True while the border values in the config are startup fallbacks, so YOLT leaves the world's own border alone. */
     public static boolean borderHeld() {
         return borderHeld;
+    }
+
+    /** The copy the startup load kept of the admin's file before writing over it, or null if it wrote over nothing. */
+    public static @Nullable String startupBackup() {
+        return startupBackup;
     }
 
     public static void releaseBorder() {

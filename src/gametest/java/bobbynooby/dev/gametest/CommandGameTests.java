@@ -996,6 +996,42 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // A config from a newer YOLT is never rewritten, so after a held border's reload the typo is still in the file, and
+    // the startup kept no copy of it
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadOfNewerConfigSaysTheTypoIsStillInTheFile(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Path bak = backupOf(path);
+        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        String newer = "{\"configVersion\": " + (ConfigLoader.CURRENT_VERSION + 1)
+                + ", \"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}";
+        try {
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(30000));
+            Files.writeString(path, newer);
+            Settings.load();
+            helper.assertTrue(Settings.borderHeld(), "border not held");
+
+            List<String> output = run(server, "yolt reload");
+            helper.assertTrue(output.contains("World border still not applied, since the config has a bad worldBorder.diameter."
+                    + " Fix it, then reload again."), "command output: " + output);
+            helper.assertValueEqual(Files.readString(path), newer, "config file");
+            helper.assertTrue(Settings.borderHeld(), "border no longer held");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 30000.0, "overworld border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            // The test's reload applied its file to the world
+            LiveSettings.applyAll(server);
+            restoreBorders(bordersBefore);
+            restoreBackup(bak, bakBefore);
+        }
+        helper.succeed();
+    }
+
     // What the startup's WARN asks for: a plain reload of the file it rewrote. The worldBorder section is the same as the
     // held one, yet applying it would put the 10,000 default over the world's 30,000 border with the player 7000 blocks
     // from its centre, so the border stays held. The settings are put back before the player leaves, since the startup

@@ -52,11 +52,17 @@ final class AdminCommands {
         List<String> warnings = new ArrayList<>(result.warnings());
         boolean applyBorder = true;
         if (Settings.borderHeld() && result.borderProblem() != null) {
-            // A bad border key keeps the live value, and while the border is held that is a startup default, not the world's.
-            // The reload has already written that value over the typo, and the startup kept the admin's file as a .bak.
-            warnings.add("World border still not applied, since " + result.borderProblem() + ". The reload saved the value in"
-                    + " use over it, so set it again in the file, then reload. The file as it was at startup is in "
-                    + Settings.path().getFileName() + ".bak.");
+            // A bad border key keeps the live value, and while the border is held that is a startup default, not the world's
+            String held = "World border still not applied, since " + result.borderProblem() + ".";
+            if (result.rewritten()) {
+                // The reload has already written that value over the typo, and the startup may have kept the admin's file
+                String backup = Settings.startupBackup();
+                warnings.add(held + " The reload saved the value in use over it, so set it again in the file, then reload."
+                        + (backup == null ? "" : " The file as it was at startup is in " + backup + "."));
+            } else {
+                // A newer config is never rewritten, so the typo is still in the file
+                warnings.add(held + " Fix it, then reload again.");
+            }
         } else {
             // A reload can't be confirmed, so a border that would leave someone outside waits for /yolt border and the others.
             // An unchanged file is checked too: what counts is the world's own border, which a timed /worldborder can have

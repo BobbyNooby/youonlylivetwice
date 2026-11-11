@@ -29,9 +29,12 @@ public final class ConfigLoader {
     /**
      * unparseable means the file could not be read or was not valid JSON; config is then null if load was told not to
      * write defaults. borderProblem, when not null, says why the worldBorder values are fallbacks rather than the file's
-     * own: the whole file, or a worldBorder key that was refused or unknown.
+     * own: the whole file, or a worldBorder key that was refused or unknown. rewritten says whether the file now holds
+     * what was loaded: a newer config is left as it is, and so is a file a reload couldn't read or didn't find. backup
+     * names the copy kept of the file before this load wrote over it, or is null.
      */
-    public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem) {}
+    public record Result(@Nullable YoltConfig config, List<String> warnings, boolean unparseable, @Nullable String borderProblem,
+                         boolean rewritten, @Nullable String backup) {}
 
     /**
      * What setting one key did. config is the new live config, and null when nothing changed: problem then says why, or
@@ -75,9 +78,9 @@ public final class ConfigLoader {
                 // A moved file must not reset a running server, so nothing is written either. The base itself comes
                 // back, which is how /yolt reload tells that nothing was read
                 warnings.add("config file is missing, nothing changed");
-                return new Result(base, warnings, false, null);
+                return new Result(base, warnings, false, null, false, null);
             }
-            return new Result(writeDefaults(file), warnings, false, null);
+            return new Result(writeDefaults(file), warnings, false, null, true, null);
         }
 
         JsonObject user;
@@ -91,17 +94,18 @@ public final class ConfigLoader {
                     : (e instanceof IOException ? "config could not be read (" : "config is not valid JSON (") + e.getMessage() + ")";
             if (!writeDefaultsOnError) {
                 warnings.add(problem);
-                return new Result(null, warnings, true, null);
+                return new Result(null, warnings, true, null, false, null);
             }
             String backup = backup(file, file.getFileName() + ".bak");
             warnings.add(problem + ", old file saved as " + backup + ", using defaults");
-            return new Result(writeDefaults(file), warnings, true, problem);
+            return new Result(writeDefaults(file), warnings, true, problem, true, backup);
         }
 
         int version = fileVersion(user);
+        String backup = null;
         if (version < currentVersion) {
             // Copied before anything is written, so the upgraded file never replaces the only copy of the old one
-            String backup = backup(file, file.getFileName() + ".v" + version + ".bak");
+            backup = backup(file, file.getFileName() + ".v" + version + ".bak");
             user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
             warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
         }
@@ -133,17 +137,17 @@ public final class ConfigLoader {
         if (version > currentVersion) {
             // Rewriting would drop what only the newer YOLT knows
             warnings.add("config is from a newer version, so it was not rewritten");
-            return new Result(config, warnings, false, borderProblem);
+            return new Result(config, warnings, false, borderProblem, false, backup);
         }
         // Each warning since the merge began is something typed in the file that the rewrite leaves out or changes, so at
         // startup the admin's file is kept first, under the same name as one that can't be read. A reload keeps the live
         // values and writes no copy.
         if (writeDefaultsOnError && warnings.size() > warningsBeforeMerge) {
-            String backup = backup(file, file.getFileName() + ".bak");
+            backup = backup(file, file.getFileName() + ".bak");
             warnings.add("old file saved as " + backup + " before the rewrite");
         }
         write(file, config);
-        return new Result(config, warnings, false, borderProblem);
+        return new Result(config, warnings, false, borderProblem, true, backup);
     }
 
     // Null when every worldBorder value is the file's own
