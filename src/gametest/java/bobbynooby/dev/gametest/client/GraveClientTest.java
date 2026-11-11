@@ -231,12 +231,8 @@ public class GraveClientTest implements FabricClientGameTest {
         connection.waitForChunksRender();
         ctx.waitFor(mc -> mc.level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD));
 
-        // Without the HUD the crosshair doesn't cover the face
-        ctx.getInput().pressKey(options -> options.keyToggleGui);
-        ctx.waitFor(mc -> mc.gui.hud.isHidden());
-        screenshot(ctx, "02-grave-head");
-        ctx.getInput().pressKey(options -> options.keyToggleGui);
-        ctx.waitFor(mc -> !mc.gui.hud.isHidden());
+        // Without the HUD the crosshair doesn't cover the face. The HUD comes back even if the shot fails.
+        ClientTests.screenshotWithoutHud(ctx, "02-grave-head");
     }
 
     private static void showGraveMenu(ClientGameTestContext ctx, TestDedicatedServerContext server,

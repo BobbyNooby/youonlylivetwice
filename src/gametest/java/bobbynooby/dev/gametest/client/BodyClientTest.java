@@ -10,7 +10,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
-import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.Direction;
@@ -218,14 +217,8 @@ public class BodyClientTest implements FabricClientGameTest {
         });
     }
 
+    // Without the HUD the crosshair doesn't cover the body. The HUD comes back even if the shot fails.
     private static void screenshot(ClientGameTestContext ctx, String name) {
-        ctx.runOnClient(mc -> mc.gui.toastManager().clear());
-        // Without the HUD the crosshair doesn't cover the body
-        ctx.getInput().pressKey(options -> options.keyToggleGui);
-        ctx.waitFor(mc -> mc.gui.hud.isHidden());
-        // No counter prefix, so the CI artifact keeps the plain file names
-        ctx.takeScreenshot(TestScreenshotOptions.of(name).disableCounterPrefix());
-        ctx.getInput().pressKey(options -> options.keyToggleGui);
-        ctx.waitFor(mc -> !mc.gui.hud.isHidden());
+        ClientTests.screenshotWithoutHud(ctx, name);
     }
 }
