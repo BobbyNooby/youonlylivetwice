@@ -183,6 +183,36 @@ class ConfigLoaderTest {
         assertEquals(50, loadJson("{\"serverList\":{\"shownMaxPlayers\":50}}").config().serverList.shownMaxPlayers);
     }
 
+    // On a reload a bad value of each of the five keys Task 30b added keeps the live one, each with its own warning
+    @Test
+    void newKeysKeepTheCurrentValueOnReload() throws IOException {
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"graves\":{\"searchRadius\":33,\"voidSearchRadius\":0},\"chat\":{\"whisperRadius\":-1},"
+                + "\"serverList\":{\"shownMaxPlayers\":-1},\"hide\":{\"tabHeaderLines\":\"one line\"}}");
+        YoltConfig live = new YoltConfig();
+        live.graves.searchRadius = 10;
+        live.graves.voidSearchRadius = 5;
+        live.chat.whisperRadius = 8;
+        live.serverList.shownMaxPlayers = 20;
+        live.hide.tabHeaderLines = List.of("the live line");
+
+        ConfigLoader.Result r = ConfigLoader.load(file, live, false);
+        assertEquals(10, r.config().graves.searchRadius);
+        assertEquals(5, r.config().graves.voidSearchRadius);
+        assertEquals(8, r.config().chat.whisperRadius);
+        assertEquals(20, r.config().serverList.shownMaxPlayers);
+        assertEquals(List.of("the live line"), r.config().hide.tabHeaderLines);
+        List<String> expected = List.of("graves.searchRadius: must be 3 to 32, using the current value",
+                "graves.voidSearchRadius: must be 1 to 32, using the current value",
+                "chat.whisperRadius: must be 0 or more, using the current value",
+                "serverList.shownMaxPlayers: must be 0 or more, using the current value",
+                "hide.tabHeaderLines: expected a list of strings, using the current value");
+        for (String warning : expected) {
+            assertTrue(r.warnings().contains(warning), "no \"" + warning + "\" in " + r.warnings());
+        }
+        assertEquals(expected.size(), r.warnings().size(), r.warnings().toString());
+    }
+
     @Test
     void fileRewrittenWithEveryKey() throws IOException {
         loadJson("{\"randomSpawn\":false}");
