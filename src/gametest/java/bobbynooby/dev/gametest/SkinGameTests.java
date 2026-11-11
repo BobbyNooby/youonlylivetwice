@@ -141,6 +141,25 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // An offline login can bring a name no Mojang account can have. It counts as no account, so Mojang isn't asked.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void loginNameNoAccountCanHaveIsNotLookedUp(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Dot.");
+        // What the lookup would give, if it were asked
+        MOJANG.answer(name);
+        try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+            login.tick();
+            Optional<GameProfile> told = login.finished();
+            helper.assertTrue(told.isPresent(), "the login did not go through");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked");
+            assertEqual(helper, textures(told.get()), null, "textures for a name no account can have");
+        } finally {
+            MOJANG.forget(name);
+        }
+        helper.succeed();
+    }
+
     @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
     public void modeOffNeverLooksUp(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();

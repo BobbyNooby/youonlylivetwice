@@ -88,6 +88,11 @@ public final class LoginSkins {
 
     // From a fresh saved answer at once, else from Mojang
     private void skinOf(String name, boolean pick) {
+        // An offline login can bring a name no account can have, which counts as Mojang's no-account answer
+        if (!Skins.couldBeAccount(name)) {
+            use(name, pick, CachedSkin.noAccount(name, System.currentTimeMillis()));
+            return;
+        }
         CachedSkin saved = SkinStore.get(server).skin(name);
         if (savedOnly || (saved != null && saved.fresh(System.currentTimeMillis(), Settings.get().skins.refreshHours))) {
             use(name, pick, saved);
