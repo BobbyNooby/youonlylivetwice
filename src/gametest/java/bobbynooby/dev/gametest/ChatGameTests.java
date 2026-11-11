@@ -110,6 +110,44 @@ public class ChatGameTests {
         helper.succeed();
     }
 
+    // A real death with game messages hidden: its death message reaches no player near or far, only the admin in admin
+    // view, which shows it was sent at all. The dying player leaves before the death's kick.
+    @GameTest
+    public void deathMessageReachesNoNormalPlayer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean hiddenBefore = hide.gameMessages;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer dying = join(helper, joined, "deathmsg", BlockPos.ZERO);
+        TestPlayers.Recording admin = null;
+        try {
+            hide.gameMessages = true;
+            TestPlayers.Recording near = joinRecording(helper, joined, "deathnear", new BlockPos(2, 0, 0));
+            TestPlayers.Recording far = joinRecording(helper, joined, "deathfar", BlockPos.ZERO);
+            far.teleportTo(far.getX() + 200, far.getY(), far.getZ());
+            admin = joinRecording(helper, joined, "deathadmin", new BlockPos(1, 0, 0));
+            TestPlayers.op(admin);
+            AdminView.set(admin, true);
+            String name = dying.getGameProfile().name();
+
+            TestPlayers.markLoaded(dying);
+            dying.kill(dying.level());
+            helper.assertTrue(dying.isDeadOrDying(), "the player did not die");
+            helper.assertValueEqual(deathLines(admin, name), 1, "death messages the admin in admin view got");
+            helper.assertValueEqual(deathLines(near, name), 0, "death messages the near player got");
+            helper.assertValueEqual(deathLines(far, name), 0, "death messages the far player got");
+        } finally {
+            hide.gameMessages = hiddenBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+                TestPlayers.deop(admin);
+            }
+            leaveAll(joined);
+            BodyTestKit.removeGraves(helper, dying.getUUID());
+        }
+        helper.succeed();
+    }
+
     // With restrictCommands off anyone may /me, and only a gamemaster's is an announcement
     @GameTest
     public void nonOpEmoteIsChat(GameTestHelper helper) {
@@ -214,6 +252,18 @@ public class ChatGameTests {
             }
         }
         return false;
+    }
+
+    // How many death messages naming that player this one was sent; every vanilla one names the dead first
+    private static int deathLines(TestPlayers.Recording player, String name) {
+        int lines = 0;
+        for (Component message : player.messages) {
+            if (message.getContents() instanceof TranslatableContents line && line.getKey().startsWith("death.")
+                    && line.getArgs().length > 0 && line.getArgs()[0] instanceof Component dead && dead.getString().equals(name)) {
+                lines++;
+            }
+        }
+        return lines;
     }
 
     private static TestPlayers.Recording joinRecording(GameTestHelper helper, List<ServerPlayer> joined, String name, BlockPos pos) {
