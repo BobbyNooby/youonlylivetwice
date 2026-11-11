@@ -14,8 +14,7 @@ import java.util.Set;
 
 /** Hands a body's state back to its owner when they log in. */
 public final class BodyLogin {
-    private BodyLogin() {
-    }
+    private BodyLogin() {}
 
     /**
      * The player takes over their body as it is now, and the body goes. With bodies switched off this still runs,

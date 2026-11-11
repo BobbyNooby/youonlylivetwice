@@ -14,8 +14,7 @@ public final class GearSync {
     public static final List<EquipmentSlot> SLOTS = List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS,
             EquipmentSlot.FEET, EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND);
 
-    private GearSync() {
-    }
+    private GearSync() {}
 
     /**
      * Applies the body's gear to the real slots, one slot at a time:

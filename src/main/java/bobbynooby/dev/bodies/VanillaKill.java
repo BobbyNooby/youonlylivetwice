@@ -16,8 +16,7 @@ import java.util.function.ToIntFunction;
  * player whose body is loaded. Only the command: damage and the void still kill a body.
  */
 public final class VanillaKill {
-    private VanillaKill() {
-    }
+    private VanillaKill() {}
 
     /**
      * Runs vanilla's kill on the victims that aren't bodies, so its message counts only those, then tells the source

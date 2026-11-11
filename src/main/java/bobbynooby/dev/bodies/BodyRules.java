@@ -10,8 +10,7 @@ import net.minecraft.world.entity.decoration.Mannequin;
 
 /** What counts as a body, and how a body differs from other entities: no drops, worn armour, no portals. */
 public final class BodyRules {
-    private BodyRules() {
-    }
+    private BodyRules() {}
 
     /** True for anything we spawned as a body: it wears copies of its owner's saved gear, so its death drops nothing. */
     public static boolean dropsNothing(LivingEntity entity) {

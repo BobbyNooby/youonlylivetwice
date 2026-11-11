@@ -14,8 +14,7 @@ import net.minecraft.world.entity.player.Player;
 
 /** Gives hostile mobs the goal that sends them after bodies. */
 public final class BodyMobs {
-    private BodyMobs() {
-    }
+    private BodyMobs() {}
 
     static void init() {
         // Runs for each entity of a chunk in turn, so a throw would break off the rest

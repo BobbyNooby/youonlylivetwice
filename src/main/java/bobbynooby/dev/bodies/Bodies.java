@@ -30,8 +30,7 @@ public final class Bodies {
     /** Marks the entities we made, so a decorative mannequin is never taken for a body. */
     public static final String TAG = "yolt_body";
 
-    private Bodies() {
-    }
+    private Bodies() {}
 
     public static void init() {
         // LEAVE runs on the server thread before vanilla saves the player; DISCONNECT can run on the network thread

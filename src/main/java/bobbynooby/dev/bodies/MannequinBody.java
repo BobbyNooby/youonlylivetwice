@@ -13,8 +13,7 @@ import net.minecraft.world.level.storage.TagValueInput;
 
 /** Builds the vanilla mannequin that stands in for a logged-out player. */
 public final class MannequinBody {
-    private MannequinBody() {
-    }
+    private MannequinBody() {}
 
     public static Mannequin spawn(ServerPlayer player, YoltConfig.BodiesSection cfg) {
         ServerLevel level = player.level();

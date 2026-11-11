@@ -40,8 +40,7 @@ public final class BodyExpiry {
     // Body entity id to when it may be tried again, for bodies whose expiry failed. Our error is logged once per body.
     private static final Map<UUID, Long> RETRY_AT = new HashMap<>();
 
-    private BodyExpiry() {
-    }
+    private BodyExpiry() {}
 
     public static void init() {
         // Once a second is plenty for a time counted in minutes

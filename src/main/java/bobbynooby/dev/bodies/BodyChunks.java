@@ -12,8 +12,7 @@ import java.util.Optional;
 
 /** Keeps a body's record in step with its chunk unloading and loading. */
 public final class BodyChunks {
-    private BodyChunks() {
-    }
+    private BodyChunks() {}
 
     /** Saves a body's state as its chunk unloads, for a login while it stays unloaded. */
     public static void onBodyUnload(Entity entity) {

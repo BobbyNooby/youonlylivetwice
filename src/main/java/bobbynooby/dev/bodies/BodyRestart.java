@@ -9,8 +9,7 @@ import net.minecraft.world.entity.LivingEntity;
 
 /** Keeps bodies' records current across saves and stops, and brings player bodies back when the server starts. */
 public final class BodyRestart {
-    private BodyRestart() {
-    }
+    private BodyRestart() {}
 
     /**
      * Player bodies aren't saved with their chunks, so each comes back from its record when the server starts.

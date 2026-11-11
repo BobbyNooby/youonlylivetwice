@@ -26,8 +26,7 @@ import java.util.Optional;
 
 /** Kills a body's owner when the body dies, and kills a standing body for an offline /yolt kill. */
 final class BodyDeath {
-    private BodyDeath() {
-    }
+    private BodyDeath() {}
 
     /**
      * A body's death is its owner's: their saved items go into a grave where the body fell, and the lockout starts.

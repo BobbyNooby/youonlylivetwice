@@ -8,8 +8,7 @@ import net.minecraft.world.level.storage.LevelResource;
 
 /** Stats and advancements for a player body that are never stored or saved, so its owner's stay untouched. */
 public final class BodyStats {
-    private BodyStats() {
-    }
+    private BodyStats() {}
 
     /** The body's own stats, never stored in the player list, so nothing is kept or written for the body's id. */
     public static ServerStatsCounter detachedStats(PlayerBody body) {

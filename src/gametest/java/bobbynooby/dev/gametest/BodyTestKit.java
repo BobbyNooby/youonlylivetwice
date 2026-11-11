@@ -27,8 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 // What every body test does to make a body and get rid of it. The test server keeps bodies off, so a test turns the
 // default switches on, and cleanUp puts the server's own back in the same tick.
 final class BodyTestKit {
-    private BodyTestKit() {
-    }
+    private BodyTestKit() {}
 
     // A fresh section has the default switches, with bodies on; the caller puts the returned one back
     static YoltConfig.BodiesSection useDefaultBodies() {

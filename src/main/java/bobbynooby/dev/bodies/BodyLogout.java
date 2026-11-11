@@ -22,8 +22,7 @@ import java.util.Set;
 
 /** Leaves a body behind when a player logs out. */
 public final class BodyLogout {
-    private BodyLogout() {
-    }
+    private BodyLogout() {}
 
     /** The new body, or empty when this logout gets none. */
     public static Optional<Entity> onLogout(ServerPlayer player) {

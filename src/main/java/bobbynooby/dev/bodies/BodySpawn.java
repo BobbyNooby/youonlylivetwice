@@ -13,8 +13,7 @@ import net.minecraft.world.item.ItemStack;
 
 /** What both body types do as they are made from their player. */
 final class BodySpawn {
-    private BodySpawn() {
-    }
+    private BodySpawn() {}
 
     /** Puts the body where its player stands, facing the same way. */
     static void placeLike(ServerPlayer player, Avatar body) {
