@@ -2,8 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
-import bobbynooby.dev.world.WorldBorders;
 import bobbynooby.dev.world.GameRuleSwitches;
+import bobbynooby.dev.world.WorldBorders;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
