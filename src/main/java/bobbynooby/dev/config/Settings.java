@@ -92,6 +92,11 @@ public final class Settings {
         borderHeld = false;
     }
 
+    /** Holds the border as the world saved it, as a startup with bad border values does. */
+    public static void holdBorder() {
+        borderHeld = true;
+    }
+
     /** True while a server with no single-player owner runs, so single-player worlds stay vanilla. */
     public static boolean active() {
         return active;

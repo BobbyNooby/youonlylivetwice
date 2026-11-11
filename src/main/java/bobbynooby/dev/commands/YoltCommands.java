@@ -39,6 +39,11 @@ public final class YoltCommands {
         });
     }
 
+    /** Run when a server has started, before the border is applied: holds a saved border that would strand what can't move. */
+    public static void holdStrandingBorder(MinecraftServer server) {
+        BorderCommands.holdIfStranding(server);
+    }
+
     static int fail(CommandSourceStack source, String text) {
         source.sendFailure(Component.literal(text));
         return 0;

@@ -27,8 +27,11 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Settings.load();
         ServerLifecycleEvents.SERVER_STARTING.register(Settings::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPED.register(Settings::onServerStopped);
-        // LiveSettings: the first SERVER_STARTED hook, so the nametag team exists before the bodies come back and join
-        // it. Nobody is online yet, so its visibility refresh misses no one.
+        // The border check: before LiveSettings applies the saved border, so one that would strand the world spawn, the
+        // End platform, a body or a grave is held instead
+        ServerLifecycleEvents.SERVER_STARTED.register(YoltCommands::holdStrandingBorder);
+        // LiveSettings: before the other SERVER_STARTED hooks, so the nametag team exists before the bodies come back and
+        // join it. Nobody is online yet, so its visibility refresh misses no one.
         ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
         // AdminView: registers its saved flag, which must happen before any player save is read
         AdminView.init();

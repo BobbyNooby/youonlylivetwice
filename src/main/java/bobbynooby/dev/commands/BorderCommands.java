@@ -101,6 +101,25 @@ final class BorderCommands {
         return Settings.on(c -> c.worldBorder.enabled) ? stranded(server, sized(diameter, endScale, true), true) : Outside.NONE;
     }
 
+    /**
+     * At startup, before the config's border is applied: one that would leave the world spawn, the End's arrival platform,
+     * a body or a grave outside is held, as a startup border that fell back to defaults is, until a reload or a border
+     * command checks it again. Nobody is online yet. A border saved while held, or edited into the file while the server
+     * was down, gets no other check.
+     */
+    static void holdIfStranding(MinecraftServer server) {
+        if (Settings.borderHeld()) {
+            return;
+        }
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        Outside outside = newlyStranded(server, border.diameter, border.endScale);
+        if (!outside.names().isEmpty()) {
+            Settings.holdBorder();
+            LOGGER.warn("Config: the config's border would leave {} outside it, so YOLT left the world border as the world saved it."
+                    + " Change the config, then run /yolt reload, or use /yolt border or endscaling with confirm.", listed(outside.names()));
+        }
+    }
+
     // The border one level would have after a change, or null when the change leaves that level's border alone
     private interface Proposal {
         @Nullable WorldBorder of(WorldBorder live, boolean isEnd);

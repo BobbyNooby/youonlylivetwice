@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.chat.CommandRestriction;
+import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -62,6 +63,8 @@ import java.util.stream.Stream;
 public class CommandGameTests {
     // A batch of its own: a reload swaps the whole config object, which a test holding the old one across ticks would miss
     static final String CONFIG_COMMAND = "you-only-live-twice-gametest:config_command";
+    // A batch of its own: it holds the border, which every border command and reload reads
+    private static final String STARTUP_BORDER = "you-only-live-twice-gametest:startup_border";
     private static final String SPAWN_NOTE = " The world spawn is outside the new border; move it with /setworldspawn.";
     // Test structures, and the world spawn among them, sit within ±15 million blocks, so a border this wide around 0, 0
     // holds them all, and BEYOND is past its edge
@@ -910,6 +913,57 @@ public class CommandGameTests {
             restoreBackups(backups);
         }
         helper.succeed();
+    }
+
+    // A startup checks the saved border before it applies it, so a border saved while held, or edited into the file while
+    // the server was down, can't strand the world spawn. Every border starts at vanilla's largest, so only the moved spawn
+    // is past the file's border. With random spawn on, first joins are put inside it, so the same border is applied.
+    // Settings.load and the two SERVER_STARTED hooks are what the mod runs at start.
+    @GameTest(environment = STARTUP_BORDER)
+    public void startupHoldsASavedBorderThatStrandsTheSpawn(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        SavedBackups backups = saveBackups(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+        String border = "\"worldBorder\": {\"enabled\": true, \"diameter\": " + WIDE + ", \"endScale\": 1.0}";
+        try {
+            centreAll(server);
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(ConfigLoader.MAX_BORDER_DIAMETER));
+            moveSpawn(server, BEYOND);
+
+            Files.writeString(path, "{\"randomSpawn\": false, " + border + "}");
+            startUp(server);
+            helper.assertTrue(Settings.borderHeld(), "a border that strands the world spawn was not held");
+            for (ServerLevel level : server.getAllLevels()) {
+                helper.assertValueEqual(level.getWorldBorder().getSize(), (double) ConfigLoader.MAX_BORDER_DIAMETER,
+                        level.dimension().identifier() + " border size");
+            }
+
+            Files.writeString(path, "{\"randomSpawn\": true, " + border + "}");
+            startUp(server);
+            helper.assertFalse(Settings.borderHeld(), "a border that strands nothing was held");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size with random spawn");
+        } finally {
+            Files.writeString(path, fileBefore);
+            Settings.load();
+            TestServerSetup.applyTestSettings();
+            LiveSettings.applyAll(server);
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
+            restoreBackups(backups);
+        }
+        helper.succeed();
+    }
+
+    // The mod's startup with the test server's overrides, but YOLT's border on as the file has it
+    private static void startUp(MinecraftServer server) {
+        Settings.load();
+        TestServerSetup.applyTestSettings();
+        Settings.get().worldBorder.enabled = true;
+        YoltCommands.holdStrandingBorder(server);
+        LiveSettings.applyAll(server);
     }
 
     // A held border waits through a reload that still has a bad border value, then goes through the reload's stranding
