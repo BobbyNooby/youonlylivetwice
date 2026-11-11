@@ -56,6 +56,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.stream.Stream;
 
 // Commands run as the console, which has no player. Each test puts the settings and the config file back in a finally block.
 public class CommandGameTests {
@@ -931,8 +932,7 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
-        Path bak = backupOf(path);
-        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        SavedBackups backups = saveBackups(path);
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         try {
             // A size YOLT's defaults give no dimension (10,000, or 20,000 for the end)
@@ -949,7 +949,7 @@ public class CommandGameTests {
             Settings.load();
             TestServerSetup.applyTestSettings();
             restoreBorders(bordersBefore);
-            restoreBackup(bak, bakBefore);
+            restoreBackups(backups);
         }
         helper.succeed();
     }
@@ -961,12 +961,13 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
-        Path bak = backupOf(path);
-        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        SavedBackups backups = saveBackups(path);
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         String typo = "{\"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}";
         try {
             server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(30000));
+            // With no .bak there, the startup keeps the typed file as .bak itself, which is the name the reply gives
+            Files.deleteIfExists(backups.bak());
             Files.writeString(path, typo);
             Settings.load();
 
@@ -991,7 +992,7 @@ public class CommandGameTests {
             // The test's reloads applied their files to the world
             LiveSettings.applyAll(server);
             restoreBorders(bordersBefore);
-            restoreBackup(bak, bakBefore);
+            restoreBackups(backups);
         }
         helper.succeed();
     }
@@ -1003,8 +1004,7 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
-        Path bak = backupOf(path);
-        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        SavedBackups backups = saveBackups(path);
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         String newer = "{\"configVersion\": " + (ConfigLoader.CURRENT_VERSION + 1)
                 + ", \"worldBorder\": {\"enabled\": true, \"diameter\": \"2OOOO\"}}";
@@ -1027,7 +1027,7 @@ public class CommandGameTests {
             // The test's reload applied its file to the world
             LiveSettings.applyAll(server);
             restoreBorders(bordersBefore);
-            restoreBackup(bak, bakBefore);
+            restoreBackups(backups);
         }
         helper.succeed();
     }
@@ -1041,8 +1041,7 @@ public class CommandGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         Path path = Settings.path();
         String fileBefore = Files.readString(path);
-        Path bak = backupOf(path);
-        byte[] bakBefore = Files.exists(bak) ? Files.readAllBytes(bak) : null;
+        SavedBackups backups = saveBackups(path);
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         ServerPlayer player = TestPlayers.join(helper, "HeldOut", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         String name = player.nameAndId().name();
@@ -1067,7 +1066,7 @@ public class CommandGameTests {
             // The test's reload applied its file to the world
             LiveSettings.applyAll(server);
             restoreBorders(bordersBefore);
-            restoreBackup(bak, bakBefore);
+            restoreBackups(backups);
             TestPlayers.leave(player);
         }
         helper.succeed();
@@ -1221,17 +1220,34 @@ public class CommandGameTests {
         helper.succeed();
     }
 
-    // A startup load that refuses a value keeps the file it rewrites as a .bak
-    private static Path backupOf(Path config) {
-        return config.resolveSibling(config.getFileName() + ".bak");
+    // A startup load that refuses a value keeps the file it rewrites as a .bak, or beside it with the time added when the
+    // .bak holds something else. bytes is null when there was no .bak.
+    private record SavedBackups(Path bak, byte[] bytes, List<Path> timed) {}
+
+    private static SavedBackups saveBackups(Path config) throws IOException {
+        Path bak = config.resolveSibling(config.getFileName() + ".bak");
+        return new SavedBackups(bak, Files.exists(bak) ? Files.readAllBytes(bak) : null, timedCopies(bak));
     }
 
-    // Puts back the .bak a test's startup load may have written, or removes it if there was none
-    private static void restoreBackup(Path bak, byte[] before) throws IOException {
-        if (before == null) {
-            Files.deleteIfExists(bak);
+    // Puts back the .bak a test's startup loads may have written, or removes it if there was none, and removes the timed
+    // copies they made
+    private static void restoreBackups(SavedBackups saved) throws IOException {
+        if (saved.bytes() == null) {
+            Files.deleteIfExists(saved.bak());
         } else {
-            Files.write(bak, before);
+            Files.write(saved.bak(), saved.bytes());
+        }
+        for (Path copy : timedCopies(saved.bak())) {
+            if (!saved.timed().contains(copy)) {
+                Files.delete(copy);
+            }
+        }
+    }
+
+    private static List<Path> timedCopies(Path bak) throws IOException {
+        String prefix = bak.getFileName() + "-";
+        try (Stream<Path> files = Files.list(bak.toAbsolutePath().getParent())) {
+            return files.filter(file -> file.getFileName().toString().startsWith(prefix)).toList();
         }
     }
 
