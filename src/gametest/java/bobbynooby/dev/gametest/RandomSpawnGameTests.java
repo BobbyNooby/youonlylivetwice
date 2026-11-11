@@ -43,7 +43,8 @@ public class RandomSpawnGameTests {
         helper.succeed();
     }
 
-    // Four columns, spread out so each is checked on its own. Fire sits on netherrack, where it never burns out.
+    // Four columns, spread out so each is checked on its own. Fire sits on netherrack, where it never burns out. A plain
+    // grass column among them must still give a spot, so a structure that refuses everything can't pass.
     @GameTest(skyAccess = true)
     public void randomSpawnAvoidsFireBerriesAndMagma(GameTestHelper helper) {
         BlockPos fire = new BlockPos(1, 0, 1);
@@ -64,6 +65,11 @@ public class RandomSpawnGameTests {
             helper.assertTrue(spot == null, helper.getBlockState(ground.above()).getBlock() + " on "
                     + helper.getBlockState(ground).getBlock() + " gave the spot " + spot);
         }
+
+        helper.setBlock(GROUND, Blocks.GRASS_BLOCK);
+        BlockPos grass = helper.absolutePos(GROUND);
+        BlockPos spot = RandomSpawn.spotAt(helper.getLevel(), grass.getX(), grass.getZ());
+        helper.assertTrue(grass.above().equals(spot), "the plain grass column gave the spot " + spot + ", not " + grass.above());
         helper.succeed();
     }
 
