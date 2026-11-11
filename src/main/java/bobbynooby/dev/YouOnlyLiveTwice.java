@@ -16,6 +16,7 @@ import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.server.MinecraftServer;
 
 // Loads in any environment so client tests can host a dedicated server in the client process;
 // every feature checks Settings.active(), so single-player stays vanilla.
@@ -27,12 +28,9 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Settings.load();
         ServerLifecycleEvents.SERVER_STARTING.register(Settings::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPED.register(Settings::onServerStopped);
-        // The border check: before LiveSettings applies the saved border, so one that would strand the world spawn, the
-        // End platform, a body or a grave is held instead
-        ServerLifecycleEvents.SERVER_STARTED.register(YoltCommands::holdStrandingBorder);
-        // LiveSettings: before the other SERVER_STARTED hooks, so the nametag team exists before the bodies come back and
-        // join it. Nobody is online yet, so its visibility refresh misses no one.
-        ServerLifecycleEvents.SERVER_STARTED.register(LiveSettings::applyAll);
+        // The config's settings and border: the first SERVER_STARTED hook, so the nametag team exists before the bodies
+        // come back and join it
+        ServerLifecycleEvents.SERVER_STARTED.register(YouOnlyLiveTwice::onServerStarted);
         // AdminView: registers its saved flag, which must happen before any player save is read
         AdminView.init();
         // Commands: built on each command registration, so their place here doesn't matter
@@ -54,5 +52,15 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Bodies.init();
 
         Yolt.LOGGER.info("You Only Live Twice started");
+    }
+
+    /**
+     * Applies the config to a server that has started. The border check comes first, so a saved border that would strand
+     * the world spawn, the End platform, a body or a grave is held rather than applied. Nobody is online yet, so the
+     * visibility refresh misses no one.
+     */
+    public static void onServerStarted(MinecraftServer server) {
+        YoltCommands.holdStrandingBorder(server);
+        LiveSettings.applyAll(server);
     }
 }

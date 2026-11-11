@@ -1,7 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.YouOnlyLiveTwice;
 import bobbynooby.dev.chat.CommandRestriction;
-import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -923,7 +923,7 @@ public class CommandGameTests {
     // A startup checks the saved border before it applies it, so a border saved while held, or edited into the file while
     // the server was down, can't strand the world spawn. Every border starts at vanilla's largest, so only the moved spawn
     // is past the file's border. With random spawn on, first joins are put inside it, so the same border is applied.
-    // Settings.load and the two SERVER_STARTED hooks are what the mod runs at start.
+    // Settings.load and YouOnlyLiveTwice.onServerStarted are what the mod runs at start.
     @GameTest(environment = STARTUP_BORDER)
     public void startupHoldsASavedBorderThatStrandsTheSpawn(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -967,8 +967,7 @@ public class CommandGameTests {
         Settings.load();
         TestServerSetup.applyTestSettings();
         Settings.get().worldBorder.enabled = true;
-        YoltCommands.holdStrandingBorder(server);
-        LiveSettings.applyAll(server);
+        YouOnlyLiveTwice.onServerStarted(server);
     }
 
     // A held border waits through a reload that still has a bad border value, then goes through the reload's stranding
