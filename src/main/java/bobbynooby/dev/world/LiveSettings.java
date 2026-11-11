@@ -36,5 +36,7 @@ public final class LiveSettings {
         }
         // Each player's debug screen depends on hide.debugScreen
         DebugPrivacy.applyAll(server);
+        // And each player's compass target on hide.compassSpawn
+        NorthCompass.applyAll(server);
     }
 }

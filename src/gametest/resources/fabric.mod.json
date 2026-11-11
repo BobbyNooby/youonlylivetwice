@@ -34,6 +34,7 @@
 			"bobbynooby.dev.gametest.MigrationGameTests",
 			"bobbynooby.dev.gametest.NameTagGameTests",
 			"bobbynooby.dev.gametest.NightGameTests",
+			"bobbynooby.dev.gametest.NorthCompassGameTests",
 			"bobbynooby.dev.gametest.OfflineGameTests",
 			"bobbynooby.dev.gametest.PhantomGameTests",
 			"bobbynooby.dev.gametest.PlacementGameTests",

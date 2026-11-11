@@ -16,6 +16,7 @@ import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.TabHeaders;
 import bobbynooby.dev.world.LiveSettings;
+import bobbynooby.dev.world.NorthCompass;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.server.MinecraftServer;
@@ -43,10 +44,11 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Graves.init();
         // Revive: after Graves, so the grave's use-block hook opens a clicked grave before a revive head in hand is tried
         Revive.init();
-        // Visibility and chat: their hooks don't share an event with a hook that cares about order
+        // Visibility, the compass and chat: their hooks don't share an event with a hook that cares about order
         TabHeaders.init();
         NameTagTeam.init();
         DebugPrivacy.init();
+        NorthCompass.init();
         ChatDelivery.init();
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads

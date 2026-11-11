@@ -1,6 +1,7 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.world.NorthCompass;
 import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -10,8 +11,8 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 
 /**
- * Whether an op sees everyone, every hidden message and the full debug screen. Saved with the player, so it survives relogs
- * and restarts.
+ * Whether an op sees everyone, every hidden message, the full debug screen and the real world spawn. Saved with the
+ * player, so it survives relogs and restarts.
  */
 public final class AdminView {
     // Copied on death as well, since a respawn makes a new player object. Saved in player files as a bare boolean
@@ -36,8 +37,9 @@ public final class AdminView {
         set(player, on);
         // Entries, the tab list and the nametag rule all depend on it; this also resends the nametag team
         PlayerVisibility.refresh(player);
-        // So does the full debug screen
+        // So do the full debug screen and the real world spawn
         DebugPrivacy.apply(player);
+        NorthCompass.apply(player);
         return on;
     }
 
@@ -47,6 +49,7 @@ public final class AdminView {
         if (player != null && player.hasAttached(ATTACHMENT)) {
             PlayerVisibility.refresh(player);
             DebugPrivacy.apply(player);
+            NorthCompass.apply(player);
         }
     }
 

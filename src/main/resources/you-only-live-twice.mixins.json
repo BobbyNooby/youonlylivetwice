@@ -42,6 +42,8 @@
     "NoBedRespawnAnchorMixin",
     "NoBedRespawnAnchorSoundMixin",
     "NoBedRespawnMixin",
+    "NorthCompassPlayerListMixin",
+    "NorthCompassServerMixin",
     "PlayerCountLegacyMixin",
     "PlayerCountMixin",
     "PlayerCountQueryMixin",

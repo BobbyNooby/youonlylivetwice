@@ -78,6 +78,9 @@ public class YoltConfig {
         // F3 names the server "vanilla" rather than "fabric". The brand is sent as a player logs in. Fabric's channel
         // registration and ping at login still show a client that logs packets it is Fabric.
         @Applies(Applies.When.NEXT_JOIN) public boolean serverBrand = false;
+        // A plain compass points north in every dimension, not at the world spawn. Recovery, lodestone and grave compasses
+        // keep their own targets. Admin view gives an op the real spawn.
+        public boolean compassSpawn = true;
     }
 
     public static class SleepSection {
