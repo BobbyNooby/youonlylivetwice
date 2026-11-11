@@ -222,7 +222,7 @@ public final class DeathStore {
 
     public synchronized void recordDeath(UUID uuid, String name, long nowMillis, int cooldownDays, @Nullable String deathMessage) {
         String sql = "INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass, death_message) VALUES (?, ?, ?, ?, 0, ?)";
-        try (PreparedStatement statement = statement(sql, WRITE_WAIT_MILLIS)) {
+        try (PreparedStatement statement = prepare(sql, WRITE_WAIT_MILLIS)) {
             statement.setString(1, uuid.toString());
             statement.setString(2, name);
             statement.setLong(3, nowMillis);
@@ -254,7 +254,7 @@ public final class DeathStore {
      * a higher id, even one alike in every value.
      */
     public synchronized long latestId(UUID uuid) {
-        try (PreparedStatement statement = statement("SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?", READ_WAIT_MILLIS)) {
+        try (PreparedStatement statement = prepare("SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?", READ_WAIT_MILLIS)) {
             statement.setString(1, uuid.toString());
             try (ResultSet rs = statement.executeQuery()) {
                 // The MAX of no rows is null, which getLong reads as 0
@@ -272,7 +272,7 @@ public final class DeathStore {
     }
 
     private Optional<DeathLog> newest(String sql, String key, String failure) {
-        try (PreparedStatement statement = statement(sql, READ_WAIT_MILLIS)) {
+        try (PreparedStatement statement = prepare(sql, READ_WAIT_MILLIS)) {
             statement.setString(1, key);
             try (ResultSet rs = statement.executeQuery()) {
                 return rs.next() ? Optional.of(read(rs)) : Optional.empty();
@@ -295,7 +295,7 @@ public final class DeathStore {
     public synchronized boolean revive(UUID uuid, long nowMillis, String by) {
         String sql = "UPDATE death_logs SET bypass = 1, revived_at = ?, revived_by = ? "
                 + "WHERE ROWID = (SELECT MAX(ROWID) FROM death_logs WHERE uuid = ?)";
-        try (PreparedStatement statement = statement(sql, WRITE_WAIT_MILLIS)) {
+        try (PreparedStatement statement = prepare(sql, WRITE_WAIT_MILLIS)) {
             statement.setLong(1, nowMillis);
             statement.setString(2, by);
             statement.setString(3, uuid.toString());
@@ -306,7 +306,7 @@ public final class DeathStore {
     }
 
     // Each statement sets its own wait, so a read never waits as long as the write before it could
-    private PreparedStatement statement(String sql, int waitMillis) throws SQLException {
+    private PreparedStatement prepare(String sql, int waitMillis) throws SQLException {
         connection.unwrap(SQLiteConnection.class).setBusyTimeout(waitMillis);
         return connection.prepareStatement(sql);
     }
