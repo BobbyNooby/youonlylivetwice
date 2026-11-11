@@ -282,6 +282,37 @@ public class VoidGraveGameTests {
         helper.succeed();
     }
 
+    // The same, with a torch on the ledge, which no head may replace. The grave still moves to the ledge, but no search
+    // from there finds a spot, so the last resort runs from the ledge, not from the block the death was on: the grave
+    // goes under the ledge, in its column.
+    @GameTest
+    public void topLayerBlockOverEndVoidLastResortFromLedge(GameTestHelper helper) {
+        ServerLevel end = level(helper, Level.END);
+        ChunkPos chunk = new ChunkPos(312, -312);
+        BlockPos block = new BlockPos(chunk.getMiddleBlockX(), end.getMaxY(), chunk.getMiddleBlockZ());
+        BlockPos ledge = block.offset(2, -2, 0);
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        List<Grave> made = new ArrayList<>();
+        try {
+            emptyLoneChunk(helper, end, chunk, before, 1);
+            setRemembered(end, block, Blocks.OBSIDIAN, before);
+            setRemembered(end, ledge, Blocks.OBSIDIAN, before);
+            setRemembered(end, ledge.above(2), Blocks.OBSIDIAN, before);
+            setRemembered(end, ledge.above(), Blocks.TORCH, before);
+            List<String> log = OfflineGameTests.yoltLog(() -> made.add(graveFor(end, block.above())));
+            helper.assertValueEqual(made.getFirst().pos(), ledge.below(), "grave position");
+            List<String> lastResort = log.stream().filter(line -> line.startsWith("No spot near")).toList();
+            helper.assertValueEqual(lastResort.size(), 1, "last resort lines: " + lastResort);
+            helper.assertTrue(lastResort.getFirst().startsWith("No spot near " + end.dimension().identifier() + " " + ledge.above() + " "),
+                    "the last resort did not start from the ledge: " + lastResort.getFirst());
+            helper.assertTrue(end.getBlockState(ledge.above()).is(Blocks.TORCH), "the torch is gone");
+        } finally {
+            made.forEach(grave -> removeGrave(end, grave));
+            putBack(end, before);
+        }
+        helper.succeed();
+    }
+
     // The same in the Nether, with the fallback column at 0, 0 filled up to a bedrock roof, so it has no room under the
     // roof. The columns beside it have, so the grave goes there and not up on the roof.
     @GameTest
