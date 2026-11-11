@@ -27,6 +27,7 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
@@ -64,6 +65,7 @@ public class GraveCompassGameTests {
     private static final String SWITCHED_OFF = "you-only-live-twice-gametest:grave_compass_switched_off";
     private static final String MOVED = "you-only-live-twice-gametest:grave_compass_moved";
     private static final String LODESTONE = "you-only-live-twice-gametest:grave_compass_lodestone";
+    private static final String BODY = "you-only-live-twice-gametest:grave_compass_body";
 
     // One compass at the respawn, and the rejoin after it owes none
     @GameTest(environment = ONCE)
@@ -481,6 +483,43 @@ public class GraveCompassGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // The death while away that a server sees most: the player logs out, their body is killed, and they come back after
+    // a revive. They join dead, so the compass comes at the respawn. The next logout leaves a body again, which the
+    // rejoin takes over, and the player still has one compass.
+    @GameTest(environment = BODY)
+    public void compassAfterBodyKilled(GameTestHelper helper) {
+        Runnable restore = keepSwitches(helper);
+        ServerPlayer player = join(helper, "CompassBody");
+        UUID owner = player.getUUID();
+        GameProfile profile = player.getGameProfile();
+        YoltConfig.BodiesSection bodiesBefore = BodyTestKit.useDefaultBodies();
+        try {
+            config().graves.compass = true;
+            assertLockoutOn(helper);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            body.kill(helper.getLevel());
+            helper.assertTrue(body.isDeadOrDying(), "the body did not die");
+            Grave grave = onlyGrave(helper, owner);
+            helper.assertTrue(grave.compassPending(), "the grave of the body's death owes no compass");
+            helper.assertValueEqual(DeathLockout.revive(owner, profile.name(), "test"), DeathLockout.ReviveResult.REVIVED, "the revive");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
+            helper.assertValueEqual(compasses(back).size(), 0, "compasses while dead");
+            ServerPlayer respawned = respawn(helper, back);
+            helper.assertValueEqual(trackerOf(onlyCompass(helper, respawned)), pointingAt(grave), "the compass's tracker");
+
+            BodyTestKit.leaveBody(helper, respawned);
+            ServerPlayer again = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertValueEqual(compasses(again).size(), 1, "compasses after the rejoin");
+        } finally {
+            restore.run();
+            BodyTestKit.cleanUp(helper, owner, bodiesBefore);
+        }
+        helper.succeed();
     }
 
     private static YoltConfig config() {
