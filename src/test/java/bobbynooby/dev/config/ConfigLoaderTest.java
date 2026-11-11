@@ -676,4 +676,16 @@ class ConfigLoaderTest {
         assertFalse(ConfigLoader.load(file, broken.config(), false).rewritten());
         assertTrue(ConfigLoader.load(file, null, true).rewritten());
     }
+
+    // A misspelt section leaves every border key at its default just as a misspelt key does, so a startup holds the border
+    @Test
+    void misspeltBorderSectionIsABorderProblem() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldborder\": {\"diameter\": 20000}}");
+        assertEquals("the config has a bad worldborder", r.borderProblem());
+        assertEquals(10000, r.config().worldBorder.diameter);
+        assertTrue(r.warnings().contains("worldborder: unknown key, ignored"), r.warnings().toString());
+        assertEquals("the config has a bad WORLDBORDER", loadJson("{\"WORLDBORDER\": {}}").borderProblem());
+        // Only that section's name: another unknown top-level key leaves the border alone
+        assertNull(loadJson("{\"worldBorderX\": {}, \"chatt\": {}}").borderProblem());
+    }
 }

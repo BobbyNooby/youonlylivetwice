@@ -150,10 +150,11 @@ public final class ConfigLoader {
         return new Result(config, warnings, false, borderProblem, true, backup);
     }
 
-    // Null when every worldBorder value is the file's own
+    // Null when every worldBorder value is the file's own. A top-level "worldborder" counts too: it is most likely the
+    // section misspelt, which leaves every real border key at its fallback
     private static @Nullable String borderProblem(List<String> refused) {
         List<String> border = refused.stream()
-                .filter(path -> path.equals(BORDER_SECTION) || path.startsWith(BORDER_SECTION + "."))
+                .filter(path -> path.split("\\.", 2)[0].equalsIgnoreCase(BORDER_SECTION))
                 .toList();
         return border.isEmpty() ? null : "the config has a bad " + String.join(" and ", border);
     }
