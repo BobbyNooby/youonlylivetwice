@@ -334,8 +334,9 @@ public class BodyMobGameTests {
             assertHit(helper, body, Difficulty.NORMAL, attack, 4.0F);
             assertHit(helper, body, Difficulty.HARD, attack, 6.0F);
             assertHit(helper, body, Difficulty.PEACEFUL, attack, 0.0F);
-            // As for a player, only a hit a mob caused scales
+            // As for a player, only a hit a mob caused scales: not one with no attacker, nor a player's
             assertHit(helper, body, Difficulty.HARD, level.damageSources().generic(), 4.0F);
+            assertHit(helper, body, Difficulty.HARD, level.damageSources().playerAttack(player), 4.0F);
             // An explosion scales whatever set it off (26.3 DamageTypes: DamageScaling.ALWAYS)
             DamageSource blast = level.damageSources().explosion(null, null);
             assertHit(helper, body, Difficulty.EASY, blast, 3.0F);
