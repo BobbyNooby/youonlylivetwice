@@ -149,13 +149,18 @@ public class BodyMobGameTests {
     // Its own batch, which stops the clock at noon, keeps the weather clear, and puts both back afterwards. Noon in a
     // shared batch would set undead in other tests on fire, since barriers let skylight through. Stopped, since a test
     // only starts once its chunks are loaded, and the idle test server can run thousands of ticks before that, into
-    // the night or a thunderstorm, where a spider hunts.
-    @GameTest(maxTicks = 200, skyAccess = true, environment = DAYLIGHT)
+    // the night or a thunderstorm, where a spider hunts. A storm from the batch just before, such as night_thunder's,
+    // still darkens the sky while its rain and thunder fade, up to 100 ticks, so the spider comes once they have.
+    @GameTest(maxTicks = 320, skyAccess = true, environment = DAYLIGHT)
     public void spiderIgnoresBodyInDaylight(GameTestHelper helper) {
-        ignoresBody(helper, "Daylight", EntityTypes.SPIDER, NEXT_TO_BODY,
-                // Proves the scene: spiders hunt below this
-                (spider, body) -> helper.assertTrue(spider.getLightLevelDependentMagicValue() >= 0.5F, "no daylight at the spider"),
-                NOTHING_TO_RESTORE);
+        ServerLevel level = helper.getLevel();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(level.getRainLevel(1.0F) == 0 && level.getThunderLevel(1.0F) == 0,
+                        "the last storm's rain and thunder haven't faded"))
+                .thenExecute(() -> ignoresBody(helper, "Daylight", EntityTypes.SPIDER, NEXT_TO_BODY,
+                        // Proves the scene: spiders hunt below this
+                        (spider, body) -> helper.assertTrue(spider.getLightLevelDependentMagicValue() >= 0.5F, "no daylight at the spider"),
+                        NOTHING_TO_RESTORE));
     }
 
     // Four blocks off and without its goals, so it stays put: a blast that killed the body would kill its owner
