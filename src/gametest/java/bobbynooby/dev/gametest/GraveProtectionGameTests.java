@@ -498,6 +498,45 @@ public class GraveProtectionGameTests {
         helper.succeed();
     }
 
+    // The re-check finds the grave's spot taken and would move the grave up a block, but a folder stands where the
+    // grave file goes, so the moved record can't reach the disk first. The grave stays where it was, with no head
+    // anywhere for now, and says so. The file is written again in this tick.
+    @GameTest
+    public void movedGraveThatCannotBeSavedStaysPut(GameTestHelper helper) throws IOException {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GraveStore store = GraveStore.get(server);
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos spot = grave.pos();
+        BlockPos above = spot.above();
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        try {
+            level.setBlock(spot, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            Files.deleteIfExists(file);
+            Files.createDirectories(file);
+            List<String> log = OfflineGameTests.yoltLog(() -> GraveRecheck.recheck(level, store, grave));
+
+            String line = "Could not save Ghost's grave at its new spot " + above + ", so it stays at "
+                    + level.dimension().identifier() + " " + spot + " without a head for now";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith("Could not save Ghost's grave")).toList(),
+                    List.of(line), "the failed move's log lines");
+            helper.assertValueEqual(store.byId(grave.id()).map(Grave::pos), Optional.of(spot), "grave's spot");
+            helper.assertTrue(level.getBlockState(above).isAir(), "a head went down at the spot the grave could not move to");
+            helper.assertTrue(level.getBlockState(spot).is(Blocks.STONE), "the block on the grave's spot changed");
+            // So the next save writes the grave where it still is
+            helper.assertTrue(store.isDirty(), "the grave store is not marked to be saved again");
+        } finally {
+            if (Files.isDirectory(file)) {
+                Files.delete(file);
+            }
+            store.remove(grave.id());
+            level.setBlock(spot, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(above, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            store.saveNow(server);
+        }
+        helper.succeed();
+    }
+
     // How many lines YOLT logged with that text while the action ran
     private static long failures(Runnable action, String text) {
         return OfflineGameTests.yoltLog(action).stream().filter(line -> line.contains(text)).count();
