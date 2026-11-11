@@ -7,6 +7,7 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.lockout.Cooldown;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
@@ -46,6 +47,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -111,6 +113,37 @@ public class CommandGameTests {
             helper.assertValueEqual(Settings.get().deathLockout.cooldownDays, 1, "cooldown setting");
         } finally {
             Settings.get().deathLockout.cooldownDays = daysBefore;
+            Files.writeString(Settings.path(), fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // Ruling R4: each death keeps the days it was recorded with, so a new cooldown only reaches deaths from then on.
+    // Writes the config file, so it runs with the other tests that do.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void cooldownChangeLeavesEarlierDeathsAlone(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        int daysBefore = lockout.cooldownDays;
+        String fileBefore = Files.readString(Settings.path());
+        UUID earlier = UUID.randomUUID();
+        UUID later = UUID.randomUUID();
+        try {
+            lockout.cooldownDays = 7;
+            DeathLockout.recordDeath(earlier, uniqueName("Earlier"));
+            helper.assertValueEqual(run(server, "yolt respawncooldown 1"), List.of("Respawn cooldown set to 1 day."
+                    + " It applies to deaths from now on; use /yolt unkill for the rest."), "command output");
+            DeathLockout.recordDeath(later, uniqueName("Later"));
+
+            long now = System.currentTimeMillis();
+            DeathLog kept = DeathLockout.newestDeath(earlier);
+            helper.assertTrue(kept != null && kept.cooldownDays() == 7, "the earlier death's days: " + kept);
+            helper.assertTrue(Cooldown.remainingMillis(kept, now) > Duration.ofDays(6).toMillis(),
+                    "the earlier death's wait got shorter: " + LockoutGameTests.refusalText(earlier));
+            DeathLog fresh = DeathLockout.newestDeath(later);
+            helper.assertTrue(fresh != null && fresh.cooldownDays() == 1, "the later death's days: " + fresh);
+        } finally {
+            lockout.cooldownDays = daysBefore;
             Files.writeString(Settings.path(), fileBefore);
         }
         helper.succeed();
