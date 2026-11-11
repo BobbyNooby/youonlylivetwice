@@ -221,16 +221,18 @@ public class GraveStoreGameTests {
     }
 
     // A death spot that can't be read is only a hint lost: the grave loads whole with its items, without the hint and
-    // with a warning, and the file needs no copy kept
+    // with a warning, and the file needs no copy kept. So is a compass flag, which then owes no compass.
     @GameTest
     public void unreadableDeathSpotLoadsGraveWithoutIt(GameTestHelper helper) throws IOException {
         RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
         Grave grave = new Grave(UUID.randomUUID(), UUID.randomUUID(), "Alex", ResolvableProfile.createUnresolved("Alex"),
                 Level.OVERWORLD, new BlockPos(8, 64, 8), List.of(new ItemStack(Items.DIAMOND, 2)), 1234L,
-                GlobalPos.of(Level.NETHER, new BlockPos(1, 2, 3)));
+                GlobalPos.of(Level.NETHER, new BlockPos(1, 2, 3)), true);
         CompoundTag tag = (CompoundTag) Grave.CODEC.encodeStart(ops, grave).getOrThrow();
         helper.assertTrue(tag.contains("death_pos"), "the death spot was not saved");
+        helper.assertTrue(tag.contains("compass_pending"), "the compass flag was not saved");
         tag.putString("death_pos", "nowhere");
+        tag.putString("compass_pending", "maybe");
 
         List<GraveStore> loaded = new ArrayList<>();
         List<String> log = OfflineGameTests.yoltLog(() -> loaded.add(GraveStore.TYPE.codec().parse(ops, storeData(tag)).getOrThrow()));
@@ -240,6 +242,8 @@ public class GraveStoreGameTests {
                 "the grave's items changed: " + back.items());
         helper.assertTrue(back.deathPos() == null, "an unreadable death spot read as " + back.deathPos());
         helper.assertTrue(log.stream().anyMatch(line -> line.contains("unreadable death spot")), "no warning in " + log);
+        helper.assertFalse(back.compassPending(), "an unreadable compass flag still owes a compass");
+        helper.assertTrue(log.stream().anyMatch(line -> line.contains("unreadable compass flag")), "no compass warning in " + log);
         assertFileNotCopied(helper, loaded.get(0)::checkFile, storeData(tag));
         helper.succeed();
     }

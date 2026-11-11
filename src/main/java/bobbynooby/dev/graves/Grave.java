@@ -75,10 +75,10 @@ public record Grave(
     // Same fields, but items stay undecoded so one bad stack can be skipped instead of failing the grave. A grave that
     // left out an item, or part of one, comes back as an error that still carries it, so its store knows. The death
     // spot too: one that can't be read is only a hint lost, so the grave reads whole without it. So is a compass flag
-    // that can't be read, which reads as no compass owed.
+    // that can't be read, which reads as no compass owed. Either is logged, so an admin can tell why.
     private record Raw(UUID id, UUID owner, String ownerName, ResolvableProfile profile,
                        ResourceKey<Level> dimension, BlockPos pos, List<Dynamic<?>> items, long createdAt,
-                       Optional<Dynamic<?>> deathPos, boolean compassPending) {
+                       Optional<Dynamic<?>> deathPos, Optional<Dynamic<?>> compassPending) {
         static final Codec<Raw> CODEC = RecordCodecBuilder.create(i -> i.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(Raw::id),
                 UUIDUtil.CODEC.fieldOf("owner").forGetter(Raw::owner),
@@ -89,7 +89,7 @@ public record Grave(
                 Codec.PASSTHROUGH.listOf().fieldOf("items").forGetter(Raw::items),
                 Codec.LONG.fieldOf("created_at").forGetter(Raw::createdAt),
                 Codec.PASSTHROUGH.optionalFieldOf("death_pos").forGetter(Raw::deathPos),
-                Codec.BOOL.lenientOptionalFieldOf("compass_pending", false).forGetter(Raw::compassPending)
+                Codec.PASSTHROUGH.optionalFieldOf("compass_pending").forGetter(Raw::compassPending)
         ).apply(i, Raw::new));
 
         DataResult<Grave> toGrave() {
@@ -107,7 +107,10 @@ public record Grave(
             GlobalPos died = deathPos.flatMap(entry -> GlobalPos.CODEC.parse(entry).resultOrPartial(error -> Yolt.LOGGER.warn(
                     "Ignoring the unreadable death spot of {}'s grave at {} {}: {}", ownerName, dimension.identifier(), pos, error)))
                     .orElse(null);
-            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, died, compassPending);
+            boolean owesCompass = compassPending.flatMap(entry -> Codec.BOOL.parse(entry).resultOrPartial(error -> Yolt.LOGGER.warn(
+                    "Ignoring the unreadable compass flag of {}'s grave at {} {}: {}", ownerName, dimension.identifier(), pos, error)))
+                    .orElse(false);
+            Grave grave = new Grave(id, owner, ownerName, profile, dimension, pos, stacks, createdAt, died, owesCompass);
             int left = unread;
             return left == 0 ? DataResult.success(grave)
                     : DataResult.error(() -> left + " items in the grave of " + ownerName + " could not be read whole", grave);
