@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.chat.CommandRestriction;
+import bobbynooby.dev.commands.SkinCommands;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
@@ -51,6 +52,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -387,6 +389,53 @@ public class SkinGameTests {
             TestPlayers.leave(player);
             MOJANG.forget(account);
             MOJANG.forget(unknown);
+        }
+        helper.succeed();
+    }
+
+    // A non-op has a name looked up at most once every 5 seconds, so they can't send Mojang name after name. An op is
+    // never held to it. The test server turns the wait off; it is put back for this tick only.
+    @GameTest
+    public void nonOpWaitsBetweenSkinPicks(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        String first = uniqueName("Acct");
+        String second = uniqueName("Acct");
+        MOJANG.answer(first);
+        MOJANG.answer(second);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Hasty", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        TestPlayers.Recording op = TestPlayers.joinRecording(helper, "HastyOp", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        Duration waitBefore = SkinCommands.useCooldownForTesting(Duration.ofSeconds(5));
+        try {
+            TestPlayers.op(op);
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            type(player, "yolt skin set " + first);
+            assertEqual(helper, store.choice(player.getUUID()), first, "the first pick");
+
+            player.messages.clear();
+            type(player, "yolt skin set " + second);
+            helper.assertValueEqual(texts(player), List.of("You can pick a skin again in 5 seconds."), "reply to a pick at once");
+            assertEqual(helper, store.choice(player.getUUID()), first, "the pick after a pick at once");
+            helper.assertValueEqual(MOJANG.timesAsked(second), 0, "times Mojang was asked about the second name");
+
+            type(op, "yolt skin set " + first);
+            type(op, "yolt skin set " + second);
+            assertEqual(helper, store.choice(op.getUUID()), second, "an op's second pick at once");
+        } finally {
+            SkinCommands.useCooldownForTesting(waitBefore);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(player.getUUID());
+            store.clearChoice(op.getUUID());
+            TestPlayers.deop(op);
+            TestPlayers.leave(player);
+            TestPlayers.leave(op);
+            MOJANG.forget(first);
+            MOJANG.forget(second);
         }
         helper.succeed();
     }

@@ -15,21 +15,37 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 
 import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /**
  * /yolt skin: a player wears the skin of a real Mojang account from their next join on, over every other skin. A
  * non-op may set and clear only their own, in the full tree and in CommandRestriction's; ops and the console anyone's.
- * A non-op is also held to skins.refuseKnownPlayers and skins.lockAfterFirstChoice; ops and the console never are.
+ * A non-op is also held to skins.refuseKnownPlayers and skins.lockAfterFirstChoice, and to a short wait between picks;
+ * ops and the console never are.
  */
 public final class SkinCommands {
     private static final String LOCKED = "Your skin is locked. Ask an op to change it.";
+    // When each non-op last had a name looked up, so nobody can send Mojang name after name. Server thread only.
+    private static final Map<UUID, Long> LAST_PICK = new HashMap<>();
+    private static volatile Duration pickCooldown = Duration.ofSeconds(5);
 
     private SkinCommands() {}
+
+    /** For the tests: the wait between a non-op's picks from now on. Returns the wait it replaced. */
+    public static Duration useCooldownForTesting(Duration cooldown) {
+        Duration before = pickCooldown;
+        pickCooldown = cooldown;
+        return before;
+    }
 
     /** True when non-ops may pick their own skin. */
     static boolean playersMayPick() {
@@ -96,6 +112,10 @@ public final class SkinCommands {
         }
         if (!Skins.couldBeAccount(mojangName)) {
             return YoltCommands.fail(source, noAccount(mojangName));
+        }
+        String wait = heldToRules(source, own) ? pickWait(who.id()) : null;
+        if (wait != null) {
+            return YoltCommands.fail(source, wait);
         }
         MinecraftServer server = source.getServer();
         CompletableFuture<CachedSkin> answer = Skins.lookUp(server, mojangName);
@@ -176,6 +196,19 @@ public final class SkinCommands {
     // A non-op's own pick. Ops and the console may pick anything for anyone.
     private static boolean heldToRules(CommandSourceStack source, boolean own) {
         return own && !YoltCommands.GAMEMASTER.test(source);
+    }
+
+    // Null when the player may have a name looked up now, which starts their wait again
+    private static @Nullable String pickWait(UUID player) {
+        long now = System.nanoTime();
+        Long last = LAST_PICK.get(player);
+        long left = last == null ? 0 : last + pickCooldown.toNanos() - now;
+        if (left > 0) {
+            long seconds = TimeUnit.NANOSECONDS.toSeconds(left - 1) + 1;
+            return "You can pick a skin again in " + seconds + (seconds == 1 ? " second." : " seconds.");
+        }
+        LAST_PICK.put(player, now);
+        return null;
     }
 
     // A non-op who has a pick keeps it, while the lock is on, until an op changes it

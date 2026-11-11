@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.commands.SkinCommands;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.skins.Skins;
 import net.fabricmc.api.ModInitializer;
@@ -7,11 +8,15 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.gametest.framework.GameTestServer;
 import net.minecraft.world.level.gamerules.GameRules;
 
+import java.time.Duration;
+
 public class TestServerSetup implements ModInitializer {
     @Override
     public void onInitialize() {
         // Before any server starts, so YOLT never makes its Mojang lookup and no test reaches the network
         Skins.useLookupForTesting(FakeSkinLookup.INSTANCE);
+        // The skin tests pick one name after another; the wait's own test puts it back for its tick
+        SkinCommands.useCooldownForTesting(Duration.ZERO);
         // SERVER_STARTING runs before the border is applied on SERVER_STARTED.
         ServerLifecycleEvents.SERVER_STARTING.register(server -> applyTestSettings());
         // A monster that wanders near a bed makes vanilla refuse to sleep there, so none spawn on their own. Tests that
