@@ -43,7 +43,7 @@ public class RandomSpawnGameTests {
         helper.succeed();
     }
 
-    // Three columns, spread out so each is checked on its own. Fire sits on netherrack, where it never burns out.
+    // Four columns, spread out so each is checked on its own. Fire sits on netherrack, where it never burns out.
     @GameTest(skyAccess = true)
     public void randomSpawnAvoidsFireBerriesAndMagma(GameTestHelper helper) {
         BlockPos fire = new BlockPos(1, 0, 1);
@@ -54,8 +54,11 @@ public class RandomSpawnGameTests {
         helper.setBlock(berries.above(), Blocks.SWEET_BERRY_BUSH);
         BlockPos magma = new BlockPos(1, 0, 5);
         helper.setBlock(magma, Blocks.MAGMA_BLOCK);
+        BlockPos witherRose = new BlockPos(5, 0, 5);
+        helper.setBlock(witherRose, Blocks.GRASS_BLOCK);
+        helper.setBlock(witherRose.above(), Blocks.WITHER_ROSE);
 
-        for (BlockPos ground : List.of(fire, berries, magma)) {
+        for (BlockPos ground : List.of(fire, berries, magma, witherRose)) {
             BlockPos column = helper.absolutePos(ground);
             BlockPos spot = RandomSpawn.spotAt(helper.getLevel(), column.getX(), column.getZ());
             helper.assertTrue(spot == null, helper.getBlockState(ground.above()).getBlock() + " on "

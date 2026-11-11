@@ -81,7 +81,7 @@ public final class RandomSpawn {
     /**
      * Where a player could spawn in this column, or null. Runs the check vanilla gives each spawn candidate: standing on a
      * block with a full top face, not in a fluid, with room for a player. Vanilla's check sees no collision in powder
-     * snow, fire or sweet berry bushes and doesn't look underfoot, so those and magma are refused here.
+     * snow, fire, sweet berry bushes or wither roses and doesn't look underfoot, so those and magma are refused here.
      */
     public static @Nullable BlockPos spotAt(ServerLevel level, int x, int z) {
         BlockPos spot;
@@ -101,9 +101,10 @@ public final class RandomSpawn {
         return spot;
     }
 
-    // Blocks a player can stand in that freeze, burn or prick them
+    // Blocks a player can stand in that freeze, burn, prick or wither them
     private static boolean hurts(BlockState state) {
-        return state.is(Blocks.POWDER_SNOW) || state.is(BlockTags.FIRE) || state.is(Blocks.SWEET_BERRY_BUSH);
+        return state.is(Blocks.POWDER_SNOW) || state.is(BlockTags.FIRE) || state.is(Blocks.SWEET_BERRY_BUSH)
+                || state.is(Blocks.WITHER_ROSE);
     }
 
     /**
