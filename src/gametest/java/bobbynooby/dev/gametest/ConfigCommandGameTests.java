@@ -305,6 +305,27 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // Only a border key applies the border. The world's border differs from the config's, as after a reload that refused
+    // to apply its border, so applying the config's for a chat key would move it unchecked.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void otherKeyLeavesTheBorderAlone(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = CommandGameTests.saveBorders(server);
+        try {
+            Settings.get().worldBorder.enabled = true;
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setSize(30000);
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 10000, "the test server's diameter");
+            helper.assertValueEqual(run(server, "yolt config chat.radius 20"), List.of("chat.radius changed from 48 to 20."), "command output");
+            helper.assertValueEqual(overworld.getSize(), 30000.0, "overworld border size after a chat key");
+        } finally {
+            restore(server, fileBefore);
+            CommandGameTests.restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
     // The overworld's centre is put 150 blocks west of the player, so a 100 block border ends 100 blocks short of them.
     // First the live switch is off and the change turns it on, so only a check of the new config's own switch refuses
     // it. Then, with the border on, a diameter of 120 still leaves them outside. A refusal leaves the live config, the
