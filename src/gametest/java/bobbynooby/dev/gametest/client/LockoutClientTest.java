@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.gametest.TestPlayers;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
+import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
@@ -64,16 +65,25 @@ public class LockoutClientTest implements FabricClientGameTest {
     private static String showKicked(ClientGameTestContext ctx, TestDedicatedServerContext server, UUID self) {
         // Not closed by a try: the kick ends it, and closing a connection the server has ended throws
         TestDedicatedServerConnection connection = server.connect();
-        // The client's own copy of its death line can be lost: the kick right after it closes the connection on the
-        // network thread, and the client then drops chat it hasn't handled yet. A test player beside it keeps every line
-        // the server sends. Only touched on the server thread.
+        // The client's own death line can be lost: the kick right after it closes the connection on the network thread,
+        // and the client then drops what it hasn't handled yet. A test player beside it keeps every line it is sent.
+        // A death line is a hidden game message, which only an op in admin view gets. Only touched on the server thread.
         List<TestPlayers.Recording> witness = new ArrayList<>();
         try {
             connection.waitForChunksRender();
             server.runOnServer(s -> {
                 ServerPlayer player = connection.getServerPlayer();
-                witness.add(TestPlayers.joinRecording(s, "Witness", GameType.SURVIVAL,
-                        player.blockPosition().relative(player.getDirection(), WITNESS_DISTANCE)));
+                TestPlayers.Recording admin = TestPlayers.joinRecording(s, "Witness", GameType.SURVIVAL,
+                        player.blockPosition().relative(player.getDirection(), WITNESS_DISTANCE));
+                witness.add(admin);
+                TestPlayers.op(admin);
+                AdminView.set(admin, true);
+                if (!AdminView.isOn(admin)) {
+                    throw new AssertionError("the witness is not in admin view, so it would hear no death line");
+                }
+            });
+            server.runOnServer(s -> {
+                ServerPlayer player = connection.getServerPlayer();
                 player.kill(player.level());
                 if (!player.isDeadOrDying()) {
                     throw new AssertionError("the client's player did not die");
@@ -85,6 +95,9 @@ public class LockoutClientTest implements FabricClientGameTest {
                     mc -> "the death did not kick the client, which is on " + screenName(mc));
         } finally {
             ClientTests.runAll(List.of(
+                    () -> server.runOnServer(s -> witness.forEach(player -> AdminView.set(player, false))),
+                    // The op list is a file in the server's folder
+                    () -> server.runOnServer(s -> witness.forEach(TestPlayers::deop)),
                     // Gone before the client comes back, so its next login is the only one
                     () -> server.runOnServer(s -> witness.forEach(player -> ClientTests.leaveWithoutBody(s, player.getUUID()))),
                     // Only when the kick never came, so the server never stops under a client still in its world
@@ -101,7 +114,7 @@ public class LockoutClientTest implements FabricClientGameTest {
             }
             return death.deathMessage();
         });
-        // The record builds the reason too, so the death line the server sent to chat is what shows it is right
+        // The record builds the reason too, so the death line the server sent out is what shows it is right
         List<String> said = server.computeOnServer(s -> witness.get(0).messages.stream().map(Component::getString).toList());
         if (!said.contains(died)) {
             throw new AssertionError("the server's chat said " + said + ", not \"" + died + "\", the death the lockout recorded");
