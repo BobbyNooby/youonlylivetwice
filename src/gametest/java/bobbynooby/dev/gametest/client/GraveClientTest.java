@@ -158,8 +158,8 @@ public class GraveClientTest implements FabricClientGameTest {
             }
         });
 
-        // The hand needs a few ticks to rise; the name above the hotbar, in the rarity colour, stays for two seconds
-        ctx.waitTicks(10);
+        // The name above the hotbar, in the rarity colour, stays for two seconds, longer than the hand takes to rise
+        ClientTests.waitUntilHandsUp(ctx);
         screenshot(ctx, "02-revive-head");
     }
 
@@ -178,13 +178,13 @@ public class GraveClientTest implements FabricClientGameTest {
             }
             throw new AssertionError("the client's hotbar has no empty slot");
         });
-        selectSlot(ctx, server, connection, other);
+        ClientTests.selectSlot(ctx, server, connection, other);
         return compass;
     }
 
     private static void showGraveCompass(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                          TestDedicatedServerConnection connection, Grave grave, int compassSlot) {
-        selectSlot(ctx, server, connection, compassSlot);
+        ClientTests.selectSlot(ctx, server, connection, compassSlot);
         GlobalPos gravePos = GlobalPos.of(grave.dimension(), grave.pos());
         ctx.runOnClient(mc -> {
             ItemStack held = mc.player.getMainHandItem();
@@ -201,7 +201,7 @@ public class GraveClientTest implements FabricClientGameTest {
             }
         });
         // The player still faces the grave head, so the needle points up
-        ClientTests.waitUntilHandUp(ctx);
+        ClientTests.waitUntilHandsUp(ctx);
         screenshot(ctx, "02-grave-compass");
     }
 
@@ -215,7 +215,7 @@ public class GraveClientTest implements FabricClientGameTest {
                 mc -> hasNoTarget(mc.player.getMainHandItem()) ? "the client still has the grave's head"
                         : "the client's compass still has a target: " + mc.player.getMainHandItem().get(DataComponents.LODESTONE_TRACKER));
         // A changed stack can bring the hand down and up again
-        ClientTests.waitUntilHandUp(ctx);
+        ClientTests.waitUntilHandsUp(ctx);
         screenshot(ctx, "02-grave-compass-spinning");
     }
 
@@ -234,17 +234,6 @@ public class GraveClientTest implements FabricClientGameTest {
             }
         }
         return -1;
-    }
-
-    // With the hotbar key a player would press. The server must know before it puts anything in the hand.
-    private static void selectSlot(ClientGameTestContext ctx, TestDedicatedServerContext server,
-                                   TestDedicatedServerConnection connection, int slot) {
-        ctx.getInput().pressKey(options -> options.keyHotbarSlots[slot]);
-        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.getInventory().getSelectedSlot() == slot,
-                mc -> "the client has slot " + mc.player.getInventory().getSelectedSlot() + " selected, not " + slot);
-        ClientTests.waitOnServer(server, ClientGameTestContext.DEFAULT_TIMEOUT,
-                s -> connection.getServerPlayer().getInventory().getSelectedSlot() == slot,
-                s -> "the server has slot " + connection.getServerPlayer().getInventory().getSelectedSlot() + " selected, not " + slot);
     }
 
     // Crafted by the real recipe, so it carries the lore and looks a player would get

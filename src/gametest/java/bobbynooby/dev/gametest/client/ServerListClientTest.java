@@ -1,7 +1,6 @@
 package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.config.Settings;
-import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -69,16 +68,11 @@ public class ServerListClientTest implements FabricClientGameTest {
     }
 
     private static void hoverOverCount(ClientGameTestContext ctx, String address) {
-        // The mouse moves in window pixels and the list lays out in GUI pixels
-        Point cursor = ctx.computeOnClient(mc -> {
+        Point middle = ctx.computeOnClient(mc -> {
             Box count = countBox(mc, entry(mc, address));
-            Window window = mc.getWindow();
-            double x = (count.left() + count.right()) / 2 + 0.5;
-            double y = (count.top() + count.bottom()) / 2 + 0.5;
-            return new Point(x * window.getScreenWidth() / window.getGuiScaledWidth(),
-                    y * window.getScreenHeight() / window.getGuiScaledHeight());
+            return new Point((count.left() + count.right()) / 2 + 0.5, (count.top() + count.bottom()) / 2 + 0.5);
         });
-        ctx.getInput().setCursorPos(cursor.x(), cursor.y());
+        ClientTests.moveCursorToGui(ctx, middle.x(), middle.y());
     }
 
     private static void checkHover(ClientGameTestContext ctx, String address, List<String> lines) {

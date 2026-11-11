@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.TestPlayers;
+import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -141,13 +142,35 @@ public final class ClientTests {
         }
     }
 
-    // A newly held item lowers the hand and brings it back up, so a shot of it waits until the hand is all the way up
-    public static void waitUntilHandUp(ClientGameTestContext ctx) {
+    // A newly held item lowers its hand and brings it back up, so a shot of it waits until both hands are all the way up
+    public static void waitUntilHandsUp(ClientGameTestContext ctx) {
         waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> {
             FirstPersonHandsAndItemsRenderState hands = new FirstPersonHandsAndItemsRenderState();
             mc.player.firstPersonHandsAndItems().extractRenderState(mc.player, 1.0F, hands);
-            return hands.mainHandItem == mc.player.getMainHandItem() && hands.mainHandHeight >= HAND_UP;
-        }, mc -> "the hand never came all the way up with " + mc.player.getMainHandItem());
+            return hands.mainHandItem == mc.player.getMainHandItem() && hands.mainHandHeight >= HAND_UP
+                    && hands.offHandItem == mc.player.getOffhandItem() && hands.offHandHeight >= HAND_UP;
+        }, mc -> "the hands never came all the way up with " + mc.player.getMainHandItem() + " and " + mc.player.getOffhandItem());
+    }
+
+    // With the hotbar key a player would press. The server must know before it puts anything in the hand.
+    public static void selectSlot(ClientGameTestContext ctx, TestDedicatedServerContext server,
+                                  TestDedicatedServerConnection connection, int slot) {
+        ctx.getInput().pressKey(options -> options.keyHotbarSlots[slot]);
+        waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.getInventory().getSelectedSlot() == slot,
+                mc -> "the client has slot " + mc.player.getInventory().getSelectedSlot() + " selected, not " + slot);
+        waitOnServer(server, ClientGameTestContext.DEFAULT_TIMEOUT,
+                s -> connection.getServerPlayer().getInventory().getSelectedSlot() == slot,
+                s -> "the server has slot " + connection.getServerPlayer().getInventory().getSelectedSlot() + " selected, not " + slot);
+    }
+
+    // The mouse moves in window pixels and screens lay out in GUI pixels
+    public static void moveCursorToGui(ClientGameTestContext ctx, double guiX, double guiY) {
+        double[] at = ctx.computeOnClient(mc -> {
+            Window window = mc.getWindow();
+            return new double[] {guiX * window.getScreenWidth() / window.getGuiScaledWidth(),
+                    guiY * window.getScreenHeight() / window.getGuiScaledHeight()};
+        });
+        ctx.getInput().setCursorPos(at[0], at[1]);
     }
 
     // A new prone body on the client tips over into its pose over about half a second

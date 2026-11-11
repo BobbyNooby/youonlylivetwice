@@ -81,7 +81,7 @@ public class DebugPrivacyClientTest implements FabricClientGameTest {
         server.runOnServer(s -> connection.getServerPlayer().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.COMPASS)));
         ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.getMainHandItem().is(Items.COMPASS),
                 mc -> "the client never got the compass");
-        ClientTests.waitUntilHandUp(ctx);
+        ClientTests.waitUntilHandsUp(ctx);
         ctx.getInput().lookAt(NORTH, 0.0F);
 
         // With ticks frozen the client draws the needle right at its target, rather than swinging it there over a while
