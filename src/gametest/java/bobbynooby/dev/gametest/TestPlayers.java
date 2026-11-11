@@ -37,8 +37,7 @@ public final class TestPlayers {
     // The fake client end of each test player's connection, which keeps every packet the server sent
     private static final Map<UUID, EmbeddedChannel> CHANNELS = new ConcurrentHashMap<>();
 
-    private TestPlayers() {
-    }
+    private TestPlayers() {}
 
     public static ServerPlayer join(GameTestHelper helper, String name, GameType mode, BlockPos relativePos) {
         return join(helper, uniqueProfile(name), mode, relativePos);

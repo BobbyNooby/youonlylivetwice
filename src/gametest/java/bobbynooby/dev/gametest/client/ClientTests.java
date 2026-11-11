@@ -32,8 +32,7 @@ public final class ClientTests {
     // The hand's height goes from 0 when lowered to 1 when fully up
     private static final float HAND_UP = 0.99F;
 
-    private ClientTests() {
-    }
+    private ClientTests() {}
 
     // The server runs inside the client process, but it is a real dedicated server, so YOLT is active on it
     public static void withServer(ClientGameTestContext ctx, BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
