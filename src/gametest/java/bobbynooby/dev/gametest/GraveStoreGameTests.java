@@ -2,14 +2,23 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.skins.SkinStore;
+import com.google.common.collect.ImmutableMultimap;
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.serialization.DataResult;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -19,24 +28,35 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.SavedDataStorage;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -312,6 +332,171 @@ public class GraveStoreGameTests {
         helper.assertTrue(log.stream().anyMatch(line -> line.contains("unreadable compass flag")), "no compass warning in " + log);
         assertFileNotCopied(helper, loaded.get(0)::checkFile, storeData(tag));
         helper.succeed();
+    }
+
+    // Not a check of behaviour: it logs, for the CI log, what 1,000 more graves cost the lookups, a placement and the
+    // save every death makes, first with graves of 10 stacks, then of 41, a full inventory and the head. Each grave
+    // carries a signed skin twice, in its record and on its head, as a real one does. The graves are records only, far
+    // from everything, so each lookup scans them all and finds nothing. All in this tick, and the grave file is written
+    // again without them.
+    @GameTest(skyAccess = true)
+    public void costOfAThousandGravesIsLogged(GameTestHelper helper) throws IOException {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GraveStore store = GraveStore.get(server);
+        RegistryOps<Tag> ops = server.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        BlockPos open = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos inLava = helper.absolutePos(new BlockPos(3, 0, 3));
+        ChunkPos chunk = ChunkPos.containing(open);
+        Holder<Enchantment> sharpness = server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SHARPNESS);
+        Random random = new Random(1234);
+        List<Grave> light = new ArrayList<>();
+        List<Grave> full = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            ResolvableProfile profile = signedProfile(random, i);
+            BlockPos pos = new BlockPos(2_000_000 + (i % 32) * 16, 64, 2_000_000 + (i / 32) * 16);
+            light.add(costGrave(profile, pos, costItems(profile, 9, null)));
+            full.add(costGrave(profile, pos, costItems(profile, 35, sharpness)));
+        }
+        List<BlockPos> pool = new ArrayList<>();
+        try {
+            double placementBefore = meanMicros(200, () -> GravePlacement.find(level, open, store));
+            List<Long> saveBefore = eachMillis(3, () -> store.saveNow(server));
+
+            light.forEach(store::put);
+            List<Long> saveLight = eachMillis(3, () -> store.saveNow(server));
+            long lightBytes = Files.size(file);
+            light.forEach(grave -> store.remove(grave.id()));
+
+            full.forEach(store::put);
+            Grave some = full.get(500);
+            helper.assertValueEqual(store.at(some.dimension(), some.pos()).map(Grave::id), Optional.of(some.id()), "a grave found by spot");
+            double at = meanMicros(1000, () -> store.at(Level.OVERWORLD, open));
+            double inChunk = meanMicros(1000, () -> store.inChunk(Level.OVERWORLD, chunk));
+            double placement = meanMicros(200, () -> GravePlacement.find(level, open, store));
+            helper.assertValueEqual(GravePlacement.find(level, open, store), open, "placement on open floor");
+            List<Long> saveFull = eachMillis(3, () -> store.saveNow(server));
+            List<Long> storageSave = eachMillis(3, () -> {
+                store.setDirty();
+                server.getDataStorage().saveAndJoin();
+            });
+            List<Long> encode = eachMillis(3, () -> GraveStore.TYPE.codec().encodeStart(ops, store).getOrThrow());
+            List<Long> readBack = eachMillis(3, () -> {
+                try {
+                    NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+            long fullBytes = Files.size(file);
+
+            // The middle of a lava pool, as in the placement tests: the search reads far more blocks before the rim
+            for (int x = 0; x <= 7; x++) {
+                for (int z = 0; z <= 7; z++) {
+                    BlockPos pos = new BlockPos(x, 0, z);
+                    pool.add(pos);
+                    helper.setBlock(pos, x == 7 || z == 7 ? Blocks.STONE : Blocks.LAVA);
+                }
+            }
+            double poolPlacement = meanMicros(50, () -> GravePlacement.find(level, inLava, store));
+            full.forEach(grave -> store.remove(grave.id()));
+            double poolPlacementBefore = meanMicros(50, () -> GravePlacement.find(level, inLava, store));
+
+            Yolt.LOGGER.info("Grave cost, in microseconds each, with 1000 more graves: a lookup by spot {}, by chunk {}; a "
+                            + "placement on open floor {} ({} without them), in a lava pool {} ({} without them)",
+                    micros(at), micros(inChunk), micros(placement), micros(placementBefore), micros(poolPlacement),
+                    micros(poolPlacementBefore));
+            Yolt.LOGGER.info("Grave cost, in milliseconds for each of 3 runs, of the save every death makes: {} with the "
+                            + "store as it was; {} with 1000 more graves of 10 stacks, a {} KB file; {} with 1000 of 41 "
+                            + "stacks, a {} KB file. Of the last, the data storage's save took {}, one encode {}, the "
+                            + "read back {}", saveBefore, saveLight, lightBytes / 1024, saveFull, fullBytes / 1024,
+                    storageSave, encode, readBack);
+        } finally {
+            for (BlockPos pos : pool) {
+                helper.setBlock(pos, Blocks.AIR);
+            }
+            light.forEach(grave -> store.remove(grave.id()));
+            full.forEach(grave -> store.remove(grave.id()));
+            store.saveNow(server);
+        }
+        helper.succeed();
+    }
+
+    // Mean microseconds a run, after as many runs again to warm up
+    private static double meanMicros(int runs, Runnable action) {
+        for (int i = 0; i < runs; i++) {
+            action.run();
+        }
+        long start = System.nanoTime();
+        for (int i = 0; i < runs; i++) {
+            action.run();
+        }
+        return (System.nanoTime() - start) / 1_000.0 / runs;
+    }
+
+    // Each run's milliseconds, after one run to warm up
+    private static List<Long> eachMillis(int runs, Runnable action) {
+        action.run();
+        List<Long> taken = new ArrayList<>();
+        for (int i = 0; i < runs; i++) {
+            long start = System.nanoTime();
+            action.run();
+            taken.add((System.nanoTime() - start) / 1_000_000);
+        }
+        return taken;
+    }
+
+    private static String micros(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    // An owner with signed skin textures the size the session server hands out: a value of about 300 characters and a
+    // 512-byte signature
+    private static ResolvableProfile signedProfile(Random random, int i) {
+        UUID id = new UUID(random.nextLong(), random.nextLong());
+        String name = "Owner" + i;
+        byte[] skin = new byte[32];
+        random.nextBytes(skin);
+        String textures = "{\"timestamp\":" + (1_700_000_000_000L + i) + ",\"profileId\":\"" + id + "\",\"profileName\":\"" + name
+                + "\",\"textures\":{\"SKIN\":{\"url\":\"http://textures.minecraft.net/texture/" + HexFormat.of().formatHex(skin) + "\"}}}";
+        byte[] signature = new byte[512];
+        random.nextBytes(signature);
+        PropertyMap properties = new PropertyMap(ImmutableMultimap.of("textures", new Property("textures",
+                Base64.getEncoder().encodeToString(textures.getBytes(StandardCharsets.UTF_8)),
+                Base64.getEncoder().encodeToString(signature))));
+        return ResolvableProfile.createResolved(new GameProfile(id, name, properties));
+    }
+
+    private static Grave costGrave(ResolvableProfile profile, BlockPos pos, List<ItemStack> items) {
+        UUID owner = profile.partialProfile().id();
+        String name = profile.name().orElseThrow();
+        return new Grave(UUID.randomUUID(), owner, name, profile, Level.OVERWORLD, pos, items, 1L,
+                GlobalPos.of(Level.OVERWORLD, pos.below(3)));
+    }
+
+    // The grave head and plain stacks; with a sword's enchantment also worn iron armour and that sword
+    private static List<ItemStack> costItems(ResolvableProfile profile, int plain, @Nullable Holder<Enchantment> sharpness) {
+        List<ItemStack> items = new ArrayList<>();
+        items.add(GraveItems.graveHead(profile));
+        if (sharpness != null) {
+            for (Item armour : List.of(Items.IRON_HELMET, Items.IRON_CHESTPLATE, Items.IRON_LEGGINGS, Items.IRON_BOOTS)) {
+                ItemStack worn = new ItemStack(armour);
+                worn.setDamageValue(37);
+                items.add(worn);
+            }
+            ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+            sword.enchant(sharpness, 5);
+            sword.setDamageValue(120);
+            items.add(sword);
+        }
+        List<Item> kinds = List.of(Items.COBBLESTONE, Items.DIRT, Items.OAK_LOG, Items.TORCH, Items.BREAD, Items.ARROW,
+                Items.IRON_INGOT, Items.COAL, Items.OAK_PLANKS, Items.REDSTONE, Items.GOLD_INGOT, Items.DIAMOND, Items.STRING);
+        for (int i = 0; i < plain; i++) {
+            Item kind = kinds.get(i % kinds.size());
+            items.add(new ItemStack(kind, Math.min(64, kind.getDefaultMaxStackSize()) - i % 5));
+        }
+        return items;
     }
 
     // A grave file's data part, with the version fields at today's values so no fixer runs
