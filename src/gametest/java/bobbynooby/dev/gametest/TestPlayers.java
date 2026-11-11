@@ -101,8 +101,9 @@ public final class TestPlayers {
         CHANNELS.remove(player.getUUID());
     }
 
-    // A client's whole disconnect, as ServerGamePacketListenerImpl.removePlayerFromWorld runs it: a sleeper is woken
-    // and anyone riding the player gets off before the player list lets them go
+    // The part of a client's disconnect that changes the player, as ServerGamePacketListenerImpl.removePlayerFromWorld
+    // runs it: a sleeper is woken, anyone riding gets off and the player counts as disconnected, all before the player
+    // list lets them go. The "left the game" message, chat chain and text filter are left out.
     public static void disconnect(ServerPlayer player) {
         player.disconnect();
         leave(player);

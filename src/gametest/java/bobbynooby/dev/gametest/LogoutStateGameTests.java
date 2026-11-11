@@ -54,7 +54,7 @@ import static bobbynooby.dev.gametest.BodyTestKit.once;
 import static bobbynooby.dev.gametest.BodyTestKit.store;
 import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 
-// Logging out in the middle of something. Every logout is a client's whole disconnect, which wakes a sleeper and lets
+// Logging out in the middle of something. Every logout runs a client's disconnect steps, which wake a sleeper and let
 // riders off before the player list lets the player go. Each test turns the default body switches on and puts the
 // server's own back in the same tick; the ones that wait only need the body, which ticks on its own.
 public class LogoutStateGameTests {

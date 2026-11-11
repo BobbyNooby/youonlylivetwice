@@ -62,7 +62,7 @@ final class BodyTestKit {
         return bodyOf(helper, player, Mannequin.class, "mannequin");
     }
 
-    // The same through a client's whole disconnect, for a logout where what that does first matters
+    // The same through the disconnect steps, for a logout where what they do first matters
     static Mannequin disconnectBody(GameTestHelper helper, ServerPlayer player) {
         TestPlayers.disconnect(player);
         return bodyOf(helper, player, Mannequin.class, "mannequin");
