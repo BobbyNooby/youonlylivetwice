@@ -50,13 +50,15 @@ public class ServerListClientTest implements FabricClientGameTest {
                 servers.save();
             });
             try {
+                // Before the wait, so a rename fails with its own message rather than as a wait that never ended
+                Field hover = hoverField();
                 ctx.runOnClient(mc -> mc.gui.setScreen(new JoinMultiplayerScreen(mc.gui.screen())));
                 ctx.waitForScreen(JoinMultiplayerScreen.class);
                 // The list pings a server the first time it draws it
-                ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> hoverLines(entry(mc, address)) != null,
-                        mc -> "the ping never finished: the server is " + entry(mc, address).getServerData().state());
+                ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> hoverLines(hover, entry(mc, address)) != null,
+                        mc -> "the server list never took the hover lines: its ping is " + entry(mc, address).getServerData().state());
                 hoverOverCount(ctx, address);
-                checkHover(ctx, address, lines);
+                checkHover(ctx, address, lines, hover);
                 ClientTests.screenshot(ctx, "07-server-list-hover");
             } finally {
                 ClientTests.runAll(List.of(
@@ -75,7 +77,7 @@ public class ServerListClientTest implements FabricClientGameTest {
         ClientTests.moveCursorToGui(ctx, middle.x(), middle.y());
     }
 
-    private static void checkHover(ClientGameTestContext ctx, String address, List<String> lines) {
+    private static void checkHover(ClientGameTestContext ctx, String address, List<String> lines, Field hover) {
         ctx.runOnClient(mc -> {
             ServerSelectionList.OnlineServerEntry entry = entry(mc, address);
             ServerData data = entry.getServerData();
@@ -87,8 +89,8 @@ public class ServerListClientTest implements FabricClientGameTest {
             if (!sample.equals(lines)) {
                 throw new AssertionError("the client read the sample " + sample + ", not the hover lines " + lines);
             }
-            List<Component> hover = hoverLines(entry);
-            List<String> shown = hover == null ? List.of() : hover.stream().map(Component::getString).toList();
+            List<Component> tooltip = hoverLines(hover, entry);
+            List<String> shown = tooltip == null ? List.of() : tooltip.stream().map(Component::getString).toList();
             if (!shown.equals(lines)) {
                 throw new AssertionError("the hover shows " + shown + ", not the hover lines " + lines);
             }
@@ -127,13 +129,21 @@ public class ServerListClientTest implements FabricClientGameTest {
 
     // The entry's own copy of the sample's names, which it only takes once the ping's answer is in, and which the hover
     // draws. It is private, so it is read by name.
-    @SuppressWarnings("unchecked")
-    private static @Nullable List<Component> hoverLines(ServerSelectionList.OnlineServerEntry entry) {
+    private static Field hoverField() {
         try {
             Field field = ServerSelectionList.OnlineServerEntry.class.getDeclaredField("onlinePlayersTooltip");
             field.setAccessible(true);
-            return (List<Component>) field.get(entry);
-        } catch (ReflectiveOperationException e) {
+            return field;
+        } catch (NoSuchFieldException e) {
+            throw new AssertionError("the server list entry has no onlinePlayersTooltip to read its hover from", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static @Nullable List<Component> hoverLines(Field hover, ServerSelectionList.OnlineServerEntry entry) {
+        try {
+            return (List<Component>) hover.get(entry);
+        } catch (IllegalAccessException e) {
             throw new AssertionError("could not read the server list entry's hover", e);
         }
     }
