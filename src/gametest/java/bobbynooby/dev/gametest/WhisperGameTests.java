@@ -417,6 +417,37 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // With skin choice on a restricted non-op's tree has /yolt too, for their own skin. Asking for suggestions shows it,
+    // and /yolt skin set offers no names, though another player is online a few blocks away.
+    @GameTest
+    public void suggestionsWithSkinChoiceOfferNoNames(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        boolean skinChoiceBefore = config.skins.allowPlayerChoice;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            config.skins.allowPlayerChoice = true;
+            ServerPlayer nonOp = joinRecording(helper, joined, "wskin", BlockPos.ZERO);
+            ServerPlayer near = joinRecording(helper, joined, "wskinnear", new BlockPos(2, 0, 0));
+            String name = near.getGameProfile().name();
+
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "yolt"), "a non-op's commands with skin choice on");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/yolt skin "), List.of("clear", "set"), "a non-op's /yolt skin");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/yolt skin set "), List.of(), "a non-op's suggestions for a skin");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/yolt skin set " + name.substring(0, 4)), List.of(),
+                    "a non-op's suggestions for the start of a name");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.skins.allowPlayerChoice = skinChoiceBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     // With a player online a few blocks away, tab-complete after /w offers no names, for a bare /w or the start of that
     // player's name. The server's own /w, which ops use, offers none either.
     @GameTest
