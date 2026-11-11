@@ -407,6 +407,44 @@ public class GraveMenuGameTests {
         helper.succeed();
     }
 
+    // Nothing else writes an open grave's container, so a grave stack always finds room again. If something ever did,
+    // the stack with no room drops at the grave for good, never on a 5-minute timer. Stone set in the freed slot through
+    // the shared container stands in for that writer.
+    @GameTest
+    public void cursorStackWithNoRoomDropsForGood(GameTestHelper helper) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (int i = 0; i < 52; i++) {
+            stacks.add(new ItemStack(Items.COBBLESTONE, 64));
+        }
+        stacks.add(new ItemStack(Items.DIAMOND, 10));
+        Grave grave = makeGrave(helper, stacks.toArray(ItemStack[]::new));
+        helper.assertValueEqual(grave.items().size(), 54, "stacks in the full grave");
+        ServerPlayer looter = join(helper, "NoRoom");
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        try {
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            menu.clicked(53, PRIMARY, ContainerInput.PICKUP, looter);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND) && menu.getCarried().getCount() == 10,
+                    "the diamonds are not on the cursor: " + menu.getCarried());
+            GraveMenus.containerFor(grave).setItem(53, new ItemStack(Items.STONE));
+
+            TestPlayers.disconnect(looter);
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(inGrave.size(), 54, "stacks in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.DIAMOND), 0, "diamonds in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.STONE), 1, "stone in the grave");
+            List<ItemEntity> forGood = drops(helper, around, true);
+            helper.assertValueEqual(forGood.size(), 1, "drops that never despawn");
+            ItemStack dropped = forGood.get(0).getItem();
+            helper.assertTrue(dropped.is(Items.DIAMOND) && dropped.getCount() == 10, "the drop that never despawns: " + dropped);
+            helper.assertValueEqual(drops(helper, around, false).size(), 0, "drops that despawn");
+        } finally {
+            cleanUpLeft(helper, grave, around, looter);
+        }
+        helper.succeed();
+    }
+
     // The grave head comes first, as in a real death; empty stacks in the list are dropped by the record
     private static Grave makeGrave(GameTestHelper helper, ItemStack... items) {
         ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
@@ -457,6 +495,13 @@ public class GraveMenuGameTests {
                 .filter(entity -> entity.getItem().is(item) && (entity.getAge() < 0) == forGood)
                 .mapToInt(entity -> entity.getItem().getCount())
                 .sum();
+    }
+
+    // Every item entity lying there, dropped for good or the vanilla way
+    private static List<ItemEntity> drops(GameTestHelper helper, AABB around, boolean forGood) {
+        return helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive).stream()
+                .filter(entity -> (entity.getAge() < 0) == forGood)
+                .toList();
     }
 
     // After disconnects: anyone still online leaves, and anything dropped and the grave go
