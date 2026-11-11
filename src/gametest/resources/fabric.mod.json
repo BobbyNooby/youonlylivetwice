@@ -22,6 +22,7 @@
 			"bobbynooby.dev.gametest.ConfigCommandGameTests",
 			"bobbynooby.dev.gametest.DebugPrivacyGameTests",
 			"bobbynooby.dev.gametest.GraveCommandGameTests",
+			"bobbynooby.dev.gametest.GraveCompassGameTests",
 			"bobbynooby.dev.gametest.GraveDeathGameTests",
 			"bobbynooby.dev.gametest.GraveItemsGameTests",
 			"bobbynooby.dev.gametest.GraveMenuGameTests",
