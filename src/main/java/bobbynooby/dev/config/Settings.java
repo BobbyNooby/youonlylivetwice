@@ -92,10 +92,6 @@ public final class Settings {
         borderHeld = false;
     }
 
-    public static void save() {
-        ConfigLoader.write(path(), config);
-    }
-
     /** True while a server with no single-player owner runs, so single-player worlds stay vanilla. */
     public static boolean active() {
         return active;

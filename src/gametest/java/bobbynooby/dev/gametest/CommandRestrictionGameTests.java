@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.chat.CommandRestriction;
+import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import com.mojang.brigadier.ParseResults;
@@ -233,7 +234,7 @@ public class CommandRestrictionGameTests {
             for (boolean whispers : new boolean[] {true, false}) {
                 Settings.get().restrictCommands = true;
                 Settings.get().chat.allowWhispers = whispers;
-                Settings.save();
+                ConfigLoader.write(path, Settings.get());
                 run(server.createCommandSourceStack(), "yolt reload");
                 helper.assertValueEqual(lastTreeHasWhisper(helper, player), whispers,
                         "/w in the tree resent after a reload with whispers " + (whispers ? "on" : "off"));
