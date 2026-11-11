@@ -42,7 +42,7 @@ public class GraveItemsGameTests {
 
     // An offline player's grave head is built from the name and id alone, with no skin to copy
     @GameTest
-    public void profileOfNameAndIdKeepsIdAndName(GameTestHelper helper) {
+    public void offlineGraveProfileKeepsIdAndName(GameTestHelper helper) {
         UUID id = UUID.randomUUID();
         ResolvableProfile profile = Profiles.of(helper.getLevel().getServer(), new NameAndId(id, "Ghost"));
         helper.assertValueEqual(profile.partialProfile().id(), id, "profile id");
