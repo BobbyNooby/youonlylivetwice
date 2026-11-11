@@ -10,6 +10,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.skins.CachedSkin;
+import bobbynooby.dev.skins.LoginSkins;
 import bobbynooby.dev.skins.SkinOwners;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.skins.SkinTextures;
@@ -60,7 +61,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 // The fake lookup stands in for Mojang (TestServerSetup puts it in before the server starts), and each test sets up
 // names of its own. Logins run in LOGIN_CHECK, where no other test's player is online: the GameTest server holds one
@@ -148,25 +152,32 @@ public class SkinGameTests {
     }
 
     // The wait is plain time too, so slow ticks can't stretch it: with a 1 second cap the login gives up after its
-    // second tick, once a second has gone by, long before 20 ticks. The setting goes back in the same tick.
+    // second tick, once a second has gone by, long before 20 ticks. The test moves the login's clock on a second rather
+    // than wait one out. The setting and the clock go back in the same tick.
     @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
-    public void lookupTimeoutCountsPlainTimeToo(GameTestHelper helper) throws InterruptedException {
+    public void lookupTimeoutCountsPlainTimeToo(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         String name = uniqueName("Clock");
         MOJANG.neverAnswer(name);
         YoltConfig.SkinsSection skins = Settings.get().skins;
         int before = skins.lookupTimeoutSeconds;
-        skins.lookupTimeoutSeconds = 1;
-        try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
-            login.tick();
-            helper.assertTrue(login.finished().isEmpty(), "the login went on before the second was up");
-            Thread.sleep(1100);
-            List<String> log = OfflineGameTests.yoltLog(login::tick);
-            helper.assertTrue(login.finished().isPresent(), "the login did not go through once the second was up");
-            helper.assertValueEqual(log, List.of("Mojang gave no answer about the skin of " + name + " within 1 second, so "
-                    + name + " joins with the skin saved before for their name, or none"), "log");
+        AtomicLong now = new AtomicLong(System.nanoTime());
+        LongSupplier clockBefore = LoginSkins.useClockForTesting(now::get);
+        try {
+            skins.lookupTimeoutSeconds = 1;
+            try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+                login.tick();
+                helper.assertTrue(login.finished().isEmpty(), "the login went on before the second was up");
+                now.addAndGet(TimeUnit.SECONDS.toNanos(1));
+                List<String> log = OfflineGameTests.yoltLog(login::tick);
+                helper.assertTrue(login.finished().isPresent(), "the login did not go through once the second was up");
+                helper.assertValueEqual(log, List.of("Mojang gave no answer about the skin of " + name + " within 1 second, so "
+                        + name + " joins with the skin saved before for their name, or none"), "log");
+            } finally {
+                skins.lookupTimeoutSeconds = before;
+            }
         } finally {
-            skins.lookupTimeoutSeconds = before;
+            LoginSkins.useClockForTesting(clockBefore);
             MOJANG.forget(name);
         }
         helper.succeed();
