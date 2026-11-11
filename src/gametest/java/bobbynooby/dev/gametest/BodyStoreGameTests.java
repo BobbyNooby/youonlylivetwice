@@ -161,6 +161,20 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // A body's chestplate with no damage component at all, not even 0: the real chestplate loses its own
+    @GameTest
+    public void gearSyncRemovesDamageWhenBodyHasNone(GameTestHelper helper) {
+        ItemStack body = new ItemStack(Items.IRON_CHESTPLATE);
+        body.remove(DataComponents.DAMAGE);
+        helper.assertFalse(body.has(DataComponents.DAMAGE), "the body's chestplate still has a damage component");
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.CHEST, body),
+                Map.of(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 5)));
+        ItemStack chest = out.get(EquipmentSlot.CHEST);
+        helper.assertTrue(chest.is(Items.IRON_CHESTPLATE), "chestplate replaced: " + chest);
+        helper.assertFalse(chest.has(DataComponents.DAMAGE), "the real chestplate kept its damage: " + chest.get(DataComponents.DAMAGE));
+        helper.succeed();
+    }
+
     @GameTest
     public void gearSyncLeavesDifferentItem(GameTestHelper helper) {
         Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD)),
