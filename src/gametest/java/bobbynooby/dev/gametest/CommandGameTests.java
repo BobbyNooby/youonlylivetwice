@@ -33,6 +33,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -228,6 +229,44 @@ public class CommandGameTests {
         } finally {
             graves.enabled = gravesBefore;
             DeathLockout.revive(who.id(), "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // With the lockout off nothing is recorded, so the kill reads nothing before it either, and a failing store stays
+    // quiet. Online, so finding the player reads no death log. The switches go back in this tick.
+    @GameTest
+    public void killWithLockoutOffReadsNoDeaths(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Unlocked", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        YoltConfig config = Settings.get();
+        boolean gravesBefore = config.graves.enabled;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        List<String> output = new ArrayList<>();
+        List<String> log;
+        try {
+            TestPlayers.markLoaded(player);
+            // No grave to clean up: the player carries nothing, and this test is about the lockout
+            config.graves.enabled = false;
+            config.deathLockout.enabled = false;
+            try {
+                log = OfflineGameTests.yoltLog(() -> {
+                    try {
+                        withOwnDeathStore(true, closed -> output.addAll(run(server, "yolt kill " + name)));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+            } finally {
+                config.graves.enabled = gravesBefore;
+                config.deathLockout.enabled = lockoutBefore;
+            }
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            helper.assertValueEqual(output, List.of("Killed " + name + "."), "command output");
+            helper.assertTrue(log.stream().noneMatch(line -> line.contains("before the kill")), "the kill read the death log: " + log);
+        } finally {
+            TestPlayers.leave(player);
         }
         helper.succeed();
     }

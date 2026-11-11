@@ -214,11 +214,12 @@ public final class DeathLockout {
     /**
      * The row id of the player's newest death, 0 when there is none, read before a kill so the kill's own row can be
      * told apart afterwards, even from an older one alike in every value. Empty when the store is closed or can't be
-     * read: the kill then can't be confirmed.
+     * read: the kill then can't be confirmed. Also empty, without a read, while the lockout is off: no death is recorded
+     * then, so there is nothing to confirm.
      */
     public static OptionalLong newestDeathId(UUID uuid, String name) {
         DeathStore open = store;
-        if (open == null) {
+        if (open == null || !enabled()) {
             return OptionalLong.empty();
         }
         try {
