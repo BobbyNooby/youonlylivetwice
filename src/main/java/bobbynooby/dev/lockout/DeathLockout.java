@@ -20,6 +20,11 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Keeps a player who died out of the server: each death that counts goes into the death store, and the player is kicked
+ * and refused at login until the newest one's cooldown ends or someone revives them. With the store closed or failing,
+ * everyone may join.
+ */
 public final class DeathLockout {
     /** What a revive did. */
     public enum ReviveResult {
