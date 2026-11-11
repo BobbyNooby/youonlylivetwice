@@ -1067,6 +1067,39 @@ public class BorderAndReloadGameTests {
         helper.succeed();
     }
 
+    // A timed /worldborder is growing the overworld's border from 4000 to 5000 blocks, centred 1500 blocks from the
+    // player, so the config's 2000 would cut them. A reload leaves a moving border to finish, so it neither warns nor
+    // resizes it. The live 1000 block borders already leave everything else outside, so nothing else is newly outside.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadLeavesAMovingBorderToFinish(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerPlayer player = TestPlayers.join(helper, "Moving", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.WorldBorderSection live = Settings.get().worldBorder;
+        try {
+            live.enabled = true;
+            live.diameter = 1000;
+            live.endScale = 2.0;
+            WorldBorders.apply(server);
+            WorldBorder overworld = server.overworld().getWorldBorder();
+            overworld.setCenter(player.getX() - 1500, player.getZ());
+            overworld.lerpSizeBetween(4000, 5000, 1_000_000L, server.overworld().getGameTime());
+            Files.writeString(path, "{\"worldBorder\": {\"enabled\": true, \"diameter\": 2000, \"endScale\": 2.0}}");
+
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.GROWING, "overworld border status");
+            helper.assertValueEqual(overworld.getLerpTarget(), 5000.0, "overworld border target");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // The overworld's border shrank to 1000 under a timed /worldborder while YOLT's stayed 2000. Growing it back
     // leaves nobody outside, so the reload applies the config's border.
     @GameTest(environment = CONFIG_COMMAND)
