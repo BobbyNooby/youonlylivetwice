@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.skins.SkinStore;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.commands.CommandSourceStack;
@@ -56,7 +57,9 @@ public final class YoltCommands {
 
     // Online players first, so the exact player is used even if the name cache is out of date. Then the death log: a
     // locked-out player can't join, so the cache never refreshes them, and once their entry expires it may give
-    // another id for the name.
+    // another id for the name. An offline-mode server never asks Mojang: vanilla's cache would on a miss, on the
+    // server thread, and could give the account's online id, which an offline login never has. It takes the id the
+    // player last joined with, which a forwarding proxy may have given, else the one an offline login gets.
     static Optional<NameAndId> lookup(MinecraftServer server, String name) {
         ServerPlayer online = server.getPlayerList().getPlayerByName(name);
         if (online != null) {
@@ -65,6 +68,9 @@ public final class YoltCommands {
         Optional<NameAndId> died = DeathLockout.latestByName(name);
         if (died.isPresent()) {
             return died;
+        }
+        if (!server.usesAuthentication()) {
+            return Optional.of(SkinStore.get(server).joinedUnder(name).orElseGet(() -> NameAndId.createOffline(name)));
         }
         return server.services().nameToIdCache().get(name);
     }

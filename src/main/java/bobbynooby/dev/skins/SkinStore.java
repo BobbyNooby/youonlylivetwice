@@ -11,6 +11,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
@@ -288,6 +289,23 @@ public final class SkinStore extends SavedData {
             }
         }
         return false;
+    }
+
+    /**
+     * A player whose last join was under this name. One in the same case wins, since an offline-mode server gives
+     * "Steve" and "steve" different ids.
+     */
+    public Optional<NameAndId> joinedUnder(String name) {
+        NameAndId otherCase = null;
+        for (Map.Entry<UUID, String> entry : joined.entrySet()) {
+            if (entry.getValue().equals(name)) {
+                return Optional.of(new NameAndId(entry.getKey(), entry.getValue()));
+            }
+            if (otherCase == null && entry.getValue().equalsIgnoreCase(name)) {
+                otherCase = new NameAndId(entry.getKey(), entry.getValue());
+            }
+        }
+        return Optional.ofNullable(otherCase);
     }
 
     /** The player is told at their next join that their pick was reset. */

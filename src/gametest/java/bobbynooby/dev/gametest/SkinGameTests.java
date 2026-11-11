@@ -795,6 +795,41 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // An offline-mode server finds a player who isn't online by the id they last joined with, and a name nobody joined
+    // under by the id an offline login gets, never asking Mojang. Vanilla's cache can hold an account's online id for a
+    // name, which its own lookup on a miss would have put there; that id is never used.
+    @GameTest
+    public void offlineServerFindsPlayersByNameWithoutMojang(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        helper.assertFalse(server.usesAuthentication(), "the test server is in online mode");
+        String account = uniqueName("Acct");
+        String stranger = uniqueName("Never");
+        MOJANG.answer(account);
+        UUID onlineId = UUID.randomUUID();
+        server.services().nameToIdCache().add(new NameAndId(onlineId, stranger));
+        UUID offlineId = UUIDUtil.createOfflinePlayerUUID(stranger);
+        ServerPlayer player = TestPlayers.join(helper, "Gone", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId gone = player.nameAndId();
+        TestPlayers.leave(player);
+        SkinStore store = SkinStore.get(server);
+        try {
+            helper.assertValueEqual(console(server, "yolt skin set " + stranger + " " + account),
+                    List.of(stranger + "'s skin is now " + account + "'s. It shows once they rejoin."), "the pick for a stranger");
+            assertEqual(helper, store.choice(offlineId), account, "the stranger's pick under the offline id");
+            assertEqual(helper, store.choice(onlineId), null, "the stranger's pick under the cached online id");
+
+            // A test player's id is made up, as a forwarding proxy's can be, so only the join record has it
+            console(server, "yolt skin set " + gone.name() + " " + account);
+            assertEqual(helper, store.choice(gone.id()), account, "the pick for a player who left");
+        } finally {
+            store.clearChoice(offlineId);
+            store.clearChoice(onlineId);
+            store.clearChoice(gone.id());
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
     // Vanilla's name cache gives the id it holds for a name in any case, and nothing for a name it doesn't hold. This
     // cache has no Mojang to ask, so vanilla's own lookup on a miss would throw.
     @GameTest
