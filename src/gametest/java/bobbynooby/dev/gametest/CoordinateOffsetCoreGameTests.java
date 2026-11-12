@@ -226,9 +226,14 @@ public class CoordinateOffsetCoreGameTests {
         ServerPlayer player = OffsetTestKit.join(helper, "cobundle", GameType.CREATIVE);
         try {
             Offset offset = CoordinateOffsets.offset(player);
+            // Only a chunk the client holds is forgotten
+            ServerLevel level = helper.getLevel();
+            LevelChunk chunk = level.getChunkAt(helper.absolutePos(new BlockPos(1, 1, 1)));
+            ChunkPos pos = chunk.getPos();
+            player.connection.send(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
             ClientboundEntityEventPacket event = new ClientboundEntityEventPacket(player, (byte) 9);
             ClientboundBundlePacket bundle = new ClientboundBundlePacket(List.<Packet<? super ClientGamePacketListener>>of(
-                    new ClientboundSetChunkCacheCenterPacket(1, 2), new ClientboundForgetLevelChunkPacket(new ChunkPos(3, 4)), event));
+                    new ClientboundSetChunkCacheCenterPacket(1, 2), new ClientboundForgetLevelChunkPacket(pos), event));
             int mark = OffsetTestKit.mark(player);
             player.connection.send(bundle);
             ClientboundBundlePacket sent = OffsetTestKit.last(helper, player, mark, ClientboundBundlePacket.class);
@@ -242,7 +247,8 @@ public class CoordinateOffsetCoreGameTests {
                     new ChunkPos(1 + offset.x() / 16, 2 + offset.z() / 16), "centre in the bundle");
             helper.assertTrue(parts.get(1) instanceof ClientboundForgetLevelChunkPacket, "the bundle's second packet moved");
             helper.assertValueEqual(((ClientboundForgetLevelChunkPacket) parts.get(1)).pos(),
-                    new ChunkPos(3 + offset.x() / 16, 4 + offset.z() / 16), "chunk forgotten in the bundle");
+                    new ChunkPos(pos.x() + offset.x() / 16, pos.z() + offset.z() / 16), "chunk forgotten in the bundle");
+            helper.assertFalse(CoordinateOffsets.holdsChunk(player, pos), "the chunk forgotten in the bundle is still held");
             helper.assertTrue(parts.get(2) == event, "the entity event was copied or moved");
         } finally {
             TestPlayers.leave(player);

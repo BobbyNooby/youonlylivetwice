@@ -17,6 +17,8 @@
     "CommandParseMixin",
     "CommandRestrictionMixin",
     "CoordinateOffsetConnectionMixin",
+    "CoordinateOffsetRespawnMixin",
+    "CoordinateOffsetTeleportMixin",
     "CreakingTrailMixin",
     "DebugPrivacyBrandMixin",
     "DebugPrivacyGameRuleMixin",

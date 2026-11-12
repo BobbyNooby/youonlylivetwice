@@ -13,16 +13,20 @@ import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
 /**
  * Gives each player's client its own shift of X and Z. Every game packet the server sends goes through outgoing, which
  * adds the player's offset to the positions in it, and every one the client sends goes through incoming, which takes it
- * off again. A frame, the offset a client sees, starts at each login.
+ * off again. A frame, the offset a client sees, starts at each login, respawn and dimension change.
  */
 public final class CoordinateOffsets {
     // Admin view: a player it holds for when a frame starts sees real coordinates
@@ -66,6 +70,26 @@ public final class CoordinateOffsets {
         return Incoming.apply(state(connection), listener, packet);
     }
 
+    /**
+     * Anchors the frame the next Respawn packet starts at this real spot, the player's new one. The player is passed in
+     * because during a respawn the connection still holds the one who died.
+     */
+    public static void anchorNextFrame(ServerPlayer player, Vec3 realPosition) {
+        if (!Settings.active() || player.connection == null) {
+            return;
+        }
+        Connection connection = connectionOf(player);
+        if (connection != null) {
+            state(connection).nextAnchor = new OffsetState.Anchor(player, realPosition);
+        }
+    }
+
+    /** Anchors the frame a dimension change starts where the teleport takes the player. */
+    public static void anchorDimensionChange(ServerPlayer player, TeleportTransition transition) {
+        anchorNextFrame(player, PositionMoveRotation.calculateAbsolute(PositionMoveRotation.of(player),
+                PositionMoveRotation.of(transition), transition.relatives()).position());
+    }
+
     /** The offset the player's client is sent positions in now. Zero with no frame, and for a stand-in, which has no client. */
     public static Offset offset(ServerPlayer player) {
         if (StandIn.is(player) || player.connection == null) {
@@ -97,12 +121,12 @@ public final class CoordinateOffsets {
         return ((ServerCommonPacketListenerAccessor) player.connection).yoltConnection();
     }
 
-    /** The offset a frame starting now gives the player, whose real spot is anchorX, anchorZ. */
-    static Offset frameOffset(ServerPlayer player, double anchorX, double anchorZ) {
+    /** The offset a frame starting now gives the player at this real spot. A random one when there is no spot to go by. */
+    static Offset frameOffset(ServerPlayer player, @Nullable Vec3 anchor) {
         if (!on() || StandIn.is(player) || realCoordinates.test(player)) {
             return Offset.ZERO;
         }
-        return Offset.at(anchorX, anchorZ);
+        return anchor == null ? Offset.random(ThreadLocalRandom.current()) : Offset.at(anchor.x, anchor.z);
     }
 
     /**

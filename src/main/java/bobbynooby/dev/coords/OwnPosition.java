@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.CommonPlayerSpawnInfo;
 import net.minecraft.network.protocol.game.GamePacketTypes;
@@ -23,12 +24,13 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
 
-/** The player's own place: the login, teleports, the chunk ring's centre and the moves the client sends back. */
+/** The player's own place: the login, respawns, teleports, the chunk ring's centre and the moves the client sends back. */
 final class OwnPosition {
     private OwnPosition() {}
 
     static void register() {
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_LOGIN, OwnPosition::login);
+        Outgoing.translate(GamePacketTypes.CLIENTBOUND_RESPAWN, OwnPosition::respawn);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_PLAYER_POSITION, OwnPosition::teleport);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_PLAYER_LOOK_AT, OwnPosition::lookAt);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_MOVE_VEHICLE, OwnPosition::vehicleTo);
@@ -39,43 +41,88 @@ final class OwnPosition {
         Incoming.translate(GamePacketTypes.SERVERBOUND_MOVE_VEHICLE, OwnPosition::vehicleMoved);
     }
 
+    /**
+     * Notes where a teleport puts the client, in real coordinates, whatever the frame. The first one after a respawn
+     * also names the accept from which the client's moves are read in the new frame.
+     */
+    static void keepTeleport(OffsetState state, Packet<?> packet) {
+        if (!(packet instanceof ClientboundPlayerPositionPacket teleport)) {
+            return;
+        }
+        Vec3 to = teleport.change().position();
+        Set<Relative> relatives = teleport.relatives();
+        Vec3 before = state.lastPosition != null ? state.lastPosition : Vec3.ZERO;
+        state.lastPosition = new Vec3(relatives.contains(Relative.X) ? before.x + to.x : to.x,
+                relatives.contains(Relative.Y) ? before.y + to.y : to.y, relatives.contains(Relative.Z) ? before.z + to.z : to.z);
+        state.frames.updateAndGet(frames -> frames.switchAt() == Frames.AT_NEXT_TELEPORT
+                ? new Frames(frames.out(), frames.in(), teleport.id()) : frames);
+    }
+
     // The first game packet of every login, re-configuration included, so a new frame starts here, at the exact
     // point in the stream: everything after it is in the new offset. The seed and the rest go out as they are.
     private static Packet<?> login(ClientboundLoginPacket packet, Context context) {
         ServerPlayer player = context.listener().player;
-        Offset offset = CoordinateOffsets.frameOffset(player, player.getX(), player.getZ());
+        Offset offset = CoordinateOffsets.frameOffset(player, player.position());
         OffsetState state = context.state();
         CommonPlayerSpawnInfo spawn = packet.commonPlayerSpawnInfo();
         state.frames.set(new Frames(offset, offset, Frames.NO_SWITCH));
         state.dimension = spawn.dimension();
         state.heldChunks.clear();
         state.lastPosition = player.position();
-        if (offset.isZero() || spawn.lastDeathLocation().isEmpty()) {
+        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, offset);
+        if (shifted == spawn) {
             return packet;
         }
-        // Shifted even when it is in another dimension, so no real number goes out; the needle spins there anyway
-        CommonPlayerSpawnInfo shifted = new CommonPlayerSpawnInfo(spawn.dimensionType(), spawn.dimension(), spawn.seed(),
-                spawn.gameType(), spawn.previousGameType(), spawn.isDebug(), spawn.isFlat(),
-                spawn.lastDeathLocation().map(death -> offset.shift(death)), spawn.portalCooldown(), spawn.seaLevel());
         return new ClientboundLoginPacket(packet.playerId(), packet.hardcore(), packet.levels(), packet.maxPlayers(),
                 packet.chunkRadius(), packet.simulationDistance(), packet.reducedDebugInfo(), packet.showDeathScreen(),
                 packet.doLimitedCrafting(), shifted, packet.onlineMode(), packet.enforcesSecureChat());
     }
 
+    // A respawn, the way back from the End and every dimension change start a new frame here, anchored where the player
+    // arrives. A Respawn packet sent from anywhere else has no spot to go by, so its frame is a random one.
+    private static Packet<?> respawn(ClientboundRespawnPacket packet, Context context) {
+        OffsetState state = context.state();
+        OffsetState.Anchor anchor = state.nextAnchor;
+        state.nextAnchor = null;
+        ServerPlayer player = anchor != null ? anchor.player() : context.listener().player;
+        Offset offset = CoordinateOffsets.frameOffset(player, anchor != null ? anchor.position() : null);
+        CommonPlayerSpawnInfo spawn = packet.commonPlayerSpawnInfo();
+        if (!spawn.dimension().equals(state.dimension)) {
+            // The client starts a new level, with none of the old one's chunks
+            state.heldChunks.clear();
+        } else if (!offset.equals(state.frames.get().out())) {
+            // The client keeps its level and its chunks, which the new frame would put in the wrong place, and vanilla
+            // forgets none of them for a player who died. Each forget takes its chunk out of the held set.
+            ChunkRules.forgetHeld(state, context.listener());
+        }
+        state.dimension = spawn.dimension();
+        state.lastPosition = anchor != null ? anchor.position() : player.position();
+        // What the client sends stays in the old frame until it accepts the teleport that comes next
+        state.frames.updateAndGet(frames -> new Frames(offset, frames.in(), Frames.AT_NEXT_TELEPORT));
+        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, offset);
+        return shifted == spawn ? packet : new ClientboundRespawnPacket(shifted, packet.dataToKeep());
+    }
+
+    // Shifted even when it is in another dimension, so no real number goes out; the needle spins there anyway
+    private static CommonPlayerSpawnInfo withDeathShifted(CommonPlayerSpawnInfo spawn, Offset offset) {
+        if (offset.isZero() || spawn.lastDeathLocation().isEmpty()) {
+            return spawn;
+        }
+        return new CommonPlayerSpawnInfo(spawn.dimensionType(), spawn.dimension(), spawn.seed(), spawn.gameType(),
+                spawn.previousGameType(), spawn.isDebug(), spawn.isFlat(),
+                spawn.lastDeathLocation().map(death -> offset.shift(death)), spawn.portalCooldown(), spawn.seaLevel());
+    }
+
     // A relative axis is a step from where the client is, so it stays as it is. The movement is a velocity.
     private static Packet<?> teleport(ClientboundPlayerPositionPacket packet, Context context) {
-        PositionMoveRotation change = packet.change();
-        Vec3 to = change.position();
         Set<Relative> relatives = packet.relatives();
         boolean relativeX = relatives.contains(Relative.X);
         boolean relativeZ = relatives.contains(Relative.Z);
-        OffsetState state = context.state();
-        Vec3 before = state.lastPosition != null ? state.lastPosition : Vec3.ZERO;
-        state.lastPosition = new Vec3(relativeX ? before.x + to.x : to.x, relatives.contains(Relative.Y) ? before.y + to.y : to.y,
-                relativeZ ? before.z + to.z : to.z);
         if (relativeX && relativeZ) {
             return packet;
         }
+        PositionMoveRotation change = packet.change();
+        Vec3 to = change.position();
         Offset offset = context.offset();
         Vec3 shifted = new Vec3(relativeX ? to.x : offset.shiftX(to.x), to.y, relativeZ ? to.z : offset.shiftZ(to.z));
         return new ClientboundPlayerPositionPacket(packet.id(),

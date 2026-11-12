@@ -8,7 +8,11 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.level.ChunkPos;
+import org.jspecify.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Chunks, their light and their biomes, which are addressed by chunk. Their contents are chunk-local, and an offset is
@@ -53,7 +57,20 @@ final class ChunkRules {
                 .toList());
     }
 
-    private static Packet<?> forget(ClientboundForgetLevelChunkPacket packet, Context context) {
+    /** Forgets every chunk the client holds. Each goes back through the connection, so it is sent in the current frame. */
+    static void forgetHeld(OffsetState state, ServerGamePacketListenerImpl listener) {
+        for (long chunk : List.copyOf(state.heldChunks)) {
+            listener.send(new ClientboundForgetLevelChunkPacket(ChunkPos.unpack(chunk)));
+        }
+    }
+
+    // Only for a chunk the client holds. A dimension change forgets the old level's chunks after the new frame starts,
+    // which would show where they lie from the player's new spot: from the End, whose platform gives its frame away,
+    // that is the stronghold.
+    private static @Nullable Packet<?> forget(ClientboundForgetLevelChunkPacket packet, Context context) {
+        if (!context.state().heldChunks.contains(packet.pos().pack())) {
+            return null;
+        }
         return new ClientboundForgetLevelChunkPacket(context.offset().shift(packet.pos()));
     }
 }

@@ -2,6 +2,7 @@ package bobbynooby.dev.coords;
 
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -12,7 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * One connection's offsets and what the client was told in them. It lives as long as the connection, across respawns.
- * The server thread starts frames; the network threads only read them.
+ * The server thread starts frames; the network thread only reads them, and moves incoming to a new one at the accept.
  */
 public final class OffsetState {
     final AtomicReference<Frames> frames = new AtomicReference<>(Frames.NONE);
@@ -22,8 +23,13 @@ public final class OffsetState {
     final Set<Long> heldChunks = ConcurrentHashMap.newKeySet();
     // The real position the client was last told
     volatile @Nullable Vec3 lastPosition;
+    // Where the frame the next Respawn packet starts is anchored, and for whom: until a respawn is done the connection
+    // still holds the old player
+    volatile @Nullable Anchor nextAnchor;
     // Packet types whose translation failed for this connection, so each is logged once
     final Set<PacketType<?>> failed = ConcurrentHashMap.newKeySet();
 
     public OffsetState() {}
+
+    record Anchor(ServerPlayer player, Vec3 position) {}
 }

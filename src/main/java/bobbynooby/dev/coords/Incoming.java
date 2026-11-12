@@ -4,6 +4,7 @@ import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.coords.CoordinateOffsets.Translator;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.jspecify.annotations.Nullable;
 
@@ -44,8 +45,10 @@ final class Incoming {
     }
 
     /**
-     * The packet the server handles in place of this one, translated with the incoming offset. With both offsets zero it
-     * is the very packet. A translator that throws drops it, since as sent it would be read in the wrong frame.
+     * The packet the server handles in place of this one, translated with the incoming offset. After a new frame starts
+     * that is the old one, up to the client's accept of the frame's first teleport, which is read in the new one along
+     * with everything after it. With no offset to take off it is the very packet. A translator that throws drops it,
+     * since as sent it would be read in the wrong frame.
      */
     static @Nullable Packet<?> apply(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet) {
         try {
@@ -53,8 +56,13 @@ final class Incoming {
             if (frames.out().isZero() && frames.in().isZero()) {
                 return packet;
             }
+            Offset offset = frames.in();
+            if (packet instanceof ServerboundAcceptTeleportationPacket accept && accept.id() == frames.switchAt()) {
+                offset = frames.out();
+                state.frames.compareAndSet(frames, new Frames(frames.out(), frames.out(), Frames.NO_SWITCH));
+            }
             Translator<?> translator = TRANSLATORS.get(packet.type());
-            return translator == null ? packet : run(translator, packet, new Context(frames.in(), state, listener));
+            return translator == null || offset.isZero() ? packet : run(translator, packet, new Context(offset, state, listener));
         } catch (RuntimeException e) {
             CoordinateOffsets.dropped(state, listener, packet, e);
             return null;
