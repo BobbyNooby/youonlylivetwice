@@ -110,6 +110,32 @@ public class CoordinateOffsetFrameGameTests {
         helper.succeed();
     }
 
+    // The same dimension and the same offset: the client keeps its chunks where they are, so none is forgotten, and each
+    // stays held for a later frame to forget
+    @GameTest(environment = FRAMES)
+    public void sameFrameRespawnKeepsTheHeldChunks(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cfkeep", GameType.CREATIVE);
+        ServerPlayer current = player;
+        try {
+            Offset old = CoordinateOffsets.offset(player);
+            ServerLevel level = helper.getLevel();
+            LevelChunk chunk = level.getChunkAt(player.blockPosition());
+            player.connection.send(new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null));
+            // As after a death, which is when vanilla sends no forgets
+            player.setHealth(0.0F);
+            int mark = OffsetTestKit.mark(player);
+            // Back to the spot of the join, so the new frame is anchored in the same chunk
+            current = OffsetTestKit.respawn(helper, player, player.blockPosition(), false);
+            helper.assertValueEqual(CoordinateOffsets.offset(current), old, "offset after a respawn in the same chunk");
+            helper.assertTrue(OffsetTestKit.sent(current, mark, ClientboundForgetLevelChunkPacket.class).isEmpty(),
+                    "a chunk was forgotten");
+            helper.assertTrue(CoordinateOffsets.holdsChunk(current, chunk.getPos()), "the chunk is no longer held");
+        } finally {
+            TestPlayers.leave(current);
+        }
+        helper.succeed();
+    }
+
     // The client moves in the old frame until it has the respawn's teleport. Calling the respawn leaves the connection
     // holding the old player, as only the real client's path hands it the new one, so only the frame is checked here.
     @GameTest(environment = FRAMES)

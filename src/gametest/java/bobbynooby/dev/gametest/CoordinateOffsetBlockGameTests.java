@@ -10,9 +10,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundAddTransientBlockPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
@@ -26,8 +28,12 @@ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundTagQueryPacket;
 import net.minecraft.network.protocol.game.ServerboundBlockEntityTagQueryPacket;
 import net.minecraft.network.protocol.game.ServerboundEntityTagQueryPacket;
+import net.minecraft.network.protocol.game.ServerboundJigsawGeneratePacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
+import net.minecraft.network.protocol.game.ServerboundSetStructureBlockPacket;
+import net.minecraft.network.protocol.game.ServerboundSetTestBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.server.level.ServerLevel;
@@ -46,18 +52,25 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LevelEvent;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.level.block.entity.CampfireBlockEntity;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.block.entity.ShelfBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
+import net.minecraft.world.level.block.entity.StructureBlockEntity;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.StructureMode;
+import net.minecraft.world.level.block.state.properties.TestBlockMode;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -269,6 +282,112 @@ public class CoordinateOffsetBlockGameTests {
         helper.succeed();
     }
 
+    // A campfire with plain food and a gateway with no exit are of the types whose tags are read, yet hold no position, so
+    // the very tags go on, in their own packet and in the chunk
+    @GameTest(environment = BLOCKS)
+    public void positionFreeTagsKeptAsTheyAre(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbplain", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            ServerLevel level = helper.getLevel();
+            BlockPos campfirePos = new BlockPos(3, 1, 4);
+            helper.setBlock(campfirePos, Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
+            CampfireBlockEntity campfire = (CampfireBlockEntity) level.getBlockEntity(helper.absolutePos(campfirePos));
+            campfire.getItems().set(0, new ItemStack(Items.BEEF));
+            BlockPos gatewayPos = new BlockPos(5, 1, 3);
+            helper.setBlock(gatewayPos, Blocks.END_GATEWAY);
+            TheEndGatewayBlockEntity gateway = (TheEndGatewayBlockEntity) level.getBlockEntity(helper.absolutePos(gatewayPos));
+            ClientboundBlockEntityDataPacket campfirePacket = ClientboundBlockEntityDataPacket.create(campfire);
+            ClientboundBlockEntityDataPacket gatewayPacket = ClientboundBlockEntityDataPacket.create(gateway);
+            ClientboundLevelChunkWithLightPacket chunkPacket =
+                    new ClientboundLevelChunkWithLightPacket(level.getChunkAt(campfire.getBlockPos()), level.getLightEngine(), null, null);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(campfirePacket);
+            player.connection.send(gatewayPacket);
+            player.connection.send(chunkPacket);
+
+            List<ClientboundBlockEntityDataPacket> sent = OffsetTestKit.sent(player, mark, ClientboundBlockEntityDataPacket.class);
+            helper.assertValueEqual(sent.size(), 2, "block entity updates");
+            helper.assertValueEqual(sent.get(0).getPos(), offset.shift(campfire.getBlockPos()), "campfire spot");
+            helper.assertTrue(sent.get(0).getTag() == campfirePacket.getTag(), "the campfire's tag was copied");
+            helper.assertTrue(sent.get(1).getTag() == gatewayPacket.getTag(), "the gateway's tag was copied");
+            // Tests in the batch can share the chunk, so only the campfire's own entry is checked
+            ClientboundLevelChunkWithLightPacket chunkSent =
+                    OffsetTestKit.last(helper, player, mark, ClientboundLevelChunkWithLightPacket.class);
+            CompoundTag before = blockEntityTag(chunkPacket, campfire.getBlockPos());
+            helper.assertTrue(before != null, "no campfire in the chunk");
+            helper.assertTrue(blockEntityTag(chunkSent, offset.shift(campfire.getBlockPos())) == before,
+                    "the campfire's tag in the chunk was copied");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The client sends the dug block with a change of face too, and the server checks its reach to that block first.
+    // An action that is about no block sends the zero position, which means nothing and comes back as it is.
+    @GameTest(environment = BLOCKS)
+    public void destroyDirectionChangeReadAtTheRealBlock(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbface", GameType.CREATIVE);
+        try {
+            Connection connection = OffsetTestKit.connection(player);
+            BlockPos client = CoordinateOffsets.offset(player).shift(FAR);
+            ServerboundPlayerActionPacket change = (ServerboundPlayerActionPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.CHANGE_DESTROY_DIRECTION, client,
+                            Direction.NORTH, 5));
+            helper.assertValueEqual(change.getAction(), ServerboundPlayerActionPacket.Action.CHANGE_DESTROY_DIRECTION, "action");
+            helper.assertValueEqual(change.getPos(), FAR, "block of the change of face");
+            helper.assertValueEqual(change.getDirection(), Direction.NORTH, "face");
+            helper.assertValueEqual(change.getSequence(), 5, "sequence");
+            ServerboundPlayerActionPacket drop = new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.DROP_ITEM,
+                    BlockPos.ZERO, Direction.DOWN);
+            helper.assertTrue(CoordinateOffsets.incoming(connection, drop) == drop, "a drop was changed");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // An op's edit of a structure block lands on the real block, with its corner and size, which are relative, as sent.
+    // The other op blocks' packets name their block the same way.
+    @GameTest(environment = BLOCKS)
+    public void opBlockEditsLandOnTheRealBlock(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbopblock", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos structurePos = new BlockPos(3, 1, 2);
+            helper.setBlock(structurePos, Blocks.STRUCTURE_BLOCK);
+            StructureBlockEntity structure = (StructureBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(structurePos));
+            BlockPos real = structure.getBlockPos();
+            BlockPos client = offset.shift(real);
+            TestPlayers.receive(player, new ServerboundSetStructureBlockPacket(client, StructureBlockEntity.UpdateType.UPDATE_DATA,
+                    StructureMode.SAVE, "offset_probe", new BlockPos(1, 2, 3), new Vec3i(4, 5, 6), Mirror.NONE, Rotation.NONE, "",
+                    false, false, false, true, 1.0F, 0L));
+            helper.assertValueEqual(structure.getStructureName(), "minecraft:offset_probe", "the structure block's name");
+            helper.assertValueEqual(structure.getStructurePos(), new BlockPos(1, 2, 3), "the structure block's corner");
+            helper.assertValueEqual(structure.getStructureSize(), new Vec3i(4, 5, 6), "the structure block's size");
+
+            Connection connection = OffsetTestKit.connection(player);
+            ServerboundSetCommandBlockPacket command = (ServerboundSetCommandBlockPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundSetCommandBlockPacket(client, "say 1 2 3", CommandBlockEntity.Mode.AUTO, true, false, true));
+            helper.assertValueEqual(command.getPos(), real, "command block spot");
+            helper.assertValueEqual(command.getCommand(), "say 1 2 3", "command");
+            helper.assertValueEqual(command.getMode(), CommandBlockEntity.Mode.AUTO, "command block mode");
+            ServerboundJigsawGeneratePacket generate = (ServerboundJigsawGeneratePacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundJigsawGeneratePacket(client, 3, true));
+            helper.assertValueEqual(generate.getPos(), real, "jigsaw spot");
+            helper.assertValueEqual(generate.levels(), 3, "jigsaw levels");
+            ServerboundSetTestBlockPacket test = (ServerboundSetTestBlockPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundSetTestBlockPacket(client, TestBlockMode.LOG, "at 1 2 3"));
+            helper.assertValueEqual(test, new ServerboundSetTestBlockPacket(real, TestBlockMode.LOG, "at 1 2 3"), "test block edit");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // The editor opens at the client's spot, and the text the client sends there lands on the real sign
     @GameTest(environment = BLOCKS)
     public void signEditRoundTrip(GameTestHelper helper) {
@@ -407,6 +526,16 @@ public class CoordinateOffsetBlockGameTests {
             }
         });
         return tags;
+    }
+
+    private static @Nullable CompoundTag blockEntityTag(ClientboundLevelChunkWithLightPacket packet, BlockPos at) {
+        Map<BlockPos, CompoundTag> tags = new HashMap<>();
+        packet.chunkData().forEachBlockEntityTag(packet.x(), packet.z(), (pos, type, tag) -> {
+            if (tag != null) {
+                tags.put(pos.immutable(), tag);
+            }
+        });
+        return tags.get(at);
     }
 
     private static BlockPos exitPortal(CompoundTag tag) {
