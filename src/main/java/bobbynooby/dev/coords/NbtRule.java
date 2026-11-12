@@ -13,7 +13,8 @@ import java.util.Set;
 /**
  * Finds the positions vanilla puts in the NBT a client can be sent: a block position saved as three ints under a key
  * ending in "pos" or under one of a few other names, three doubles under a key ending in "pos", such as an entity's Pos,
- * and a breeze's jump target in its brain. A position under any other key goes out as it is.
+ * a breeze's jump target in its brain, and the x and z of each map decoration on an item. A position under any other key
+ * goes out as it is.
  */
 public final class NbtRule {
     // Vanilla's block positions under keys that don't end in "pos": an end gateway's exit, a leash knot, and where a
@@ -22,6 +23,8 @@ public final class NbtRule {
             "beam_target");
     // The one brain memory saved as a block position, which keeps it under "value"
     private static final String JUMP_TARGET = "minecraft:breeze_jump_target";
+    // An explorer map's markers, each with its target's x and z as doubles, in the item's saved components
+    private static final String MAP_DECORATIONS = "minecraft:map_decorations";
 
     private NbtRule() {}
 
@@ -39,7 +42,8 @@ public final class NbtRule {
         if (tag instanceof CompoundTag compound) {
             for (String key : compound.keySet()) {
                 Tag value = compound.get(key);
-                if (isBlockPos(key, value) || isEntityPos(key, value) || isJumpTarget(key, value) || holdsPosition(value)) {
+                if (isBlockPos(key, value) || isEntityPos(key, value) || isJumpTarget(key, value) || isMapDecorations(key, value)
+                        || holdsPosition(value)) {
                     return true;
                 }
             }
@@ -62,6 +66,8 @@ public final class NbtRule {
                     shiftBlockPos(compound, key, offset);
                 } else if (isJumpTarget(key, value)) {
                     shiftBlockPos((CompoundTag) value, "value", offset);
+                } else if (isMapDecorations(key, value)) {
+                    shiftDecorations((CompoundTag) value, offset);
                 } else if (isEntityPos(key, value)) {
                     ListTag pos = (ListTag) value;
                     pos.set(0, DoubleTag.valueOf(pos.getDoubleOr(0, 0.0) + offset.x()));
@@ -82,6 +88,15 @@ public final class NbtRule {
         compound.putIntArray(key, new int[] {pos[0] + offset.x(), pos[1], pos[2] + offset.z()});
     }
 
+    private static void shiftDecorations(CompoundTag decorations, Offset offset) {
+        for (String id : decorations.keySet()) {
+            if (decorations.get(id) instanceof CompoundTag decoration && isDecoration(decoration)) {
+                decoration.putDouble("x", decoration.getDoubleOr("x", 0.0) + offset.x());
+                decoration.putDouble("z", decoration.getDoubleOr("z", 0.0) + offset.z());
+            }
+        }
+    }
+
     private static boolean isBlockPos(String key, Tag value) {
         return isThreeInts(value) && (endsInPos(key) || BLOCK_POS_NAMES.contains(key));
     }
@@ -93,6 +108,15 @@ public final class NbtRule {
 
     private static boolean isJumpTarget(String key, Tag value) {
         return key.equals(JUMP_TARGET) && value instanceof CompoundTag memory && isThreeInts(memory.get("value"));
+    }
+
+    private static boolean isMapDecorations(String key, Tag value) {
+        return key.equals(MAP_DECORATIONS) && value instanceof CompoundTag decorations && decorations.keySet().stream()
+                .anyMatch(id -> decorations.get(id) instanceof CompoundTag decoration && isDecoration(decoration));
+    }
+
+    private static boolean isDecoration(CompoundTag decoration) {
+        return decoration.get("x") instanceof DoubleTag && decoration.get("z") instanceof DoubleTag;
     }
 
     private static boolean isThreeInts(Tag value) {

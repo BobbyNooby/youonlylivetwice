@@ -40,6 +40,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.LodestoneTracker;
+import net.minecraft.world.item.component.MapDecorations;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -47,12 +48,14 @@ import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.level.block.entity.CampfireBlockEntity;
+import net.minecraft.world.level.block.entity.ShelfBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -196,6 +199,37 @@ public class CoordinateOffsetBlockGameTests {
             helper.assertValueEqual(exitPortal(gateway.getUpdateTag(level.registryAccess())), EXIT, "the gateway's own exit");
             helper.assertValueEqual(campfire.getItems().get(0).get(DataComponents.LODESTONE_TRACKER).target(),
                     Optional.of(GlobalPos.of(Level.OVERWORLD, TARGET)), "the campfire's own compass");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // An explorer map's markers are in the saved item the shelf's tag holds, so the client would get the target real
+    @GameTest(environment = BLOCKS)
+    public void explorerMapOnAShelfShifted(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbshelf", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos shelfPos = new BlockPos(1, 1, 4);
+            helper.setBlock(shelfPos, Blocks.OAK_SHELF);
+            ShelfBlockEntity shelf = (ShelfBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(shelfPos));
+            ItemStack map = new ItemStack(Items.FILLED_MAP);
+            MapDecorations decorations = MapDecorations.EMPTY.withDecoration("+",
+                    new MapDecorations.Entry(MapDecorationTypes.RED_X, TARGET.getX(), TARGET.getZ(), 180.0F));
+            map.set(DataComponents.MAP_DECORATIONS, decorations);
+            shelf.getItems().set(0, map);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(ClientboundBlockEntityDataPacket.create(shelf));
+
+            ClientboundBlockEntityDataPacket sent = OffsetTestKit.last(helper, player, mark, ClientboundBlockEntityDataPacket.class);
+            CompoundTag marker = sent.getTag().getListOrEmpty("Items").getCompoundOrEmpty(0).getCompoundOrEmpty("components")
+                    .getCompoundOrEmpty("minecraft:map_decorations").getCompoundOrEmpty("+");
+            BlockPos client = offset.shift(TARGET);
+            helper.assertValueEqual(marker.getDoubleOr("x", 0.0), (double) client.getX(), "x of the marker on the shelf");
+            helper.assertValueEqual(marker.getDoubleOr("z", 0.0), (double) client.getZ(), "z of the marker on the shelf");
+            helper.assertValueEqual(shelf.getItems().get(0).get(DataComponents.MAP_DECORATIONS), decorations,
+                    "the shelf's own map");
         } finally {
             TestPlayers.leave(player);
         }

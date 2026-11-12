@@ -92,6 +92,42 @@ class NbtRuleTest {
                 .orElseThrow());
     }
 
+    // An explorer map on a shelf: each marker's target is two doubles, and its type and rotation stay
+    @Test
+    void mapDecorationsShifted() {
+        CompoundTag marker = new CompoundTag();
+        marker.putString("type", "minecraft:target_x");
+        marker.putDouble("x", 1_234.5);
+        marker.putDouble("z", -77.0);
+        marker.putFloat("rotation", 180.0F);
+        CompoundTag decorations = new CompoundTag();
+        decorations.put("+", marker);
+        CompoundTag components = new CompoundTag();
+        components.put("minecraft:map_decorations", decorations);
+        CompoundTag map = new CompoundTag();
+        map.putString("id", "minecraft:filled_map");
+        map.put("components", components);
+        ListTag items = new ListTag();
+        items.add(map);
+        CompoundTag tag = new CompoundTag();
+        tag.put("Items", items);
+        CompoundTag before = tag.copy();
+
+        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shiftedMarker = shifted.getListOrEmpty("Items").getCompoundOrEmpty(0).getCompoundOrEmpty("components")
+                .getCompoundOrEmpty("minecraft:map_decorations").getCompoundOrEmpty("+");
+        assertEquals(1_234.5 - 4_096, shiftedMarker.getDoubleOr("x", 0.0));
+        assertEquals(-77.0 + 2_048, shiftedMarker.getDoubleOr("z", 0.0));
+        assertEquals("minecraft:target_x", shiftedMarker.getStringOr("type", ""));
+        assertEquals(180.0F, shiftedMarker.getFloatOr("rotation", 0.0F));
+        assertEquals(before, tag);
+
+        // The same two keys anywhere else are no position
+        CompoundTag other = new CompoundTag();
+        other.put("minecraft:custom", marker.copy());
+        assertSame(other, NbtRule.shift(other, O));
+    }
+
     @Test
     void nestedTagsShifted() {
         CompoundTag target = new CompoundTag();
