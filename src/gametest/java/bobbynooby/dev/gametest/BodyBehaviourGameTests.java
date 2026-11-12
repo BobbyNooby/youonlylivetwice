@@ -232,6 +232,34 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // The same switch turned on after the logout: the body took none of the owner's effects, so the expiry leaves the
+    // save's own, and their modifier with them. The pass runs over every body, so this has the expiry batch.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void copyEffectsTurnedOnBeforeExpiryKeepsSavedEffects(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "LateExpiry", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Settings.get().bodies.copyEffects = false;
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 12000));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(body.getActiveEffects().isEmpty(), "the body got effects: " + body.getActiveEffects());
+            Settings.get().bodies.copyEffects = true;
+            expiredLogout(helper, owner);
+
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+            CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
+            helper.assertTrue(saved.contains("active_effects"), "the save's speed is gone after the expiry");
+            helper.assertFalse(speedModifiers(helper, saved).isEmpty(), "the save's speed modifier is gone after the expiry");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // A body set alight burns on its own ticks until its time is up. The expiry is no death: the burn and the health it
     // cost go into the save, the owner logs in still burning, and there is no grave or lockout. The pass runs over every
     // body, so this has the expiry batch; the switches are only on in the ticks that need them.
@@ -961,7 +989,8 @@ public class BodyBehaviourGameTests {
         BodyStore store = store(helper);
         BodyRecord record = store.byOwner(owner).orElseThrow();
         store.put(new BodyRecord(record.owner(), record.ownerName(), record.bodyEntity(), record.type(),
-                System.currentTimeMillis() - 61_000L, false, record.snapshot(), record.skin(), record.emptyAtLogout()));
+                System.currentTimeMillis() - 61_000L, false, record.snapshot(), record.skin(), record.emptyAtLogout(),
+                record.copiedEffects()));
     }
 
     private static Path saveFile(GameTestHelper helper, UUID owner) {

@@ -21,6 +21,11 @@ import java.util.UUID;
  * emptyAtLogout holds the gear slots the owner had empty when they logged out, so the body's were empty too. Only a
  * dispenser can fill one of those, so an item there is real, not a copy. A record saved before this was kept has
  * none, so nothing on its body counts as real.
+ * <p>
+ * copiedEffects holds whether the body took its owner's effects when it was made, so the takeover and the expiry hand
+ * its effects over only then, whatever bodies.copyEffects says by that time. A record saved before this was kept
+ * counts as copied: the switch is on by default, so its body most likely took them, and then its snapshot holds the
+ * owner's effects as they ran on the body.
  */
 public record BodyRecord(
         UUID owner,
@@ -31,7 +36,8 @@ public record BodyRecord(
         boolean pendingRemoval,
         BodySnapshot snapshot,
         PropertyMap skin,
-        Set<EquipmentSlot> emptyAtLogout
+        Set<EquipmentSlot> emptyAtLogout,
+        boolean copiedEffects
 ) {
     public BodyRecord {
         emptyAtLogout = Set.copyOf(emptyAtLogout);
@@ -54,13 +60,15 @@ public record BodyRecord(
             // Optional, so records saved before skins were kept still load
             ExtraCodecs.PROPERTY_MAP.optionalFieldOf("skin", PropertyMap.EMPTY).forGetter(BodyRecord::skin),
             EquipmentSlot.CODEC.listOf().<Set<EquipmentSlot>>xmap(Set::copyOf, slots -> slots.stream().sorted().toList())
-                    .optionalFieldOf("empty_at_logout", Set.of()).forGetter(BodyRecord::emptyAtLogout)
+                    .optionalFieldOf("empty_at_logout", Set.of()).forGetter(BodyRecord::emptyAtLogout),
+            // Missing from a record saved before it was kept, which counts as copied
+            Codec.BOOL.optionalFieldOf("copied_effects", true).forGetter(BodyRecord::copiedEffects)
     ).apply(i, BodyRecord::new));
 
-    /** A record that counts nothing on its body as real, as one saved before that was kept. */
+    /** A record that counts nothing on its body as real and its effects as copied, as one saved before either was kept. */
     public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
                       boolean pendingRemoval, BodySnapshot snapshot, PropertyMap skin) {
-        this(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, Set.of());
+        this(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, Set.of(), true);
     }
 
     /** A record with no skin kept, as for a mannequin, which keeps its own with its chunk. */
@@ -74,10 +82,12 @@ public record BodyRecord(
     }
 
     public BodyRecord withSnapshot(BodySnapshot snapshot) {
-        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout);
+        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
+                copiedEffects);
     }
 
     public BodyRecord withPendingRemoval(boolean pendingRemoval) {
-        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout);
+        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
+                copiedEffects);
     }
 }

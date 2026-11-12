@@ -84,6 +84,22 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // Whether the body copied its owner's effects is kept with it. A record saved before that was kept counts as copied,
+    // as most bodies were under the switch's default.
+    @GameTest
+    public void recordKeepsWhetherEffectsWereCopied(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyRecord made = record(Map.of());
+        BodyRecord notCopied = new BodyRecord(made.owner(), made.ownerName(), made.bodyEntity(), made.type(), made.loggedOutAt(),
+                made.pendingRemoval(), made.snapshot(), made.skin(), made.emptyAtLogout(), false);
+        CompoundTag encoded = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, notCopied).getOrThrow();
+        helper.assertFalse(BodyRecord.CODEC.parse(ops, encoded).getOrThrow().copiedEffects(), "a body that copied no effects");
+
+        encoded.remove("copied_effects");
+        helper.assertTrue(BodyRecord.CODEC.parse(ops, encoded).getOrThrow().copiedEffects(), "a record saved before it was kept");
+        helper.succeed();
+    }
+
     // A record saved before bodies kept their fall, fire and air still loads, with none of the three
     @GameTest
     public void snapshotWithoutFallFireAndAirLoads(GameTestHelper helper) {

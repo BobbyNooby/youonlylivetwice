@@ -55,7 +55,8 @@ public final class BodyLogin {
         // stays dead: their gear may be in a grave already, and the body only holds copies of it.
         if (bodyAlive && !player.isDeadOrDying()) {
             // The player stands where the body did, so the body's last ground, kept under the owner, is theirs now
-            takeOver(player, snapshot, Settings.get().bodies.copyEffects);
+            // The body's effects replace the player's only if it took theirs when it was made
+            takeOver(player, snapshot, record.copiedEffects());
         } else {
             // The body goes, and its last ground with it: the player notes their own from here
             LastGround.forget(record.owner());

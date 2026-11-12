@@ -123,7 +123,8 @@ public class YoltConfig {
         @Applies(Applies.When.NEW_BODIES) public boolean movable = true;
         @Applies(Applies.When.NEW_BODIES) public boolean totems = true;
         public boolean armourWears = true;
-        public boolean copyEffects = true;
+        // Kept with each body, so its takeover or expiry follows what the body was made with
+        @Applies(Applies.When.NEW_BODIES) public boolean copyEffects = true;
         // Vanilla /kill leaves bodies standing; /yolt kill <player> is the way to kill one on purpose
         public boolean ignoreVanillaKill = true;
     }

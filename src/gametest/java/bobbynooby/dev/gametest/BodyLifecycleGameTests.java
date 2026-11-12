@@ -518,6 +518,30 @@ public class BodyLifecycleGameTests {
         helper.succeed();
     }
 
+    // Whether the body takes the effects is settled as it is made. Turning copyEffects on between the logout and the
+    // login leaves the player the save's own: the body took none of theirs to hand back. Within this tick.
+    @GameTest
+    public void copyEffectsTurnedOnAfterLogoutKeepsOwnerEffects(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "LateEffects", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.copyEffects = false;
+            player.addEffect(new MobEffectInstance(MobEffects.SPEED, 12000));
+            player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 12000));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(body.getActiveEffects().isEmpty(), "the body got effects: " + body.getActiveEffects());
+            Settings.get().bodies.copyEffects = true;
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.hasEffect(MobEffects.SPEED), "the save's speed is gone after login");
+            helper.assertTrue(back.hasEffect(MobEffects.FIRE_RESISTANCE), "the save's fire resistance is gone after login");
+            helper.assertTrue(body.isRemoved(), "body still in the world");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
     // The owner takes over the body's effects as they are now: one it gained comes over, one that went is gone
     @GameTest
     public void takeoverReplacesEffectsWithBodys(GameTestHelper helper) {

@@ -130,7 +130,8 @@ public final class BodyExpiry {
         // An owner already dead (say killed offline after a crash lost this record's removal) keeps the save they
         // have. Health 0 without a death would respawn them and drop their inventory.
         if (!OfflinePlayerData.isDead(tag) && snapshot.health() > 0.0F) {
-            List<ItemStack> unplaced = BodySaves.applySnapshot(tag, snapshot, Settings.get().bodies.copyEffects,
+            // The body's effects go into the save only if it took the owner's when it was made
+            List<ItemStack> unplaced = BodySaves.applySnapshot(tag, snapshot, record.copiedEffects(),
                     server.registryAccess(), record.ownerName());
             // A body item the save had no room for drops where the body stands. It is taken back if the save fails,
             // so the retry can't drop it twice.

@@ -60,8 +60,9 @@ public final class BodyLogout {
                 empty.add(slot);
             }
         }
+        // The body was built from this same section, so the record says whether it took the effects
         store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
-                System.currentTimeMillis(), false, BodySnapshot.of(body), skin, empty));
+                System.currentTimeMillis(), false, BodySnapshot.of(body), skin, empty, cfg.copyEffects));
         // Only once the new body stands, so a spawn that fails leaves the old one
         old.ifPresent(record -> retire(server, player, record));
         return Optional.of(body);

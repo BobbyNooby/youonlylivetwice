@@ -164,6 +164,7 @@ class ConfigKeysTest {
                 Map.entry("bodies.pose", Applies.When.NEW_BODIES),
                 Map.entry("bodies.movable", Applies.When.NEW_BODIES),
                 Map.entry("bodies.totems", Applies.When.NEW_BODIES),
+                Map.entry("bodies.copyEffects", Applies.When.NEW_BODIES),
                 Map.entry("deathLockout.cooldownDays", Applies.When.NEW_DEATHS),
                 Map.entry("deathLockout.countCreativeAndSpectatorDeaths", Applies.When.NEW_DEATHS),
                 Map.entry("graves.enabled", Applies.When.NEW_DEATHS),
