@@ -128,9 +128,10 @@ public final class Bodies {
             } else {
                 dropForGood(server, now.dimension(), now.pos(), items);
             }
+            String where = died ? "where a grave's items would, at the nearest spot where they last" : "where the body stood";
             added.forEach((slot, item) -> Yolt.LOGGER.warn("{}'s body got an item in slot {} after they logged out, "
-                    + "and the body goes without them taking it over, so the item drops where the body stood: {}",
-                    record.ownerName(), slot.getName(), Stacks.saved(item, server.registryAccess())));
+                    + "and the body goes without them taking it over, so the item drops {}: {}",
+                    record.ownerName(), slot.getName(), where, Stacks.saved(item, server.registryAccess())));
         } catch (RuntimeException e) {
             added.forEach((slot, item) -> Yolt.LOGGER.warn("{}'s body got an item in slot {} after they logged out, "
                     + "and the body goes without them taking it over, but the item could not be dropped: {}",
