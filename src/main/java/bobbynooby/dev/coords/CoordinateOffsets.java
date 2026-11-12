@@ -205,7 +205,7 @@ public final class CoordinateOffsets {
      * in. Logged once per packet type for each connection, so a broken translator can't flood the log.
      */
     static void dropped(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet, RuntimeException e) {
-        if (state.failed.add(packet.type())) {
+        if (state.dropFailed.add(packet.type())) {
             Yolt.LOGGER.error("Could not translate the coordinates in a {} packet for {}, so it was dropped, as are later ones "
                     + "of that type that fail", packet.type(), listener.player.getPlainTextName(), e);
         }
@@ -216,7 +216,7 @@ public final class CoordinateOffsets {
      * ends a frame switch may now be wrong. Logged once per packet type for each connection.
      */
     static void unnoted(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet, RuntimeException e) {
-        if (state.failed.add(packet.type())) {
+        if (state.noteFailed.add(packet.type())) {
             Yolt.LOGGER.error("Could not note what a {} packet for {} tells the client, so it was sent as it is, as are later "
                     + "ones of that type that fail", packet.type(), listener.player.getPlainTextName(), e);
         }

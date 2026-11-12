@@ -453,6 +453,30 @@ public class CoordinateOffsetCoreGameTests {
         helper.succeed();
     }
 
+    // A type whose notes failed still has its first drop logged, as the two failures are logged apart
+    @GameTest(environment = CORE)
+    public void dropLoggedAfterTheSameTypeFailedItsNotes(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "conotedrop", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        ServerPlayer current = player;
+        try {
+            List<String> notes = OfflineGameTests.yoltLog(
+                    () -> player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null)));
+            helper.assertValueEqual(notes.stream().filter(entry -> entry.startsWith("Could not note what a "
+                    + "clientbound/minecraft:forget_level_chunk packet")).count(), 1L, "note lines in " + notes);
+            // As after a death, which is when vanilla sends no forgets
+            player.setHealth(0.0F);
+            current = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(3, 1, 3)), false);
+            helper.assertFalse(CoordinateOffsets.offset(current).isZero(), "the respawn got no offset");
+            ServerPlayer respawned = current;
+            List<String> drops = OfflineGameTests.yoltLog(
+                    () -> respawned.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null)));
+            assertOneDropLine(helper, drops, "clientbound/minecraft:forget_level_chunk", player);
+        } finally {
+            TestPlayers.leave(current);
+        }
+        helper.succeed();
+    }
+
     private static void assertOneDropLine(GameTestHelper helper, List<String> log, String type, ServerPlayer player) {
         String line = "Could not translate the coordinates in a " + type + " packet for " + player.getPlainTextName()
                 + ", so it was dropped";
