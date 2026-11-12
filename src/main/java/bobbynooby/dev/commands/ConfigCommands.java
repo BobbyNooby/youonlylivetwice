@@ -5,6 +5,7 @@ import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.world.LiveSettings;
+import bobbynooby.dev.world.WorldBorders;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -92,8 +93,13 @@ final class ConfigCommands {
             return 1;
         }
 
-        // Only a border key moves the border. Applying it for any other key could put back a border a reload refused.
-        LiveSettings.applyAll(server, border);
+        // Only a border key moves the border: applying it for any other key could put back a border a reload refused. It
+        // is forced, as /yolt border does, so a moving border stops and takes the size the check above was for. A held
+        // border waits for a reload or a border command.
+        LiveSettings.applyAll(server, false);
+        if (border && !Settings.borderHeld()) {
+            WorldBorders.apply(server, true);
+        }
         LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
         YoltCommands.reply(source, name + " changed from " + change.oldValue() + " to " + change.newValue() + key.when().note() + ".");
         tellBackup(source, change);

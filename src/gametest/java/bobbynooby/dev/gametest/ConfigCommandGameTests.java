@@ -17,6 +17,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 
@@ -368,6 +369,35 @@ public class ConfigCommandGameTests {
             restore(server, fileBefore);
             CommandGameTests.restoreBorders(bordersBefore);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A timed vanilla /worldborder change is still running, and a border key means "now", as /yolt border does: the border
+    // stops at the new size, so the reply is true. confirm, because the test structures sit outside a 5000 block border,
+    // and so may the world spawn, whose note may follow.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void configBorderKeyEndsAMovingBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = CommandGameTests.saveBorders(server);
+        WorldBorder overworld = server.overworld().getWorldBorder();
+        try {
+            Settings.get().worldBorder.enabled = true;
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 10000, "the test server's diameter");
+            overworld.lerpSizeBetween(10000, 8000, 1_000_000L, server.overworld().getGameTime());
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.SHRINKING, "overworld border status before the command");
+
+            List<String> output = run(server, "yolt config worldBorder.diameter 5000 confirm");
+            helper.assertTrue(!output.isEmpty() && output.get(0).equals("worldBorder.diameter changed from 10000 to 5000."),
+                    "command output: " + output);
+            helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
+            helper.assertValueEqual(overworld.getSize(), 5000.0, "overworld border size");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 5000, "live diameter");
+            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 5000, "diameter in the file");
+        } finally {
+            restore(server, fileBefore);
+            CommandGameTests.restoreBorders(bordersBefore);
         }
         helper.succeed();
     }
