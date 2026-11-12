@@ -5,6 +5,7 @@ import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.HashedStack;
@@ -21,8 +22,12 @@ import net.minecraft.util.debug.DebugSubscription;
 import net.minecraft.util.debug.DebugSubscriptions;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.EntityCollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -139,6 +144,24 @@ public final class CoordinateOffsets {
             return sent;
         }
         return (stack, hasher) -> sent.matches(stack, hasher) || sent.matches(ItemRule.shift(stack, in), hasher);
+    }
+
+    /**
+     * A block's collision shape as the player it is for collides: a block placed off centre by a hash of its spot, such
+     * as bamboo, sits where that player's client puts it, so the server agrees with the client on where they can walk.
+     * Everyone else, mobs included, keeps the real shape. Runs for every block an entity touches, so the cheap checks
+     * come first.
+     */
+    public static VoxelShape collisionFor(BlockState state, BlockPos pos, CollisionContext context, VoxelShape shape) {
+        if (!state.hasOffsetFunction() || !(context instanceof EntityCollisionContext entityContext)
+                || !(entityContext.getEntity() instanceof ServerPlayer player) || shape.isEmpty()) {
+            return shape;
+        }
+        Offset offset = offset(player);
+        if (offset.isZero()) {
+            return shape;
+        }
+        return shape.move(state.getOffset(offset.shift(pos)).subtract(state.getOffset(pos)));
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */

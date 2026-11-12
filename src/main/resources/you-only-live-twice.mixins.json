@@ -18,6 +18,7 @@
     "CommandNodeAccessor",
     "CommandParseMixin",
     "CommandRestrictionMixin",
+    "CoordinateOffsetCollisionMixin",
     "CoordinateOffsetConnectionMixin",
     "CoordinateOffsetContainerClickMixin",
     "CoordinateOffsetDebugMixin",
