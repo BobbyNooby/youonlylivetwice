@@ -35,6 +35,63 @@ class NbtRuleTest {
         assertEquals(doubles(1.5 - 4_096, 64.0, 2.5 + 2_048), shifted.getListOrEmpty("Pos"));
     }
 
+    // A vibration's source, a living entity's last explosion impact; Motion is a velocity
+    @Test
+    void doubleListsUnderAnyPosKeyShifted() {
+        CompoundTag event = new CompoundTag();
+        event.put("pos", doubles(10.5, 64.0, -3.5));
+        CompoundTag tag = new CompoundTag();
+        tag.put("event", event);
+        tag.put("current_explosion_impact_pos", doubles(1.0, 2.0, 3.0));
+        tag.put("Motion", doubles(0.5, 0.0, 0.5));
+        CompoundTag shifted = NbtRule.shift(tag, O);
+        assertEquals(doubles(10.5 - 4_096, 64.0, -3.5 + 2_048), shifted.getCompoundOrEmpty("event").getListOrEmpty("pos"));
+        assertEquals(doubles(1.0 - 4_096, 2.0, 3.0 + 2_048), shifted.getListOrEmpty("current_explosion_impact_pos"));
+        assertEquals(doubles(0.5, 0.0, 0.5), shifted.getListOrEmpty("Motion"));
+    }
+
+    // A leash held by an entity is saved as its UUID, four ints, which is no position
+    @Test
+    void namedBlockPositionsShifted() {
+        CompoundTag tag = new CompoundTag();
+        tag.putIntArray("leash", new int[] {1, 2, 3});
+        tag.putIntArray("patrol_target", new int[] {4, 5, 6});
+        tag.putIntArray("wander_target", new int[] {7, 8, 9});
+        tag.putIntArray("beam_target", new int[] {10, 11, 12});
+        CompoundTag shifted = NbtRule.shift(tag, O);
+        assertArrayEquals(new int[] {1 - 4_096, 2, 3 + 2_048}, shifted.getIntArray("leash").orElseThrow());
+        assertArrayEquals(new int[] {4 - 4_096, 5, 6 + 2_048}, shifted.getIntArray("patrol_target").orElseThrow());
+        assertArrayEquals(new int[] {7 - 4_096, 8, 9 + 2_048}, shifted.getIntArray("wander_target").orElseThrow());
+        assertArrayEquals(new int[] {10 - 4_096, 11, 12 + 2_048}, shifted.getIntArray("beam_target").orElseThrow());
+
+        CompoundTag heldByEntity = new CompoundTag();
+        heldByEntity.putIntArray("leash", new int[] {1, 2, 3, 4});
+        assertSame(heldByEntity, NbtRule.shift(heldByEntity, O));
+    }
+
+    @Test
+    void breezeJumpTargetShifted() {
+        CompoundTag target = new CompoundTag();
+        target.putIntArray("value", new int[] {5, 70, -9});
+        target.putLong("ttl", 100L);
+        CompoundTag memories = new CompoundTag();
+        memories.put("minecraft:breeze_jump_target", target);
+        CompoundTag other = new CompoundTag();
+        other.putIntArray("value", new int[] {1, 2, 3});
+        memories.put("minecraft:angry_at", other);
+        CompoundTag brain = new CompoundTag();
+        brain.put("memories", memories);
+        CompoundTag tag = new CompoundTag();
+        tag.put("Brain", brain);
+        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shiftedMemories = shifted.getCompoundOrEmpty("Brain").getCompoundOrEmpty("memories");
+        CompoundTag shiftedTarget = shiftedMemories.getCompoundOrEmpty("minecraft:breeze_jump_target");
+        assertArrayEquals(new int[] {5 - 4_096, 70, -9 + 2_048}, shiftedTarget.getIntArray("value").orElseThrow());
+        assertEquals(100L, shiftedTarget.getLongOr("ttl", 0L));
+        assertArrayEquals(new int[] {1, 2, 3}, shiftedMemories.getCompoundOrEmpty("minecraft:angry_at").getIntArray("value")
+                .orElseThrow());
+    }
+
     @Test
     void nestedTagsShifted() {
         CompoundTag target = new CompoundTag();

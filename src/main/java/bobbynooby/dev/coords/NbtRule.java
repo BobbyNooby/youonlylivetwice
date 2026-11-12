@@ -8,12 +8,21 @@ import net.minecraft.nbt.Tag;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
- * Finds the positions vanilla puts in the NBT a client is sent: a block position saved as three ints under a key ending
- * in "pos" or named exit_portal, and an entity's Pos as three doubles. A position under any other key goes out as it is.
+ * Finds the positions vanilla puts in the NBT a client can be sent: a block position saved as three ints under a key
+ * ending in "pos" or under one of a few other names, three doubles under a key ending in "pos", such as an entity's Pos,
+ * and a breeze's jump target in its brain. A position under any other key goes out as it is.
  */
 public final class NbtRule {
+    // Vanilla's block positions under keys that don't end in "pos": an end gateway's exit, a leash knot, and where a
+    // patrol, a wandering trader and an end crystal's beam are headed
+    private static final Set<String> BLOCK_POS_NAMES = Set.of("exit_portal", "leash", "patrol_target", "wander_target",
+            "beam_target");
+    // The one brain memory saved as a block position, which keeps it under "value"
+    private static final String JUMP_TARGET = "minecraft:breeze_jump_target";
+
     private NbtRule() {}
 
     /** The tag with every position in it shifted, as a copy. The same tag when it holds no position. */
@@ -30,7 +39,7 @@ public final class NbtRule {
         if (tag instanceof CompoundTag compound) {
             for (String key : compound.keySet()) {
                 Tag value = compound.get(key);
-                if (isBlockPos(key, value) || isEntityPos(key, value) || holdsPosition(value)) {
+                if (isBlockPos(key, value) || isEntityPos(key, value) || isJumpTarget(key, value) || holdsPosition(value)) {
                     return true;
                 }
             }
@@ -50,8 +59,9 @@ public final class NbtRule {
             for (String key : List.copyOf(compound.keySet())) {
                 Tag value = compound.get(key);
                 if (isBlockPos(key, value)) {
-                    int[] pos = ((IntArrayTag) value).getAsIntArray();
-                    compound.putIntArray(key, new int[] {pos[0] + offset.x(), pos[1], pos[2] + offset.z()});
+                    shiftBlockPos(compound, key, offset);
+                } else if (isJumpTarget(key, value)) {
+                    shiftBlockPos((CompoundTag) value, "value", offset);
                 } else if (isEntityPos(key, value)) {
                     ListTag pos = (ListTag) value;
                     pos.set(0, DoubleTag.valueOf(pos.getDoubleOr(0, 0.0) + offset.x()));
@@ -67,13 +77,29 @@ public final class NbtRule {
         }
     }
 
+    private static void shiftBlockPos(CompoundTag compound, String key, Offset offset) {
+        int[] pos = ((IntArrayTag) compound.get(key)).getAsIntArray();
+        compound.putIntArray(key, new int[] {pos[0] + offset.x(), pos[1], pos[2] + offset.z()});
+    }
+
     private static boolean isBlockPos(String key, Tag value) {
-        return value instanceof IntArrayTag array && array.size() == 3
-                && (key.toLowerCase(Locale.ROOT).endsWith("pos") || key.equals("exit_portal"));
+        return isThreeInts(value) && (endsInPos(key) || BLOCK_POS_NAMES.contains(key));
     }
 
     private static boolean isEntityPos(String key, Tag value) {
-        return key.equals("Pos") && value instanceof ListTag list && list.size() == 3
+        return endsInPos(key) && value instanceof ListTag list && list.size() == 3
                 && list.stream().allMatch(element -> element instanceof DoubleTag);
+    }
+
+    private static boolean isJumpTarget(String key, Tag value) {
+        return key.equals(JUMP_TARGET) && value instanceof CompoundTag memory && isThreeInts(memory.get("value"));
+    }
+
+    private static boolean isThreeInts(Tag value) {
+        return value instanceof IntArrayTag array && array.size() == 3;
+    }
+
+    private static boolean endsInPos(String key) {
+        return key.toLowerCase(Locale.ROOT).endsWith("pos");
     }
 }
