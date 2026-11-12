@@ -15,12 +15,14 @@ import net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.border.WorldBorder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 // The border a client with an offset is shown: only the walls near the player are real, and a whole-world border goes
@@ -174,6 +176,41 @@ public class CoordinateOffsetBorderGameTests {
                 CoordinateOffsets.recheckBorders(helper.getLevel().getServer());
                 helper.assertTrue(OffsetTestKit.sent(player, again, ClientboundInitializeBorderPacket.class).isEmpty(),
                         "a second recheck sent the same walls again");
+            } finally {
+                TestPlayers.leave(player);
+            }
+        });
+        helper.succeed();
+    }
+
+    // A teleport can land next to a wall, so the walls are checked again at the end of its tick, not up to a second later.
+    // Walking there is left to the once-a-second recheck.
+    @GameTest(environment = BORDER)
+    public void teleportNextToAWallRechecksAtTheTicksEnd(GameTestHelper helper) {
+        int viewDistance = helper.getLevel().getServer().getPlayerList().getViewDistance();
+        helper.assertTrue(BorderWalls.near(viewDistance) < 1_000, "a wall 1,000 off counts as near");
+        withBorder(helper, eastWallFrom(helper, 1_000), 4_000, () -> {
+            ServerPlayer player = OffsetTestKit.join(helper, "cbteleport", GameType.CREATIVE);
+            try {
+                MinecraftServer server = helper.getLevel().getServer();
+                Offset offset = CoordinateOffsets.offset(player);
+                WorldBorder real = helper.getLevel().getWorldBorder();
+                // The join's own teleport, after which its border went out
+                int mark = OffsetTestKit.mark(player);
+                CoordinateOffsets.recheckTeleported(server);
+                helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundInitializeBorderPacket.class).isEmpty(),
+                        "the join's walls were sent again");
+
+                player.snapTo(real.getMaxX() - 50.0, player.getY(), player.getZ());
+                CoordinateOffsets.recheckTeleported(server);
+                helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundInitializeBorderPacket.class).isEmpty(),
+                        "walls were sent for a move that was no teleport");
+
+                player.teleportTo(helper.getLevel(), real.getMaxX() - 50.0, player.getY(), player.getZ(), Set.of(), 0.0F, 0.0F, true);
+                CoordinateOffsets.recheckTeleported(server);
+                List<ClientboundInitializeBorderPacket> sent = OffsetTestKit.sent(player, mark, ClientboundInitializeBorderPacket.class);
+                helper.assertValueEqual(sent.size(), 1, "borders sent after the teleport");
+                helper.assertValueEqual(maxX(sent.getFirst()), real.getMaxX() + offset.x(), "east wall after the teleport");
             } finally {
                 TestPlayers.leave(player);
             }

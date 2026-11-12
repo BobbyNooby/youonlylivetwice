@@ -71,10 +71,13 @@ public final class CoordinateOffsets {
     public static void init(Predicate<ServerPlayer> realCoordinates, Predicate<BlockPos> northTarget) {
         CoordinateOffsets.realCoordinates = realCoordinates;
         CoordinateOffsets.northTarget = northTarget;
-        // Once a second, as the walls a player is near change only as fast as they travel
+        // Once a second, as the walls a player is near change only as fast as they travel, and at the end of any tick that
+        // teleported someone
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
                 recheckBorders(server);
+            } else {
+                recheckTeleported(server);
             }
         });
         OwnPosition.register();
@@ -188,12 +191,25 @@ public final class CoordinateOffsets {
      */
     public static void recheckBorders(MinecraftServer server) {
         borderRechecks++;
+        recheck(server, true);
+    }
+
+    /** The same, only for each player whose client was sent a teleport since their walls were last checked. */
+    public static void recheckTeleported(MinecraftServer server) {
+        recheck(server, false);
+    }
+
+    private static void recheck(MinecraftServer server, boolean everyone) {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             Offset offset = offset(player);
             if (offset.isZero()) {
                 continue;
             }
             OffsetState state = state(connectionOf(player));
+            if (!everyone && !state.borderRecheck) {
+                continue;
+            }
+            state.borderRecheck = false;
             state.lastPosition = player.position();
             ClientboundInitializeBorderPacket live = new ClientboundInitializeBorderPacket(player.level().getWorldBorder());
             if (!Objects.equals(BorderRule.squareFor(live, state, player, offset), state.lastBorder)) {

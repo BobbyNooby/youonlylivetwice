@@ -41,8 +41,9 @@ final class OwnPosition {
     }
 
     /**
-     * Notes where a teleport puts the client, in real coordinates, whatever the frame, one in a bundle too. The first one
-     * after a respawn also names the accept from which the client's moves are read in the new frame.
+     * Notes where a teleport puts the client, in real coordinates, whatever the frame, one in a bundle too, and that its
+     * walls want checking. The first one after a respawn also names the accept from which the client's moves are read in
+     * the new frame.
      */
     static void keepTeleport(OffsetState state, Packet<?> packet) {
         if (packet instanceof ClientboundBundlePacket bundle) {
@@ -57,6 +58,7 @@ final class OwnPosition {
         Vec3 before = state.lastPosition != null ? state.lastPosition : Vec3.ZERO;
         state.lastPosition = new Vec3(relatives.contains(Relative.X) ? before.x + to.x : to.x,
                 relatives.contains(Relative.Y) ? before.y + to.y : to.y, relatives.contains(Relative.Z) ? before.z + to.z : to.z);
+        state.borderRecheck = true;
         state.frames.updateAndGet(frames -> frames.switchAt() == Frames.AT_NEXT_TELEPORT
                 ? new Frames(frames.out(), frames.in(), teleport.id()) : frames);
     }

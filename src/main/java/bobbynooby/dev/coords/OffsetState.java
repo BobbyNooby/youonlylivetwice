@@ -24,6 +24,8 @@ public final class OffsetState {
     volatile @Nullable Vec3 lastPosition;
     // The walls the client was last sent, null for the whole world, so the recheck sends them only when they change
     volatile BorderWalls.@Nullable Square lastBorder;
+    // Set by a teleport the client is sent, which can land it next to a wall, so its walls are checked at the tick's end
+    volatile boolean borderRecheck;
     // The real spot the frame the next Respawn packet starts is anchored at
     volatile @Nullable Vec3 nextAnchor;
     // Packet types whose translation failed for this connection, and those whose notes failed, so each is logged once
