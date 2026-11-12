@@ -24,7 +24,7 @@ public final class OffsetState {
     volatile @Nullable Vec3 lastPosition;
     // The real spot the frame the next Respawn packet starts is anchored at
     volatile @Nullable Vec3 nextAnchor;
-    // Packet types whose translation failed for this connection, so each is logged once
+    // Packet types whose translation or notes failed for this connection, so each is logged once
     final Set<PacketType<?>> failed = ConcurrentHashMap.newKeySet();
 
     public OffsetState() {}

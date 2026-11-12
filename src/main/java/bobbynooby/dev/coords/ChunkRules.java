@@ -1,6 +1,7 @@
 package bobbynooby.dev.coords;
 
 import bobbynooby.dev.coords.CoordinateOffsets.Context;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.ChunkBlockEntityInfoInvoker;
 import bobbynooby.dev.mixin.LevelChunkPacketDataInvoker;
 import net.minecraft.nbt.CompoundTag;
@@ -95,12 +96,15 @@ final class ChunkRules {
         }
     }
 
+    // Looked up once, at mod start, so the reason it can't be found is logged once
     private static @Nullable MethodHandle blockEntityConstructor() {
         try {
             Class<?> type = Class.forName("net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData$BlockEntityInfo");
             return MethodHandles.privateLookupIn(type, MethodHandles.lookup()).findConstructor(type,
                     MethodType.methodType(void.class, byte.class, short.class, BlockEntityType.class, Optional.class));
         } catch (ReflectiveOperationException | RuntimeException e) {
+            Yolt.LOGGER.error("Could not find how to build a chunk's block entity, so a chunk with a position in a block "
+                    + "entity's tag won't be sent to players with a coordinate offset", e);
             return null;
         }
     }

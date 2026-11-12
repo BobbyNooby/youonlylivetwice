@@ -165,6 +165,17 @@ public final class CoordinateOffsets {
         }
     }
 
+    /**
+     * A packet that goes as it is couldn't be noted, so it goes on, but the chunks the client holds or the teleport that
+     * ends a frame switch may now be wrong. Logged once per packet type for each connection.
+     */
+    static void unnoted(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet, RuntimeException e) {
+        if (state.failed.add(packet.type())) {
+            Yolt.LOGGER.error("Could not note what a {} packet for {} tells the client, so it was sent as it is, as are later "
+                    + "ones of that type that fail", packet.type(), listener.player.getPlainTextName(), e);
+        }
+    }
+
     // Packets the translators leave alone. The coverage test fails on any type that is in no table.
     private static void classifyTheRest() {
         Outgoing.noPositions(

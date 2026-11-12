@@ -69,6 +69,7 @@ final class Outgoing {
             // Nothing in a packet that goes as it is can leak, so one only the notes can't read goes on, to fail where it
             // would in vanilla
             if (asItIs) {
+                CoordinateOffsets.unnoted(state, listener, packet, e);
                 return packet;
             }
             CoordinateOffsets.dropped(state, listener, packet, e);

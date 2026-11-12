@@ -431,6 +431,28 @@ public class CoordinateOffsetCoreGameTests {
         helper.succeed();
     }
 
+    // With no offset nothing in the packet can leak, so one whose chunk can't be noted still goes, and that is logged once
+    @GameTest(environment = CORE)
+    public void failedNotesSendThePacketAsItIs(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "conotes", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        try {
+            ClientboundForgetLevelChunkPacket forget = new ClientboundForgetLevelChunkPacket((ChunkPos) null);
+            int mark = OffsetTestKit.mark(player);
+            List<String> log = OfflineGameTests.yoltLog(() -> {
+                player.connection.send(forget);
+                player.connection.send(forget);
+            });
+            helper.assertValueEqual(OffsetTestKit.sent(player, mark, ClientboundForgetLevelChunkPacket.class), List.of(forget, forget),
+                    "forgets sent");
+            String line = "Could not note what a clientbound/minecraft:forget_level_chunk packet for " + player.getPlainTextName()
+                    + " tells the client, so it was sent as it is";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(line)).count(), 1L, "lines in " + log);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     private static void assertOneDropLine(GameTestHelper helper, List<String> log, String type, ServerPlayer player) {
         String line = "Could not translate the coordinates in a " + type + " packet for " + player.getPlainTextName()
                 + ", so it was dropped";
