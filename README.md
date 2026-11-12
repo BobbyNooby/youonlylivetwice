@@ -589,8 +589,9 @@ The coordinate offset reads every packet, so a new Minecraft version can add a p
 a release on a new version:
 
 - Run the coverage and leak tests (`CoordinateOffsetCoverageGameTests` and `LeakSweepGameTests`). Every new packet,
-  item component, entity data type, particle, block entity, debug subscription, position source and waypoint type
-  has to be sorted into "shifted" or "holds no position" first.
+  item component, entity data type, particle, block entity, position source and waypoint type has to be sorted into
+  "shifted" or "holds no position" first. A new debug subscription needs nothing: a player with an offset is only
+  ever sent the server tick times one, so any new one is held back from them.
 - Compare the packet classes that changed between the two versions, and look in them for new positions, items, NBT
   and particles.
 - Check that every method the hooks sit on still exists with the same arguments: sending and receiving on the
