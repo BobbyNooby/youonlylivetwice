@@ -558,8 +558,9 @@ public class BodyDeathGameTests {
     }
 
     // The same with the body dying in lava: the helmet goes where a grave's items would drop, the nearest spot where they
-    // last, not into the lava that killed it. The lava goes again in this tick, before it can spread.
-    @GameTest
+    // last, not into the lava that killed it. The lava goes again in this tick, before it can spread. No ceiling, which
+    // the search up from the lava would take as a floor.
+    @GameTest(skyAccess = true)
     public void deadSaveBodyDeathInLavaDropsGearWhereItLasts(GameTestHelper helper) throws IOException {
         ServerPlayer player = join(helper, "LavaAgain");
         UUID owner = player.getUUID();
