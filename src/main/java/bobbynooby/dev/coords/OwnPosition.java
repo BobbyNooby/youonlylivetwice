@@ -4,6 +4,7 @@ import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.mixin.PlayerLookAtPacketAccessor;
 import net.minecraft.core.PositionAndRotation;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
@@ -40,10 +41,14 @@ final class OwnPosition {
     }
 
     /**
-     * Notes where a teleport puts the client, in real coordinates, whatever the frame. The first one after a respawn
-     * also names the accept from which the client's moves are read in the new frame.
+     * Notes where a teleport puts the client, in real coordinates, whatever the frame, one in a bundle too. The first one
+     * after a respawn also names the accept from which the client's moves are read in the new frame.
      */
     static void keepTeleport(OffsetState state, Packet<?> packet) {
+        if (packet instanceof ClientboundBundlePacket bundle) {
+            bundle.subPackets().forEach(part -> keepTeleport(state, part));
+            return;
+        }
         if (!(packet instanceof ClientboundPlayerPositionPacket teleport)) {
             return;
         }

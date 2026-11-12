@@ -8,6 +8,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
@@ -20,6 +23,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -248,6 +252,39 @@ public class CoordinateOffsetFrameGameTests {
             player.connection.teleport(player.getX(), player.getY(), player.getZ(), 0.0F, 0.0F);
             Vec3 sent = OffsetTestKit.last(helper, player, mark, ClientboundPlayerPositionPacket.class).change().position();
             helper.assertValueEqual(sent, offset.shift(player.position()), "the teleport after the respawn packet");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A teleport sent in a bundle names the accept that moves the client's moves to the new frame, as one on its own does
+    @GameTest(environment = FRAMES)
+    public void teleportInABundleNamesTheSwitch(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cfbundle", GameType.CREATIVE);
+        try {
+            Offset old = CoordinateOffsets.offset(player);
+            Connection connection = OffsetTestKit.connection(player);
+            ServerLevel level = helper.getLevel();
+            OffsetTestKit.withCoordinates(() -> {
+                player.connection.send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(level), (byte) 0));
+                return null;
+            });
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.equals(old), "the respawn packet kept the old frame's offset " + old);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(new ClientboundBundlePacket(List.<Packet<? super ClientGamePacketListener>>of(
+                    new ClientboundSetChunkCacheCenterPacket(0, 0),
+                    new ClientboundPlayerPositionPacket(4_321, PositionMoveRotation.of(player), Set.of()))));
+
+            Vec3 client = OffsetTestKit.last(helper, player, mark, ClientboundPlayerPositionPacket.class).change().position();
+            ServerboundAcceptTeleportationPacket accept = (ServerboundAcceptTeleportationPacket) CoordinateOffsets.incoming(
+                    connection, new ServerboundAcceptTeleportationPacket(4_321, client.x, client.y, client.z, 0.0F, 0.0F));
+            helper.assertValueEqual(accept.x(), client.x - offset.x(), "x of the accept");
+            helper.assertValueEqual(accept.z(), client.z - offset.z(), "z of the accept");
+            ServerboundMovePlayerPacket late = (ServerboundMovePlayerPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundMovePlayerPacket.Pos(client.x + 1, client.y, client.z, false, false));
+            helper.assertValueEqual(late.getX(0.0), client.x + 1 - offset.x(), "x of a move sent after the accept");
         } finally {
             TestPlayers.leave(player);
         }
