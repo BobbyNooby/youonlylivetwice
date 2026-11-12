@@ -18,7 +18,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -62,6 +64,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gameevent.BlockPositionSource;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -71,23 +75,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
-// Every packet of a whole scene, read for a real X or Z. Each scene joins at one fixed real spot far out with the switch
-// on, so every real position in it falls in a narrow band that no shifted one comes near. The scenes share the spot and
-// hold players across ticks, so each has a batch of its own.
+// Every packet of a whole scene, read for a real X or Z, or a constant sent shifted. Each scene joins at one fixed real
+// spot far out with the switch on, so every real position in it falls in a narrow band that no shifted one comes near,
+// and every shifted constant in the band's mirror. The scenes share the spot and hold players across ticks, so each has
+// a batch of its own.
 public class LeakSweepGameTests {
     private static final String WORLD = "you-only-live-twice-gametest:leak_sweep_world";
     private static final String ITEMS = "you-only-live-twice-gametest:leak_sweep_items";
     private static final String TRAVEL = "you-only-live-twice-gametest:leak_sweep_travel";
     private static final String KILL = "you-only-live-twice-gametest:leak_sweep_kill";
-    // The scene's real spot, and the offset of every frame anchored there
+    // The scene's real spot, and the offset of every frame anchored there, which puts the spot's chunk at 0, 0
     private static final Vec3 SPOT = new Vec3(12_296.5, 100.0, -12_280.5);
     private static final BlockPos SPOT_BLOCK = BlockPos.containing(SPOT);
     private static final Offset OFFSET = new Offset(-12_288, 12_288);
-    // Real positions within 512 blocks of the spot. Shifted, the same positions sit within 512 of 0, 0.
-    private static final LeakScanner.Band BAND = new LeakScanner.Band(11_776, 12_800, -12_800, -11_776);
+    // Real positions within 512 blocks of the spot's chunk. Shifted, the same positions sit within 512 of 0, 0. A constant
+    // shifted on its way out, such as a zero the client ignores, sits within 512 of the offset itself.
+    private static final int REACH = 512;
+    private static final LeakScanner.Band BAND = LeakScanner.Band.around("real", -OFFSET.x(), -OFFSET.z(), REACH);
+    private static final LeakScanner.Band OFFSET_BAND = LeakScanner.Band.around("offset", OFFSET.x(), OFFSET.z(), REACH);
+    private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND);
+    // A north compass's target Z, the same for everyone
+    private static final int NORTH_Z = -28_999_984;
     // A compass's target and a gateway's exit, in the band, so a leak of either shows
     private static final BlockPos TARGET = SPOT_BLOCK.offset(30, -36, -40);
     private static final BlockPos EXIT = SPOT_BLOCK.offset(-50, 0, 60);
@@ -100,7 +110,7 @@ public class LeakSweepGameTests {
     private static final double WALLED = 4_000.0;
 
     // The check of the check: with the switch off, a real spot is found, once, and so is one deep in an item, in a sound's
-    // eighths and in chunks. The same spot shifted is not.
+    // eighths and in chunks, a place with only one axis real, and a zero sent shifted. The same spot shifted is not.
     @GameTest
     public void scannerFindsARealPosition(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper.getLevel().getServer(), "lsscanner", GameType.CREATIVE, SPOT_BLOCK);
@@ -113,15 +123,21 @@ public class LeakSweepGameTests {
             List<String> found = scan(sent.subList(mark, sent.size()));
             helper.assertValueEqual(found.size(), 1, "findings in the block update sent: " + found);
 
-            helper.assertValueEqual(LeakScanner.findings(new ClientboundBlockUpdatePacket(OFFSET.shift(TARGET), stone), BAND),
-                    List.of(), "findings in a block update at the shifted spot");
-            helper.assertValueEqual(LeakScanner.findings(new ClientboundContainerSetContentPacket(0, 1, List.of(nestedCompass()),
-                    ItemStack.EMPTY), BAND).size(), 1, "findings for a compass in a shulker box in a bundle");
-            helper.assertValueEqual(LeakScanner.findings(new ClientboundSoundPacket(SoundEvents.NOTE_BLOCK_BELL, SoundSource.BLOCKS,
-                    SPOT.x, SPOT.y, SPOT.z, 1.0F, 1.0F, 0L), BAND).size(), 2, "findings in a sound, one each for x and z");
+            helper.assertValueEqual(findingsIn(new ClientboundBlockUpdatePacket(OFFSET.shift(TARGET), stone)), List.of(),
+                    "findings in a block update at the shifted spot");
+            helper.assertValueEqual(findingsIn(new ClientboundContainerSetContentPacket(0, 1, List.of(nestedCompass()), ItemStack.EMPTY)).size(),
+                    1, "findings for a compass in a shulker box in a bundle");
+            helper.assertValueEqual(findingsIn(new ClientboundSoundPacket(SoundEvents.NOTE_BLOCK_BELL, SoundSource.BLOCKS, SPOT.x, SPOT.y,
+                    SPOT.z, 1.0F, 1.0F, 0L)).size(), 2, "findings in a sound, one each for x and z");
             ChunkPos chunk = ChunkPos.containing(SPOT_BLOCK);
-            helper.assertValueEqual(LeakScanner.findings(new ClientboundSetChunkCacheCenterPacket(chunk.x(), chunk.z()), BAND).size(),
-                    2, "findings in a chunk centre, one each for x and z");
+            helper.assertValueEqual(findingsIn(new ClientboundSetChunkCacheCenterPacket(chunk.x(), chunk.z())).size(), 2,
+                    "findings in a chunk centre, one each for x and z");
+            // A north target whose X was left real, with the Z every player has
+            helper.assertValueEqual(findingsIn(new ClientboundSetDefaultSpawnPositionPacket(LevelData.RespawnData.of(Level.OVERWORLD,
+                    new BlockPos(TARGET.getX(), 64, NORTH_Z), 0.0F, 0.0F))).size(), 1, "findings for a north target with a real x");
+            // The zero a portal sound is played at, sent shifted, which is the offset itself
+            helper.assertValueEqual(findingsIn(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, OFFSET.shift(BlockPos.ZERO), 0,
+                    false)).size(), 1, "findings for a portal sound at the shifted zero");
         } finally {
             TestPlayers.leave(player);
         }
@@ -352,9 +368,11 @@ public class LeakSweepGameTests {
         });
     }
 
+    // With the sound a portal plays, sent at a zero the client ignores, which would show in the offset band sent shifted
     private static void travel(GameTestHelper helper, Sweep sweep, UUID id, ServerLevel to) {
         ServerPlayer player = sweep.current(id);
-        OffsetTestKit.withCoordinates(() -> player.teleportTo(to, SPOT.x, SPOT.y, SPOT.z, Set.of(), 0.0F, 0.0F, true));
+        OffsetTestKit.withCoordinates(() -> player.teleport(new TeleportTransition(to, SPOT, Vec3.ZERO, 0.0F, 0.0F,
+                TeleportTransition.PLAY_PORTAL_SOUND)));
         helper.assertTrue(player.level() == to, "the player did not reach " + to.dimension().identifier());
         helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset in " + to.dimension().identifier());
         loadAround(to);
@@ -398,10 +416,14 @@ public class LeakSweepGameTests {
         return bundle;
     }
 
+    private static List<String> findingsIn(Object packet) {
+        return LeakScanner.findings(packet, BAND, OFFSET_BAND);
+    }
+
     private static List<String> scan(List<Packet<?>> packets) {
         List<String> found = new ArrayList<>();
         for (Packet<?> packet : packets) {
-            found.addAll(LeakScanner.findings(packet, BAND));
+            found.addAll(findingsIn(packet));
         }
         return found;
     }
@@ -514,12 +536,15 @@ public class LeakSweepGameTests {
         }
 
         private void finish() {
-            List<String> found = new ArrayList<>();
+            LeakScanner.Scan scan = new LeakScanner.Scan(BANDS);
             for (UUID id : scanned) {
-                found.addAll(scan(TestPlayers.sentPackets(joined.get(id))));
+                for (Packet<?> packet : TestPlayers.sentPackets(joined.get(id))) {
+                    scan.packet(packet);
+                }
             }
             cleanUp();
-            helper.assertTrue(found.isEmpty(), found.size() + " real positions sent: "
+            List<String> found = scan.findings();
+            helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
                     + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
             helper.succeed();
         }

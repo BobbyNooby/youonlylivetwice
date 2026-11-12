@@ -69,9 +69,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Lists every real position in a packet a client with an offset was sent. The scene sits at a real spot far out, so
- * every real position in it falls in a narrow band around that spot, and every shifted one lands near 0, 0, far from
- * the band. The walk goes through the packet as its fields hold it, nested items, NBT, particles and texts included.
+ * Lists every real position in a packet a client with an offset was sent, and every constant sent shifted. The scene sits
+ * at a real spot far out, so every real position in it falls in a narrow band around that spot, and every shifted one
+ * lands near 0, 0, far from the band. A constant the client ignores, shifted, lands near the offset itself, which is
+ * the band's mirror, so that is a band too. The walk goes through the packet as its fields hold it, nested items, NBT,
+ * particles and texts included.
  */
 final class LeakScanner {
     // Objects deep; a list, map, optional or array on the way doesn't count
@@ -85,8 +87,15 @@ final class LeakScanner {
     // What to read of each class, worked out once
     private static final Map<Class<?>, List<Part>> PARTS = new ConcurrentHashMap<>();
 
-    /** The real spot's band: a real position has both its X and Z in it, a shifted one neither. */
-    record Band(int minX, int maxX, int minZ, int maxZ) {
+    /**
+     * Where no place the client is sent may be. A place is flagged when either of its axes is in the band's span on that
+     * axis, so a place with only one axis left real or shifted from a constant shows too.
+     */
+    record Band(String name, int minX, int maxX, int minZ, int maxZ) {
+        static Band around(String name, int x, int z, int reach) {
+            return new Band(name, x - reach, x + reach, z - reach, z + reach);
+        }
+
         boolean inX(double x) {
             return x >= minX && x <= maxX;
         }
@@ -94,19 +103,34 @@ final class LeakScanner {
         boolean inZ(double z) {
             return z >= minZ && z <= maxZ;
         }
+    }
 
-        boolean in(double x, double z) {
-            return inX(x) && inZ(z);
+    /** What the packets read so far hold: places in a band. */
+    static final class Scan {
+        private final List<Band> bands;
+        private final List<String> findings = new ArrayList<>();
+
+        Scan(List<Band> bands) {
+            this.bands = List.copyOf(bands);
+        }
+
+        void packet(Object packet) {
+            new Walk(this).packet(packet);
+        }
+
+        /** One line per place in a band, naming the band, the packet class and the path to the field. */
+        List<String> findings() {
+            return findings;
         }
     }
 
     private LeakScanner() {}
 
-    /** One line per real position in the packet, naming the packet class and the path to the field. */
-    static List<String> findings(Object packet, Band band) {
-        Walk walk = new Walk(band);
-        walk.packet(packet);
-        return walk.findings;
+    /** One line per place in a band in the packet. */
+    static List<String> findings(Object packet, Band... bands) {
+        Scan scan = new Scan(List.of(bands));
+        scan.packet(packet);
+        return scan.findings();
     }
 
     // A field or a record component, read the same way
@@ -117,14 +141,13 @@ final class LeakScanner {
     }
 
     private static final class Walk {
-        private final Band band;
-        private final List<String> findings = new ArrayList<>();
-        private final Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Scan scan;
+        private final Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         private final List<String> path = new ArrayList<>();
         private String packetName = "";
 
-        private Walk(Band band) {
-            this.band = band;
+        private Walk(Scan scan) {
+            this.scan = scan;
         }
 
         // A bundle's parts are packets of their own to the client
@@ -141,7 +164,17 @@ final class LeakScanner {
         }
 
         private void found(String what, Object value) {
-            findings.add(packetName + String.join("", path) + ": " + what + " " + value);
+            scan.findings.add(packetName + String.join("", path) + ": " + what + " " + value);
+        }
+
+        // A place on both axes: one finding for the first band either axis is in
+        private void place(String what, Object value, double x, double z) {
+            for (Band band : scan.bands) {
+                if (band.inX(x) || band.inZ(z)) {
+                    found(band.name() + " " + what, value);
+                    return;
+                }
+            }
         }
 
         private void visit(@Nullable Object value, int depth) {
@@ -159,7 +192,7 @@ final class LeakScanner {
                 }
                 return;
             }
-            if (!seen.add(value) || position(value)) {
+            if (!visited.add(value) || position(value)) {
                 return;
             }
             if (value instanceof Tag tag) {
@@ -217,27 +250,19 @@ final class LeakScanner {
         // A place by its type: blocks and vectors by their X and Z, chunks and sections by their first block
         private boolean position(Object value) {
             if (value instanceof Vec3 vector) {
-                if (band.in(vector.x, vector.z)) {
-                    found("position", vector);
-                }
+                place("position", vector, vector.x, vector.z);
                 return true;
             }
             if (value instanceof SectionPos section) {
-                if (band.in(section.x() * 16.0, section.z() * 16.0)) {
-                    found("section", section);
-                }
+                place("section", section, section.x() * 16.0, section.z() * 16.0);
                 return true;
             }
             if (value instanceof Vec3i block) {
-                if (band.in(block.getX(), block.getZ())) {
-                    found("block", block);
-                }
+                place("block", block, block.getX(), block.getZ());
                 return true;
             }
             if (value instanceof ChunkPos chunk) {
-                if (band.in(chunk.x() * 16.0, chunk.z() * 16.0)) {
-                    found("chunk", chunk);
-                }
+                place("chunk", chunk, chunk.x() * 16.0, chunk.z() * 16.0);
                 return true;
             }
             return false;
@@ -253,21 +278,25 @@ final class LeakScanner {
             double blocks = owner instanceof ClientboundSoundPacket ? value / 8.0
                     : owner instanceof ClientboundLevelChunkWithLightPacket || owner instanceof ClientboundLightUpdatePacket
                     || owner instanceof ClientboundSetChunkCacheCenterPacket ? value * 16.0 : value;
-            if (x ? band.inX(blocks) : band.inZ(blocks)) {
-                found(name, value);
+            for (Band band : scan.bands) {
+                if (x ? band.inX(blocks) : band.inZ(blocks)) {
+                    found(band.name() + " " + name, value);
+                    return;
+                }
             }
         }
 
         private void tag(Tag tag) {
             if (tag instanceof IntArrayTag array) {
                 int[] ints = array.getAsIntArray();
-                if (ints.length == 3 && band.in(ints[0], ints[2])) {
-                    found("int array", Arrays.toString(ints));
+                if (ints.length == 3) {
+                    place("int array", Arrays.toString(ints), ints[0], ints[2]);
                 }
             } else if (tag instanceof ListTag list) {
-                if (list.size() == 3 && list.stream().allMatch(element -> element instanceof DoubleTag)
-                        && band.in(((DoubleTag) list.get(0)).value(), ((DoubleTag) list.get(2)).value())) {
-                    found("double list", list);
+                if (list.size() == 3 && list.stream().allMatch(element -> element instanceof DoubleTag)) {
+                    double x = ((DoubleTag) list.get(0)).value();
+                    double z = ((DoubleTag) list.get(2)).value();
+                    place("double list", list, x, z);
                 }
                 for (int i = 0; i < list.size(); i++) {
                     path.add("[" + i + "]");
@@ -276,9 +305,8 @@ final class LeakScanner {
                 }
             } else if (tag instanceof CompoundTag compound) {
                 // A map marker's x and z
-                if (compound.get("x") instanceof NumericTag x && compound.get("z") instanceof NumericTag z
-                        && band.in(x.doubleValue(), z.doubleValue())) {
-                    found("x and z", compound);
+                if (compound.get("x") instanceof NumericTag x && compound.get("z") instanceof NumericTag z) {
+                    place("x and z", compound, x.doubleValue(), z.doubleValue());
                 }
                 for (String key : compound.keySet()) {
                     path.add("{" + key + "}");
@@ -348,8 +376,11 @@ final class LeakScanner {
         private void teleport(Vec3 to, Set<Relative> relatives) {
             boolean absoluteX = !relatives.contains(Relative.X);
             boolean absoluteZ = !relatives.contains(Relative.Z);
-            if (absoluteX && absoluteZ ? band.in(to.x, to.z) : absoluteX ? band.inX(to.x) : absoluteZ && band.inZ(to.z)) {
-                found("teleport", to);
+            for (Band band : scan.bands) {
+                if (absoluteX && band.inX(to.x) || absoluteZ && band.inZ(to.z)) {
+                    found(band.name() + " teleport", to);
+                    return;
+                }
             }
         }
 
@@ -360,11 +391,13 @@ final class LeakScanner {
             double east = Mth.clamp(border.getNewCenterX() + half, -edge, edge);
             double north = Mth.clamp(border.getNewCenterZ() - half, -edge, edge);
             double south = Mth.clamp(border.getNewCenterZ() + half, -edge, edge);
-            if (band.inX(west) || band.inX(east)) {
-                found("border wall x", west + " to " + east);
-            }
-            if (band.inZ(north) || band.inZ(south)) {
-                found("border wall z", north + " to " + south);
+            for (Band band : scan.bands) {
+                if (band.inX(west) || band.inX(east)) {
+                    found(band.name() + " border wall x", west + " to " + east);
+                }
+                if (band.inZ(north) || band.inZ(south)) {
+                    found(band.name() + " border wall z", north + " to " + south);
+                }
             }
         }
     }
