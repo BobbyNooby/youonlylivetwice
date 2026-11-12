@@ -317,31 +317,24 @@ public final class ItemRule {
     // Every slot keeps its place, empty ones too, so the copy is built from the slot list itself
     private static ItemContainerContents container(ItemContainerContents contents, Offset offset) {
         List<Optional<ItemStackTemplate>> slots = ((ItemContainerContentsInvoker) (Object) contents).yoltItems();
-        List<Optional<ItemStackTemplate>> shifted = null;
-        for (int i = 0; i < slots.size(); i++) {
-            Optional<ItemStackTemplate> slot = slots.get(i);
+        List<Optional<ItemStackTemplate>> shifted = CoordinateOffsets.mapEach(slots, slot -> {
             if (slot.isEmpty()) {
-                continue;
+                return slot;
             }
             ItemStackTemplate moved = shift(slot.get(), offset);
-            if (moved != slot.get()) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(slots);
-                }
-                shifted.set(i, Optional.of(moved));
-            }
-        }
-        return shifted == null ? contents : ItemContainerContentsInvoker.yoltNew(shifted);
+            return moved == slot.get() ? slot : Optional.of(moved);
+        });
+        return shifted == slots ? contents : ItemContainerContentsInvoker.yoltNew(shifted);
     }
 
     // In order, as the client shows a bundle's items in the order they went in
     private static BundleContents bundle(BundleContents bundle, Offset offset) {
-        List<ItemStackTemplate> shifted = shiftTemplates(bundle.items(), offset);
+        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(bundle.items(), template -> shift(template, offset));
         return shifted == bundle.items() ? bundle : new BundleContents(shifted);
     }
 
     private static ChargedProjectiles projectiles(ChargedProjectiles projectiles, Offset offset) {
-        List<ItemStackTemplate> shifted = shiftTemplates(projectiles.items(), offset);
+        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(projectiles.items(), template -> shift(template, offset));
         return shifted == projectiles.items() ? projectiles : new ChargedProjectiles(shifted);
     }
 
@@ -371,54 +364,16 @@ public final class ItemRule {
 
     // A bee's flower is kept in its entity data
     private static Bees bees(Bees bees, Offset offset) {
-        List<BeehiveBlockEntity.Occupant> shifted = null;
-        for (int i = 0; i < bees.bees().size(); i++) {
-            BeehiveBlockEntity.Occupant bee = bees.bees().get(i);
+        List<BeehiveBlockEntity.Occupant> shifted = CoordinateOffsets.mapEach(bees.bees(), bee -> {
             TypedEntityData<EntityType<?>> data = typedData(bee.entityData(), offset);
-            if (data != bee.entityData()) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(bees.bees());
-                }
-                shifted.set(i, new BeehiveBlockEntity.Occupant(data, bee.ticksInHive(), bee.minTicksInHive()));
-            }
-        }
-        return shifted == null ? bees : new Bees(shifted);
-    }
-
-    // The very list when no item in it changes
-    private static List<ItemStackTemplate> shiftTemplates(List<ItemStackTemplate> templates, Offset offset) {
-        List<ItemStackTemplate> shifted = null;
-        for (int i = 0; i < templates.size(); i++) {
-            ItemStackTemplate template = templates.get(i);
-            ItemStackTemplate moved = shift(template, offset);
-            if (moved != template) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(templates);
-                }
-                shifted.set(i, moved);
-            }
-        }
-        return shifted == null ? templates : shifted;
-    }
-
-    private static List<ItemStack> shiftStacks(List<ItemStack> stacks, Offset offset) {
-        List<ItemStack> shifted = null;
-        for (int i = 0; i < stacks.size(); i++) {
-            ItemStack stack = stacks.get(i);
-            ItemStack moved = shift(stack, offset);
-            if (moved != stack) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(stacks);
-                }
-                shifted.set(i, moved);
-            }
-        }
-        return shifted == null ? stacks : shifted;
+            return data == bee.entityData() ? bee : new BeehiveBlockEntity.Occupant(data, bee.ticksInHive(), bee.minTicksInHive());
+        });
+        return shifted == bees.bees() ? bees : new Bees(shifted);
     }
 
     private static Packet<?> containerContent(ClientboundContainerSetContentPacket packet, Context context) {
         Offset offset = context.offset();
-        List<ItemStack> items = shiftStacks(packet.items(), offset);
+        List<ItemStack> items = CoordinateOffsets.mapEach(packet.items(), stack -> shift(stack, offset));
         ItemStack carried = shift(packet.carriedItem(), offset);
         if (items == packet.items() && carried == packet.carriedItem()) {
             return packet;
@@ -446,38 +401,28 @@ public final class ItemRule {
     private static Packet<?> equipment(ClientboundSetEquipmentPacket packet, Context context) {
         Offset offset = context.offset();
         List<Pair<EquipmentSlot, ItemStack>> slots = packet.getSlots();
-        List<Pair<EquipmentSlot, ItemStack>> shifted = null;
-        for (int i = 0; i < slots.size(); i++) {
-            Pair<EquipmentSlot, ItemStack> slot = slots.get(i);
+        List<Pair<EquipmentSlot, ItemStack>> shifted = CoordinateOffsets.mapEach(slots, slot -> {
             ItemStack moved = shift(slot.getSecond(), offset);
-            if (moved != slot.getSecond()) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(slots);
-                }
-                shifted.set(i, Pair.of(slot.getFirst(), moved));
-            }
-        }
-        return shifted == null ? packet : new ClientboundSetEquipmentPacket(packet.getEntity(), shifted);
+            return moved == slot.getSecond() ? slot : Pair.of(slot.getFirst(), moved);
+        });
+        return shifted == slots ? packet : new ClientboundSetEquipmentPacket(packet.getEntity(), shifted);
     }
 
     // Only a data pack could put a position in what a trade gives
     private static Packet<?> offers(ClientboundMerchantOffersPacket packet, Context context) {
         Offset offset = context.offset();
         MerchantOffers offers = packet.getOffers();
-        MerchantOffers shifted = null;
-        for (int i = 0; i < offers.size(); i++) {
-            MerchantOffer offer = offers.get(i);
+        List<MerchantOffer> shifted = CoordinateOffsets.mapEach(offers, offer -> {
             ItemStack result = shift(offer.getResult(), offset);
-            if (result != offer.getResult()) {
-                if (shifted == null) {
-                    shifted = new MerchantOffers();
-                    shifted.addAll(offers);
-                }
-                shifted.set(i, withResult(offer, result));
-            }
+            return result == offer.getResult() ? offer : withResult(offer, result);
+        });
+        if (shifted == offers) {
+            return packet;
         }
-        return shifted == null ? packet : new ClientboundMerchantOffersPacket(packet.getContainerId(), shifted,
-                packet.getVillagerLevel(), packet.getVillagerXp(), packet.showProgress(), packet.canRestock());
+        MerchantOffers copy = new MerchantOffers();
+        copy.addAll(shifted);
+        return new ClientboundMerchantOffersPacket(packet.getContainerId(), copy, packet.getVillagerLevel(),
+                packet.getVillagerXp(), packet.showProgress(), packet.canRestock());
     }
 
     // Everything the client is sent of the offer, its uses and price changes included

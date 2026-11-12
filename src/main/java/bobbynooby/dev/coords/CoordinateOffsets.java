@@ -25,10 +25,13 @@ import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 /**
  * Gives each player's client its own shift of X and Z. Every game packet the server sends goes through outgoing, which
@@ -176,6 +179,25 @@ public final class CoordinateOffsets {
         } finally {
             buffer.release();
         }
+    }
+
+    /**
+     * The list with each element mapped, in order: a copy made at the first element that changes, or the very list when
+     * none does. Never changes the list it is given.
+     */
+    static <T> List<T> mapEach(List<T> list, UnaryOperator<T> map) {
+        List<T> copy = null;
+        for (int i = 0; i < list.size(); i++) {
+            T element = list.get(i);
+            T mapped = map.apply(element);
+            if (mapped != element) {
+                if (copy == null) {
+                    copy = new ArrayList<>(list);
+                }
+                copy.set(i, mapped);
+            }
+        }
+        return copy == null ? list : copy;
     }
 
     /**

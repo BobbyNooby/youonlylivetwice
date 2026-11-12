@@ -21,7 +21,6 @@ import net.minecraft.world.entity.Relative;
 import net.minecraft.world.entity.vehicle.minecart.NewMinecartBehavior;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -127,18 +126,7 @@ public final class EntityRules {
 
     // A living entity's effect particles, in order; the very list when none moves
     private static List<ParticleOptions> particles(List<ParticleOptions> particles, Offset offset) {
-        List<ParticleOptions> shifted = null;
-        for (int i = 0; i < particles.size(); i++) {
-            ParticleOptions particle = particles.get(i);
-            ParticleOptions moved = ParticleRule.shift(particle, offset);
-            if (moved != particle) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(particles);
-                }
-                shifted.set(i, moved);
-            }
-        }
-        return shifted == null ? particles : shifted;
+        return CoordinateOffsets.mapEach(particles, particle -> ParticleRule.shift(particle, offset));
     }
 
     // Built from its fields. Its angles are kept as bytes, and the getters' degrees pack back to the same ones. The
@@ -189,18 +177,8 @@ public final class EntityRules {
     private static Packet<?> entityData(ClientboundSetEntityDataPacket packet, Context context) {
         Offset offset = context.offset();
         List<SynchedEntityData.DataValue<?>> values = packet.packedItems();
-        List<SynchedEntityData.DataValue<?>> shifted = null;
-        for (int i = 0; i < values.size(); i++) {
-            SynchedEntityData.DataValue<?> value = values.get(i);
-            SynchedEntityData.DataValue<?> moved = shift(value, offset);
-            if (moved != value) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(values);
-                }
-                shifted.set(i, moved);
-            }
-        }
-        return shifted == null ? packet : new ClientboundSetEntityDataPacket(packet.id(), shifted);
+        List<SynchedEntityData.DataValue<?>> shifted = CoordinateOffsets.mapEach(values, value -> shift(value, offset));
+        return shifted == values ? packet : new ClientboundSetEntityDataPacket(packet.id(), shifted);
     }
 
     // Each shift was put in the table with its own serializer, so its types match the value's

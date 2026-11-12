@@ -19,7 +19,6 @@ import net.minecraft.util.random.Weighted;
 import net.minecraft.util.random.WeightedList;
 import net.minecraft.world.waypoints.TrackedWaypoint;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -67,19 +66,13 @@ final class EffectRules {
     // The very list when no particle in it moves, with each weight kept
     private static WeightedList<ExplosionParticleInfo> blockParticles(WeightedList<ExplosionParticleInfo> particles, Offset offset) {
         List<Weighted<ExplosionParticleInfo>> entries = particles.unwrap();
-        List<Weighted<ExplosionParticleInfo>> shifted = null;
-        for (int i = 0; i < entries.size(); i++) {
-            Weighted<ExplosionParticleInfo> entry = entries.get(i);
+        List<Weighted<ExplosionParticleInfo>> shifted = CoordinateOffsets.mapEach(entries, entry -> {
             ExplosionParticleInfo info = entry.value();
             ParticleOptions particle = ParticleRule.shift(info.particle(), offset);
-            if (particle != info.particle()) {
-                if (shifted == null) {
-                    shifted = new ArrayList<>(entries);
-                }
-                shifted.set(i, new Weighted<>(new ExplosionParticleInfo(particle, info.scaling(), info.speed()), entry.weight()));
-            }
-        }
-        return shifted == null ? particles : WeightedList.of(shifted);
+            return particle == info.particle() ? entry
+                    : new Weighted<>(new ExplosionParticleInfo(particle, info.scaling(), info.speed()), entry.weight());
+        });
+        return shifted == entries ? particles : WeightedList.of(shifted);
     }
 
     // The spot a hit came from, such as a bed that blew up, which tilts the hurt camera towards it
