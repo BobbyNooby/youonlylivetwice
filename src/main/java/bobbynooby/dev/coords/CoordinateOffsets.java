@@ -8,6 +8,7 @@ import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.SharedConstants;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.coordinates.Coordinates;
 import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
@@ -217,14 +218,27 @@ public final class CoordinateOffsets {
         return northTarget.test(pos);
     }
 
+    // Commands are few, so walking the player list for each typed spot is cheap enough
+    private static @Nullable ServerPlayer typist(CommandSourceStack source) {
+        CommandSource first = ((CommandSourceStackAccessor) source).yoltSource();
+        for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
+            if (player.commandSource() == first) {
+                return player;
+            }
+        }
+        return null;
+    }
+
     /**
      * Where coordinates typed in a command are, for the player who typed them: absolute X and Z come in the frame the
      * player's client sends in, so its offset comes off. Relative ones are steps from a real spot already. The console,
      * a command block and "execute as" from either keep real coordinates, as the stack's first source isn't a player.
+     * A player's stack doesn't hold the player as its source but a feedback source of its own, so the player is found
+     * by that, which also covers "execute as" someone else from a player.
      */
     public static Vec3 typedPosition(CommandSourceStack source, WorldCoordinates typed, Vec3 position) {
-        if (!(((CommandSourceStackAccessor) source).yoltSource() instanceof ServerPlayer player) || StandIn.is(player)
-                || player.connection == null) {
+        ServerPlayer player = typist(source);
+        if (player == null || StandIn.is(player) || player.connection == null) {
             return position;
         }
         Connection connection = connectionOf(player);
