@@ -7,6 +7,7 @@ import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
@@ -86,6 +87,30 @@ public class CoordinateOffsetCommandGameTests {
         } finally {
             TestPlayers.deop(player);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Admin view changes a player's offset only when a frame starts, so the reply says to rejoin
+    @GameTest(environment = COMMANDS)
+    public void adminViewReplyAsksToRejoin(GameTestHelper helper) {
+        TestPlayers.Recording admin = TestPlayers.joinRecording(helper, "cmadmin", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        try {
+            TestPlayers.op(admin);
+            OffsetTestKit.withCoordinates(() -> {
+                run(admin.createCommandSourceStack(), "yolt adminview");
+                run(admin.createCommandSourceStack(), "yolt adminview");
+                return null;
+            });
+            List<String> replies = admin.messages.stream().map(Component::getString)
+                    .filter(text -> text.startsWith("Admin view"))
+                    .toList();
+            helper.assertValueEqual(replies, List.of("Admin view on. Rejoin to see real coordinates.",
+                    "Admin view off. Rejoin to see offset coordinates."), "replies");
+        } finally {
+            AdminView.set(admin, false);
+            TestPlayers.deop(admin);
+            TestPlayers.leave(admin);
         }
         helper.succeed();
     }

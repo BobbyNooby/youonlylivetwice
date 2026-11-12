@@ -3,6 +3,7 @@ package bobbynooby.dev.commands;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.visibility.AdminView;
 import bobbynooby.dev.world.LiveSettings;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -35,6 +36,11 @@ final class AdminCommands {
         ServerPlayer player = source.getPlayerOrException();
         boolean on = AdminView.toggle(player);
         LOGGER.info("{} turned admin view {}", source.getTextName(), on ? "on" : "off");
+        // An offset only changes when a frame starts, so the admin's coordinates follow at the next join
+        if (CoordinateOffsets.on()) {
+            return YoltCommands.done(source, on ? "Admin view on. Rejoin to see real coordinates."
+                    : "Admin view off. Rejoin to see offset coordinates.");
+        }
         return YoltCommands.done(source, on ? "Admin view on." : "Admin view off.");
     }
 
