@@ -3,7 +3,7 @@
 	"id": "you-only-live-twice",
 	"version": "${version}",
 	"name": "You Only Live Twice",
-	"description": "A server-side Fabric mod that gives players a second life: a grave holds your items when you die.",
+	"description": "Server-side hardcore multiplayer: dying locks you out for days, your items wait in a grave anyone can loot, a logout leaves your body behind, and the server hides who is online.",
 	"authors": [
 		"BobbyNooby"
 	],
