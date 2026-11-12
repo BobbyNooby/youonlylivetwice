@@ -50,15 +50,16 @@ final class Outgoing {
     }
 
     /**
-     * The packet to send in place of this one. A login or a respawn always starts a new frame. Otherwise, with both
-     * offsets zero the very packet goes on. Either way the chunks the client holds and the teleports it is sent are
-     * noted. A translator that throws drops the packet, and the exception never reaches the sender.
+     * The packet to send in place of this one. A login or a respawn always starts a new frame. Otherwise, with no
+     * outgoing offset the very packet goes on, whatever the incoming one still is. Either way the chunks the client holds
+     * and the teleports it is sent are noted. A translator that throws drops the packet, and the exception never reaches
+     * the sender.
      */
     static @Nullable Packet<?> apply(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet) {
         Frames frames = state.frames.get();
         PacketType<?> type = packet.type();
         boolean asItIs = type != GamePacketTypes.CLIENTBOUND_LOGIN && type != GamePacketTypes.CLIENTBOUND_RESPAWN
-                && frames.out().isZero() && frames.in().isZero();
+                && frames.out().isZero();
         try {
             Packet<?> sent = asItIs ? packet : translateOne(packet, new Context(frames.out(), state, listener));
             ChunkRules.keepHeld(state, packet);

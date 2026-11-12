@@ -12,6 +12,7 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.MinecraftServer;
@@ -255,21 +256,39 @@ public class CoordinateOffsetFrameGameTests {
         helper.succeed();
     }
 
+    // Nothing is added from the respawn on, so the very packets go out, while what the client sends is read in the old
+    // frame until it accepts the respawn's teleport
     @GameTest(environment = FRAMES)
     public void adminViewAtRespawnGivesRealCoordinates(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "cfadmin", GameType.CREATIVE);
         ServerPlayer current = player;
         try {
-            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the join got no offset");
+            Offset old = CoordinateOffsets.offset(player);
+            helper.assertFalse(old.isZero(), "the join got no offset");
+            Connection connection = OffsetTestKit.connection(player);
             TestPlayers.op(player);
             AdminView.set(player, true);
             int mark = OffsetTestKit.mark(player);
             current = OffsetTestKit.respawn(helper, player, helper.absolutePos(RESPAWN), false);
             helper.assertValueEqual(CoordinateOffsets.offset(current), Offset.ZERO, "offset after a respawn with admin view on");
             int respawn = OffsetTestKit.lastIndex(helper, current, mark, ClientboundRespawnPacket.class);
-            Vec3 sent = OffsetTestKit.first(helper, current, respawn + 1, ClientboundPlayerPositionPacket.class)
-                    .change().position();
-            helper.assertValueEqual(sent, current.position(), "the respawn's teleport");
+            ClientboundPlayerPositionPacket teleport =
+                    OffsetTestKit.first(helper, current, respawn + 1, ClientboundPlayerPositionPacket.class);
+            helper.assertValueEqual(teleport.change().position(), current.position(), "the respawn's teleport");
+
+            ClientboundSetChunkCacheCenterPacket centre = new ClientboundSetChunkCacheCenterPacket(3, 4);
+            current.connection.send(centre);
+            helper.assertTrue(OffsetTestKit.last(helper, current, mark, ClientboundSetChunkCacheCenterPacket.class) == centre,
+                    "a copy went out with no offset");
+            ServerboundMovePlayerPacket early = (ServerboundMovePlayerPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundMovePlayerPacket.Pos(0.5, 80.0, 0.5, false, false));
+            helper.assertValueEqual(early.getX(0.0), 0.5 - old.x(), "x of a move sent before the accept");
+            Vec3 at = teleport.change().position();
+            ServerboundAcceptTeleportationPacket accept =
+                    new ServerboundAcceptTeleportationPacket(teleport.id(), at.x, at.y, at.z, 0.0F, 0.0F);
+            helper.assertTrue(CoordinateOffsets.incoming(connection, accept) == accept, "the accept was not taken as it is");
+            ServerboundMovePlayerPacket late = new ServerboundMovePlayerPacket.Pos(at.x + 1, at.y, at.z, false, false);
+            helper.assertTrue(CoordinateOffsets.incoming(connection, late) == late, "a move after the accept was not taken as it is");
         } finally {
             AdminView.set(current, false);
             TestPlayers.deop(current);
