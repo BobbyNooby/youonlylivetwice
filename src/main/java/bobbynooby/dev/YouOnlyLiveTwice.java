@@ -5,6 +5,7 @@ import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveCompass;
 import bobbynooby.dev.graves.GraveNotice;
@@ -52,6 +53,9 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         NameTagTeam.init();
         DebugPrivacy.init();
         NorthCompass.init();
+        // Coordinate offset: its hooks are on the connection, not on an event. Admin view is handed in, so an admin's
+        // next frame can be real.
+        CoordinateOffsets.init(AdminView::isOn);
         ChatDelivery.init();
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads
