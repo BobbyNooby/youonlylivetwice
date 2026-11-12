@@ -50,17 +50,6 @@ public class CoordinateOffsetCoverageGameTests {
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_LERP_SIZE, 9),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION, 9));
     private static final Map<PacketType<?>, Integer> PENDING_SERVERBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.SERVERBOUND_USE_ITEM_ON, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_PLAYER_ACTION, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_SIGN_UPDATE, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_PICK_ITEM_FROM_BLOCK, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_BLOCK_ENTITY_TAG_QUERY, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_SET_STRUCTURE_BLOCK, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_SET_JIGSAW_BLOCK, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_JIGSAW_GENERATE, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_SET_COMMAND_BLOCK, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_SET_TEST_BLOCK, 4),
-            Map.entry(GamePacketTypes.SERVERBOUND_TEST_INSTANCE_BLOCK_ACTION, 4),
             Map.entry(GamePacketTypes.SERVERBOUND_SET_CREATIVE_MODE_SLOT, 5),
             Map.entry(GamePacketTypes.SERVERBOUND_CONTAINER_CLICK, 5));
 

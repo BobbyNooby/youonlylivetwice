@@ -8,11 +8,14 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,6 +68,18 @@ final class OffsetTestKit {
         return withCoordinates(() -> fromEnd
                 ? players.respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION)
                 : players.respawn(player, false, Entity.RemovalReason.KILLED));
+    }
+
+    // What a real client does once it has joined: it says the world has loaded and accepts the join's teleport. Until it
+    // accepts, the server refuses to place a block.
+    static void settle(GameTestHelper helper, ServerPlayer player) {
+        TestPlayers.markLoaded(player);
+        // What each tick does first, so the accept's move is measured from where the player is
+        player.connection.resetPosition();
+        ClientboundPlayerPositionPacket teleport = last(helper, player, 0, ClientboundPlayerPositionPacket.class);
+        Vec3 client = teleport.change().position();
+        TestPlayers.receive(player,
+                new ServerboundAcceptTeleportationPacket(teleport.id(), client.x, client.y, client.z, 0.0F, 0.0F));
     }
 
     // The connection holds the frames, and lives on across a respawn

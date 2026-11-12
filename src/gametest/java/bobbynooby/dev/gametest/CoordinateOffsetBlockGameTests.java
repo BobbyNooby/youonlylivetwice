@@ -7,11 +7,13 @@ import it.unimi.dsi.fastutil.shorts.ShortArraySet;
 import it.unimi.dsi.fastutil.shorts.ShortSet;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundAddTransientBlockPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -21,8 +23,13 @@ import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.LodestoneTracker;
@@ -33,11 +40,14 @@ import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.level.block.entity.CampfireBlockEntity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.List;
@@ -211,6 +221,74 @@ public class CoordinateOffsetBlockGameTests {
             ClientboundLevelChunkWithLightPacket plainSent =
                     OffsetTestKit.last(helper, player, mark, ClientboundLevelChunkWithLightPacket.class);
             helper.assertTrue(plainSent.chunkData() == plain.chunkData(), "a chunk with no position in it got new data");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The editor opens at the client's spot, and the text the client sends there lands on the real sign
+    @GameTest(environment = BLOCKS)
+    public void signEditRoundTrip(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbsign", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos signPos = new BlockPos(2, 1, 1);
+            helper.setBlock(signPos, Blocks.OAK_SIGN);
+            SignBlockEntity sign = (SignBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(signPos));
+            sign.setAllowedPlayerEditor(player.getUUID());
+            int mark = OffsetTestKit.mark(player);
+            player.openTextEdit(sign, SignTextSlot.FRONT);
+            ClientboundOpenSignEditorPacket editor =
+                    OffsetTestKit.last(helper, player, mark, ClientboundOpenSignEditorPacket.class);
+            helper.assertValueEqual(editor.pos(), offset.shift(sign.getBlockPos()), "sign editor spot");
+
+            List<String> lines = List.of("one", "two", "three", "four");
+            TestPlayers.receive(player, new ServerboundSignUpdatePacket(editor.pos(), lines, SignTextSlot.FRONT));
+            helper.assertValueEqual(sign.getText(SignTextSlot.FRONT).getMessages(false).stream().map(Component::getString).toList(),
+                    lines, "the sign's text");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The server reads the click and the dig in real coordinates, so the block goes where the client put it
+    @GameTest(environment = BLOCKS)
+    public void useItemOnAndDigAtTheClientPosition(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbuse", GameType.CREATIVE);
+        try {
+            OffsetTestKit.settle(helper, player);
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos base = new BlockPos(2, 1, 2);
+            helper.setBlock(base, Blocks.GOLD_BLOCK);
+            BlockPos client = offset.shift(helper.absolutePos(base));
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE));
+            BlockHitResult hit = new BlockHitResult(new Vec3(client.getX() + 0.5, client.getY() + 1.0, client.getZ() + 0.5),
+                    Direction.UP, client, false);
+            TestPlayers.receive(player, new ServerboundUseItemOnPacket(InteractionHand.MAIN_HAND, hit, 1));
+            helper.assertBlockPresent(Blocks.STONE, base.above());
+
+            TestPlayers.receive(player, new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
+                    client.above(), Direction.UP, 2));
+            helper.assertBlockPresent(Blocks.AIR, base.above());
+            helper.assertBlockPresent(Blocks.GOLD_BLOCK, base);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(environment = BLOCKS)
+    public void pickBlockAtTheClientPosition(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbpick", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos diamond = new BlockPos(2, 1, 1);
+            helper.setBlock(diamond, Blocks.DIAMOND_BLOCK);
+            TestPlayers.receive(player, new ServerboundPickItemFromBlockPacket(offset.shift(helper.absolutePos(diamond)), false));
+            helper.assertTrue(player.getInventory().getSelectedItem().is(Items.DIAMOND_BLOCK),
+                    "the selected slot holds " + player.getInventory().getSelectedItem());
         } finally {
             TestPlayers.leave(player);
         }
