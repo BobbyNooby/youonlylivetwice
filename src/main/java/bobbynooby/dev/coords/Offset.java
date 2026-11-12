@@ -24,8 +24,9 @@ public record Offset(int x, int z) {
         }
     }
 
+    // Not Math.abs, which is negative for Integer.MIN_VALUE
     private static boolean fits(int value) {
-        return value % 16 == 0 && Math.abs(value) <= LIMIT;
+        return value % 16 == 0 && value >= -LIMIT && value <= LIMIT;
     }
 
     /** The offset that puts the real spot inside client chunk 0,0, so the first position a player sees says nothing. */

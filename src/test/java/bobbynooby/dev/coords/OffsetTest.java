@@ -54,6 +54,13 @@ class OffsetTest {
         assertThrows(IllegalArgumentException.class, () -> new Offset(1_000_000, 0));
     }
 
+    // A multiple of 16 whose Math.abs is negative
+    @Test
+    void constructorRefusesMinValue() {
+        assertThrows(IllegalArgumentException.class, () -> new Offset(Integer.MIN_VALUE, 0));
+        assertThrows(IllegalArgumentException.class, () -> new Offset(0, Integer.MIN_VALUE));
+    }
+
     @Test
     void shiftAndNegateRoundTrip() {
         Offset offset = new Offset(-4_096, 2_048);
