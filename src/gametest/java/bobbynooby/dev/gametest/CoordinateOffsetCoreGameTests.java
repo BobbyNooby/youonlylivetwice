@@ -109,9 +109,8 @@ public class CoordinateOffsetCoreGameTests {
             // So the finally block can't remove it twice
             player = null;
             BlockPos spot = new BlockPos(40, 80, -73);
-            // Not helper.relativePos, which turns an unrotated test half a turn
-            BlockPos fromTest = spot.subtract(helper.absolutePos(BlockPos.ZERO));
-            back = OffsetTestKit.withCoordinates(() -> TestPlayers.rejoin(helper, profile, GameType.CREATIVE, fromTest));
+            back = OffsetTestKit.withCoordinates(
+                    () -> TestPlayers.rejoin(helper.getLevel().getServer(), profile, GameType.CREATIVE, spot));
             Offset offset = CoordinateOffsets.offset(back);
             helper.assertValueEqual(offset, Offset.at(spot.getX() + 0.5, spot.getZ() + 0.5), "offset at the rejoin");
             helper.assertFalse(offset.equals(first), "the rejoin kept the first frame's offset " + first);

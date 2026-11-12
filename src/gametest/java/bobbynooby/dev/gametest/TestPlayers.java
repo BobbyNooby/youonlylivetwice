@@ -54,11 +54,20 @@ public final class TestPlayers {
     // A returning player: like a real login, their save is read before they are placed in the world, and the pearls
     // and vehicle it holds come back once they are (PrepareSpawnTask)
     public static ServerPlayer rejoin(GameTestHelper helper, GameProfile profile, GameType mode, BlockPos relativePos) {
-        MinecraftServer server = helper.getLevel().getServer();
+        return rejoin(helper.getLevel(), profile, mode, helper.absolutePos(relativePos));
+    }
+
+    // At a fixed spot, which the test's rotation leaves where it is
+    public static ServerPlayer rejoin(MinecraftServer server, GameProfile profile, GameType mode, BlockPos absolutePos) {
+        return rejoin(server.overworld(), profile, mode, absolutePos);
+    }
+
+    private static ServerPlayer rejoin(ServerLevel level, GameProfile profile, GameType mode, BlockPos absolutePos) {
+        MinecraftServer server = level.getServer();
         Optional<ValueInput> saved = server.getPlayerList().loadPlayerData(new NameAndId(profile.id(), profile.name()))
                 .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, server.registryAccess(), tag));
-        ServerPlayer player = join(helper.getLevel(), profile, mode, helper.absolutePos(relativePos), (level, cookie) -> {
-            ServerPlayer loaded = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation());
+        ServerPlayer player = join(level, profile, mode, absolutePos, (l, cookie) -> {
+            ServerPlayer loaded = new ServerPlayer(server, l, cookie.gameProfile(), cookie.clientInformation());
             saved.ifPresent(loaded::load);
             return loaded;
         });
