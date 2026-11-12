@@ -968,6 +968,54 @@ public class GraveProtectionGameTests {
         helper.succeed();
     }
 
+    // With the count switch on, a spectator's offline death counts: the lockout starts, and the grave holds only the
+    // revive head, since the save keeps everything else for the respawn, the ender chest too. The switches go back in
+    // this tick.
+    @GameTest
+    public void offlineCountedSpectatorKillLeavesOnlyTheHead(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "OffSpecCount", GameType.SPECTATOR, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
+        } finally {
+            TestPlayers.leave(player);
+        }
+
+        YoltConfig config = Settings.get();
+        boolean countBefore = config.deathLockout.countCreativeAndSpectatorDeaths;
+        YoltConfig.EnderChestMode mode = config.graves.enderChestOnDeath;
+        try {
+            config.deathLockout.countCreativeAndSpectatorDeaths = true;
+            config.graves.enderChestOnDeath = YoltConfig.EnderChestMode.GRAVE;
+            try {
+                helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            } finally {
+                config.deathLockout.countCreativeAndSpectatorDeaths = countBefore;
+                config.graves.enderChestOnDeath = mode;
+            }
+
+            List<Grave> graves = gravesOf(helper, who.id());
+            helper.assertValueEqual(graves.size(), 1, "graves");
+            List<ItemStack> items = graves.get(0).items();
+            helper.assertValueEqual(items.size(), 1, "stacks in the grave");
+            helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "the grave's only stack is not the head");
+            helper.assertValueEqual(items.get(0).getCount(), 1, "heads in the grave");
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            helper.assertValueEqual(saved.getFloatOr("Health", -1.0F), 0.0F, "saved health");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()),
+                    Items.DIAMOND), 1, "diamonds in the save");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeEnderChest(saved, server.registryAccess(), who.name()),
+                    Items.EMERALD), 1, "emeralds in the saved ender chest");
+            helper.assertTrue(LockoutGameTests.refusedForLockout(DeathLockout.refusal(who.id(), "Test")),
+                    "the counted death did not lock them out");
+        } finally {
+            removeGraves(helper, gravesOf(helper, who.id()));
+        }
+        helper.succeed();
+    }
+
     // A static profile, so the head never looks anything up. The spot must be on something: in open air the grave
     // would drop to the floor.
     private static Grave makeGrave(GameTestHelper helper, BlockPos relativePos) {

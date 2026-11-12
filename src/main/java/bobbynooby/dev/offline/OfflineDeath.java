@@ -98,8 +98,9 @@ public final class OfflineDeath {
         // Graves are already on disk when deposit returns, so a crash before the commit can duplicate, never lose.
         List<Runnable> undo = new ArrayList<>();
         try {
-            // An online spectator's death never reaches the grave hook either, but unplaced items have to go somewhere
-            if (!keepsAll || !unplaced.isEmpty()) {
+            // A death that counts always gets its revive head, a spectator's too, whose grave holds nothing else. One that
+            // doesn't count only puts down the unplaced items, which have to go somewhere.
+            if (!uncounted || !unplaced.isEmpty()) {
                 undo.add(deposit(server, who, items, where, profile));
             }
             undo.add(dropExperience(level, where, experience));

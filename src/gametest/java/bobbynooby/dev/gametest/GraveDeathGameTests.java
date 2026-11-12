@@ -485,6 +485,53 @@ public class GraveDeathGameTests {
         helper.assertValueEqual(GraveItems.ownerId(heads.get(0)), Optional.of(player.getUUID()), "the dropped head's owner");
     }
 
+    // With the count switch on, a spectator's death counts too. Vanilla keeps a spectator's items for the respawn, and
+    // their ender chest stays whatever the setting, so the grave holds only the revive head. It is made before the
+    // death is recorded, so the lockout's text can say where. The switches go back in this tick, and the player leaves
+    // before the kick comes.
+    @GameTest
+    public void countedSpectatorDeathLeavesOnlyTheHead(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "CountedSpec", GameType.SPECTATOR, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        YoltConfig config = Settings.get();
+        boolean countBefore = config.deathLockout.countCreativeAndSpectatorDeaths;
+        YoltConfig.EnderChestMode enderBefore = config.graves.enderChestOnDeath;
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
+            String refusal;
+            config.deathLockout.countCreativeAndSpectatorDeaths = true;
+            config.graves.enderChestOnDeath = YoltConfig.EnderChestMode.GRAVE;
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            try {
+                kill(helper, player);
+                Component text = DeathLockout.refusal(server, owner, player.nameAndId().name());
+                refusal = text == null ? "" : text.getString();
+            } finally {
+                config.deathLockout.countCreativeAndSpectatorDeaths = countBefore;
+                config.graves.enderChestOnDeath = enderBefore;
+                config.graves.tellLocation = tellBefore;
+            }
+
+            Grave grave = onlyGrave(helper, player);
+            helper.assertValueEqual(grave.items().size(), 1, "stacks in the grave");
+            helper.assertTrue(GraveItems.isGraveHead(grave.items().get(0)), "the grave's only stack is not the head");
+            helper.assertValueEqual(grave.items().get(0).getCount(), 1, "heads in the grave");
+            helper.assertValueEqual(GraveItems.ownerId(grave.items().get(0)), Optional.of(owner), "the head's owner");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 2, "diamonds on the dead spectator");
+            helper.assertValueEqual(player.getEnderChestInventory().countItem(Items.EMERALD), 1, "emeralds in the ender chest");
+            BlockPos at = grave.pos();
+            helper.assertTrue(refusal.startsWith("You died") && refusal.endsWith(
+                    "\nYour grave is at " + at.getX() + ", " + at.getY() + ", " + at.getZ() + " in the Overworld."),
+                    "the lockout's text: " + refusal);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void emptyInventoryStillMakesGrave(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Empty");

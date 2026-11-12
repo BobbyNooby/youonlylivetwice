@@ -58,8 +58,29 @@ public final class GraveDeath {
         if (!Settings.on(c -> c.graves.enabled)) {
             return false;
         }
-        boolean keepInventory = level.getGameRules().get(GameRules.KEEP_INVENTORY);
-        YoltConfig.EnderChestMode enderMode = Settings.get().graves.enderChestOnDeath;
+        return bury(player, level, level.getGameRules().get(GameRules.KEEP_INVENTORY), Settings.get().graves.enderChestOnDeath);
+    }
+
+    /**
+     * A spectator's death skips the drops, and vanilla hands their inventory back at the respawn, as with keepInventory.
+     * One that counts still leaves its revive head, alone in a grave, so someone can bring them back.
+     */
+    public static void onSpectatorDeath(ServerPlayer player) {
+        if (!player.isSpectator() || StandIn.is(player) || UncountedDeaths.uncounted(player)) {
+            return;
+        }
+        // As at any other death, before the switch
+        GraveNotice.forget(player.getUUID());
+        if (Settings.on(c -> c.graves.enabled)) {
+            // The ender chest stays too, as it does for a spectator's offline death
+            bury(player, player.level(), true, YoltConfig.EnderChestMode.KEEP);
+        }
+    }
+
+    // The death's graves, with the head first. With keepInventory the inventory and menus stay, so only the head and what
+    // enderMode adds go in. True when the items went into a grave or dropped in its place.
+    private static boolean bury(ServerPlayer player, ServerLevel level, boolean keepInventory,
+                                YoltConfig.EnderChestMode enderMode) {
         Inventory inventory = player.getInventory();
         PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
         String name = player.nameAndId().name();

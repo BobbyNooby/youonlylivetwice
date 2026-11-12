@@ -5,13 +5,17 @@ import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.core.Yolt;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -38,6 +42,8 @@ import java.util.UUID;
 public final class Graves {
     // A grave opens as a 6-row chest menu
     private static final int SLOTS_PER_GRAVE = GraveMenu.GRAVE_SLOTS;
+    // Runs before the death event's default phase, where the lockout records the death
+    private static final Identifier SPECTATOR_GRAVE = Yolt.id("spectator_grave");
 
     private Graves() {}
 
@@ -48,6 +54,14 @@ public final class Graves {
         // Creative players included, so not even an op can break one by hand
         PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) -> !isGrave(level, pos));
         ServerChunkEvents.CHUNK_LOAD.register(GraveBlocks::onChunkLoad);
+        // A spectator's death never reaches the drops, so its grave comes from the death event. Made before the lockout
+        // records the death, as a death's drops are, so the kick can say where it is. A throw would skip that record.
+        ServerLivingEntityEvents.AFTER_DEATH.addPhaseOrdering(SPECTATOR_GRAVE, Event.DEFAULT_PHASE);
+        ServerLivingEntityEvents.AFTER_DEATH.register(SPECTATOR_GRAVE, (entity, source) -> {
+            if (entity instanceof ServerPlayer player) {
+                Guard.run(() -> GraveDeath.onSpectatorDeath(player), "Could not make a grave for {}", player.nameAndId().name());
+            }
+        });
         GraveMenus.init();
         LastGround.init();
         GraveRecheck.init();
