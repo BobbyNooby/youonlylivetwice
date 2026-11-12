@@ -7,6 +7,7 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.border.WorldBorder;
@@ -32,22 +33,31 @@ final class BorderRule {
 
     /**
      * The walls the client should have now, or null for the whole world, which goes out as it is: its centre and size
-     * are the same in every frame, and shifted they would be the offset itself.
+     * are the same in every frame, and shifted they would be the offset itself. A world cut short by max-world-size has
+     * walls at its edges, so it goes through the walls rule like any border.
      */
     static BorderWalls.@Nullable Square squareFor(ClientboundInitializeBorderPacket packet, OffsetState state, ServerPlayer player,
                                                  Offset offset) {
         if (packet.getNewCenterX() == 0.0 && packet.getNewCenterZ() == 0.0 && packet.getNewSize() == WorldBorder.MAX_SIZE
-                && packet.getLerpTime() == 0L) {
+                && packet.getLerpTime() == 0L && packet.getNewAbsoluteMaxSize() == MinecraftServer.ABSOLUTE_MAX_WORLD_SIZE) {
             return null;
         }
         int absoluteMax = packet.getNewAbsoluteMaxSize();
         double half = packet.getOldSize() / 2.0;
         Vec3 at = state.lastPosition != null ? state.lastPosition : player.position();
         double near = BorderWalls.near(player.level().getServer().getPlayerList().getViewDistance());
-        // The real walls stop at the world's edge, as the client's do
+        // The real walls stop at the server's edge. The client's edge is the world's own in every copy, so it never cuts
+        // into the client's frame.
         return BorderWalls.forClient(edge(packet.getNewCenterX() - half, absoluteMax), edge(packet.getNewCenterX() + half, absoluteMax),
                 edge(packet.getNewCenterZ() - half, absoluteMax), edge(packet.getNewCenterZ() + half, absoluteMax), at.x, at.z, near,
-                absoluteMax, offset);
+                MinecraftServer.ABSOLUTE_MAX_WORLD_SIZE, offset);
+    }
+
+    // Whether the server's edge cuts the border anywhere while it moves, which a plainly shifted copy wouldn't show
+    private static boolean cutByTheEdge(ClientboundInitializeBorderPacket packet) {
+        double half = Math.max(packet.getOldSize(), packet.getNewSize()) / 2.0;
+        int absoluteMax = packet.getNewAbsoluteMaxSize();
+        return Math.abs(packet.getNewCenterX()) + half > absoluteMax || Math.abs(packet.getNewCenterZ()) + half > absoluteMax;
     }
 
     private static double edge(double value, int absoluteMax) {
@@ -58,8 +68,9 @@ final class BorderRule {
         return new ClientboundInitializeBorderPacket(context.listener().player.level().getWorldBorder());
     }
 
-    // No field constructor, so the copy goes through the codec; the warnings and the world's edge are kept. A plain border
-    // keeps its sizes and its movement. Walls go out still, and the recheck sends them again as a moving border goes.
+    // No field constructor, so the copy goes through the codec; the warnings are kept. A plain border keeps its sizes and
+    // its movement, unless the server's edge cuts it. Walls go out still, and the recheck sends them again as a moving
+    // border goes.
     private static Packet<?> border(ClientboundInitializeBorderPacket packet, Context context) {
         OffsetState state = context.state();
         Offset offset = context.offset();
@@ -70,7 +81,8 @@ final class BorderRule {
         }
         ClientboundInitializeBorderPacket copy = CoordinateOffsets.copy(ClientboundInitializeBorderPacket.STREAM_CODEC, packet);
         InitializeBorderPacketAccessor fields = (InitializeBorderPacketAccessor) copy;
-        if (square.plain()) {
+        fields.yoltSetNewAbsoluteMaxSize(MinecraftServer.ABSOLUTE_MAX_WORLD_SIZE);
+        if (square.plain() && !cutByTheEdge(packet)) {
             fields.yoltSetNewCenterX(offset.shiftX(packet.getNewCenterX()));
             fields.yoltSetNewCenterZ(offset.shiftZ(packet.getNewCenterZ()));
         } else {

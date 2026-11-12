@@ -28,4 +28,8 @@ public interface InitializeBorderPacketAccessor {
     @Accessor("lerpTime")
     @Mutable
     void yoltSetLerpTime(long ticks);
+
+    @Accessor("newAbsoluteMaxSize")
+    @Mutable
+    void yoltSetNewAbsoluteMaxSize(int size);
 }

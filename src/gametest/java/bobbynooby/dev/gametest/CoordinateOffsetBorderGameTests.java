@@ -36,6 +36,8 @@ public class CoordinateOffsetBorderGameTests {
     private static final double WHOLE = 59_999_968.0;
     // A north compass's target, a million blocks inside the edge
     private static final int NORTH = 28_999_984;
+    // A max-world-size well inside the world's own edge
+    private static final int SMALL_WORLD = 10_000;
 
     @GameTest(environment = BORDER)
     public void wholeWorldBorderGoesOutAsItIs(GameTestHelper helper) {
@@ -120,6 +122,32 @@ public class CoordinateOffsetBorderGameTests {
                 TestPlayers.leave(player);
             }
         });
+        helper.succeed();
+    }
+
+    // With max-world-size set, the world stops short of its own edge, and that stop is a wall like the border's: near, the
+    // client gets the real one shifted, and its own edge stays the world's, so no wall shows where there is none
+    @GameTest(environment = BORDER)
+    public void maxWorldSizeEdgeIsAWall(GameTestHelper helper) {
+        WorldBorder border = helper.getLevel().getWorldBorder();
+        int edgeBefore = border.getAbsoluteMaxSize();
+        ServerPlayer player = null;
+        try {
+            border.setAbsoluteMaxSize(SMALL_WORLD);
+            player = OffsetTestKit.joinNearTheCentre(helper, "cbedge", GameType.CREATIVE, new BlockPos(SMALL_WORLD - 50, 100, 0));
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            ClientboundInitializeBorderPacket sent = OffsetTestKit.first(helper, player, 0, ClientboundInitializeBorderPacket.class);
+            helper.assertValueEqual(sent.getNewAbsoluteMaxSize(), EDGE, "the client's world edge");
+            helper.assertValueEqual(maxX(sent), (double) SMALL_WORLD + offset.x(), "east wall");
+            helper.assertTrue(sent.getNewCenterX() - sent.getNewSize() / 2.0 <= -EDGE, "the west wall is inside the world's edge: "
+                    + (sent.getNewCenterX() - sent.getNewSize() / 2.0));
+        } finally {
+            border.setAbsoluteMaxSize(edgeBefore);
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
+        }
         helper.succeed();
     }
 
