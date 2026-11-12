@@ -55,6 +55,8 @@ public final class CoordinateOffsets {
         ChunkRules.register();
         BlockRules.register();
         ItemRule.register();
+        ParticleRule.register();
+        EffectRules.register();
         classifyTheRest();
     }
 

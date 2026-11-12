@@ -70,9 +70,12 @@
     "SetPlayerTeamPacketInvoker",
     "SleepAnnounceMixin",
     "SleepStatusMixin",
+    "SoundPacketAccessor",
     "TargetGoalAccessor",
     "VanillaKillMixin",
-    "VisibilityPairingMixin"
+    "VisibilityPairingMixin",
+    "WaypointChunkAccessor",
+    "WaypointVectorAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

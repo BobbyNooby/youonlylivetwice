@@ -24,6 +24,7 @@
 			"bobbynooby.dev.gametest.CoordinateOffsetBlockGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetCoreGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetCoverageGameTests",
+			"bobbynooby.dev.gametest.CoordinateOffsetEffectGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetFrameGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetItemGameTests",
 			"bobbynooby.dev.gametest.DebugPrivacyGameTests",

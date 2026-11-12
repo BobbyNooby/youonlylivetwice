@@ -4,8 +4,10 @@ import bobbynooby.dev.coords.BlockRules;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Coverage;
 import bobbynooby.dev.coords.ItemRule;
+import bobbynooby.dev.coords.ParticleRule;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.ProtocolInfo;
@@ -13,10 +15,13 @@ import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.game.GameProtocols;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.gameevent.PositionSourceType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // A packet type nobody looked at fails here, such as one a Minecraft update adds, so no position in it goes out real
 // unseen. They only read the tables, so they share the default batch.
@@ -24,12 +29,6 @@ public class CoordinateOffsetCoverageGameTests {
     // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
     // types out of here as it puts them in a table.
     private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_SOUND, 6),
-            Map.entry(GamePacketTypes.CLIENTBOUND_LEVEL_PARTICLES, 6),
-            Map.entry(GamePacketTypes.CLIENTBOUND_EXPLODE, 6),
-            Map.entry(GamePacketTypes.CLIENTBOUND_DAMAGE_EVENT, 6),
-            Map.entry(GamePacketTypes.CLIENTBOUND_WAYPOINT, 6),
-            Map.entry(GamePacketTypes.CLIENTBOUND_GAME_TEST_HIGHLIGHT_POS, 6),
             Map.entry(GamePacketTypes.CLIENTBOUND_ADD_ENTITY, 7),
             Map.entry(GamePacketTypes.CLIENTBOUND_TELEPORT_ENTITY, 7),
             Map.entry(GamePacketTypes.CLIENTBOUND_ENTITY_POSITION_SYNC, 7),
@@ -80,6 +79,33 @@ public class CoordinateOffsetCoverageGameTests {
             }
         }
         helper.assertTrue(missing.isEmpty(), "data component types in no table: " + String.join(", ", missing));
+        helper.succeed();
+    }
+
+    // The same for particles, which come in their own packet, in explosions and in entity data
+    @GameTest
+    public void everyParticleTypeIsClassified(GameTestHelper helper) {
+        Map<ParticleType<?>, Coverage> coverage = ParticleRule.particleCoverage();
+        List<String> missing = new ArrayList<>();
+        for (ParticleType<?> type : BuiltInRegistries.PARTICLE_TYPE) {
+            if (!coverage.containsKey(type)) {
+                missing.add(String.valueOf(BuiltInRegistries.PARTICLE_TYPE.getKey(type)));
+            }
+        }
+        helper.assertTrue(missing.isEmpty(), "particle types in no table: " + String.join(", ", missing));
+        helper.succeed();
+    }
+
+    // The particle rule moves a vibration's block and keeps an entity's id, and the waypoint rule knows these four kinds.
+    // A new kind of either would go out unshifted, so it fails here. The waypoint kinds are private, so they are read by
+    // name.
+    @GameTest
+    public void positionSourcesAndWaypointTypesKnown(GameTestHelper helper) throws ClassNotFoundException {
+        helper.assertValueEqual(Set.copyOf(BuiltInRegistries.POSITION_SOURCE_TYPE.stream().toList()),
+                Set.<PositionSourceType<?>>of(PositionSourceType.BLOCK, PositionSourceType.ENTITY), "position source types");
+        Object[] kinds = Class.forName("net.minecraft.world.waypoints.TrackedWaypoint$Type").getEnumConstants();
+        helper.assertValueEqual(Arrays.stream(kinds).map(String::valueOf).toList(), List.of("EMPTY", "VEC3I", "CHUNK", "AZIMUTH"),
+                "waypoint types");
         helper.succeed();
     }
 
