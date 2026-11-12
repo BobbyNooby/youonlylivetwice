@@ -75,8 +75,8 @@ final class BorderRule {
         OffsetState state = context.state();
         Offset offset = context.offset();
         BorderWalls.Square square = squareFor(packet, state, context.listener().player, offset);
-        state.lastBorder = square;
         if (square == null) {
+            state.lastBorder = null;
             return packet;
         }
         ClientboundInitializeBorderPacket copy = CoordinateOffsets.copy(ClientboundInitializeBorderPacket.STREAM_CODEC, packet);
@@ -92,6 +92,8 @@ final class BorderRule {
             fields.yoltSetNewSize(square.size());
             fields.yoltSetLerpTime(0L);
         }
+        // Only now, so a copy that fails, and so goes nowhere, isn't taken for walls the client has
+        state.lastBorder = square;
         return copy;
     }
 
