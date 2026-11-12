@@ -91,7 +91,7 @@ public final class GravePlacement {
      * where find's search starts. The first that items last on wins; with none, the start, which is never below the
      * world.
      */
-    static BlockPos dropSpot(ServerLevel level, BlockPos deathPos, @Nullable BlockPos lastGround, GraveStore store) {
+    public static BlockPos dropSpot(ServerLevel level, BlockPos deathPos, @Nullable BlockPos lastGround, GraveStore store) {
         List<BlockPos> spots = new ArrayList<>();
         try {
             spots.add(find(level, deathPos, lastGround, store));

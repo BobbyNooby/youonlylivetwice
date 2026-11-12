@@ -121,7 +121,7 @@ public final class BodyDeath {
             OfflineDeath.applyOfflineDeath(server, who, tag, where, profile, bodyDeathMessage, unplaced);
         } else {
             // No grave takes what a dispenser put on the body, and the body drops nothing itself
-            Bodies.dropAddedGear(server, record, body);
+            Bodies.dropAddedGear(server, record, body, true);
         }
         BodyStore.get(server).remove(record.owner());
         // The grave has used it, and the body is gone

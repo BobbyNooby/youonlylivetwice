@@ -227,15 +227,16 @@ public final class Graves {
     }
 
     /**
-     * Drops the stacks at the centre of spot, where a grave would have kept them: with no push, so each falls straight
-     * down the column that was checked, and never to despawn. Every one or none: if the world refuses one, or adding it
-     * throws, the ones dropped are taken back and this throws.
+     * Drops the stacks at the centre of spot, a spot GravePlacement checked, such as its dropSpot: with no push, so each
+     * falls straight down the column that was checked, and never to despawn. Every one or none: if the world refuses
+     * one, or adding it throws, the ones dropped are taken back and this throws. Returns how to take them all back.
      */
-    static void dropForGood(ServerLevel level, BlockPos spot, List<ItemStack> stacks) {
+    public static Runnable dropForGood(ServerLevel level, BlockPos spot, List<ItemStack> stacks) {
         // Entities added to a chunk that isn't loaded sit in limbo until it is
         level.getChunkAt(spot);
         Vec3 centre = Vec3.atCenterOf(spot);
         List<ItemEntity> added = new ArrayList<>();
+        Runnable undo = () -> added.forEach(Entity::discard);
         try {
             for (ItemStack stack : stacks) {
                 ItemEntity item = new ItemEntity(level, centre.x, centre.y, centre.z, stack, 0.0, 0.0, 0.0);
@@ -247,9 +248,10 @@ public final class Graves {
                 }
             }
         } catch (RuntimeException e) {
-            added.forEach(Entity::discard);
+            undo.run();
             throw e;
         }
+        return undo;
     }
 
     // Only an online owner has a facing, so graves for offline owners face the default way

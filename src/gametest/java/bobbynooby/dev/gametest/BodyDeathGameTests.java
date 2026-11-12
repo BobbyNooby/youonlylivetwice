@@ -537,6 +537,49 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // The same with the body dying in lava: the helmet goes where a grave's items would drop, the nearest spot where they
+    // last, not into the lava that killed it. The lava goes again in this tick, before it can spread.
+    @GameTest
+    public void deadSaveBodyDeathInLavaDropsGearWhereItLasts(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "LavaAgain");
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        BlockPos lava = helper.absolutePos(new BlockPos(1, 1, 1));
+        AABB around = new AABB(lava).inflate(4.0);
+        try {
+            for (BlockPos floor : BlockPos.betweenClosed(new BlockPos(0, 0, 0), new BlockPos(2, 0, 2))) {
+                helper.setBlock(floor, Blocks.STONE);
+            }
+            Mannequin body = leaveBody(helper, player);
+            helper.assertValueEqual(body.blockPosition(), lava, "the body's block");
+            CompoundTag dead = save(helper, player);
+            dead.putFloat("Health", 0.0F);
+            OfflinePlayerData.save(server, owner, dead);
+            body.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            helper.setBlock(new BlockPos(1, 1, 1), Blocks.LAVA);
+
+            body.kill(helper.getLevel());
+            helper.assertTrue(body.isDeadOrDying(), "body did not die");
+            helper.assertTrue(gravesOf(helper, owner).isEmpty(), "a grave was made for a dead save");
+            List<ItemEntity> drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, around,
+                    drop -> drop.getItem().is(Items.IRON_HELMET));
+            helper.assertValueEqual(drops.size(), 1, "helmets dropped");
+            ItemEntity drop = drops.get(0);
+            helper.assertValueEqual(drop.getItem().getCount(), 1, "the dropped helmet's count");
+            helper.assertFalse(drop.blockPosition().equals(lava), "the helmet dropped into the lava");
+            helper.assertTrue(helper.getLevel().getBlockState(drop.blockPosition()).getFluidState().isEmpty(),
+                    "the helmet dropped into a fluid at " + drop.blockPosition());
+            helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, "dropped helmet's age");
+        } finally {
+            helper.setBlock(new BlockPos(1, 1, 1), Blocks.AIR);
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around, drop -> drop.getItem().is(Items.IRON_HELMET))
+                    .forEach(Entity::discard);
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // The real slot was empty, so only the body has the helmet; GearSync gives it to the save before the death
     @GameTest
     public void bodyGearReachesGrave(GameTestHelper helper) {

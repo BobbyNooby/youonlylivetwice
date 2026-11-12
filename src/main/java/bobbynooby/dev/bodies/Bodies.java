@@ -4,6 +4,9 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Stacks;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.graves.GravePlacement;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.graves.LastGround;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -29,6 +32,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
 public final class Bodies {
@@ -106,9 +110,10 @@ public final class Bodies {
     /**
      * For a body that goes without its owner taking it over: what fills a slot that was empty at its logout is real, as
      * only a dispenser fills one, so it drops for good where the body stands. Each item is logged, so one that can't be
-     * dropped is at least in the log.
+     * dropped is at least in the log. With died, the body may lie in the lava or over the void that killed it, so the
+     * items go where a grave's would drop instead: the nearest spot where they last.
      */
-    static void dropAddedGear(MinecraftServer server, BodyRecord record, BodySnapshot now) {
+    static void dropAddedGear(MinecraftServer server, BodyRecord record, BodySnapshot now, boolean died) {
         Map<EquipmentSlot, ItemStack> added = new EnumMap<>(EquipmentSlot.class);
         for (EquipmentSlot slot : GearSync.SLOTS) {
             ItemStack item = now.gear().getOrDefault(slot, ItemStack.EMPTY);
@@ -117,7 +122,12 @@ public final class Bodies {
             }
         }
         try {
-            dropForGood(server, now.dimension(), now.pos(), List.copyOf(added.values()));
+            List<ItemStack> items = List.copyOf(added.values());
+            if (died) {
+                dropWhereTheyLast(server, record.owner(), now, items);
+            } else {
+                dropForGood(server, now.dimension(), now.pos(), items);
+            }
             added.forEach((slot, item) -> Yolt.LOGGER.warn("{}'s body got an item in slot {} after they logged out, "
                     + "and the body goes without them taking it over, so the item drops where the body stood: {}",
                     record.ownerName(), slot.getName(), Stacks.saved(item, server.registryAccess())));
@@ -126,6 +136,18 @@ public final class Bodies {
                     + "and the body goes without them taking it over, but the item could not be dropped: {}",
                     record.ownerName(), slot.getName(), Stacks.saved(item, server.registryAccess()), e));
         }
+    }
+
+    // At the spot a grave's drops take for a death where the body lies, through the graves' own drop
+    private static void dropWhereTheyLast(MinecraftServer server, UUID owner, BodySnapshot body, List<ItemStack> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        ServerLevel found = server.getLevel(body.dimension());
+        ServerLevel level = found != null ? found : server.overworld();
+        BlockPos spot = GravePlacement.dropSpot(level, BlockPos.containing(body.pos()),
+                LastGround.in(owner, level.dimension()).orElse(null), GraveStore.get(server));
+        Graves.dropForGood(level, spot, items);
     }
 
     /**
