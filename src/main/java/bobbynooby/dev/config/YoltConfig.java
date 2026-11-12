@@ -105,6 +105,8 @@ public class YoltConfig {
         // A plain compass points north in every dimension, not at the world spawn. Recovery, lodestone and grave compasses
         // keep their own targets. Admin view gives an op the real spawn.
         public boolean compassSpawn = true;
+        // Each player's client sees X and Z shifted by an amount of its own, new at every join, respawn and dimension change
+        @Applies(Applies.When.NEXT_JOIN) public boolean coordinates = false;
     }
 
     public static class SleepSection {
