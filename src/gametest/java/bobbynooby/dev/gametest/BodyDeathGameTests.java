@@ -389,6 +389,26 @@ public class BodyDeathGameTests {
         helper.succeed();
     }
 
+    // An admin can put the body tag on a real player, whose items are real. Only the body rules say what a body is, and
+    // no body record points at the player, so /kill kills them like anyone else. They leave before the kick comes.
+    @GameTest
+    public void vanillaKillKillsATaggedRealPlayer(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "TaggedReal", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        try {
+            helper.assertTrue(Settings.get().bodies.ignoreVanillaKill, "vanilla /kill kills bodies by default");
+            player.addTag(Bodies.TAG);
+            TestPlayers.markLoaded(player);
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill " + player.getGameProfile().name()),
+                    List.of("Killed " + player.getDisplayName().getString()), "output of /kill");
+            helper.assertTrue(player.isDeadOrDying(), "the tagged player /kill hit is alive");
+        } finally {
+            TestPlayers.leave(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
     // Vanilla /kill that hits no body says nothing more than vanilla does, with the switch on
     @GameTest
     public void vanillaKillWithoutBodiesGivesNoHint(GameTestHelper helper) {

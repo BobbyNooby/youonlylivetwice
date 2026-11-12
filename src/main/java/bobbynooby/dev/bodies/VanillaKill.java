@@ -1,7 +1,6 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.core.StandIn;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
@@ -29,7 +28,9 @@ public final class VanillaKill {
         }
         List<Entity> others = new ArrayList<>();
         for (Entity victim : victims) {
-            if (!isBody(victim)) {
+            // The body rules' own test: a real player with the tag still dies, and a tagged entity no record points at
+            // is no one's body
+            if (!BodyRules.isBody(victim)) {
                 others.add(victim);
             }
         }
@@ -42,10 +43,5 @@ public final class VanillaKill {
                 + ". Use /yolt kill <player> to kill one.";
         source.sendSuccess(() -> Component.literal(hint), false);
         return killed;
-    }
-
-    // A mannequin body carries the tag, and a player-type body is a stand-in as well
-    private static boolean isBody(Entity entity) {
-        return StandIn.is(entity) || entity.entityTags().contains(Bodies.TAG);
     }
 }
