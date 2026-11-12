@@ -191,11 +191,13 @@ public final class BlockRules {
         return new ClientboundAddTransientBlockPacket(context.offset().shift(packet.getPos()), packet.getBlockState());
     }
 
-    // The global ones too, such as a wither's spawn: the client plays them from the direction of the spot. The portal
-    // sound is sent at the zero position, which the client ignores, and shifted it would be the offset itself.
+    // The global ones too, such as a wither's spawn: the client plays them from the direction of the spot. The client
+    // plays the portal sound where it stands, whatever the spot. Vanilla sends it at the zero position, which shifted
+    // would be the offset itself, and any other sender's spot would be real, so it always goes at zero.
     private static Packet<?> levelEvent(ClientboundLevelEventPacket packet, Context context) {
         if (packet.getType() == LevelEvent.SOUND_PORTAL_TRAVEL) {
-            return packet;
+            return packet.getPos().equals(BlockPos.ZERO) ? packet
+                    : new ClientboundLevelEventPacket(packet.getType(), BlockPos.ZERO, packet.getData(), packet.isGlobalEvent());
         }
         return new ClientboundLevelEventPacket(packet.getType(), context.offset().shift(packet.getPos()), packet.getData(),
                 packet.isGlobalEvent());

@@ -227,6 +227,13 @@ public class CoordinateOffsetFrameGameTests {
             helper.assertValueEqual(sounds.getFirst().getPos(), BlockPos.ZERO, "portal sound spot");
             helper.assertTrue(events.stream().noneMatch(event -> event.getPos().getX() == offset.x()
                     && event.getPos().getZ() == offset.z()), "a level event carries the offset " + offset);
+
+            // Another sender's spot would be real, so it goes at zero too, with its data kept
+            int handMark = OffsetTestKit.mark(player);
+            player.connection.send(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, new BlockPos(900, 70, -400), 7, false));
+            ClientboundLevelEventPacket hand = OffsetTestKit.last(helper, player, handMark, ClientboundLevelEventPacket.class);
+            helper.assertValueEqual(hand.getPos(), BlockPos.ZERO, "spot of a portal sound sent at a real spot");
+            helper.assertValueEqual(hand.getData(), 7, "data of that portal sound");
         } finally {
             TestPlayers.leave(player);
         }
