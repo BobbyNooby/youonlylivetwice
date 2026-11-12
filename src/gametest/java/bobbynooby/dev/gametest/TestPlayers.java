@@ -129,6 +129,12 @@ public final class TestPlayers {
         return packets;
     }
 
+    // A packet from the fake client: it goes in through the connection's own read, as a real client's does, and is
+    // handled at once when the test runs on the server thread
+    public static void receive(ServerPlayer player, Packet<?> packet) {
+        CHANNELS.get(player.getUUID()).writeInbound(packet);
+    }
+
     // What a real client does every tick that makes players start tracking each other:
     // it confirms chunk batches, so more chunks get sent, and its movement packets re-check who it can see
     public static void driveTracking(ServerPlayer player) {

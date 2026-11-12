@@ -53,6 +53,7 @@
     "PlayerListInvoker",
     "PlayerListLoginMixin",
     "PlayerListVisibilityMixin",
+    "PlayerLookAtPacketAccessor",
     "PlayerSpawnFinderInvoker",
     "RandomSpawnMixin",
     "ServerCommandSuggestionsProviderMixin",

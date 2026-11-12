@@ -1,0 +1,102 @@
+package bobbynooby.dev.gametest;
+
+import bobbynooby.dev.coords.CoordinateOffsets;
+import bobbynooby.dev.coords.Coverage;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.ProtocolInfo;
+import net.minecraft.network.protocol.PacketType;
+import net.minecraft.network.protocol.game.GameProtocols;
+import net.minecraft.network.protocol.game.GamePacketTypes;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+// A packet type nobody looked at fails here, such as one a Minecraft update adds, so no position in it goes out real
+// unseen. They only read the tables, so they share the default batch.
+public class CoordinateOffsetCoverageGameTests {
+    // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
+    // types out of here as it puts them in a table.
+    private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
+            Map.entry(GamePacketTypes.CLIENTBOUND_RESPAWN, 3),
+            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_UPDATE, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SECTION_BLOCKS_UPDATE, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_ENTITY_DATA, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_EVENT, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_DESTRUCTION, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_ADD_TRANSIENT_BLOCK, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_LEVEL_EVENT, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_OPEN_SIGN_EDITOR, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_TAG_QUERY, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_BLOCK_VALUE, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_CHUNK_VALUE, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_ENTITY_VALUE, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_EVENT, 4),
+            Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_CONTENT, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_SLOT, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_CURSOR_ITEM, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_PLAYER_INVENTORY, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_EQUIPMENT, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_MERCHANT_OFFERS, 5),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SOUND, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_LEVEL_PARTICLES, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_EXPLODE, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_DAMAGE_EVENT, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_WAYPOINT, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_GAME_TEST_HIGHLIGHT_POS, 6),
+            Map.entry(GamePacketTypes.CLIENTBOUND_ADD_ENTITY, 7),
+            Map.entry(GamePacketTypes.CLIENTBOUND_TELEPORT_ENTITY, 7),
+            Map.entry(GamePacketTypes.CLIENTBOUND_ENTITY_POSITION_SYNC, 7),
+            Map.entry(GamePacketTypes.CLIENTBOUND_MOVE_MINECART_ALONG_TRACK, 7),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_ENTITY_DATA, 7),
+            Map.entry(GamePacketTypes.CLIENTBOUND_INITIALIZE_BORDER, 9),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_CENTER, 9),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_SIZE, 9),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_LERP_SIZE, 9),
+            Map.entry(GamePacketTypes.CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION, 9));
+    private static final Map<PacketType<?>, Integer> PENDING_SERVERBOUND = Map.ofEntries(
+            Map.entry(GamePacketTypes.SERVERBOUND_USE_ITEM_ON, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_PLAYER_ACTION, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SIGN_UPDATE, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_PICK_ITEM_FROM_BLOCK, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_BLOCK_ENTITY_TAG_QUERY, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SET_STRUCTURE_BLOCK, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SET_JIGSAW_BLOCK, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_JIGSAW_GENERATE, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SET_COMMAND_BLOCK, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SET_TEST_BLOCK, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_TEST_INSTANCE_BLOCK_ACTION, 4),
+            Map.entry(GamePacketTypes.SERVERBOUND_SET_CREATIVE_MODE_SLOT, 5),
+            Map.entry(GamePacketTypes.SERVERBOUND_CONTAINER_CLICK, 5));
+
+    @GameTest
+    public void everyClientboundPacketTypeIsClassified(GameTestHelper helper) {
+        assertClassified(helper, GameProtocols.CLIENTBOUND_TEMPLATE.details(), CoordinateOffsets.clientboundCoverage(),
+                PENDING_CLIENTBOUND);
+    }
+
+    @GameTest
+    public void everyServerboundPacketTypeIsClassified(GameTestHelper helper) {
+        assertClassified(helper, GameProtocols.SERVERBOUND_TEMPLATE.details(), CoordinateOffsets.serverboundCoverage(),
+                PENDING_SERVERBOUND);
+    }
+
+    // Every type the protocol lists is in the tables or still pending, never both
+    private static void assertClassified(GameTestHelper helper, ProtocolInfo.Details protocol, Map<PacketType<?>, Coverage> tables,
+                                         Map<PacketType<?>, Integer> pending) {
+        List<String> problems = new ArrayList<>();
+        protocol.listPackets((type, id) -> {
+            if (!tables.containsKey(type) && !pending.containsKey(type)) {
+                problems.add(type + " is in no table");
+            }
+        });
+        pending.forEach((type, task) -> {
+            if (tables.containsKey(type)) {
+                problems.add(type + " is in a table and still pending for task " + task);
+            }
+        });
+        helper.assertTrue(problems.isEmpty(), String.join("; ", problems));
+        helper.succeed();
+    }
+}

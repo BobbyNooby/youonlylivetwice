@@ -21,6 +21,8 @@
 			"bobbynooby.dev.gametest.CommandGameTests",
 			"bobbynooby.dev.gametest.CommandRestrictionGameTests",
 			"bobbynooby.dev.gametest.ConfigCommandGameTests",
+			"bobbynooby.dev.gametest.CoordinateOffsetCoreGameTests",
+			"bobbynooby.dev.gametest.CoordinateOffsetCoverageGameTests",
 			"bobbynooby.dev.gametest.DebugPrivacyGameTests",
 			"bobbynooby.dev.gametest.GraveCommandGameTests",
 			"bobbynooby.dev.gametest.GraveCompassGameTests",

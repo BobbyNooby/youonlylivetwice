@@ -39,6 +39,8 @@ public final class CoordinateOffsets {
 
     public static void init(Predicate<ServerPlayer> realCoordinates) {
         CoordinateOffsets.realCoordinates = realCoordinates;
+        OwnPosition.register();
+        ChunkRules.register();
         classifyTheRest();
     }
 
