@@ -1,19 +1,19 @@
 package bobbynooby.dev.mixin;
 
-import bobbynooby.dev.coords.CoordinateOffsets;
+import bobbynooby.dev.coords.TypedCoordinates;
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
-import com.llamalad7.mixinextras.sugar.Local;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.commands.arguments.coordinates.ColumnPosArgument;
+import net.minecraft.commands.arguments.coordinates.Coordinates;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(WorldCoordinates.class)
+@Mixin({BlockPosArgument.class, ColumnPosArgument.class})
 public abstract class CoordinateOffsetCommandMixin {
-    // Block, column and position arguments all read their coordinates here; rotations read theirs elsewhere
-    @ModifyReturnValue(method = "getPosition", at = @At("RETURN"))
-    private Vec3 typedInTheirFrame(Vec3 position, @Local(argsOnly = true) CommandSourceStack source) {
-        return CoordinateOffsets.typedPosition(source, (WorldCoordinates) (Object) this, position);
+    // Block and column arguments always name a spot
+    @ModifyReturnValue(method = "parse(Lcom/mojang/brigadier/StringReader;)Lnet/minecraft/commands/arguments/coordinates/Coordinates;",
+            at = @At("RETURN"))
+    private Coordinates typedSpot(Coordinates parsed) {
+        return TypedCoordinates.spot(parsed);
     }
 }

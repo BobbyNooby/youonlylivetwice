@@ -3,15 +3,10 @@ package bobbynooby.dev.coords;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
-import bobbynooby.dev.mixin.CommandSourceStackAccessor;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.SharedConstants;
-import net.minecraft.commands.CommandSource;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.arguments.coordinates.Coordinates;
-import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.network.Connection;
@@ -34,7 +29,6 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
-import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
@@ -163,8 +157,7 @@ public final class CoordinateOffsets {
      * have it sent again. The very hash with no offset to read by.
      */
     public static HashedStack clientHash(ServerPlayer player, HashedStack sent) {
-        Connection connection = player.connection == null ? null : connectionOf(player);
-        Offset in = connection == null ? Offset.ZERO : state(connection).frames.get().in();
+        Offset in = incomingOffset(player);
         if (in.isZero()) {
             return sent;
         }
@@ -218,76 +211,6 @@ public final class CoordinateOffsets {
         return northTarget.test(pos);
     }
 
-    // Commands are few, so walking the player list for each typed spot is cheap enough
-    private static @Nullable ServerPlayer typist(CommandSourceStack source) {
-        CommandSource first = ((CommandSourceStackAccessor) source).yoltSource();
-        for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
-            if (player.commandSource() == first) {
-                return player;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Where coordinates typed in a command are, for the player who typed them: absolute X and Z come in the frame the
-     * player's client sends in, so its offset comes off. Relative ones are steps from a real spot already. The console,
-     * a command block and "execute as" from either keep real coordinates, as the stack's first source isn't a player.
-     * A player's stack doesn't hold the player as its source but a feedback source of its own, so the player is found
-     * by that, which also covers "execute as" someone else from a player.
-     */
-    public static Vec3 typedPosition(CommandSourceStack source, WorldCoordinates typed, Vec3 position) {
-        ServerPlayer player = typist(source);
-        if (player == null || StandIn.is(player) || player.connection == null) {
-            return position;
-        }
-        Connection connection = connectionOf(player);
-        Offset in = connection == null ? Offset.ZERO : state(connection).frames.get().in();
-        if (in.isZero()) {
-            return position;
-        }
-        return new Vec3(typed.isXRelative() ? position.x : position.x - in.x(), position.y,
-                typed.isZRelative() ? position.z : position.z - in.z());
-    }
-
-    /**
-     * A parsed position argument as the rule for typed spots should see it. One that doesn't centre whole numbers is a
-     * vector, such as a particle spread, not a spot: its numbers stay as typed, as a spread of 0 read as a spot would go
-     * out as the offset itself.
-     */
-    public static Coordinates typedArgument(Coordinates parsed, boolean centred) {
-        return !centred && parsed instanceof WorldCoordinates typed ? new TypedVector(typed) : parsed;
-    }
-
-    // Reads its numbers the way vanilla's coordinates do, past the rule for spots
-    private record TypedVector(WorldCoordinates typed) implements Coordinates {
-        @Override
-        public Vec3 getPosition(CommandSourceStack source) {
-            Vec3 at = source.getPosition();
-            return new Vec3(typed.x().get(at.x), typed.y().get(at.y), typed.z().get(at.z));
-        }
-
-        @Override
-        public Vec2 getRotation(CommandSourceStack source) {
-            return typed.getRotation(source);
-        }
-
-        @Override
-        public boolean isXRelative() {
-            return typed.isXRelative();
-        }
-
-        @Override
-        public boolean isYRelative() {
-            return typed.isYRelative();
-        }
-
-        @Override
-        public boolean isZRelative() {
-            return typed.isZRelative();
-        }
-    }
-
     /**
      * Where the player's client shows a real spot: shifted by their offset when it is in the dimension of their frame,
      * as it is with no offset, and empty in another dimension, which has no frame to show it in.
@@ -313,6 +236,15 @@ public final class CoordinateOffsets {
 
     public static Map<PacketType<?>, Coverage> serverboundCoverage() {
         return Incoming.coverage();
+    }
+
+    /** The offset what the player's client sends is read in now. Zero with no frame. */
+    static Offset incomingOffset(ServerPlayer player) {
+        if (StandIn.is(player) || player.connection == null) {
+            return Offset.ZERO;
+        }
+        Connection connection = connectionOf(player);
+        return connection == null ? Offset.ZERO : state(connection).frames.get().in();
     }
 
     static OffsetState state(Connection connection) {
@@ -517,7 +449,7 @@ public final class CoordinateOffsets {
                 GamePacketTypes.SERVERBOUND_SPECTATOR_ACTION,
                 GamePacketTypes.SERVERBOUND_TELEPORT_TO_ENTITY,
                 GamePacketTypes.SERVERBOUND_USE_ITEM);
-        // Coordinates typed in a command are read where the command uses them
+        // Coordinates typed in a command are read in the player's frame as it is parsed (TypedCoordinates)
         Incoming.elsewhere(GamePacketTypes.SERVERBOUND_CHAT_COMMAND, GamePacketTypes.SERVERBOUND_CHAT_COMMAND_SIGNED);
         // A player with an offset has no debug subscriptions, so is sent none of these
         Outgoing.elsewhere(GamePacketTypes.CLIENTBOUND_DEBUG_BLOCK_VALUE, GamePacketTypes.CLIENTBOUND_DEBUG_CHUNK_VALUE,

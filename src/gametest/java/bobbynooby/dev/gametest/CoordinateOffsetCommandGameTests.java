@@ -9,12 +9,15 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -33,6 +36,9 @@ public class CoordinateOffsetCommandGameTests {
     private static final String COMMANDS = "you-only-live-twice-gametest:coordinate_offset_commands";
     // Holds the lockout and graves.tellLocation while a dead player's notice is read
     private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:coordinate_offset_grave_notice";
+    // The test data pack's function, which teleports whoever runs it to a fixed real spot, written as "tp @s 40 120 -73"
+    private static final Identifier TELEPORT_FUNCTION = Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "offset_tp");
+    private static final Vec3 FUNCTION_SPOT = new Vec3(40.5, 120.0, -72.5);
 
     // Whole numbers are centred on the block, as vanilla does; a relative step is from the real spot
     @GameTest(environment = COMMANDS)
@@ -44,10 +50,10 @@ public class CoordinateOffsetCommandGameTests {
             helper.assertFalse(offset.isZero(), "the player got no offset");
             int clientX = player.getBlockX() + offset.x();
             int clientZ = player.getBlockZ() + offset.z();
-            run(player.createCommandSourceStack(), "tp @s " + clientX + " 120 " + clientZ);
+            type(player, "tp @s " + clientX + " 120 " + clientZ);
             Vec3 landed = new Vec3(clientX + 0.5 - offset.x(), 120.0, clientZ + 0.5 - offset.z());
             helper.assertValueEqual(player.position(), landed, "where the typed teleport went");
-            run(player.createCommandSourceStack(), "tp @s ~1 ~ ~");
+            type(player, "tp @s ~1 ~ ~");
             helper.assertValueEqual(player.position(), landed.add(1.0, 0.0, 0.0), "where the relative teleport went");
         } finally {
             TestPlayers.deop(player);
@@ -75,6 +81,36 @@ public class CoordinateOffsetCommandGameTests {
         helper.succeed();
     }
 
+    // A reward function runs as the player, but its numbers were written in a data pack, in real coordinates
+    @GameTest(environment = COMMANDS)
+    public void rewardFunctionUsesRealCoordinates(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmreward", GameType.SURVIVAL);
+        try {
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            AdvancementRewards.Builder.function(TELEPORT_FUNCTION).build().grant(player);
+            helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the reward function's teleport went");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Typing /function runs lines the player didn't type, so they keep real coordinates too
+    @GameTest(environment = COMMANDS)
+    public void functionTypedByAnOpUsesRealCoordinates(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmfunction", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            type(player, "function " + TELEPORT_FUNCTION);
+            helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the function's teleport went");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // Angles go through the same argument type, but are never shifted
     @GameTest(environment = COMMANDS)
     public void rotationArgumentUntouched(GameTestHelper helper) {
@@ -82,7 +118,7 @@ public class CoordinateOffsetCommandGameTests {
         try {
             TestPlayers.op(player);
             Vec3 before = player.position();
-            run(player.createCommandSourceStack(), "tp @s ~ ~ ~ 90 0");
+            type(player, "tp @s ~ ~ ~ 90 0");
             helper.assertValueEqual(player.getYRot(), 90.0F, "yaw");
             helper.assertValueEqual(player.position(), before, "position after turning");
         } finally {
@@ -103,7 +139,7 @@ public class CoordinateOffsetCommandGameTests {
             int clientX = player.getBlockX() + offset.x();
             int clientZ = player.getBlockZ() + offset.z();
             int mark = OffsetTestKit.mark(player);
-            run(player.createCommandSourceStack(), "particle minecraft:flame " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @s");
+            type(player, "particle minecraft:flame " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @s");
             ClientboundLevelParticlesPacket sent = OffsetTestKit.last(helper, player, mark, ClientboundLevelParticlesPacket.class);
             helper.assertValueEqual(List.of(sent.x(), sent.z()), List.of(clientX + 0.5, clientZ + 0.5), "spot of the particle");
             helper.assertValueEqual(List.of(sent.xDist(), sent.yDist(), sent.zDist()), List.of(0.0F, 0.0F, 0.0F), "spread");
@@ -233,5 +269,10 @@ public class CoordinateOffsetCommandGameTests {
 
     private static void run(CommandSourceStack source, String command) {
         source.getServer().getCommands().performPrefixedCommand(source, command);
+    }
+
+    // As the player's client sends a typed command, which is all that is read in their frame
+    private static void type(ServerPlayer player, String command) {
+        player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));
     }
 }
