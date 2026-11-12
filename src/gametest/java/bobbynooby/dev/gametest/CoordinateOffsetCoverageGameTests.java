@@ -65,14 +65,14 @@ public class CoordinateOffsetCoverageGameTests {
         helper.succeed();
     }
 
-    // The same for item components: every one goes to the client, those with no stream codec of their own in their
-    // saved form
+    // The same for item components. Every type is checked, since every one goes to the client: those with no stream
+    // codec of their own go in their saved form.
     @GameTest
     public void everySyncedDataComponentIsClassified(GameTestHelper helper) {
         Map<DataComponentType<?>, Coverage> coverage = ItemRule.componentCoverage();
         List<String> missing = new ArrayList<>();
         for (DataComponentType<?> type : BuiltInRegistries.DATA_COMPONENT_TYPE) {
-            if (type.streamCodec() != null && !coverage.containsKey(type)) {
+            if (!coverage.containsKey(type)) {
                 missing.add(String.valueOf(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type)));
             }
         }

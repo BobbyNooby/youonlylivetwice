@@ -15,38 +15,60 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ItemParticleOption;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.HashedPatchMap;
 import net.minecraft.network.HashedStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
 import net.minecraft.network.protocol.game.ClientboundMerchantOffersPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.HashOps;
+import net.minecraft.util.random.WeightedList;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.Bees;
 import net.minecraft.world.item.component.BundleContents;
+import net.minecraft.world.item.component.ChargedProjectiles;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.component.MapDecorations;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.component.SulfurCubeContent;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.world.item.component.UseRemainder;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.trading.ItemCost;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -336,6 +358,96 @@ public class CoordinateOffsetItemGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // Each rebuild of a part nested in an item, an entity's data or an explosion, once: the components with a position
+    // in their NBT or in an item they hold, a living entity's effect particles and the explosion's own particle
+    @GameTest(environment = ITEMS)
+    public void everyNestedRebuildShifted(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cirebuilds", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            ItemStackTemplate inside = ItemStackTemplate.fromNonEmptyStack(compass(TARGET));
+            ItemStack bees = new ItemStack(Items.BEE_NEST);
+            bees.set(DataComponents.BEES, new Bees(List.of(new BeehiveBlockEntity.Occupant(
+                    TypedEntityData.<EntityType<?>>of(EntityTypes.BEE, posTag("flower_pos", TARGET)), 20, 600))));
+            ItemStack entity = new ItemStack(Items.ARMOR_STAND);
+            entity.set(DataComponents.ENTITY_DATA, TypedEntityData.<EntityType<?>>of(EntityTypes.ARMOR_STAND,
+                    posTag("home_pos", TARGET)));
+            ItemStack blockEntity = new ItemStack(Items.STONE);
+            blockEntity.set(DataComponents.BLOCK_ENTITY_DATA, TypedEntityData.<BlockEntityType<?>>of(BlockEntityTypes.END_GATEWAY,
+                    posTag("exit_portal", TARGET)));
+            ItemStack bucket = new ItemStack(Items.AXOLOTL_BUCKET);
+            bucket.set(DataComponents.BUCKET_ENTITY_DATA, CustomData.of(posTag("home_pos", TARGET)));
+            ItemStack custom = new ItemStack(Items.PAPER);
+            CustomData customData = CustomData.of(posTag("marked_pos", TARGET));
+            custom.set(DataComponents.CUSTOM_DATA, customData);
+            ItemStack plainCustom = new ItemStack(Items.PAPER);
+            CompoundTag note = new CompoundTag();
+            note.putString("note", "no spot here");
+            plainCustom.set(DataComponents.CUSTOM_DATA, CustomData.of(note));
+            ItemStack crossbow = new ItemStack(Items.CROSSBOW);
+            crossbow.set(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.of(inside));
+            ItemStack remainder = new ItemStack(Items.BOWL);
+            remainder.set(DataComponents.USE_REMAINDER, new UseRemainder(inside));
+            ItemStack cube = new ItemStack(Items.STONE);
+            cube.set(DataComponents.SULFUR_CUBE_CONTENT, new SulfurCubeContent(inside));
+            List<ItemStack> stacks = List.of(bees, entity, blockEntity, bucket, custom, plainCustom, crossbow, remainder, cube);
+            ItemParticleOption itemParticle = new ItemParticleOption(ParticleTypes.ITEM, inside);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(new ClientboundContainerSetContentPacket(0, 1, stacks, ItemStack.EMPTY));
+            player.connection.send(new ClientboundSetEntityDataPacket(4_343, List.of(new SynchedEntityData.DataValue<>(10,
+                    EntityDataSerializers.PARTICLES, List.<ParticleOptions>of(ParticleTypes.HEART, itemParticle)))));
+            player.connection.send(new ClientboundExplodePacket(new Vec3(1.5, 64.0, 2.5), 4.0F, 3, Optional.empty(), itemParticle,
+                    SoundEvents.GENERIC_EXPLODE, WeightedList.of(), true));
+
+            List<ItemStack> sent = OffsetTestKit.last(helper, player, mark, ClientboundContainerSetContentPacket.class).items();
+            BlockPos client = offset.shift(TARGET);
+            helper.assertValueEqual(posIn(sent.get(0).get(DataComponents.BEES).bees().getFirst().entityData().copyTagWithoutId(),
+                    "flower_pos"), client, "a bee's flower");
+            helper.assertValueEqual(posIn(sent.get(1).get(DataComponents.ENTITY_DATA).copyTagWithoutId(), "home_pos"), client,
+                    "entity data");
+            helper.assertValueEqual(posIn(sent.get(2).get(DataComponents.BLOCK_ENTITY_DATA).copyTagWithoutId(), "exit_portal"), client,
+                    "block entity data");
+            helper.assertValueEqual(posIn(sent.get(3).get(DataComponents.BUCKET_ENTITY_DATA).copyTag(), "home_pos"), client,
+                    "a bucket's entity");
+            helper.assertValueEqual(posIn(sent.get(4).get(DataComponents.CUSTOM_DATA).copyTag(), "marked_pos"), client, "custom data");
+            helper.assertValueEqual(posIn(custom.get(DataComponents.CUSTOM_DATA).copyTag(), "marked_pos"), TARGET,
+                    "custom data the server keeps");
+            helper.assertTrue(sent.get(5) == plainCustom, "a stack whose custom data holds no spot was copied");
+            helper.assertValueEqual(targetOf(sent.get(6).get(DataComponents.CHARGED_PROJECTILES).items().getFirst()), client,
+                    "a charged projectile");
+            helper.assertValueEqual(targetOf(sent.get(7).get(DataComponents.USE_REMAINDER).convertInto()), client, "a use remainder");
+            helper.assertValueEqual(targetOf(sent.get(8).get(DataComponents.SULFUR_CUBE_CONTENT).absorbedBlockItemStack()), client,
+                    "a sulfur cube's block");
+
+            SynchedEntityData.DataValue<?> value = OffsetTestKit.last(helper, player, mark, ClientboundSetEntityDataPacket.class)
+                    .packedItems().getFirst();
+            List<?> particles = (List<?>) value.value();
+            helper.assertTrue(particles.getFirst() == ParticleTypes.HEART, "a particle with no item was copied");
+            helper.assertValueEqual(targetOf(((ItemParticleOption) particles.get(1)).getItem()), client, "an effect particle's item");
+            ClientboundExplodePacket explosion = OffsetTestKit.last(helper, player, mark, ClientboundExplodePacket.class);
+            helper.assertValueEqual(targetOf(((ItemParticleOption) explosion.explosionParticle()).getItem()), client,
+                    "the explosion's own particle");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static CompoundTag posTag(String key, BlockPos pos) {
+        CompoundTag tag = new CompoundTag();
+        tag.putIntArray(key, new int[] {pos.getX(), pos.getY(), pos.getZ()});
+        return tag;
+    }
+
+    private static BlockPos posIn(CompoundTag tag, String key) {
+        int[] pos = tag.getIntArray(key).orElseThrow();
+        return new BlockPos(pos[0], pos[1], pos[2]);
+    }
+
+    private static BlockPos targetOf(ItemStackTemplate template) {
+        return template.get(DataComponents.LODESTONE_TRACKER).target().orElseThrow().pos();
     }
 
     private static ItemStack compass(BlockPos target) {
