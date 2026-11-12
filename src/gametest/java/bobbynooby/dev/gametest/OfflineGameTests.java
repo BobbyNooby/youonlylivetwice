@@ -87,7 +87,14 @@ public class OfflineGameTests {
         helper.assertValueEqual(GraveAsserts.count(itemsAt(helper, last).stream().map(ItemEntity::getItem).toList(), Items.DIAMOND),
                 1, "diamonds dropped");
         helper.assertValueEqual(itemEntities(helper, Items.IRON_HELMET, last), 1, "iron helmet item entities");
+        helper.assertValueEqual(itemsAt(helper, last).size(), 2, "item entities");
+        // The owner isn't here to pick them up, so they never despawn
+        for (ItemEntity drop : itemsAt(helper, last)) {
+            // ItemEntity.setUnlimitedLifetime sets this age, which the item's tick never counts up from
+            helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, drop.getItem() + "'s age");
+        }
         helper.assertFalse(orbsAt(helper, last).isEmpty(), "no XP dropped");
+        itemsAt(helper, last).forEach(Entity::discard);
 
         CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
         helper.assertTrue(saved.getListOrEmpty("Inventory").isEmpty(), "saved inventory still has items");
@@ -498,8 +505,9 @@ public class OfflineGameTests {
         return (int) itemsAt(helper, at).stream().filter(entity -> entity.getItem().is(item)).count();
     }
 
-    // An offline death drops at the bottom centre of the save's block, and in the same tick nothing has moved yet, so
-    // the search is that block alone. Absolute, since vanilla's relativePos turns an unrotated test's position half round.
+    // An offline death with graves off drops in the save's block when items last there, as on the test's floor, and in
+    // the same tick nothing has moved yet, so the search is that block alone. Absolute, since vanilla's relativePos turns
+    // an unrotated test's position half round.
     private static List<ItemEntity> itemsAt(GameTestHelper helper, BlockPos at) {
         return helper.getLevel().getEntities(EntityTypes.ITEM, new AABB(at), Entity::isAlive);
     }

@@ -4,11 +4,14 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Undo;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveNotice;
+import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.graves.LastGround;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathMessages;
 import bobbynooby.dev.lockout.UncountedDeaths;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -16,7 +19,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
@@ -119,7 +121,9 @@ public final class OfflineDeath {
 
     /**
      * Puts the items in the world at where, and returns how to take them back out. With graves on they go into
-     * graves with a grave head first, as in an online death, and the graves are on disk before this returns.
+     * graves with a grave head first, as in an online death, and the graves are on disk before this returns. With
+     * graves off they drop for good where a failed grave's items would, the nearest spot to where that keeps them,
+     * since the owner isn't there to pick them up before they despawn.
      */
     private static Runnable deposit(MinecraftServer server, NameAndId who, List<ItemStack> items, GlobalPos where,
                                     ResolvableProfile profile) {
@@ -127,12 +131,12 @@ public final class OfflineDeath {
         if (Settings.on(c -> c.graves.enabled)) {
             return depositInGraves(server, level, who, items, where, profile);
         }
-        Vec3 pos = Vec3.atBottomCenterOf(where.pos());
-        List<Entity> drops = new ArrayList<>();
-        for (ItemStack item : items) {
-            drops.add(new ItemEntity(level, pos.x, pos.y, pos.z, item));
+        if (items.isEmpty()) {
+            return () -> {};
         }
-        return spawnAll(level, where, drops);
+        BlockPos spot = GravePlacement.dropSpot(level, where.pos(), LastGround.in(who.id(), level.dimension()).orElse(null),
+                GraveStore.get(server));
+        return Graves.dropForGood(level, spot, items);
     }
 
     // The undo takes back every grave, including the extra ones past 54 stacks
