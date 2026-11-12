@@ -249,8 +249,13 @@ can't get past.
   spread is a distance, so it stays as typed. Only what a player types counts: the console, command blocks, functions
   (a `/function` an op types included), advancement rewards and scheduled functions use real coordinates. Command
   replies show real numbers.
-- A command in clickable chat text (from a data pack, say) is sent by the clicker's game as if they typed it, so its
-  absolute numbers are read as the clicker's shifted ones.
+- Only position arguments are read in the op's numbers. These are read as real even when an op types them: a
+  selector's `x=`, `y=` and `z=`; positions inside typed SNBT or components, such as a lodestone target in `/give`,
+  NBT in `/setblock`, `/summon` or `/data`, or a particle's `trail` target or `vibration` destination; and a function
+  macro's arguments.
+- A command in clickable chat text is sent by the clicker's game as if they typed it, so its absolute numbers are read
+  as the clicker's shifted ones. Vanilla's own `/locate` reply is one: clicking it puts `/tp @s` and the real numbers
+  in the chat box, and sent as it is, it takes the op about one offset away.
 - The grave notice: the kick and the login refusal name only the dimension. The chat line after a respawn shows the
   grave in your own numbers, or only the dimension when the grave is in another one.
 - Text in chat, signs and books is never changed, so numbers someone writes stay as written. Only an item a text
