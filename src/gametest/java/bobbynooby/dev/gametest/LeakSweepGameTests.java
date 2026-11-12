@@ -112,7 +112,7 @@ public class LeakSweepGameTests {
 
     // The check of the check: with the switch off, a real spot is found, once, and so is one deep in an item, in a sound's
     // eighths and in chunks, a place with only one axis real, and a zero sent shifted. The same spot shifted is not. A
-    // watched spot shows as seen only once a packet holds it.
+    // watched spot shows as seen only once a packet holds it, and a part that can't be read is named.
     @GameTest
     public void scannerFindsARealPosition(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper.getLevel().getServer(), "lsscanner", GameType.CREATIVE, SPOT_BLOCK);
@@ -145,6 +145,9 @@ public class LeakSweepGameTests {
             helper.assertValueEqual(watching.missing(), List.of(OFFSET.shift(TARGET)), "watched spots missing before any packet");
             watching.packet(new ClientboundBlockUpdatePacket(OFFSET.shift(TARGET), stone));
             helper.assertValueEqual(watching.missing(), List.of(), "watched spots missing after a block update there");
+            LeakScanner.Scan locked = new LeakScanner.Scan(BANDS, List.of());
+            locked.packet(new Unreadable(TARGET.getX()));
+            helper.assertValueEqual(List.copyOf(locked.unread()), List.of(Unreadable.class.getName() + ".x"), "parts left unread");
         } finally {
             TestPlayers.leave(player);
         }
@@ -443,6 +446,14 @@ public class LeakSweepGameTests {
         return found;
     }
 
+    // A part that throws as it is read, as a field locked by a later access rule would
+    private record Unreadable(int x) {
+        @Override
+        public int x() {
+            throw new IllegalStateException("locked");
+        }
+    }
+
     /**
      * One scene: its players, its steps, the real spots it shows shifted, and what it puts back. Once the main player's
      * client holds the chunk it stands in, the steps run on their ticks, and AFTER ticks past the last one every packet
@@ -568,6 +579,8 @@ public class LeakSweepGameTests {
             helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
                     + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
             helper.assertValueEqual(scan.missing(), List.of(), "shifted spots the scene shows that no packet held");
+            helper.assertValueEqual(scan.unreadMinecraft(), List.of(),
+                    "Minecraft parts the scan couldn't read, of " + scan.unread().size() + " unread in all");
             helper.succeed();
         }
 

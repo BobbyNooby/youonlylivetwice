@@ -68,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -76,7 +77,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * at a real spot far out, so every real position in it falls in a narrow band around that spot, and every shifted one
  * lands near 0, 0, far from the band. A constant the client ignores, shifted, lands near the offset itself, which is
  * the band's mirror, so that is a band too. The walk goes through the packet as its fields hold it, nested items, NBT,
- * particles and texts included.
+ * particles and texts included, and keeps note of what it couldn't read.
  */
 final class LeakScanner {
     // Objects deep; a list, map, optional or array on the way doesn't count
@@ -87,8 +88,8 @@ final class LeakScanner {
     private static final List<String> LEAF_PACKAGES = List.of("java.", "javax.", "jdk.", "sun.", "com.sun.", "io.netty.",
             "com.mojang.serialization.", "com.mojang.brigadier.", "com.mojang.authlib.", "com.google.gson.", "org.joml.",
             "org.slf4j.", "org.apache.");
-    // What to read of each class, worked out once
-    private static final Map<Class<?>, List<Part>> PARTS = new ConcurrentHashMap<>();
+    // What to read of each class, and what of it can't be read, worked out once
+    private static final Map<Class<?>, Parts> PARTS = new ConcurrentHashMap<>();
 
     /**
      * Where no place the client is sent may be. A place is flagged when either of its axes is in the band's span on that
@@ -108,12 +109,13 @@ final class LeakScanner {
         }
     }
 
-    /** What the packets read so far hold: places in a band, and the watched spots among their places. */
+    /** What the packets read so far hold: places in a band, the watched spots among their places, and what was unread. */
     static final class Scan {
         private final List<Band> bands;
         private final Set<BlockPos> watched;
         private final List<String> findings = new ArrayList<>();
         private final Set<BlockPos> seen = new HashSet<>();
+        private final Set<String> unread = new TreeSet<>();
 
         Scan(List<Band> bands, Collection<BlockPos> watched) {
             this.bands = List.copyOf(bands);
@@ -133,6 +135,16 @@ final class LeakScanner {
         List<BlockPos> missing() {
             return watched.stream().filter(spot -> !seen.contains(spot)).sorted().toList();
         }
+
+        /** Each class whose fields couldn't be listed, and each field that couldn't be read, by its class's name. */
+        Set<String> unread() {
+            return unread;
+        }
+
+        /** The same, only Minecraft's own classes, where a position the walk can't see would be. */
+        List<String> unreadMinecraft() {
+            return unread.stream().filter(name -> name.startsWith("net.minecraft.")).toList();
+        }
     }
 
     private LeakScanner() {}
@@ -144,12 +156,15 @@ final class LeakScanner {
         return scan.findings();
     }
 
-    // A field or a record component, read the same way
-    private record Part(String name, Class<?> type, Field field, @Nullable Method accessor) {
-        @Nullable Object read(Object owner) throws ReflectiveOperationException {
-            return accessor != null ? accessor.invoke(owner) : field.get(owner);
+    // A field or a record component, read the same way, and the name of the class that declares it
+    private record Part(String owner, String name, Class<?> type, Field field, @Nullable Method accessor) {
+        @Nullable Object read(Object holder) throws ReflectiveOperationException {
+            return accessor != null ? accessor.invoke(holder) : field.get(holder);
         }
     }
+
+    // A class's parts, and the names of what of it can't be read at all
+    private record Parts(List<Part> parts, List<String> unread) {}
 
     private static final class Walk {
         private final Scan scan;
@@ -245,11 +260,14 @@ final class LeakScanner {
             if (special(value, depth) || depth >= MAX_DEPTH) {
                 return;
             }
-            for (Part part : partsOf(type)) {
+            Parts parts = partsOf(type);
+            scan.unread.addAll(parts.unread());
+            for (Part part : parts.parts()) {
                 Object read;
                 try {
                     read = part.read(value);
                 } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                    scan.unread.add(part.owner() + "." + part.name());
                     continue;
                 }
                 if (part.type() == int.class || part.type() == double.class) {
@@ -430,42 +448,50 @@ final class LeakScanner {
     }
 
     // Records by their components, anything else by its fields and its superclasses' fields, statics left out
-    private static List<Part> partsOf(Class<?> type) {
+    private static Parts partsOf(Class<?> type) {
         return PARTS.computeIfAbsent(type, LeakScanner::findPartsOrNone);
     }
 
-    // A class whose fields can't even be listed is one this run has no part of
-    private static List<Part> findPartsOrNone(Class<?> type) {
+    // A class whose fields can't even be listed is one this run has no part of, and says so
+    private static Parts findPartsOrNone(Class<?> type) {
         try {
             return findParts(type);
         } catch (RuntimeException | LinkageError e) {
-            return List.of();
+            return new Parts(List.of(), List.of(type.getName()));
         }
     }
 
-    private static List<Part> findParts(Class<?> type) {
+    private static Parts findParts(Class<?> type) {
         List<Part> parts = new ArrayList<>();
+        List<String> unread = new ArrayList<>();
         if (type.isRecord()) {
             for (RecordComponent component : type.getRecordComponents()) {
                 Method accessor = component.getAccessor();
                 try {
                     Field field = type.getDeclaredField(component.getName());
                     if (accessor.trySetAccessible()) {
-                        parts.add(new Part(component.getName(), component.getType(), field, accessor));
+                        parts.add(new Part(type.getName(), component.getName(), component.getType(), field, accessor));
+                    } else {
+                        unread.add(type.getName() + "." + component.getName());
                     }
                 } catch (NoSuchFieldException e) {
-                    // Every component has its field
+                    unread.add(type.getName() + "." + component.getName());
                 }
             }
-            return parts;
+            return new Parts(parts, unread);
         }
         for (Class<?> at = type; at != null && at != Object.class && !Walk.inLeafPackage(at); at = at.getSuperclass()) {
             for (Field field : at.getDeclaredFields()) {
-                if (!Modifier.isStatic(field.getModifiers()) && !field.isSynthetic() && field.trySetAccessible()) {
-                    parts.add(new Part(field.getName(), field.getType(), field, null));
+                if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
+                    continue;
+                }
+                if (field.trySetAccessible()) {
+                    parts.add(new Part(at.getName(), field.getName(), field.getType(), field, null));
+                } else {
+                    unread.add(at.getName() + "." + field.getName());
                 }
             }
         }
-        return parts;
+        return new Parts(parts, unread);
     }
 }
