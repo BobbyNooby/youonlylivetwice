@@ -36,6 +36,8 @@ public class CoordinateOffsetCommandGameTests {
     private static final String COMMANDS = "you-only-live-twice-gametest:coordinate_offset_commands";
     // Holds the lockout and graves.tellLocation while a dead player's notice is read
     private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:coordinate_offset_grave_notice";
+    // Holds the lockout and graves.tellLocation until a death's kick, which comes after its tick
+    private static final String GRAVE_KICK = "you-only-live-twice-gametest:coordinate_offset_grave_kick";
     // The test data pack's function, which teleports whoever runs it to a fixed real spot, written as "tp @s 40 120 -73"
     private static final Identifier TELEPORT_FUNCTION = Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "offset_tp");
     private static final Vec3 FUNCTION_SPOT = new Vec3(40.5, 120.0, -72.5);
@@ -239,6 +241,55 @@ public class CoordinateOffsetCommandGameTests {
             removeGraves(helper, player.getUUID());
         }
         helper.succeed();
+    }
+
+    // The kick goes to a client still in its frame, so while that has an offset the kick names only the dimension, even
+    // with the switch off by then. It comes after the death's tick, so the lockout is held across ticks.
+    @GameTest(environment = GRAVE_KICK, maxTicks = 20)
+    public void kickOmitsXAndZWhileTheFrameHasAnOffset(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean lockoutBefore = config.deathLockout.enabled;
+        boolean gravesBefore = config.graves.enabled;
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        ServerPlayer player = OffsetTestKit.join(helper, "cmkick", GameType.SURVIVAL);
+        Runnable cleanUp = () -> {
+            config.deathLockout.enabled = lockoutBefore;
+            config.graves.enabled = gravesBefore;
+            config.graves.tellLocation = tellBefore;
+            ServerPlayer stillOnline = helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID());
+            if (stillOnline != null) {
+                TestPlayers.leave(stillOnline);
+            }
+            removeGraves(helper, player.getUUID());
+        };
+        boolean waiting = false;
+        try {
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            helper.assertFalse(CoordinateOffsets.on(), "the switch is still on after the join");
+            config.deathLockout.enabled = true;
+            config.graves.enabled = true;
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            onlyGrave(helper, player);
+            helper.runAfterDelay(3, () -> {
+                try {
+                    String reason = LockoutGameTests.disconnectReason(player);
+                    helper.assertTrue(reason.startsWith("You died") && reason.endsWith("\nYour grave is in the Overworld."),
+                            "kick: " + reason);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // The grave notices the player was sent from packet "from" on

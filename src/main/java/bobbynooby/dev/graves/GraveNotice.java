@@ -67,23 +67,27 @@ public final class GraveNotice {
     /**
      * "Your grave is at x, y, z in the Overworld." for the owner's death at deathMillis, as the kick and the login
      * refusal tell it, or null when that death made no grave that is still there, or the setting says not to tell.
-     * With coordinate offsets on, only the dimension: neither goes out in a frame, as the next one isn't known yet.
-     * Never throws, since the login check calls it.
+     * With coordinate offsets on, only the dimension: the next frame isn't known yet, and the player sees the grave in
+     * it. So too for a kick to a client whose frame has an offset, even once the switch is off. Never throws, since the
+     * login check calls it.
      */
     public static @Nullable String line(MinecraftServer server, UUID owner, long deathMillis) {
         try {
-            return line(madeAt(server, owner, deathMillis));
+            Grave grave = madeAt(server, owner, deathMillis);
+            if (!tells(grave)) {
+                return null;
+            }
+            return hidesCoordinates(server, owner) ? inLine(grave) : atLine(grave, grave.pos());
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not look up where the grave of {} is, so they are not told", owner, e);
             return null;
         }
     }
 
-    private static @Nullable String line(@Nullable Grave grave) {
-        if (!tells(grave)) {
-            return null;
-        }
-        return CoordinateOffsets.on() ? inLine(grave) : atLine(grave, grave.pos());
+    // An owner still online is being kicked, in the frame their client has
+    private static boolean hidesCoordinates(MinecraftServer server, UUID owner) {
+        ServerPlayer online = server.getPlayerList().getPlayer(owner);
+        return CoordinateOffsets.on() || (online != null && !CoordinateOffsets.offset(online).isZero());
     }
 
     // In chat after the respawn, which goes out in the new frame: the spot the player's client shows, or only the
