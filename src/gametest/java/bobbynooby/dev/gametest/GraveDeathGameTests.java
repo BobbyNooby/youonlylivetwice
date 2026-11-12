@@ -431,7 +431,8 @@ public class GraveDeathGameTests {
     }
 
     // The same with keepInventory: the items stay on the player, but the revive head still drops where they last, for
-    // good. The game rule and the border are set and put back in this tick.
+    // good. The game rule and the border are set and put back in this tick. The name stays within 16 characters with
+    // the test number on, or the head's profile couldn't be saved and would show no owner.
     @GameTest(skyAccess = true)
     public void noFreeBlockWithKeepInventoryStillDropsTheHead(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -444,7 +445,7 @@ public class GraveDeathGameTests {
         BlockPos death = helper.absolutePos(new BlockPos(3, 0, 3));
         Map<BlockPos, BlockState> before = new HashMap<>();
         AABB around = new AABB(death).inflate(2);
-        ServerPlayer player = TestPlayers.join(server, "ColumnlessKeep", GameType.SURVIVAL, death);
+        ServerPlayer player = TestPlayers.join(server, "KeepColumn", GameType.SURVIVAL, death);
         try {
             for (int y = level.getMinY(); y <= level.getMaxY(); y++) {
                 VoidGraveGameTests.setRemembered(level, death.atY(y), Blocks.STONE, before);
