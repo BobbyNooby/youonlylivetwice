@@ -3,10 +3,13 @@ package bobbynooby.dev.coords;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.mixin.CommandSourceStackAccessor;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.SharedConstants;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
@@ -208,6 +211,25 @@ public final class CoordinateOffsets {
 
     static boolean isNorthTarget(BlockPos pos) {
         return northTarget.test(pos);
+    }
+
+    /**
+     * Where coordinates typed in a command are, for the player who typed them: absolute X and Z come in the frame the
+     * player's client sends in, so its offset comes off. Relative ones are steps from a real spot already. The console,
+     * a command block and "execute as" from either keep real coordinates, as the stack's first source isn't a player.
+     */
+    public static Vec3 typedPosition(CommandSourceStack source, WorldCoordinates typed, Vec3 position) {
+        if (!(((CommandSourceStackAccessor) source).yoltSource() instanceof ServerPlayer player) || StandIn.is(player)
+                || player.connection == null) {
+            return position;
+        }
+        Connection connection = connectionOf(player);
+        Offset in = connection == null ? Offset.ZERO : state(connection).frames.get().in();
+        if (in.isZero()) {
+            return position;
+        }
+        return new Vec3(typed.isXRelative() ? position.x : position.x - in.x(), position.y,
+                typed.isZRelative() ? position.z : position.z - in.z());
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */
