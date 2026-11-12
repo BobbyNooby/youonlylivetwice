@@ -79,8 +79,9 @@ import java.util.UUID;
 
 // Every packet of a whole scene, read for a real X or Z, or a constant sent shifted. Each scene joins at one fixed real
 // spot far out with the switch on, so every real position in it falls in a narrow band that no shifted one comes near,
-// and every shifted constant in the band's mirror. The scenes share the spot and hold players across ticks, so each has
-// a batch of its own.
+// and every shifted constant in the band's mirror. Each scene also checks that the shifted spots it shows were sent, so
+// a packet that was dropped can't pass for a clean one. The scenes share the spot and hold players across ticks, so each
+// has a batch of its own.
 public class LeakSweepGameTests {
     private static final String WORLD = "you-only-live-twice-gametest:leak_sweep_world";
     private static final String ITEMS = "you-only-live-twice-gametest:leak_sweep_items";
@@ -110,7 +111,8 @@ public class LeakSweepGameTests {
     private static final double WALLED = 4_000.0;
 
     // The check of the check: with the switch off, a real spot is found, once, and so is one deep in an item, in a sound's
-    // eighths and in chunks, a place with only one axis real, and a zero sent shifted. The same spot shifted is not.
+    // eighths and in chunks, a place with only one axis real, and a zero sent shifted. The same spot shifted is not. A
+    // watched spot shows as seen only once a packet holds it.
     @GameTest
     public void scannerFindsARealPosition(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper.getLevel().getServer(), "lsscanner", GameType.CREATIVE, SPOT_BLOCK);
@@ -138,6 +140,11 @@ public class LeakSweepGameTests {
             // The zero a portal sound is played at, sent shifted, which is the offset itself
             helper.assertValueEqual(findingsIn(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, OFFSET.shift(BlockPos.ZERO), 0,
                     false)).size(), 1, "findings for a portal sound at the shifted zero");
+
+            LeakScanner.Scan watching = new LeakScanner.Scan(BANDS, List.of(OFFSET.shift(TARGET)));
+            helper.assertValueEqual(watching.missing(), List.of(OFFSET.shift(TARGET)), "watched spots missing before any packet");
+            watching.packet(new ClientboundBlockUpdatePacket(OFFSET.shift(TARGET), stone));
+            helper.assertValueEqual(watching.missing(), List.of(), "watched spots missing after a block update there");
         } finally {
             TestPlayers.leave(player);
         }
@@ -151,6 +158,8 @@ public class LeakSweepGameTests {
             ServerPlayer player = sweep.join("lsworld", GameType.CREATIVE, SPOT_BLOCK, true);
             helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset at the spot");
             ServerPlayer sleeper = sweep.join("lssleeper", GameType.CREATIVE, SPOT_BLOCK.offset(-3, 0, 6), true);
+            sweep.expect(TARGET);
+            sweep.expect(EXIT);
             sweep.at(0, () -> worldScene(helper, sweep, player, sleeper));
             sweep.start(player);
         });
@@ -165,6 +174,7 @@ public class LeakSweepGameTests {
             ServerPlayer holder = sweep.join("lsholder", GameType.CREATIVE, SPOT_BLOCK.offset(-3, 0, 3), true);
             // Held from the start, so the player is sent it as soon as it sees the holder
             holder.setItemInHand(InteractionHand.MAIN_HAND, compass(TARGET));
+            sweep.expect(TARGET);
             sweep.at(0, () -> itemsScene(helper, sweep, player));
             sweep.start(player);
         });
@@ -177,6 +187,8 @@ public class LeakSweepGameTests {
         sweep.guard(() -> {
             ServerPlayer player = sweep.join("lstravel", GameType.CREATIVE, SPOT_BLOCK, true);
             helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset at the spot");
+            // Where every teleport and respawn puts the client
+            sweep.expect(SPOT_BLOCK);
             travelScene(helper, sweep, player.getUUID());
             sweep.start(player);
         });
@@ -216,6 +228,7 @@ public class LeakSweepGameTests {
             ItemStack compass = compass(TARGET);
             compass.set(DataComponents.CUSTOM_NAME, Component.literal("Home"));
             killer.setItemInHand(InteractionHand.MAIN_HAND, compass);
+            sweep.expect(TARGET);
             // A few ticks in, so both have seen the killer with the compass in hand
             sweep.at(5, () -> {
                 TestPlayers.markLoaded(victim);
@@ -305,8 +318,10 @@ public class LeakSweepGameTests {
         // A gateway has no item to pick, so a campfire holding the compass stands in for a block with a position in its data
         BlockPos campfire = campfireWithCompass(helper.getLevel(), sweep, SPOT_BLOCK.offset(2, 0, 0));
         TestPlayers.receive(player, new ServerboundPickItemFromBlockPacket(OFFSET.shift(campfire), true));
-        helper.assertTrue(player.getInventory().getSelectedItem().is(Items.CAMPFIRE),
-                "the pick gave " + player.getInventory().getSelectedItem());
+        ItemStack picked = player.getInventory().getSelectedItem();
+        helper.assertTrue(picked.is(Items.CAMPFIRE), "the pick gave " + picked);
+        helper.assertTrue(picked.getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY).nonEmptyItemCopyStream()
+                .anyMatch(item -> ItemStack.isSameItemSameComponents(item, compass(TARGET))), "the picked campfire holds no compass: " + picked);
     }
 
     private static void travelScene(GameTestHelper helper, Sweep sweep, UUID id) {
@@ -429,10 +444,10 @@ public class LeakSweepGameTests {
     }
 
     /**
-     * One scene: its players, its steps, and what it puts back. Once the main player's client holds the chunk it stands
-     * in, the steps run on their ticks, and AFTER ticks past the last one every packet each scanned player was sent is
-     * read. Everything is scheduled before the test's first tick runs, since the test runner can't take new work while it
-     * runs a tick's. Players leave and the world goes back whatever happens.
+     * One scene: its players, its steps, the real spots it shows shifted, and what it puts back. Once the main player's
+     * client holds the chunk it stands in, the steps run on their ticks, and AFTER ticks past the last one every packet
+     * each scanned player was sent is read. Everything is scheduled before the test's first tick runs, since the test
+     * runner can't take new work while it runs a tick's. Players leave and the world goes back whatever happens.
      */
     private static final class Sweep {
         private final GameTestHelper helper;
@@ -441,6 +456,7 @@ public class LeakSweepGameTests {
         private final Map<UUID, ServerPlayer> joined = new LinkedHashMap<>();
         private final List<UUID> scanned = new ArrayList<>();
         private final List<Step> steps = new ArrayList<>();
+        private final List<BlockPos> expected = new ArrayList<>();
         private final List<Runnable> cleanUps = new ArrayList<>();
         private final List<BlockPos> blocks = new ArrayList<>();
         private final List<Entity> entities = new ArrayList<>();
@@ -469,6 +485,11 @@ public class LeakSweepGameTests {
 
         void at(int tick, Runnable action) {
             steps.add(new Step(tick, action));
+        }
+
+        // A real spot the scene shows, which some packet must hold shifted
+        void expect(BlockPos real) {
+            expected.add(real);
         }
 
         void onCleanUp(Runnable step) {
@@ -536,7 +557,7 @@ public class LeakSweepGameTests {
         }
 
         private void finish() {
-            LeakScanner.Scan scan = new LeakScanner.Scan(BANDS);
+            LeakScanner.Scan scan = new LeakScanner.Scan(BANDS, expected.stream().map(real -> OFFSET.shift(real)).toList());
             for (UUID id : scanned) {
                 for (Packet<?> packet : TestPlayers.sentPackets(joined.get(id))) {
                     scan.packet(packet);
@@ -546,6 +567,7 @@ public class LeakSweepGameTests {
             List<String> found = scan.findings();
             helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
                     + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
+            helper.assertValueEqual(scan.missing(), List.of(), "shifted spots the scene shows that no packet held");
             helper.succeed();
         }
 

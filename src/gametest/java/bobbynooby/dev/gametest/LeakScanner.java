@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.advancements.triggers.Criterion;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.HolderSet;
@@ -59,7 +60,9 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,13 +108,16 @@ final class LeakScanner {
         }
     }
 
-    /** What the packets read so far hold: places in a band. */
+    /** What the packets read so far hold: places in a band, and the watched spots among their places. */
     static final class Scan {
         private final List<Band> bands;
+        private final Set<BlockPos> watched;
         private final List<String> findings = new ArrayList<>();
+        private final Set<BlockPos> seen = new HashSet<>();
 
-        Scan(List<Band> bands) {
+        Scan(List<Band> bands, Collection<BlockPos> watched) {
             this.bands = List.copyOf(bands);
+            this.watched = Set.copyOf(watched);
         }
 
         void packet(Object packet) {
@@ -122,13 +128,18 @@ final class LeakScanner {
         List<String> findings() {
             return findings;
         }
+
+        /** The watched spots that no packet held as a place, by its block. */
+        List<BlockPos> missing() {
+            return watched.stream().filter(spot -> !seen.contains(spot)).sorted().toList();
+        }
     }
 
     private LeakScanner() {}
 
     /** One line per place in a band in the packet. */
     static List<String> findings(Object packet, Band... bands) {
-        Scan scan = new Scan(List.of(bands));
+        Scan scan = new Scan(List.of(bands), List.of());
         scan.packet(packet);
         return scan.findings();
     }
@@ -174,6 +185,14 @@ final class LeakScanner {
                     found(band.name() + " " + what, value);
                     return;
                 }
+            }
+        }
+
+        // A place with its height too, which may be one of the spots the scene expects to send shifted
+        private void look(double x, double y, double z) {
+            BlockPos block = BlockPos.containing(x, y, z);
+            if (scan.watched.contains(block)) {
+                scan.seen.add(block);
             }
         }
 
@@ -251,6 +270,7 @@ final class LeakScanner {
         private boolean position(Object value) {
             if (value instanceof Vec3 vector) {
                 place("position", vector, vector.x, vector.z);
+                look(vector.x, vector.y, vector.z);
                 return true;
             }
             if (value instanceof SectionPos section) {
@@ -259,6 +279,7 @@ final class LeakScanner {
             }
             if (value instanceof Vec3i block) {
                 place("block", block, block.getX(), block.getZ());
+                look(block.getX(), block.getY(), block.getZ());
                 return true;
             }
             if (value instanceof ChunkPos chunk) {
@@ -291,12 +312,15 @@ final class LeakScanner {
                 int[] ints = array.getAsIntArray();
                 if (ints.length == 3) {
                     place("int array", Arrays.toString(ints), ints[0], ints[2]);
+                    look(ints[0], ints[1], ints[2]);
                 }
             } else if (tag instanceof ListTag list) {
                 if (list.size() == 3 && list.stream().allMatch(element -> element instanceof DoubleTag)) {
                     double x = ((DoubleTag) list.get(0)).value();
+                    double y = ((DoubleTag) list.get(1)).value();
                     double z = ((DoubleTag) list.get(2)).value();
                     place("double list", list, x, z);
+                    look(x, y, z);
                 }
                 for (int i = 0; i < list.size(); i++) {
                     path.add("[" + i + "]");
@@ -379,8 +403,11 @@ final class LeakScanner {
             for (Band band : scan.bands) {
                 if (absoluteX && band.inX(to.x) || absoluteZ && band.inZ(to.z)) {
                     found(band.name() + " teleport", to);
-                    return;
+                    break;
                 }
+            }
+            if (absoluteX && absoluteZ && !relatives.contains(Relative.Y)) {
+                look(to.x, to.y, to.z);
             }
         }
 
