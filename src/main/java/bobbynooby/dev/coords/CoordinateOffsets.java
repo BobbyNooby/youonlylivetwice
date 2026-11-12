@@ -53,6 +53,7 @@ public final class CoordinateOffsets {
         OwnPosition.register();
         ChunkRules.register();
         BlockRules.register();
+        ItemRule.register();
         classifyTheRest();
     }
 

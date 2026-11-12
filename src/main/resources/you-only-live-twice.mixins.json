@@ -37,6 +37,7 @@
     "GraveProtectionPistonFrontMixin",
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
+    "ItemContainerContentsInvoker",
     "LevelChunkPacketDataInvoker",
     "LockoutDeathMessageMixin",
     "LoginSkinMixin",

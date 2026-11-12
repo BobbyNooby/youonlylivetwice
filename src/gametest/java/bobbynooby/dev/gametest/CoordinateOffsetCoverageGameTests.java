@@ -3,7 +3,9 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.coords.BlockRules;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Coverage;
+import bobbynooby.dev.coords.ItemRule;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.ProtocolInfo;
@@ -22,12 +24,6 @@ public class CoordinateOffsetCoverageGameTests {
     // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
     // types out of here as it puts them in a table.
     private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_CONTENT, 5),
-            Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_SLOT, 5),
-            Map.entry(GamePacketTypes.CLIENTBOUND_SET_CURSOR_ITEM, 5),
-            Map.entry(GamePacketTypes.CLIENTBOUND_SET_PLAYER_INVENTORY, 5),
-            Map.entry(GamePacketTypes.CLIENTBOUND_SET_EQUIPMENT, 5),
-            Map.entry(GamePacketTypes.CLIENTBOUND_MERCHANT_OFFERS, 5),
             Map.entry(GamePacketTypes.CLIENTBOUND_SOUND, 6),
             Map.entry(GamePacketTypes.CLIENTBOUND_LEVEL_PARTICLES, 6),
             Map.entry(GamePacketTypes.CLIENTBOUND_EXPLODE, 6),
@@ -44,9 +40,7 @@ public class CoordinateOffsetCoverageGameTests {
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_SIZE, 9),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_LERP_SIZE, 9),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION, 9));
-    private static final Map<PacketType<?>, Integer> PENDING_SERVERBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.SERVERBOUND_SET_CREATIVE_MODE_SLOT, 5),
-            Map.entry(GamePacketTypes.SERVERBOUND_CONTAINER_CLICK, 5));
+    private static final Map<PacketType<?>, Integer> PENDING_SERVERBOUND = Map.of();
 
     @GameTest
     public void everyClientboundPacketTypeIsClassified(GameTestHelper helper) {
@@ -71,6 +65,21 @@ public class CoordinateOffsetCoverageGameTests {
             }
         }
         helper.assertTrue(missing.isEmpty(), "block entity types in no table: " + String.join(", ", missing));
+        helper.succeed();
+    }
+
+    // The same for item components: every one goes to the client, those with no stream codec of their own in their
+    // saved form
+    @GameTest
+    public void everySyncedDataComponentIsClassified(GameTestHelper helper) {
+        Map<DataComponentType<?>, Coverage> coverage = ItemRule.componentCoverage();
+        List<String> missing = new ArrayList<>();
+        for (DataComponentType<?> type : BuiltInRegistries.DATA_COMPONENT_TYPE) {
+            if (type.streamCodec() != null && !coverage.containsKey(type)) {
+                missing.add(String.valueOf(BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type)));
+            }
+        }
+        helper.assertTrue(missing.isEmpty(), "data component types in no table: " + String.join(", ", missing));
         helper.succeed();
     }
 
