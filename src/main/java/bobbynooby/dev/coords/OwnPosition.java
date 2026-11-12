@@ -2,9 +2,7 @@ package bobbynooby.dev.coords;
 
 import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.mixin.PlayerLookAtPacketAccessor;
-import io.netty.buffer.Unpooled;
 import net.minecraft.core.PositionAndRotation;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
@@ -132,14 +130,7 @@ final class OwnPosition {
     // No getters and no field constructor for the entity form, so the copy goes through the codec. Its x and z are also
     // where the client looks when the entity isn't there.
     private static Packet<?> lookAt(ClientboundPlayerLookAtPacket packet, Context context) {
-        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
-        ClientboundPlayerLookAtPacket copy;
-        try {
-            ClientboundPlayerLookAtPacket.STREAM_CODEC.encode(buffer, packet);
-            copy = ClientboundPlayerLookAtPacket.STREAM_CODEC.decode(buffer);
-        } finally {
-            buffer.release();
-        }
+        ClientboundPlayerLookAtPacket copy = CoordinateOffsets.copy(ClientboundPlayerLookAtPacket.STREAM_CODEC, packet);
         PlayerLookAtPacketAccessor fields = (PlayerLookAtPacketAccessor) copy;
         Offset offset = context.offset();
         fields.yoltSetX(offset.shiftX(fields.yoltX()));

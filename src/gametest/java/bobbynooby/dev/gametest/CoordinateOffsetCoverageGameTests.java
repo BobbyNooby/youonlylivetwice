@@ -1,13 +1,16 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.coords.BlockRules;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Coverage;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.ProtocolInfo;
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.game.GameProtocols;
 import net.minecraft.network.protocol.game.GamePacketTypes;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,14 +22,6 @@ public class CoordinateOffsetCoverageGameTests {
     // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
     // types out of here as it puts them in a table.
     private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_UPDATE, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_SECTION_BLOCKS_UPDATE, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_ENTITY_DATA, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_EVENT, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_BLOCK_DESTRUCTION, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_ADD_TRANSIENT_BLOCK, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_LEVEL_EVENT, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_OPEN_SIGN_EDITOR, 4),
             Map.entry(GamePacketTypes.CLIENTBOUND_TAG_QUERY, 4),
             Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_BLOCK_VALUE, 4),
             Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_CHUNK_VALUE, 4),
@@ -79,6 +74,20 @@ public class CoordinateOffsetCoverageGameTests {
     public void everyServerboundPacketTypeIsClassified(GameTestHelper helper) {
         assertClassified(helper, GameProtocols.SERVERBOUND_TEMPLATE.details(), CoordinateOffsets.serverboundCoverage(),
                 PENDING_SERVERBOUND);
+    }
+
+    // The same for block entities, whose update tags reach the client in chunks and in their own packet
+    @GameTest
+    public void everyBlockEntityTypeIsClassified(GameTestHelper helper) {
+        Map<BlockEntityType<?>, Coverage> coverage = BlockRules.blockEntityCoverage();
+        List<String> missing = new ArrayList<>();
+        for (BlockEntityType<?> type : BuiltInRegistries.BLOCK_ENTITY_TYPE) {
+            if (!coverage.containsKey(type)) {
+                missing.add(String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type)));
+            }
+        }
+        helper.assertTrue(missing.isEmpty(), "block entity types in no table: " + String.join(", ", missing));
+        helper.succeed();
     }
 
     // Every type the protocol lists is in the tables or still pending, never both

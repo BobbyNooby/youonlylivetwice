@@ -4,7 +4,10 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.common.CommonPacketTypes;
@@ -46,6 +49,7 @@ public final class CoordinateOffsets {
         CoordinateOffsets.realCoordinates = realCoordinates;
         OwnPosition.register();
         ChunkRules.register();
+        BlockRules.register();
         classifyTheRest();
     }
 
@@ -127,6 +131,17 @@ public final class CoordinateOffsets {
             return Offset.ZERO;
         }
         return anchor == null ? Offset.random(ThreadLocalRandom.current()) : Offset.at(anchor.x, anchor.z);
+    }
+
+    /** A copy of a packet with no constructor to copy it by, made by writing it out and reading it back. */
+    static <P> P copy(StreamCodec<FriendlyByteBuf, P> codec, P packet) {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            codec.encode(buffer, packet);
+            return codec.decode(buffer);
+        } finally {
+            buffer.release();
+        }
     }
 
     /**
