@@ -689,6 +689,8 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
       that far) starts a stretch far from 0, 0, at their real numbers moved 999,984 blocks towards 0.
     - With `max-world-size` set in `server.properties`, the edge of the world counts as a border wall: only its near
       part shows.
+    - When that edge cuts a border into a rectangle and a player is near two opposite walls, their client is sent a
+      square as wide as the rectangle, so its north and south walls show in the wrong place. They give nothing away.
     - These go out as an op or a data pack wrote them, with any position in them real:
         - a position under an NBT key YOLT doesn't know. It shifts vanilla's own: keys ending in `pos`,
           `exit_portal`, `leash`, `patrol_target`, `wander_target`, `beam_target`, a breeze's jump target and map
