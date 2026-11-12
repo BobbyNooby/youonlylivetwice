@@ -13,6 +13,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.resources.Identifier;
@@ -37,9 +38,15 @@ public class CoordinateOffsetCommandGameTests {
     private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:coordinate_offset_grave_notice";
     // Holds the lockout and graves.tellLocation until a death's kick, which comes after its tick
     private static final String GRAVE_KICK = "you-only-live-twice-gametest:coordinate_offset_grave_kick";
+    private static final int KICK_TICKS = 20;
     // The test data pack's function, which teleports whoever runs it to a fixed real spot, written as "tp @s 40 120 -73"
     private static final Identifier TELEPORT_FUNCTION = Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "offset_tp");
     private static final Vec3 FUNCTION_SPOT = new Vec3(40.5, 120.0, -72.5);
+    // A flake hunt runs copies of the kick test at once, each holding the switches until its own kick. All want the same
+    // values, so the first to start keeps what was there and the last to finish puts it back; a copy that kept and put
+    // back another's values would switch them off under a kick still to come, or leave them on.
+    private static int kickSwitchHolders;
+    private static Runnable putBackKickSwitches = () -> {};
 
     // Whole numbers are centred on the block, as vanilla does; a relative step is from the real spot
     @GameTest(environment = COMMANDS)
@@ -270,18 +277,21 @@ public class CoordinateOffsetCommandGameTests {
     }
 
     // The kick goes to a client still in its frame, so while that has an offset the kick names only the dimension, even
-    // with the switch off by then. It comes after the death's tick, so the lockout is held across ticks.
-    @GameTest(environment = GRAVE_KICK, maxTicks = 20)
+    // with the switch off by then. It comes after the death's tick, so the lockout is held across ticks. The kick is a
+    // queued task, which the server can hold for a few ticks when many are queued at once, so the test waits for it.
+    @GameTest(environment = GRAVE_KICK, maxTicks = KICK_TICKS)
     public void kickOmitsXAndZWhileTheFrameHasAnOffset(GameTestHelper helper) {
-        YoltConfig config = Settings.get();
-        boolean lockoutBefore = config.deathLockout.enabled;
-        boolean gravesBefore = config.graves.enabled;
-        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
         ServerPlayer player = OffsetTestKit.join(helper, "cmkick", GameType.SURVIVAL);
+        boolean[] held = {false};
+        boolean[] cleaned = {false};
         Runnable cleanUp = () -> {
-            config.deathLockout.enabled = lockoutBefore;
-            config.graves.enabled = gravesBefore;
-            config.graves.tellLocation = tellBefore;
+            if (cleaned[0]) {
+                return;
+            }
+            cleaned[0] = true;
+            if (held[0]) {
+                releaseKickSwitches();
+            }
             ServerPlayer stillOnline = helper.getLevel().getServer().getPlayerList().getPlayer(player.getUUID());
             if (stillOnline != null) {
                 TestPlayers.leave(stillOnline);
@@ -292,15 +302,21 @@ public class CoordinateOffsetCommandGameTests {
         try {
             helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
             helper.assertFalse(CoordinateOffsets.on(), "the switch is still on after the join");
-            config.deathLockout.enabled = true;
-            config.graves.enabled = true;
-            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            holdKickSwitches();
+            held[0] = true;
             player.getInventory().add(new ItemStack(Items.DIAMOND));
             TestPlayers.markLoaded(player);
             player.kill(player.level());
             helper.assertTrue(player.isDeadOrDying(), "the player did not die");
             onlyGrave(helper, player);
-            helper.runAfterDelay(3, () -> {
+            helper.onEachTick(() -> {
+                if (cleaned[0]) {
+                    return;
+                }
+                // Waits for the kick, up to the last tick, which checks whatever there is
+                if (OffsetTestKit.sent(player, 0, ClientboundDisconnectPacket.class).isEmpty() && helper.getTick() < KICK_TICKS - 1) {
+                    return;
+                }
                 try {
                     String reason = LockoutGameTests.disconnectReason(player);
                     helper.assertTrue(reason.startsWith("You died") && reason.endsWith("\nYour grave is in the Overworld."),
@@ -315,6 +331,29 @@ public class CoordinateOffsetCommandGameTests {
             if (!waiting) {
                 cleanUp.run();
             }
+        }
+    }
+
+    private static void holdKickSwitches() {
+        YoltConfig config = Settings.get();
+        if (kickSwitchHolders++ == 0) {
+            boolean lockout = config.deathLockout.enabled;
+            boolean graves = config.graves.enabled;
+            YoltConfig.TellLocation tell = config.graves.tellLocation;
+            putBackKickSwitches = () -> {
+                config.deathLockout.enabled = lockout;
+                config.graves.enabled = graves;
+                config.graves.tellLocation = tell;
+            };
+        }
+        config.deathLockout.enabled = true;
+        config.graves.enabled = true;
+        config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+    }
+
+    private static void releaseKickSwitches() {
+        if (--kickSwitchHolders == 0) {
+            putBackKickSwitches.run();
         }
     }
 
