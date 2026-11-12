@@ -7,6 +7,7 @@ import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveCompass;
+import bobbynooby.dev.graves.GraveNotice;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
@@ -39,8 +40,9 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         // Commands: built on each command registration, and their one hook, a LEAVE that forgets a skin pick's wait,
         // touches nothing another hook reads, so their place here doesn't matter
         YoltCommands.register();
-        // DeathLockout: its JOIN, which kicks a player who died while joining, must run before the body handover in Bodies
-        DeathLockout.init();
+        // DeathLockout: its JOIN, which kicks a player who died while joining, must run before the body handover in Bodies.
+        // It gets the graves' notice from here, so its kick and login refusal can say where the grave is.
+        DeathLockout.init(GraveNotice::line, GraveNotice::forget);
         // Graves: before Revive, since the first use-block hook to act wins the click
         Graves.init();
         // Revive: after Graves, so the grave's use-block hook opens a clicked grave before a revive head in hand is tried

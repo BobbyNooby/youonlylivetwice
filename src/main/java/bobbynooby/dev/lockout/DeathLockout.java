@@ -5,7 +5,6 @@ import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
-import bobbynooby.dev.graves.GraveNotice;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -20,6 +19,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Keeps a player who died out of the server: each death that counts goes into the death store, and the player is kicked
@@ -37,11 +37,24 @@ public final class DeathLockout {
         FAILED
     }
 
+    /** Where the grave of the owner's death at deathMillis is, as a line for them, or null to say nothing. Never throws. */
+    @FunctionalInterface
+    public interface GraveLine {
+        @Nullable String of(MinecraftServer server, UUID owner, long deathMillis);
+    }
+
     private static volatile DeathStore store;
+    // Handed in at init, so the lockout needn't import the graves: where a death's grave is, and what to forget once the
+    // kick has told it
+    private static GraveLine graveLine = (server, owner, deathMillis) -> null;
+    private static Consumer<UUID> toldAtKick = owner -> {};
 
     private DeathLockout() {}
 
-    public static void init() {
+    public static void init(GraveLine graves, Consumer<UUID> told) {
+        graveLine = graves;
+        toldAtKick = told;
+
         ServerLifecycleEvents.SERVER_STARTED.register(started -> {
             if (!Settings.active()) {
                 return;
@@ -116,7 +129,7 @@ public final class DeathLockout {
         if (locked == null) {
             return null;
         }
-        String grave = GraveNotice.line(server, uuid, locked.death().deathTimeMillis());
+        String grave = graveLine.of(server, uuid, locked.death().deathTimeMillis());
         return Component.literal(grave == null ? locked.text() : locked.text() + "\n" + grave);
     }
 
@@ -171,7 +184,7 @@ public final class DeathLockout {
             if (reason != null) {
                 current.connection.disconnect(reason);
                 // The kick told them where the grave is, so the respawn after the lockout doesn't again
-                GraveNotice.forget(uuid);
+                toldAtKick.accept(uuid);
             }
         });
     }
