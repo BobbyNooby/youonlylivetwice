@@ -13,6 +13,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -84,6 +85,28 @@ public class CoordinateOffsetCommandGameTests {
             run(player.createCommandSourceStack(), "tp @s ~ ~ ~ 90 0");
             helper.assertValueEqual(player.getYRot(), 90.0F, "yaw");
             helper.assertValueEqual(player.position(), before, "position after turning");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A particle's spread is no spot, so a spread of 0 stays 0 rather than become the offset itself; its spot is read in
+    // the op's frame and goes back out in it
+    @GameTest(environment = COMMANDS)
+    public void particleSpreadReadAsTyped(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmparticle", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            int clientX = player.getBlockX() + offset.x();
+            int clientZ = player.getBlockZ() + offset.z();
+            int mark = OffsetTestKit.mark(player);
+            run(player.createCommandSourceStack(), "particle minecraft:flame " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @s");
+            ClientboundLevelParticlesPacket sent = OffsetTestKit.last(helper, player, mark, ClientboundLevelParticlesPacket.class);
+            helper.assertValueEqual(List.of(sent.x(), sent.z()), List.of(clientX + 0.5, clientZ + 0.5), "spot of the particle");
+            helper.assertValueEqual(List.of(sent.xDist(), sent.yDist(), sent.zDist()), List.of(0.0F, 0.0F, 0.0F), "spread");
         } finally {
             TestPlayers.deop(player);
             TestPlayers.leave(player);

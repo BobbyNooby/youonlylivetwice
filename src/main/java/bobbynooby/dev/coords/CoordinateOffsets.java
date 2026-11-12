@@ -9,6 +9,7 @@ import io.netty.buffer.Unpooled;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.coordinates.Coordinates;
 import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -32,6 +33,7 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
@@ -232,6 +234,44 @@ public final class CoordinateOffsets {
         }
         return new Vec3(typed.isXRelative() ? position.x : position.x - in.x(), position.y,
                 typed.isZRelative() ? position.z : position.z - in.z());
+    }
+
+    /**
+     * A parsed position argument as the rule for typed spots should see it. One that doesn't centre whole numbers is a
+     * vector, such as a particle spread, not a spot: its numbers stay as typed, as a spread of 0 read as a spot would go
+     * out as the offset itself.
+     */
+    public static Coordinates typedArgument(Coordinates parsed, boolean centred) {
+        return !centred && parsed instanceof WorldCoordinates typed ? new TypedVector(typed) : parsed;
+    }
+
+    // Reads its numbers the way vanilla's coordinates do, past the rule for spots
+    private record TypedVector(WorldCoordinates typed) implements Coordinates {
+        @Override
+        public Vec3 getPosition(CommandSourceStack source) {
+            Vec3 at = source.getPosition();
+            return new Vec3(typed.x().get(at.x), typed.y().get(at.y), typed.z().get(at.z));
+        }
+
+        @Override
+        public Vec2 getRotation(CommandSourceStack source) {
+            return typed.getRotation(source);
+        }
+
+        @Override
+        public boolean isXRelative() {
+            return typed.isXRelative();
+        }
+
+        @Override
+        public boolean isYRelative() {
+            return typed.isYRelative();
+        }
+
+        @Override
+        public boolean isZRelative() {
+            return typed.isZRelative();
+        }
     }
 
     /**
