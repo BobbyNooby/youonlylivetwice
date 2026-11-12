@@ -66,12 +66,14 @@ public final class GraveDeath {
 
         // Until the graves exist, any failure drops everything instead
         List<ItemStack> fromMenus = new ArrayList<>();
+        ItemStack head = ItemStack.EMPTY;
         List<Grave> graves;
         try {
             ResolvableProfile profile = Profiles.of(player);
             // The head comes first and is always there: it is the revive token
+            head = GraveItems.graveHead(profile);
             List<ItemStack> items = new ArrayList<>();
-            items.add(GraveItems.graveHead(profile));
+            items.add(head);
             if (!keepInventory) {
                 // Menus close first, so a menu that hands items back into the inventory is covered by the scan
                 closeMenusInto(player, fromMenus);
@@ -85,8 +87,9 @@ public final class GraveDeath {
             graves = Graves.create(level, player.blockPosition(), profile, player.getUUID(), name, items);
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not make a grave for {}, dropping their items instead", name, e);
-            // With keepInventory no menu was closed, vanilla drops nothing, and the inventory stays
-            return !keepInventory && dropWhereTheyLast(player, level, name, fromMenus);
+            // The head drops too, keepInventory or not, or nobody could revive them. With keepInventory no menu was
+            // closed, the inventory stays, and vanilla drops nothing either way.
+            return dropWhereTheyLast(player, level, name, head, fromMenus, keepInventory) && !keepInventory;
         }
 
         // The emptied player is saved right after the death, by the lockout's kick or below, so the graves must reach
@@ -138,29 +141,41 @@ public final class GraveDeath {
     }
 
     // Vanilla would drop them at the player, which over the void is below the world, where they are gone at once. So the
-    // inventory and what the menus handed back drop where the grave would have gone, or on the last ground, the way
-    // vanilla's own death drops go: curse of vanishing destroyed, the rest out of the inventory. False if that fails
-    // too: the menu items go back into the inventory, and vanilla drops it all where the player died.
-    private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name, List<ItemStack> fromMenus) {
+    // head, the inventory and what the menus handed back drop where the grave would have gone, or on the last ground, the
+    // way vanilla's own death drops go: curse of vanishing destroyed, the rest out of the inventory. With keepInventory
+    // only the head drops. False if that fails too: the head and the menu items go back into the inventory, and vanilla
+    // drops it all where the player died, or keeps it with keepInventory.
+    private static boolean dropWhereTheyLast(ServerPlayer player, ServerLevel level, String name, ItemStack head,
+                                             List<ItemStack> fromMenus, boolean keepInventory) {
         Inventory inventory = player.getInventory();
         BlockPos spot;
         try {
-            destroyVanishing(inventory);
+            if (!keepInventory) {
+                destroyVanishing(inventory);
+            }
             spot = GravePlacement.dropSpot(level, player.blockPosition(),
                     LastGround.in(player.getUUID(), level.dimension()).orElse(null), GraveStore.get(level.getServer()));
             // Copies, so a drop that fails leaves every item where it was
             List<ItemStack> stacks = new ArrayList<>();
-            for (int i = 0; i < inventory.getContainerSize(); i++) {
-                stacks.add(inventory.getItem(i));
+            stacks.add(head);
+            if (!keepInventory) {
+                for (int i = 0; i < inventory.getContainerSize(); i++) {
+                    stacks.add(inventory.getItem(i));
+                }
             }
             stacks.addAll(fromMenus);
             Graves.dropForGood(level, spot, Stacks.nonEmptyCopies(stacks));
         } catch (RuntimeException e) {
             Yolt.LOGGER.error("Could not drop {}'s items where they would last either, so they drop where {} died", name, name, e);
-            handBack(player, fromMenus);
+            List<ItemStack> back = new ArrayList<>();
+            back.add(head);
+            back.addAll(fromMenus);
+            handBack(player, Stacks.nonEmpty(back));
             return false;
         }
-        inventory.clearContent();
+        if (!keepInventory) {
+            inventory.clearContent();
+        }
         Yolt.LOGGER.info("Dropped {}'s items at {} {}, since their grave could not be made", name, level.dimension().identifier(), spot);
         return true;
     }

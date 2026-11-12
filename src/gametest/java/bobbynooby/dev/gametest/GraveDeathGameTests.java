@@ -370,7 +370,7 @@ public class GraveDeathGameTests {
 
     // The border is one column wide and the death column is stone from the bottom of the world to the top, so no block
     // anywhere can take a grave and the placement throws. The death then drops the items where they last, each stack
-    // once. Set and put back in this tick.
+    // once, and the revive head with them, so someone can still bring the player back. Set and put back in this tick.
     @GameTest(skyAccess = true)
     public void noFreeBlockForAGraveDropsTheItemsInstead(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -412,9 +412,10 @@ public class GraveDeathGameTests {
             helper.assertTrue(level.getBlockState(death).is(Blocks.STONE), "the block at the death spot changed");
             helper.assertTrue(player.getInventory().isEmpty(), "the dead player still holds items");
             List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive);
-            helper.assertValueEqual(drops.size(), 2, "stacks dropped");
+            helper.assertValueEqual(drops.size(), 3, "stacks dropped");
             helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, death, 2.0), 3, "diamonds dropped");
             helper.assertValueEqual(itemsNear(helper, Items.IRON_SWORD, death, 2.0), 1, "swords dropped");
+            assertHeadDropped(helper, drops, player);
             for (ItemEntity drop : drops) {
                 helper.assertValueEqual(drop.blockPosition(), death, drop.getItem() + "'s spot");
                 helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, drop.getItem() + "'s age");
@@ -427,6 +428,61 @@ public class GraveDeathGameTests {
             cleanUp(helper, player);
         }
         helper.succeed();
+    }
+
+    // The same with keepInventory: the items stay on the player, but the revive head still drops where they last, for
+    // good. The game rule and the border are set and put back in this tick.
+    @GameTest(skyAccess = true)
+    public void noFreeBlockWithKeepInventoryStillDropsTheHead(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GameRules rules = server.getGameRules();
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos death = helper.absolutePos(new BlockPos(3, 0, 3));
+        Map<BlockPos, BlockState> before = new HashMap<>();
+        AABB around = new AABB(death).inflate(2);
+        ServerPlayer player = TestPlayers.join(server, "ColumnlessKeep", GameType.SURVIVAL, death);
+        try {
+            for (int y = level.getMinY(); y <= level.getMaxY(); y++) {
+                VoidGraveGameTests.setRemembered(level, death.atY(y), Blocks.STONE, before);
+            }
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            border.setCenter(death.getX() + 0.5, death.getZ() + 0.5);
+            border.setSize(1);
+            boolean keepBefore = rules.get(GameRules.KEEP_INVENTORY);
+            rules.set(GameRules.KEEP_INVENTORY, true, server);
+            try {
+                kill(helper, player);
+            } finally {
+                rules.set(GameRules.KEEP_INVENTORY, keepBefore, server);
+            }
+
+            helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "a grave was made");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 3, "diamonds kept on the player");
+            List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive);
+            helper.assertValueEqual(drops.size(), 1, "stacks dropped");
+            assertHeadDropped(helper, drops, player);
+            helper.assertValueEqual(drops.get(0).blockPosition(), death, "the head's spot");
+            helper.assertValueEqual(drops.get(0).getAge(), (int) Short.MIN_VALUE, "the head's age");
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            VoidGraveGameTests.putBack(level, before);
+            level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // One grave head among the drops, a single one, and the dead player's
+    private static void assertHeadDropped(GameTestHelper helper, List<ItemEntity> drops, ServerPlayer player) {
+        List<ItemStack> heads = drops.stream().map(ItemEntity::getItem).filter(GraveItems::isGraveHead).toList();
+        helper.assertValueEqual(heads.size(), 1, "grave heads dropped");
+        helper.assertValueEqual(heads.get(0).getCount(), 1, "the dropped head's count");
+        helper.assertValueEqual(GraveItems.ownerId(heads.get(0)), Optional.of(player.getUUID()), "the dropped head's owner");
     }
 
     @GameTest
