@@ -44,10 +44,11 @@ public final class BorderWalls {
      */
     public static Square forClient(double minX, double maxX, double minZ, double maxZ, double playerX, double playerZ,
                                    double near, int absoluteMax, Offset offset) {
-        boolean nearMinX = playerX - minX <= near;
-        boolean nearMaxX = maxX - playerX <= near;
-        boolean nearMinZ = playerZ - minZ <= near;
-        boolean nearMaxZ = maxZ - playerZ <= near;
+        // Either side of a wall: a player far outside one, a spectator say, would otherwise be shown it real
+        boolean nearMinX = Math.abs(playerX - minX) <= near;
+        boolean nearMaxX = Math.abs(maxX - playerX) <= near;
+        boolean nearMinZ = Math.abs(playerZ - minZ) <= near;
+        boolean nearMaxZ = Math.abs(maxZ - playerZ) <= near;
         if ((nearMinX && nearMaxX) || (nearMinZ && nearMaxZ)) {
             return new Square((minX + maxX) / 2.0 + offset.x(), (minZ + maxZ) / 2.0 + offset.z(), maxX - minX, true);
         }

@@ -34,6 +34,13 @@ class BorderWallsTest {
         assertFalse(square.plain());
     }
 
+    // Outside the border a wall counts as near only within reach too, so a far one gives nothing away
+    @Test
+    void wallFarOutsideStaysHidden() {
+        assertEquals(new BorderWalls.Square(0, 0, 59_999_968, false), around5000(6_000, 0));
+        assertEquals(904.0, around5000(5_100, 0).maxX(A));
+    }
+
     @Test
     void cornerShowsBothNearWalls() {
         BorderWalls.Square square = around5000(-4_900, 4_900);
