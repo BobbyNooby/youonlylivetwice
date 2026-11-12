@@ -7,6 +7,7 @@ import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.visibility.NorthCompass;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.Packet;
@@ -38,6 +39,8 @@ import java.util.function.Supplier;
 public class CoordinateOffsetBorderGameTests {
     private static final String BORDER = "you-only-live-twice-gametest:coordinate_offset_border";
     private static final String TIMER = "you-only-live-twice-gametest:coordinate_offset_border_timer";
+    // Holds a border and a player across ticks
+    private static final String TICK = "you-only-live-twice-gametest:coordinate_offset_border_tick";
     // Where OffsetTestKit joins a player, in the test
     private static final BlockPos SPOT = new BlockPos(1, 1, 1);
     // The world's edge, and the size of the square past it that hides a far wall
@@ -223,6 +226,55 @@ public class CoordinateOffsetBorderGameTests {
             }
         });
         helper.succeed();
+    }
+
+    // The same through the tick handler: a teleport on a tick that isn't a whole second gets its walls by the next tick,
+    // which the once-a-second recheck alone wouldn't send
+    @GameTest(environment = TICK, maxTicks = 20)
+    public void tickHandlerSendsTheTeleportsWalls(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        helper.assertTrue(BorderWalls.near(server.getPlayerList().getViewDistance()) < 1_000, "a wall 1,000 off counts as near");
+        ServerPlayer player = OffsetTestKit.join(helper, "cbtick", GameType.CREATIVE);
+        WorldBorder real = helper.getLevel().getWorldBorder();
+        double centreX = real.getCenterX();
+        double centreZ = real.getCenterZ();
+        double sizeBefore = real.getSize();
+        boolean[] cleaned = {false};
+        Runnable cleanUp = () -> {
+            if (!cleaned[0]) {
+                cleaned[0] = true;
+                real.setCenter(centreX, centreZ);
+                real.setSize(sizeBefore);
+                TestPlayers.leave(player);
+            }
+        };
+        helper.runBeforeTestEnd(cleanUp);
+        // The handler runs as the tick ends, at the tick count the test sees during it; a whole second runs every check
+        int delay = (server.getTickCount() + 1) % SharedConstants.TICKS_PER_SECOND == 0 ? 2 : 1;
+        int[] mark = {0};
+        helper.runAfterDelay(delay, () -> {
+            try {
+                BlockPos centre = eastWallFrom(helper, 1_000);
+                real.setCenter(centre.getX(), centre.getZ());
+                real.setSize(4_000);
+                mark[0] = OffsetTestKit.mark(player);
+                player.teleportTo(helper.getLevel(), real.getMaxX() - 50.0, player.getY(), player.getZ(), Set.of(), 0.0F, 0.0F, true);
+            } catch (RuntimeException | Error e) {
+                cleanUp.run();
+                throw e;
+            }
+        });
+        helper.runAfterDelay(delay + 1, () -> {
+            try {
+                Offset offset = CoordinateOffsets.offset(player);
+                List<ClientboundInitializeBorderPacket> sent = OffsetTestKit.sent(player, mark[0], ClientboundInitializeBorderPacket.class);
+                helper.assertValueEqual(sent.size(), 1, "borders sent by the end of the teleport's tick");
+                helper.assertValueEqual(maxX(sent.getFirst()), real.getMaxX() + offset.x(), "east wall after the teleport");
+            } finally {
+                cleanUp.run();
+            }
+            helper.succeed();
+        });
     }
 
     // An op types the centre in their own numbers, as every typed spot is, though /yolt center keeps a typed 100 at 100
