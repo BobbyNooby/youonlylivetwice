@@ -6,7 +6,6 @@ import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
-import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementRewards;
@@ -20,6 +19,7 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -211,7 +211,8 @@ public class CoordinateOffsetCommandGameTests {
         helper.succeed();
     }
 
-    // The refusal goes out before any frame, so it names only the dimension
+    // The refusal goes out before any frame, so it names only the dimension. Read from a real login check, made once the
+    // dead player has gone, before the kick their death queued.
     @GameTest(environment = GRAVE_NOTICE)
     public void loginRefusalOmitsXAndZ(GameTestHelper helper) {
         YoltConfig config = Settings.get();
@@ -219,6 +220,7 @@ public class CoordinateOffsetCommandGameTests {
         boolean gravesBefore = config.graves.enabled;
         YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
         ServerPlayer player = OffsetTestKit.join(helper, "cmrefusal", GameType.SURVIVAL);
+        boolean online = true;
         try {
             config.deathLockout.enabled = true;
             config.graves.enabled = true;
@@ -228,16 +230,20 @@ public class CoordinateOffsetCommandGameTests {
             player.kill(player.level());
             helper.assertTrue(player.isDeadOrDying(), "the player did not die");
             onlyGrave(helper, player);
+            TestPlayers.leave(player);
+            online = false;
             MinecraftServer server = helper.getLevel().getServer();
-            Component refusal = OffsetTestKit.withCoordinates(
-                    () -> DeathLockout.refusal(server, player.getUUID(), player.getGameProfile().name()));
+            NameAndId who = player.nameAndId();
+            Component refusal = OffsetTestKit.withCoordinates(() -> LockoutGameTests.loginRefusal(server, who));
             helper.assertTrue(refusal != null && refusal.getString().endsWith("\nYour grave is in the Overworld."),
                     "login refusal: " + (refusal == null ? null : refusal.getString()));
         } finally {
             config.deathLockout.enabled = lockoutBefore;
             config.graves.enabled = gravesBefore;
             config.graves.tellLocation = tellBefore;
-            TestPlayers.leave(player);
+            if (online) {
+                TestPlayers.leave(player);
+            }
             removeGraves(helper, player.getUUID());
         }
         helper.succeed();
