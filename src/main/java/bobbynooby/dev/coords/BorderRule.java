@@ -2,18 +2,21 @@ package bobbynooby.dev.coords;
 
 import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.mixin.InitializeBorderPacketAccessor;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
+import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The world border a client with an offset is shown. It only shows the walls near the player, so a far wall gives no
- * real coordinate away.
+ * The world border a client with an offset is shown, and the world spawn its compass points at. The border only shows
+ * the walls near the player, so a far wall gives no real coordinate away.
  */
 final class BorderRule {
     private BorderRule() {}
@@ -24,6 +27,7 @@ final class BorderRule {
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_BORDER_CENTER, (packet, context) -> border(live(context), context));
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_BORDER_SIZE, (packet, context) -> border(live(context), context));
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_BORDER_LERP_SIZE, (packet, context) -> border(live(context), context));
+        Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION, BorderRule::spawn);
     }
 
     /**
@@ -77,5 +81,17 @@ final class BorderRule {
             fields.yoltSetLerpTime(0L);
         }
         return copy;
+    }
+
+    // A north compass's target is a set distance north of the world's edge, so its Z is the same for everyone and
+    // shifted it would be the offset itself; its X is the player's own. Any other spawn is a real spot.
+    private static Packet<?> spawn(ClientboundSetDefaultSpawnPositionPacket packet, Context context) {
+        LevelData.RespawnData spawn = packet.respawnData();
+        BlockPos pos = spawn.pos();
+        Offset offset = context.offset();
+        BlockPos shifted = CoordinateOffsets.isNorthTarget(pos) ? new BlockPos(pos.getX() + offset.x(), pos.getY(), pos.getZ())
+                : offset.shift(pos);
+        return new ClientboundSetDefaultSpawnPositionPacket(LevelData.RespawnData.of(spawn.dimension(), shifted, spawn.yaw(),
+                spawn.pitch()));
     }
 }

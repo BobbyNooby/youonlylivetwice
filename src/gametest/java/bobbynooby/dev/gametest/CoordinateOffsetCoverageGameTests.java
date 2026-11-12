@@ -14,7 +14,6 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.ProtocolInfo;
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.game.GameProtocols;
-import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -29,22 +28,14 @@ import java.util.Set;
 // A packet type nobody looked at fails here, such as one a Minecraft update adds, so no position in it goes out real
 // unseen. They only read the tables, so they share the default batch.
 public class CoordinateOffsetCoverageGameTests {
-    // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
-    // types out of here as it puts them in a table.
-    private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_SET_DEFAULT_SPAWN_POSITION, 9));
-    private static final Map<PacketType<?>, Integer> PENDING_SERVERBOUND = Map.of();
-
     @GameTest
     public void everyClientboundPacketTypeIsClassified(GameTestHelper helper) {
-        assertClassified(helper, GameProtocols.CLIENTBOUND_TEMPLATE.details(), CoordinateOffsets.clientboundCoverage(),
-                PENDING_CLIENTBOUND);
+        assertClassified(helper, GameProtocols.CLIENTBOUND_TEMPLATE.details(), CoordinateOffsets.clientboundCoverage());
     }
 
     @GameTest
     public void everyServerboundPacketTypeIsClassified(GameTestHelper helper) {
-        assertClassified(helper, GameProtocols.SERVERBOUND_TEMPLATE.details(), CoordinateOffsets.serverboundCoverage(),
-                PENDING_SERVERBOUND);
+        assertClassified(helper, GameProtocols.SERVERBOUND_TEMPLATE.details(), CoordinateOffsets.serverboundCoverage());
     }
 
     // The same for block entities, whose update tags reach the client in chunks and in their own packet
@@ -118,18 +109,12 @@ public class CoordinateOffsetCoverageGameTests {
         helper.succeed();
     }
 
-    // Every type the protocol lists is in the tables or still pending, never both
-    private static void assertClassified(GameTestHelper helper, ProtocolInfo.Details protocol, Map<PacketType<?>, Coverage> tables,
-                                         Map<PacketType<?>, Integer> pending) {
+    // Every type the protocol lists is in the tables
+    private static void assertClassified(GameTestHelper helper, ProtocolInfo.Details protocol, Map<PacketType<?>, Coverage> tables) {
         List<String> problems = new ArrayList<>();
         protocol.listPackets((type, id) -> {
-            if (!tables.containsKey(type) && !pending.containsKey(type)) {
+            if (!tables.containsKey(type)) {
                 problems.add(type + " is in no table");
-            }
-        });
-        pending.forEach((type, task) -> {
-            if (tables.containsKey(type)) {
-                problems.add(type + " is in a table and still pending for task " + task);
             }
         });
         helper.assertTrue(problems.isEmpty(), String.join("; ", problems));

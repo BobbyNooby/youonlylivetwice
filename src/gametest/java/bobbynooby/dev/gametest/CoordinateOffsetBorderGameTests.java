@@ -1,21 +1,27 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.coords.BorderWalls;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
+import bobbynooby.dev.visibility.NorthCompass;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
+import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.border.WorldBorder;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 // The border a client with an offset is shown: only the walls near the player are real, and a whole-world border goes
 // as it is. Each test sets the level's border and puts it back in the same tick, and reads its players' packets, so
@@ -28,6 +34,8 @@ public class CoordinateOffsetBorderGameTests {
     // The world's edge, and the size of the square past it that hides a far wall
     private static final int EDGE = 29_999_984;
     private static final double WHOLE = 59_999_968.0;
+    // A north compass's target, a million blocks inside the edge
+    private static final int NORTH = 28_999_984;
 
     @GameTest(environment = BORDER)
     public void wholeWorldBorderGoesOutAsItIs(GameTestHelper helper) {
@@ -154,6 +162,74 @@ public class CoordinateOffsetBorderGameTests {
         });
     }
 
+    // The bundle's first border is the whole world and its target's Z the same for everyone, so both go as they are;
+    // only the target's X is the player's own, in their frame
+    @GameTest(environment = BORDER)
+    public void northBundleCarriesNoOffset(GameTestHelper helper) {
+        ServerPlayer player = withCompassSpawn(true, () -> OffsetTestKit.join(helper, "cbnorth", GameType.CREATIVE));
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            List<Packet<?>> parts = northBundle(helper, player);
+            ClientboundInitializeBorderPacket first = (ClientboundInitializeBorderPacket) parts.get(0);
+            helper.assertValueEqual(List.of(first.getNewCenterX(), first.getNewCenterZ(), first.getNewSize()), List.of(0.0, 0.0, WHOLE),
+                    "the bundle's first border");
+            BlockPos target = ((ClientboundSetDefaultSpawnPositionPacket) parts.get(1)).respawnData().pos();
+            helper.assertValueEqual(target.getX(), player.getBlockX() + offset.x(), "target x");
+            helper.assertValueEqual(target.getZ(), -NORTH, "target z");
+            helper.assertTrue(new WorldBorder().isWithinBounds(target), "the target is outside the whole-world border: " + target);
+            assertSameBorder(helper, (ClientboundInitializeBorderPacket) parts.get(2),
+                    OffsetTestKit.first(helper, player, 0, ClientboundInitializeBorderPacket.class), "the bundle's last border");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The bundle puts back the walls the client had, not the real border shifted
+    @GameTest(environment = BORDER)
+    public void northBundleRestoresTheWallsBorder(GameTestHelper helper) {
+        withBorder(helper, eastWallFrom(helper, 100), 4_000, () -> {
+            ServerPlayer player = withCompassSpawn(true, () -> OffsetTestKit.join(helper, "cbnorthwall", GameType.CREATIVE));
+            try {
+                Offset offset = CoordinateOffsets.offset(player);
+                ClientboundInitializeBorderPacket walls = OffsetTestKit.first(helper, player, 0, ClientboundInitializeBorderPacket.class);
+                ClientboundInitializeBorderPacket last = (ClientboundInitializeBorderPacket) northBundle(helper, player).get(2);
+                assertSameBorder(helper, last, walls, "the bundle's last border");
+                WorldBorder real = helper.getLevel().getWorldBorder();
+                helper.assertFalse(last.getNewCenterX() == real.getCenterX() + offset.x() && last.getNewSize() == real.getSize(),
+                        "the bundle's last border is the real one shifted");
+            } finally {
+                TestPlayers.leave(player);
+            }
+        });
+        helper.succeed();
+    }
+
+    // The offset stays under a million blocks, so the target, a million blocks inside the edge, stays inside it
+    @GameTest(environment = BORDER)
+    public void limitKeepsTheNorthTargetInside(GameTestHelper helper) {
+        helper.assertValueEqual(Offset.LIMIT, 999_984, "offset limit");
+        helper.assertTrue(new WorldBorder().isWithinBounds(new BlockPos(NORTH + Offset.LIMIT, 64, -NORTH)),
+                "the target at the largest offset is outside the whole-world border");
+        helper.assertFalse(new WorldBorder().isWithinBounds(new BlockPos(NORTH + 1_000_000, 64, -NORTH)),
+                "a million blocks out would still be inside");
+        helper.assertTrue(NorthCompass.isNorthTarget(new BlockPos(17, 63, -NORTH)), "the north target is not known");
+        helper.succeed();
+    }
+
+    @GameTest(environment = BORDER)
+    public void plainSpawnShiftedWithCompassSpawnOff(GameTestHelper helper) {
+        ServerPlayer player = withCompassSpawn(false, () -> OffsetTestKit.join(helper, "cbspawn", GameType.CREATIVE));
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos spawn = OffsetTestKit.last(helper, player, 0, ClientboundSetDefaultSpawnPositionPacket.class).respawnData().pos();
+            helper.assertValueEqual(spawn, offset.shift(helper.getLevel().getRespawnData().pos()), "spawn sent");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // A border with its east wall this far east of the join spot, centred on the spot's Z
     private static BlockPos eastWallFrom(GameTestHelper helper, int distance) {
         BlockPos spot = helper.absolutePos(SPOT);
@@ -174,6 +250,40 @@ public class CoordinateOffsetBorderGameTests {
             border.setCenter(centreX, centreZ);
             border.setSize(sizeBefore);
         }
+    }
+
+    private static <T> T withCompassSpawn(boolean on, Supplier<T> body) {
+        boolean before = Settings.get().hide.compassSpawn;
+        Settings.get().hide.compassSpawn = on;
+        try {
+            return body.get();
+        } finally {
+            Settings.get().hide.compassSpawn = before;
+        }
+    }
+
+    // The parts of the join's north compass bundle, the first bundle with a spawn in it
+    private static List<Packet<?>> northBundle(GameTestHelper helper, ServerPlayer player) {
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundBundlePacket bundle) {
+                List<Packet<?>> parts = new ArrayList<>();
+                bundle.subPackets().forEach(parts::add);
+                if (parts.stream().anyMatch(part -> part instanceof ClientboundSetDefaultSpawnPositionPacket)) {
+                    helper.assertValueEqual(parts.size(), 3, "parts of the north bundle");
+                    return parts;
+                }
+            }
+        }
+        helper.fail("no north compass bundle was sent");
+        return List.of();
+    }
+
+    private static void assertSameBorder(GameTestHelper helper, ClientboundInitializeBorderPacket actual,
+                                         ClientboundInitializeBorderPacket expected, String what) {
+        helper.assertValueEqual(List.<Object>of(actual.getNewCenterX(), actual.getNewCenterZ(), actual.getOldSize(), actual.getNewSize(),
+                        actual.getLerpTime()),
+                List.<Object>of(expected.getNewCenterX(), expected.getNewCenterZ(), expected.getOldSize(), expected.getNewSize(),
+                        expected.getLerpTime()), what);
     }
 
     // Where the client puts the east wall, which it keeps inside the world's edge

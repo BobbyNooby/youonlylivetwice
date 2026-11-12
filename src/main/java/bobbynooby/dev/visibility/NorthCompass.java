@@ -121,6 +121,11 @@ public final class NorthCompass {
         }
     }
 
+    /** True for a north compass's target, which is the same distance north for everyone. */
+    public static boolean isNorthTarget(BlockPos pos) {
+        return pos.getZ() == -EDGE;
+    }
+
     /** Where the player's compass points in level: straight north of them, far off. */
     public static BlockPos targetFor(ServerPlayer player, ServerLevel level) {
         return new BlockPos(Mth.clamp(player.getBlockX(), -EDGE, EDGE), level.getSeaLevel(), -EDGE);

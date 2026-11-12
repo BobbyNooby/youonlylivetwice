@@ -51,6 +51,8 @@ import java.util.function.UnaryOperator;
 public final class CoordinateOffsets {
     // Admin view: a player it holds for when a frame starts sees real coordinates
     private static Predicate<ServerPlayer> realCoordinates = player -> false;
+    // The north compass: whether a spawn is the far north target it sends, whose Z is the same for everyone
+    private static Predicate<BlockPos> northTarget = pos -> false;
     // How many times the border walls were rechecked. Only the tests read it.
     private static int borderRechecks;
 
@@ -64,8 +66,9 @@ public final class CoordinateOffsets {
     /** What a translator works with: the offset for its direction, the connection's state and its listener. */
     record Context(Offset offset, OffsetState state, ServerGamePacketListenerImpl listener) {}
 
-    public static void init(Predicate<ServerPlayer> realCoordinates) {
+    public static void init(Predicate<ServerPlayer> realCoordinates, Predicate<BlockPos> northTarget) {
         CoordinateOffsets.realCoordinates = realCoordinates;
+        CoordinateOffsets.northTarget = northTarget;
         // Once a second, as the walls a player is near change only as fast as they travel
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
@@ -201,6 +204,10 @@ public final class CoordinateOffsets {
     /** How many times the border walls have been rechecked. Only the tests use it. */
     public static int borderRechecks() {
         return borderRechecks;
+    }
+
+    static boolean isNorthTarget(BlockPos pos) {
+        return northTarget.test(pos);
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */
