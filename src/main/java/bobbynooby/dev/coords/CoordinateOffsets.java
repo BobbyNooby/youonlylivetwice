@@ -17,6 +17,7 @@ import net.minecraft.network.protocol.ping.PingPacketTypes;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.debug.DebugSubscription;
+import net.minecraft.util.debug.DebugSubscriptions;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -106,11 +107,15 @@ public final class CoordinateOffsets {
     }
 
     /**
-     * The debug subscriptions the player is sent values for: none with an offset, as their values are full of positions
-     * and only ops get them, who have admin view for real coordinates.
+     * The debug subscriptions the player is sent values for. With an offset only the server's tick times, as the others'
+     * values are full of positions and only ops get them, who have admin view for real coordinates.
      */
     public static Set<DebugSubscription<?>> debugSubscriptions(ServerPlayer player, Set<DebugSubscription<?>> vanilla) {
-        return offset(player).isZero() ? vanilla : Set.of();
+        if (offset(player).isZero()) {
+            return vanilla;
+        }
+        return vanilla.contains(DebugSubscriptions.DEDICATED_SERVER_TICK_TIME)
+                ? Set.of(DebugSubscriptions.DEDICATED_SERVER_TICK_TIME) : Set.of();
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */

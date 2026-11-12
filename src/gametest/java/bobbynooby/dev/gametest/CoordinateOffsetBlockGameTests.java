@@ -362,7 +362,7 @@ public class CoordinateOffsetBlockGameTests {
         helper.succeed();
     }
 
-    // Their values are full of positions; an op with no offset keeps them
+    // Their values are full of positions, so only the tick times, which hold none, are left; an op with no offset keeps all
     @GameTest(environment = BLOCKS)
     public void noDebugSubscriptionsWithAnOffset(GameTestHelper helper) {
         ServerPlayer shifted = OffsetTestKit.join(helper, "cbdebug", GameType.CREATIVE);
@@ -371,11 +371,14 @@ public class CoordinateOffsetBlockGameTests {
             plain = TestPlayers.join(helper, "cbdebugplain", GameType.CREATIVE, new BlockPos(1, 1, 1));
             TestPlayers.op(shifted);
             TestPlayers.op(plain);
-            Set<DebugSubscription<?>> wanted = Set.of(DebugSubscriptions.BEES);
+            Set<DebugSubscription<?>> wanted = Set.of(DebugSubscriptions.BEES, DebugSubscriptions.DEDICATED_SERVER_TICK_TIME);
             shifted.requestDebugSubscriptions(wanted);
             plain.requestDebugSubscriptions(wanted);
+            helper.assertValueEqual(shifted.debugSubscriptions(),
+                    Set.<DebugSubscription<?>>of(DebugSubscriptions.DEDICATED_SERVER_TICK_TIME), "debug subscriptions with an offset");
+            shifted.requestDebugSubscriptions(Set.of(DebugSubscriptions.POIS));
             helper.assertValueEqual(shifted.debugSubscriptions(), Set.<DebugSubscription<?>>of(),
-                    "debug subscriptions with an offset");
+                    "debug subscriptions with an offset and no tick times asked for");
             helper.assertValueEqual(plain.debugSubscriptions(), wanted, "debug subscriptions of an op joined with the switch off");
         } finally {
             TestPlayers.deop(shifted);
