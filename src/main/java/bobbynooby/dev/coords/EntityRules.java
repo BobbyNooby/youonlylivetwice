@@ -62,15 +62,15 @@ public final class EntityRules {
         translated(EntityDataSerializers.ITEM_STACK, ItemRule::shift);
         translated(EntityDataSerializers.PARTICLE, ParticleRule::shift);
         translated(EntityDataSerializers.PARTICLES, EntityRules::particles);
+        // Names and a text display's text: only an item a hover in them shows moves
+        translated(EntityDataSerializers.COMPONENT, TextRule::shift);
+        translated(EntityDataSerializers.OPTIONAL_COMPONENT, TextRule::shift);
         noPositions(
                 EntityDataSerializers.BYTE,
                 EntityDataSerializers.INT,
                 EntityDataSerializers.LONG,
                 EntityDataSerializers.FLOAT,
                 EntityDataSerializers.STRING,
-                // text, which is left as it is, coordinates typed into a name included
-                EntityDataSerializers.COMPONENT,
-                EntityDataSerializers.OPTIONAL_COMPONENT,
                 EntityDataSerializers.BLOCK_STATE,
                 EntityDataSerializers.OPTIONAL_BLOCK_STATE,
                 EntityDataSerializers.BOOLEAN,

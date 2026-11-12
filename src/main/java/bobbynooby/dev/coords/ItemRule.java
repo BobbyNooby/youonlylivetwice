@@ -9,6 +9,7 @@ import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
@@ -18,6 +19,7 @@ import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.server.network.Filterable;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -27,14 +29,17 @@ import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.component.MapDecorations;
 import net.minecraft.world.item.component.SulfurCubeContent;
 import net.minecraft.world.item.component.TypedEntityData;
 import net.minecraft.world.item.component.UseRemainder;
+import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -47,9 +52,9 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 
 /**
- * Positions inside items: a compass's target, a map's markers, the items a container, bundle or crossbow holds, and the
- * NBT an item carries. Only an item's own components are looked at, since the client knows each item's defaults. The
- * same rule takes them off again for what a creative client sends.
+ * Positions inside items: a compass's target, a map's markers, the items a container, bundle or crossbow holds, the NBT
+ * an item carries, and the items shown in its name, lore and pages. Only an item's own components are looked at, since
+ * the client knows each item's defaults. The same rule takes them off again for what a creative client sends.
  */
 public final class ItemRule {
     // Filled at mod start, before any server thread runs, and only read after
@@ -182,19 +187,23 @@ public final class ItemRule {
         // Any NBT a command or a data pack puts on an item
         translated(DataComponents.CUSTOM_DATA, ItemRule::customData);
         translated(DataComponents.BEES, ItemRule::bees);
+        // Text, whose words stay as they are, coordinates typed into them included. An item a hover in it shows goes
+        // through this rule too.
+        translated(DataComponents.CUSTOM_NAME, TextRule::shift);
+        translated(DataComponents.ITEM_NAME, TextRule::shift);
+        translated(DataComponents.LORE, ItemRule::lore);
+        translated(DataComponents.WRITTEN_BOOK_CONTENT, ItemRule::book);
+        translated(DataComponents.SIGN_TEXT_FRONT, ItemRule::sign);
+        translated(DataComponents.SIGN_TEXT_BACK, ItemRule::sign);
         noPositions(
                 DataComponents.MAX_STACK_SIZE,
                 DataComponents.MAX_DAMAGE,
                 DataComponents.DAMAGE,
                 DataComponents.UNBREAKABLE,
                 DataComponents.USE_EFFECTS,
-                // text, which is left as it is, coordinates typed into it included
-                DataComponents.CUSTOM_NAME,
                 DataComponents.MINIMUM_ATTACK_CHARGE,
                 DataComponents.DAMAGE_TYPE,
-                DataComponents.ITEM_NAME,
                 DataComponents.ITEM_MODEL,
-                DataComponents.LORE,
                 DataComponents.RARITY,
                 DataComponents.ENCHANTMENTS,
                 // block predicates an op writes, which go out as written, like a typed command
@@ -237,7 +246,6 @@ public final class ItemRule {
                 DataComponents.POTION_DURATION_SCALE,
                 DataComponents.SUSPICIOUS_STEW_EFFECTS,
                 DataComponents.WRITABLE_BOOK_CONTENT,
-                DataComponents.WRITTEN_BOOK_CONTENT,
                 DataComponents.TRIM,
                 DataComponents.DEBUG_STICK_STATE,
                 DataComponents.INSTRUMENT,
@@ -292,8 +300,6 @@ public final class ItemRule {
                 DataComponents.SHEEP_COLOR,
                 DataComponents.SHULKER_COLOR,
                 DataComponents.PROVIDES_POTTERY_PATTERN,
-                DataComponents.SIGN_TEXT_FRONT,
-                DataComponents.SIGN_TEXT_BACK,
                 DataComponents.WAXED,
                 DataComponents.CUSHION_COLOR);
     }
@@ -355,6 +361,32 @@ public final class ItemRule {
         CompoundTag tag = data.getUnsafe();
         CompoundTag shifted = NbtRule.shift(tag, offset);
         return shifted == tag ? data : TypedEntityData.of(data.type(), shifted);
+    }
+
+    private static ItemLore lore(ItemLore lore, Offset offset) {
+        List<Component> lines = CoordinateOffsets.mapEach(lore.lines(), line -> TextRule.shift(line, offset));
+        return lines == lore.lines() ? lore : new ItemLore(lines);
+    }
+
+    // The title and author are plain strings; each page keeps its filtered form
+    private static WrittenBookContent book(WrittenBookContent book, Offset offset) {
+        List<Filterable<Component>> pages = CoordinateOffsets.mapEach(book.pages(), page -> {
+            Component raw = TextRule.shift(page.raw(), offset);
+            Optional<Component> filtered = TextRule.shift(page.filtered(), offset);
+            return raw == page.raw() && filtered == page.filtered() ? page : new Filterable<>(raw, filtered);
+        });
+        return pages == book.pages() ? book
+                : new WrittenBookContent(book.title(), book.author(), book.generation(), pages, book.resolved());
+    }
+
+    // A sign item's lines, with the filtered ones kept the same list when they are
+    private static SignText sign(SignText text, Offset offset) {
+        List<Component> lines = text.getMessages(false);
+        List<Component> shifted = CoordinateOffsets.mapEach(lines, line -> TextRule.shift(line, offset));
+        List<Component> filtered = text.getMessages(true) == lines ? shifted
+                : CoordinateOffsets.mapEach(text.getMessages(true), line -> TextRule.shift(line, offset));
+        return shifted == lines && filtered == text.getMessages(true) ? text
+                : new SignText(shifted, filtered, text.getColor(), text.hasGlowingText());
     }
 
     // Read in place, as for entity data

@@ -61,6 +61,7 @@ public final class CoordinateOffsets {
         ParticleRule.register();
         EffectRules.register();
         EntityRules.register();
+        TextRule.register();
         classifyTheRest();
     }
 
@@ -222,13 +223,13 @@ public final class CoordinateOffsets {
         }
     }
 
-    // Packets the translators leave alone. The coverage test fails on any type that is in no table.
+    // Packets the translators leave alone. The coverage test fails on any type that is in no table. Recipes,
+    // advancements and dialogs show items and text that only a data pack writes, which go out as written.
     private static void classifyTheRest() {
         Outgoing.noPositions(
                 GamePacketTypes.CLIENTBOUND_ANIMATE,
                 GamePacketTypes.CLIENTBOUND_AWARD_STATS,
                 GamePacketTypes.CLIENTBOUND_BLOCK_CHANGED_ACK,
-                GamePacketTypes.CLIENTBOUND_BOSS_EVENT,
                 GamePacketTypes.CLIENTBOUND_BUNDLE_DELIMITER,
                 GamePacketTypes.CLIENTBOUND_CHANGE_DIFFICULTY,
                 GamePacketTypes.CLIENTBOUND_CHUNK_BATCH_FINISHED,
@@ -236,7 +237,6 @@ public final class CoordinateOffsets {
                 CommonPacketTypes.CLIENTBOUND_CLEAR_DIALOG,
                 GamePacketTypes.CLIENTBOUND_CLEAR_TITLES,
                 GamePacketTypes.CLIENTBOUND_COMMANDS,
-                GamePacketTypes.CLIENTBOUND_COMMAND_SUGGESTIONS,
                 GamePacketTypes.CLIENTBOUND_CONTAINER_CLOSE,
                 GamePacketTypes.CLIENTBOUND_CONTAINER_SET_DATA,
                 CookiePacketTypes.CLIENTBOUND_COOKIE_REQUEST,
@@ -246,30 +246,23 @@ public final class CoordinateOffsets {
                 CommonPacketTypes.CLIENTBOUND_CUSTOM_REPORT_DETAILS,
                 GamePacketTypes.CLIENTBOUND_DEBUG_SAMPLE,
                 GamePacketTypes.CLIENTBOUND_DELETE_CHAT,
-                CommonPacketTypes.CLIENTBOUND_DISCONNECT,
-                GamePacketTypes.CLIENTBOUND_DISGUISED_CHAT,
                 GamePacketTypes.CLIENTBOUND_ENTITY_EVENT,
                 GamePacketTypes.CLIENTBOUND_GAME_EVENT,
                 GamePacketTypes.CLIENTBOUND_GAME_RULE_VALUES,
                 GamePacketTypes.CLIENTBOUND_HURT_ANIMATION,
                 CommonPacketTypes.CLIENTBOUND_KEEP_ALIVE,
                 GamePacketTypes.CLIENTBOUND_LOW_DISK_SPACE_WARNING,
-                GamePacketTypes.CLIENTBOUND_MAP_ITEM_DATA,
                 GamePacketTypes.CLIENTBOUND_MOUNT_SCREEN_OPEN,
                 GamePacketTypes.CLIENTBOUND_MOVE_ENTITY_POS,
                 GamePacketTypes.CLIENTBOUND_MOVE_ENTITY_POS_ROT,
                 GamePacketTypes.CLIENTBOUND_MOVE_ENTITY_ROT,
                 GamePacketTypes.CLIENTBOUND_OPEN_BOOK,
-                GamePacketTypes.CLIENTBOUND_OPEN_SCREEN,
                 CommonPacketTypes.CLIENTBOUND_PING,
                 GamePacketTypes.CLIENTBOUND_PLACE_GHOST_RECIPE,
                 GamePacketTypes.CLIENTBOUND_PLAYER_ABILITIES,
-                GamePacketTypes.CLIENTBOUND_PLAYER_CHAT,
                 GamePacketTypes.CLIENTBOUND_PLAYER_COMBAT_END,
                 GamePacketTypes.CLIENTBOUND_PLAYER_COMBAT_ENTER,
-                GamePacketTypes.CLIENTBOUND_PLAYER_COMBAT_KILL,
                 GamePacketTypes.CLIENTBOUND_PLAYER_INFO_REMOVE,
-                GamePacketTypes.CLIENTBOUND_PLAYER_INFO_UPDATE,
                 GamePacketTypes.CLIENTBOUND_PLAYER_ROTATION,
                 PingPacketTypes.CLIENTBOUND_PONG_RESPONSE,
                 CommonPacketTypes.CLIENTBOUND_POST_EFFECTS,
@@ -281,12 +274,8 @@ public final class CoordinateOffsets {
                 GamePacketTypes.CLIENTBOUND_REMOVE_MOB_EFFECT,
                 GamePacketTypes.CLIENTBOUND_RESET_SCORE,
                 CommonPacketTypes.CLIENTBOUND_RESOURCE_PACK_POP,
-                CommonPacketTypes.CLIENTBOUND_RESOURCE_PACK_PUSH,
                 GamePacketTypes.CLIENTBOUND_ROTATE_HEAD,
                 GamePacketTypes.CLIENTBOUND_SELECT_ADVANCEMENTS_TAB,
-                GamePacketTypes.CLIENTBOUND_SERVER_DATA,
-                CommonPacketTypes.CLIENTBOUND_SERVER_LINKS,
-                GamePacketTypes.CLIENTBOUND_SET_ACTION_BAR_TEXT,
                 GamePacketTypes.CLIENTBOUND_SET_BORDER_WARNING_DELAY,
                 GamePacketTypes.CLIENTBOUND_SET_BORDER_WARNING_DISTANCE,
                 GamePacketTypes.CLIENTBOUND_SET_CAMERA,
@@ -297,25 +286,17 @@ public final class CoordinateOffsets {
                 GamePacketTypes.CLIENTBOUND_SET_EXPERIENCE,
                 GamePacketTypes.CLIENTBOUND_SET_HEALTH,
                 GamePacketTypes.CLIENTBOUND_SET_HELD_SLOT,
-                GamePacketTypes.CLIENTBOUND_SET_OBJECTIVE,
                 GamePacketTypes.CLIENTBOUND_SET_PASSENGERS,
-                GamePacketTypes.CLIENTBOUND_SET_PLAYER_TEAM,
-                GamePacketTypes.CLIENTBOUND_SET_SCORE,
                 GamePacketTypes.CLIENTBOUND_SET_SIMULATION_DISTANCE,
-                GamePacketTypes.CLIENTBOUND_SET_SUBTITLE_TEXT,
                 GamePacketTypes.CLIENTBOUND_SET_TIME,
                 GamePacketTypes.CLIENTBOUND_SET_TITLES_ANIMATION,
-                GamePacketTypes.CLIENTBOUND_SET_TITLE_TEXT,
                 CommonPacketTypes.CLIENTBOUND_SHOW_DIALOG,
                 GamePacketTypes.CLIENTBOUND_SOUND_ENTITY,
                 GamePacketTypes.CLIENTBOUND_START_CONFIGURATION,
                 GamePacketTypes.CLIENTBOUND_STOP_SOUND,
                 CommonPacketTypes.CLIENTBOUND_STORE_COOKIE,
                 GamePacketTypes.CLIENTBOUND_SWING_ANIMATION,
-                GamePacketTypes.CLIENTBOUND_SYSTEM_CHAT,
-                GamePacketTypes.CLIENTBOUND_TAB_LIST,
                 GamePacketTypes.CLIENTBOUND_TAKE_ITEM_ENTITY,
-                GamePacketTypes.CLIENTBOUND_TEST_INSTANCE_BLOCK_STATUS,
                 GamePacketTypes.CLIENTBOUND_TICKING_STATE,
                 GamePacketTypes.CLIENTBOUND_TICKING_STEP,
                 CommonPacketTypes.CLIENTBOUND_TRANSFER,

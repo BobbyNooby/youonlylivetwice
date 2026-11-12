@@ -28,6 +28,7 @@
 			"bobbynooby.dev.gametest.CoordinateOffsetEntityGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetFrameGameTests",
 			"bobbynooby.dev.gametest.CoordinateOffsetItemGameTests",
+			"bobbynooby.dev.gametest.CoordinateOffsetTextGameTests",
 			"bobbynooby.dev.gametest.DebugPrivacyGameTests",
 			"bobbynooby.dev.gametest.GraveCommandGameTests",
 			"bobbynooby.dev.gametest.GraveCompassGameTests",
