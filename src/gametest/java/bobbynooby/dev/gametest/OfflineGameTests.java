@@ -58,6 +58,8 @@ public class OfflineGameTests {
     @GameTest(maxTicks = 40)
     public void offlineKillDropsSavedItemsAndLocksOut(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        // A floor right under the save's spot, so the drops land in that block
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
         ServerPlayer player = TestPlayers.join(helper, "Off", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
         BlockPos last = player.blockPosition();
@@ -112,6 +114,8 @@ public class OfflineGameTests {
     @GameTest
     public void offlineKillFailureLeavesNoDuplicate(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
+        // As above, so a drop the failure failed to take back would be in the save's block
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
         ServerPlayer player = TestPlayers.join(helper, "Fail", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         NameAndId who = player.nameAndId();
         BlockPos last = player.blockPosition();
@@ -505,9 +509,9 @@ public class OfflineGameTests {
         return (int) itemsAt(helper, at).stream().filter(entity -> entity.getItem().is(item)).count();
     }
 
-    // An offline death with graves off drops in the save's block when items last there, as on the test's floor, and in
-    // the same tick nothing has moved yet, so the search is that block alone. Absolute, since vanilla's relativePos turns
-    // an unrotated test's position half round.
+    // An offline death with graves off drops where its items land, in the save's block on the stone a test puts under
+    // it, and in the same tick nothing has moved yet, so the search is that block alone. Absolute, since vanilla's
+    // relativePos turns an unrotated test's position half round.
     private static List<ItemEntity> itemsAt(GameTestHelper helper, BlockPos at) {
         return helper.getLevel().getEntities(EntityTypes.ITEM, new AABB(at), Entity::isAlive);
     }
