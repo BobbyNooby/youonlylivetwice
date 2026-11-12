@@ -5,6 +5,8 @@ import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
@@ -14,8 +16,10 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.common.CommonPacketTypes;
 import net.minecraft.network.protocol.cookie.CookiePacketTypes;
+import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.debug.DebugSubscription;
@@ -33,6 +37,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
@@ -46,6 +51,8 @@ import java.util.function.UnaryOperator;
 public final class CoordinateOffsets {
     // Admin view: a player it holds for when a frame starts sees real coordinates
     private static Predicate<ServerPlayer> realCoordinates = player -> false;
+    // How many times the border walls were rechecked. Only the tests read it.
+    private static int borderRechecks;
 
     private CoordinateOffsets() {}
 
@@ -59,6 +66,12 @@ public final class CoordinateOffsets {
 
     public static void init(Predicate<ServerPlayer> realCoordinates) {
         CoordinateOffsets.realCoordinates = realCoordinates;
+        // Once a second, as the walls a player is near change only as fast as they travel
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
+                recheckBorders(server);
+            }
+        });
         OwnPosition.register();
         ChunkRules.register();
         BlockRules.register();
@@ -67,6 +80,7 @@ public final class CoordinateOffsets {
         EffectRules.register();
         EntityRules.register();
         TextRule.register();
+        BorderRule.register();
         classifyTheRest();
     }
 
@@ -162,6 +176,31 @@ public final class CoordinateOffsets {
             return shape;
         }
         return shape.move(state.getOffset(offset.shift(pos)).subtract(state.getOffset(pos)));
+    }
+
+    /**
+     * Sends each player with an offset the border again when the walls they should see have changed: they walked near a
+     * wall or away from one, or a moving border moved. Also notes where each is, for the walls.
+     */
+    public static void recheckBorders(MinecraftServer server) {
+        borderRechecks++;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            Offset offset = offset(player);
+            if (offset.isZero()) {
+                continue;
+            }
+            OffsetState state = state(connectionOf(player));
+            state.lastPosition = player.position();
+            ClientboundInitializeBorderPacket live = new ClientboundInitializeBorderPacket(player.level().getWorldBorder());
+            if (!Objects.equals(BorderRule.squareFor(live, state, player, offset), state.lastBorder)) {
+                player.connection.send(live);
+            }
+        }
+    }
+
+    /** How many times the border walls have been rechecked. Only the tests use it. */
+    public static int borderRechecks() {
+        return borderRechecks;
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */

@@ -53,8 +53,8 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         NameTagTeam.init();
         DebugPrivacy.init();
         NorthCompass.init();
-        // Coordinate offset: its hooks are on the connection, not on an event. Admin view is handed in, so an admin's
-        // next frame can be real.
+        // Coordinate offset: its hooks are on the connection, not on an event, apart from the border recheck at the end of
+        // a tick, which reads nothing another hook writes. Admin view is handed in, so an admin's next frame can be real.
         CoordinateOffsets.init(AdminView::isOn);
         ChatDelivery.init();
         Whispers.init();
