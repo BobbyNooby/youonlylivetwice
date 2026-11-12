@@ -189,7 +189,7 @@ public final class DeathLockout {
         });
     }
 
-    /** A death with no message; the player is told only that they died. */
+    /** For the tests: a death with no message, so the player is told only that they died. */
     public static void recordDeath(UUID uuid, String name) {
         recordDeath(uuid, name, null);
     }
@@ -211,7 +211,7 @@ public final class DeathLockout {
         }
     }
 
-    /** The player's newest death. Null when there is none, or the store is closed or can't be read. */
+    /** For the tests: the player's newest death. Null when there is none, or the store is closed or can't be read. */
     public static @Nullable DeathLog newestDeath(UUID uuid) {
         DeathStore open = store;
         if (open == null) {
