@@ -1,5 +1,6 @@
 package bobbynooby.dev.commands;
 
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinOwners;
@@ -45,6 +46,7 @@ public final class SkinCommands {
     // Run once, at startup
     static void init() {
         ServerPlayerEvents.LEAVE.register(player -> LAST_PICK.remove(player.getUUID()));
+        CommandRestriction.useOwnSkinCommand(SkinCommands::ownSkinCommand);
     }
 
     /** For the tests: the wait between a non-op's picks from now on. Returns the wait it replaced. */
@@ -79,7 +81,7 @@ public final class SkinCommands {
     }
 
     /** The /yolt a non-op is sent and may run: setting and clearing their own skin, nothing else. */
-    public static LiteralArgumentBuilder<CommandSourceStack> ownSkinCommand() {
+    private static LiteralArgumentBuilder<CommandSourceStack> ownSkinCommand() {
         return Commands.literal("yolt")
                 .then(Commands.literal("skin")
                         .then(Commands.literal("set")

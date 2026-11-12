@@ -1,8 +1,8 @@
 package bobbynooby.dev.chat;
 
-import bobbynooby.dev.commands.SkinCommands;
 import bobbynooby.dev.config.Settings;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -11,13 +11,24 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionSet;
+import org.jspecify.annotations.Nullable;
+
+import java.util.function.Supplier;
 
 /**
  * Holds non-op players to /help, plus /w when whispers are on and /yolt skin when players may pick their skin: what they
  * may run, are sent and get suggested.
  */
 public final class CommandRestriction {
+    // The /yolt a non-op may run for their own skin. The commands hand it in at startup, so chat needn't import them.
+    private static @Nullable Supplier<LiteralArgumentBuilder<CommandSourceStack>> ownSkinCommand;
+
     private CommandRestriction() {}
+
+    /** Takes the /yolt that sets and clears a non-op's own skin, for the non-op tree. */
+    public static void useOwnSkinCommand(Supplier<LiteralArgumentBuilder<CommandSourceStack>> command) {
+        ownSkinCommand = command;
+    }
 
     /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
     public static boolean restricted(ServerPlayer player) {
@@ -45,8 +56,8 @@ public final class CommandRestriction {
             root.addChild(Whispers.command().build());
         }
         // Only the part for the player's own skin, so read against this tree nothing else of /yolt parses
-        if (allowSkinChoice) {
-            root.addChild(SkinCommands.ownSkinCommand().build());
+        if (allowSkinChoice && ownSkinCommand != null) {
+            root.addChild(ownSkinCommand.get().build());
         }
         return root;
     }
