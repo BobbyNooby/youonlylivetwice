@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.coords.CoordinateOffsets;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.BlockPos;
@@ -11,6 +12,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import org.jspecify.annotations.Nullable;
 
@@ -43,7 +45,7 @@ public final class GraveNotice {
                 return;
             }
             Guard.run(() -> {
-                String line = line(GraveStore.get(newPlayer.level().getServer()).byId(graveId).orElse(null));
+                String line = respawnLine(GraveStore.get(newPlayer.level().getServer()).byId(graveId).orElse(null), newPlayer);
                 if (line != null) {
                     newPlayer.sendSystemMessage(Component.literal(line));
                 }
@@ -65,6 +67,7 @@ public final class GraveNotice {
     /**
      * "Your grave is at x, y, z in the Overworld." for the owner's death at deathMillis, as the kick and the login
      * refusal tell it, or null when that death made no grave that is still there, or the setting says not to tell.
+     * With coordinate offsets on, only the dimension: neither goes out in a frame, as the next one isn't known yet.
      * Never throws, since the login check calls it.
      */
     public static @Nullable String line(MinecraftServer server, UUID owner, long deathMillis) {
@@ -77,16 +80,38 @@ public final class GraveNotice {
     }
 
     private static @Nullable String line(@Nullable Grave grave) {
-        if (grave == null || !Settings.active()) {
+        if (!tells(grave)) {
             return null;
+        }
+        return CoordinateOffsets.on() ? inLine(grave) : atLine(grave, grave.pos());
+    }
+
+    // In chat after the respawn, which goes out in the new frame: the spot the player's client shows, or only the
+    // dimension when the grave is in another one
+    private static @Nullable String respawnLine(@Nullable Grave grave, ServerPlayer player) {
+        if (!tells(grave)) {
+            return null;
+        }
+        return CoordinateOffsets.shownAt(player, GlobalPos.of(grave.dimension(), grave.pos()))
+                .map(pos -> atLine(grave, pos))
+                .orElseGet(() -> inLine(grave));
+    }
+
+    private static boolean tells(@Nullable Grave grave) {
+        if (grave == null || !Settings.active()) {
+            return false;
         }
         YoltConfig.GravesSection config = Settings.get().graves;
-        if (config.tellLocation == YoltConfig.TellLocation.NEVER || (config.tellLocation == YoltConfig.TellLocation.WHEN_MOVED
-                && !movedFar(grave, config.tellLocationDistance))) {
-            return null;
-        }
-        BlockPos pos = grave.pos();
+        return config.tellLocation != YoltConfig.TellLocation.NEVER && (config.tellLocation != YoltConfig.TellLocation.WHEN_MOVED
+                || movedFar(grave, config.tellLocationDistance));
+    }
+
+    private static String atLine(Grave grave, BlockPos pos) {
         return "Your grave is at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " in " + dimensionName(grave.dimension()) + ".";
+    }
+
+    private static String inLine(Grave grave) {
+        return "Your grave is in " + dimensionName(grave.dimension()) + ".";
     }
 
     // The first grave of the death: one made within the minute before it, the newest such. One death's graves share a

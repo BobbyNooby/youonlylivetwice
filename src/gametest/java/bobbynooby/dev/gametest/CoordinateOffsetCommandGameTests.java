@@ -1,19 +1,36 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
+import bobbynooby.dev.graves.Grave;
+import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.lockout.DeathLockout;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.List;
+import java.util.UUID;
 
 // Coordinates an op with an offset types, and the texts that would tell a player real coordinates. The tests join
 // players and ops them, so the class has batches of its own.
 public class CoordinateOffsetCommandGameTests {
     private static final String COMMANDS = "you-only-live-twice-gametest:coordinate_offset_commands";
+    // Holds the lockout and graves.tellLocation while a dead player's notice is read
+    private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:coordinate_offset_grave_notice";
 
     // Whole numbers are centred on the block, as vanilla does; a relative step is from the real spot
     @GameTest(environment = COMMANDS)
@@ -71,6 +88,99 @@ public class CoordinateOffsetCommandGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // The chat line after a respawn goes out in the new frame, so it shows the grave where that client has it
+    @GameTest(environment = GRAVE_NOTICE)
+    public void graveNoticeShiftedAfterRespawn(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean lockoutBefore = config.deathLockout.enabled;
+        boolean gravesBefore = config.graves.enabled;
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        ServerPlayer player = OffsetTestKit.join(helper, "cmgrave", GameType.SURVIVAL);
+        ServerPlayer current = player;
+        try {
+            config.deathLockout.enabled = false;
+            config.graves.enabled = true;
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            Grave grave = onlyGrave(helper, player);
+            int mark = OffsetTestKit.mark(player);
+            current = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(5, 1, 5)), false);
+            Offset offset = CoordinateOffsets.offset(current);
+            helper.assertFalse(offset.isZero(), "the respawn got no offset");
+            BlockPos shown = offset.shift(grave.pos());
+            helper.assertValueEqual(graveLines(current, mark), List.of("Your grave is at " + shown.getX() + ", " + shown.getY() + ", "
+                    + shown.getZ() + " in the Overworld."), "grave notices after the respawn");
+        } finally {
+            config.deathLockout.enabled = lockoutBefore;
+            config.graves.enabled = gravesBefore;
+            config.graves.tellLocation = tellBefore;
+            TestPlayers.leave(current);
+            removeGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // The refusal goes out before any frame, so it names only the dimension
+    @GameTest(environment = GRAVE_NOTICE)
+    public void loginRefusalOmitsXAndZ(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean lockoutBefore = config.deathLockout.enabled;
+        boolean gravesBefore = config.graves.enabled;
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        ServerPlayer player = OffsetTestKit.join(helper, "cmrefusal", GameType.SURVIVAL);
+        try {
+            config.deathLockout.enabled = true;
+            config.graves.enabled = true;
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            onlyGrave(helper, player);
+            MinecraftServer server = helper.getLevel().getServer();
+            Component refusal = OffsetTestKit.withCoordinates(
+                    () -> DeathLockout.refusal(server, player.getUUID(), player.getGameProfile().name()));
+            helper.assertTrue(refusal != null && refusal.getString().endsWith("\nYour grave is in the Overworld."),
+                    "login refusal: " + (refusal == null ? null : refusal.getString()));
+        } finally {
+            config.deathLockout.enabled = lockoutBefore;
+            config.graves.enabled = gravesBefore;
+            config.graves.tellLocation = tellBefore;
+            TestPlayers.leave(player);
+            removeGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // The grave notices the player was sent from packet "from" on
+    private static List<String> graveLines(ServerPlayer player, int from) {
+        return OffsetTestKit.sent(player, from, ClientboundSystemChatPacket.class).stream()
+                .map(packet -> packet.content().getString())
+                .filter(text -> text.startsWith("Your grave is "))
+                .toList();
+    }
+
+    private static Grave onlyGrave(GameTestHelper helper, ServerPlayer player) {
+        List<Grave> graves = GraveStore.get(helper.getLevel().getServer()).all().stream()
+                .filter(grave -> grave.owner().equals(player.getUUID()))
+                .toList();
+        helper.assertValueEqual(graves.size(), 1, "graves for the player");
+        return graves.getFirst();
+    }
+
+    private static void removeGraves(GameTestHelper helper, UUID owner) {
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        for (Grave grave : List.copyOf(store.all())) {
+            if (grave.owner().equals(owner)) {
+                store.remove(grave.id());
+                helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        }
     }
 
     private static void run(CommandSourceStack source, String command) {

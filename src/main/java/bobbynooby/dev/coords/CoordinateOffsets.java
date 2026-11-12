@@ -11,6 +11,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.coordinates.WorldCoordinates;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.HashedStack;
@@ -41,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
@@ -230,6 +232,19 @@ public final class CoordinateOffsets {
         }
         return new Vec3(typed.isXRelative() ? position.x : position.x - in.x(), position.y,
                 typed.isZRelative() ? position.z : position.z - in.z());
+    }
+
+    /**
+     * Where the player's client shows a real spot: shifted by their offset when it is in the dimension of their frame,
+     * as it is with no offset, and empty in another dimension, which has no frame to show it in.
+     */
+    public static Optional<BlockPos> shownAt(ServerPlayer player, GlobalPos real) {
+        Offset offset = offset(player);
+        if (offset.isZero()) {
+            return Optional.of(real.pos());
+        }
+        return real.dimension().equals(state(connectionOf(player)).dimension) ? Optional.of(offset.shift(real.pos()))
+                : Optional.empty();
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */
