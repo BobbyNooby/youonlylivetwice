@@ -14,6 +14,7 @@ import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import bobbynooby.dev.skins.Skins;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -731,7 +732,7 @@ public class BodyLifecycleGameTests {
             MinecraftServer server = helper.getLevel().getServer();
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
-                    Profiles.of(server, player.nameAndId()), null);
+                    Profiles.of(Skins.known(server, player.nameAndId())), null);
             helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.IRON_CHESTPLATE), 1, "chestplates in the graves");
             helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.IRON_SWORD), 1, "swords in the graves");
 
@@ -763,7 +764,7 @@ public class BodyLifecycleGameTests {
             MinecraftServer server = helper.getLevel().getServer();
             CompoundTag saved = OfflinePlayerData.load(server, player.nameAndId()).orElseThrow();
             OfflineDeath.applyOfflineDeath(server, player.nameAndId(), saved, OfflinePlayerData.lastPosition(saved),
-                    Profiles.of(server, player.nameAndId()), null);
+                    Profiles.of(Skins.known(server, player.nameAndId())), null);
 
             ServerPlayer back = rejoin(helper, player);
             helper.assertTrue(back.isDeadOrDying(), "dead player came back alive");

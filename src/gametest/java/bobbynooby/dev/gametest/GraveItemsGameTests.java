@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.skins.Skins;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -44,7 +45,7 @@ public class GraveItemsGameTests {
     @GameTest
     public void offlineGraveProfileKeepsIdAndName(GameTestHelper helper) {
         UUID id = UUID.randomUUID();
-        ResolvableProfile profile = Profiles.of(helper.getLevel().getServer(), new NameAndId(id, "Ghost"));
+        ResolvableProfile profile = Profiles.of(Skins.known(helper.getLevel().getServer(), new NameAndId(id, "Ghost")));
         helper.assertValueEqual(profile.partialProfile().id(), id, "profile id");
         helper.assertValueEqual(profile.name(), Optional.of("Ghost"), "profile name");
         helper.assertTrue(profile.partialProfile().properties().values().stream()

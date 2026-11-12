@@ -4,6 +4,7 @@ import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.offline.OfflineDeath;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import bobbynooby.dev.skins.Skins;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -61,7 +62,7 @@ public final class Kills {
         boolean uncounted = UncountedDeaths.uncounted(OfflinePlayerData.gameType(tag.get()));
         // No player or body to copy a skin from, so the grave head gets the one last known for them
         OfflineDeath.applyOfflineDeath(server, who, tag.get(), OfflinePlayerData.lastPosition(tag.get()),
-                Profiles.of(server, who), null);
+                Profiles.of(Skins.known(server, who)), null);
         return uncounted ? Result.KILLED_UNCOUNTED : Result.KILLED_OFFLINE;
     }
 }
