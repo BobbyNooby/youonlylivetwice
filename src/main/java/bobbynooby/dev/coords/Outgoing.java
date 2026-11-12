@@ -51,18 +51,22 @@ final class Outgoing {
 
     /**
      * The packet to send in place of this one. A login always starts a new frame. Otherwise, with both offsets zero the
-     * very packet goes on and only the chunks the client holds are noted. A translator that throws drops the packet, and
-     * the exception never reaches the sender.
+     * very packet goes on. Either way the chunks the client holds are noted. A translator that throws drops the packet,
+     * and the exception never reaches the sender.
      */
     static @Nullable Packet<?> apply(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet) {
+        Frames frames = state.frames.get();
+        boolean asItIs = packet.type() != GamePacketTypes.CLIENTBOUND_LOGIN && frames.out().isZero() && frames.in().isZero();
         try {
+            Packet<?> sent = asItIs ? packet : translateOne(packet, new Context(frames.out(), state, listener));
             ChunkRules.keepHeld(state, packet);
-            Frames frames = state.frames.get();
-            if (packet.type() != GamePacketTypes.CLIENTBOUND_LOGIN && frames.out().isZero() && frames.in().isZero()) {
+            return sent;
+        } catch (RuntimeException e) {
+            // Nothing in a packet that goes as it is can leak, so one only the notes can't read goes on, to fail where it
+            // would in vanilla
+            if (asItIs) {
                 return packet;
             }
-            return translateOne(packet, new Context(frames.out(), state, listener));
-        } catch (RuntimeException e) {
             CoordinateOffsets.dropped(state, listener, packet, e);
             return null;
         }

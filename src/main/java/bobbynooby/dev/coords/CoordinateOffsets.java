@@ -13,6 +13,7 @@ import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.level.ChunkPos;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -72,6 +73,12 @@ public final class CoordinateOffsets {
         }
         Connection connection = connectionOf(player);
         return connection == null ? Offset.ZERO : state(connection).frames.get().out();
+    }
+
+    /** Whether the player's client holds the chunk at this real position, by what it has been sent. */
+    public static boolean holdsChunk(ServerPlayer player, ChunkPos chunk) {
+        Connection connection = player.connection == null ? null : connectionOf(player);
+        return connection != null && state(connection).heldChunks.contains(chunk.pack());
     }
 
     public static Map<PacketType<?>, Coverage> clientboundCoverage() {

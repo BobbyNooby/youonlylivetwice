@@ -267,6 +267,7 @@ public class CoordinateOffsetCoreGameTests {
         helper.succeed();
     }
 
+    // The chunks are noted all the same, so a frame that starts later can forget them
     @GameTest(environment = CORE)
     public void switchOffSendsTheSameObjects(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "cooff", GameType.CREATIVE, new BlockPos(1, 1, 1));
@@ -277,6 +278,17 @@ public class CoordinateOffsetCoreGameTests {
             player.connection.send(packet);
             helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundSetChunkCacheCenterPacket.class) == packet,
                     "a copy went out with the switch off");
+
+            ServerLevel level = helper.getLevel();
+            LevelChunk chunk = level.getChunkAt(helper.absolutePos(new BlockPos(1, 1, 1)));
+            ClientboundLevelChunkWithLightPacket chunkPacket =
+                    new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null);
+            player.connection.send(chunkPacket);
+            helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundLevelChunkWithLightPacket.class) == chunkPacket,
+                    "a copy of the chunk went out with the switch off");
+            helper.assertTrue(CoordinateOffsets.holdsChunk(player, chunk.getPos()), "the chunk sent with the switch off is not held");
+            player.connection.send(new ClientboundForgetLevelChunkPacket(chunk.getPos()));
+            helper.assertFalse(CoordinateOffsets.holdsChunk(player, chunk.getPos()), "the forgotten chunk is still held");
         } finally {
             TestPlayers.leave(player);
         }
@@ -352,24 +364,30 @@ public class CoordinateOffsetCoreGameTests {
     }
 
     // A packet whose position is missing makes its translator throw, as a broken one would. As it is, the packet would
-    // carry real coordinates, so it goes nowhere, and the sender never sees the exception.
+    // carry real coordinates, so it goes nowhere, and the sender never sees the exception. A bundle loses only that part.
     @GameTest(environment = CORE)
     public void failedTranslationDropsTheSentPacket(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "codrop", GameType.CREATIVE);
         try {
+            Offset offset = CoordinateOffsets.offset(player);
             int mark = OffsetTestKit.mark(player);
             List<String> log = OfflineGameTests.yoltLog(() -> {
                 player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null));
                 player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null));
+                player.connection.send(new ClientboundBundlePacket(List.<Packet<? super ClientGamePacketListener>>of(
+                        new ClientboundMoveVehiclePacket((PositionAndRotation) null), new ClientboundSetChunkCacheCenterPacket(3, 4))));
             });
             helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundForgetLevelChunkPacket.class).isEmpty(),
                     "a packet that could not be translated went out");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundMoveVehiclePacket.class).isEmpty(),
+                    "a bundle's part that could not be translated went out");
             assertOneDropLine(helper, log, "clientbound/minecraft:forget_level_chunk", player);
-            // The connection goes on
-            ClientboundSetChunkCacheCenterPacket after = new ClientboundSetChunkCacheCenterPacket(3, 4);
-            player.connection.send(after);
-            helper.assertFalse(OffsetTestKit.sent(player, mark, ClientboundSetChunkCacheCenterPacket.class).isEmpty(),
-                    "nothing went out after the dropped packets");
+            assertOneDropLine(helper, log, "clientbound/minecraft:move_vehicle", player);
+            // The rest of the bundle goes on, and so does the connection
+            ClientboundSetChunkCacheCenterPacket centre =
+                    OffsetTestKit.last(helper, player, mark, ClientboundSetChunkCacheCenterPacket.class);
+            helper.assertValueEqual(new ChunkPos(centre.getX(), centre.getZ()), new ChunkPos(3 + offset.x() / 16, 4 + offset.z() / 16),
+                    "centre in the bundle");
         } finally {
             TestPlayers.leave(player);
         }
