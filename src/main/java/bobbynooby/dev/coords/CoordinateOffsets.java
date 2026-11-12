@@ -7,6 +7,7 @@ import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.HashedStack;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
@@ -117,6 +118,20 @@ public final class CoordinateOffsets {
         }
         return vanilla.contains(DebugSubscriptions.DEDICATED_SERVER_TICK_TIME)
                 ? Set.of(DebugSubscriptions.DEDICATED_SERVER_TICK_TIME) : Set.of();
+    }
+
+    /**
+     * The hash a clicked slot is matched by. The client hashes the items it was sent, which are shifted, so the hash
+     * also matches the server's stack once shifted the way the client reads; otherwise every click on a compass would
+     * have it sent again. The very hash with no offset to read by.
+     */
+    public static HashedStack clientHash(ServerPlayer player, HashedStack sent) {
+        Connection connection = player.connection == null ? null : connectionOf(player);
+        Offset in = connection == null ? Offset.ZERO : state(connection).frames.get().in();
+        if (in.isZero()) {
+            return sent;
+        }
+        return (stack, hasher) -> sent.matches(stack, hasher) || sent.matches(ItemRule.shift(stack, in), hasher);
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */

@@ -5,7 +5,11 @@ import bobbynooby.dev.coords.ItemRule;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveCompass;
+import com.google.common.hash.HashCode;
 import com.mojang.datafixers.util.Pair;
+import com.mojang.serialization.DynamicOps;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -13,6 +17,8 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.HashedPatchMap;
+import net.minecraft.network.HashedStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
@@ -20,9 +26,12 @@ import net.minecraft.network.protocol.game.ClientboundMerchantOffersPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.HashOps;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
@@ -275,6 +284,35 @@ public class CoordinateOffsetItemGameTests {
         helper.succeed();
     }
 
+    // The client hashes the compass it holds, the shifted one. Unmatched, the server would send the slot and the cursor
+    // again after every click, which shows as a flicker or a ghost item.
+    @GameTest(environment = ITEMS)
+    public void clickWithACompassCausesNoResync(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "ciclick", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            ItemStack compass = compass(TARGET);
+            player.getInventory().setItem(9, compass);
+            player.inventoryMenu.sendAllDataToRemote();
+            HashedPatchMap.HashGenerator hasher = clientHasher(player);
+            HashedStack carried = HashedStack.create(ItemRule.shift(compass, offset), hasher);
+            Int2ObjectMap<HashedStack> changed = new Int2ObjectOpenHashMap<>();
+            changed.put(9, HashedStack.EMPTY);
+            int mark = OffsetTestKit.mark(player);
+            TestPlayers.receive(player, new ServerboundContainerClickPacket(player.inventoryMenu.containerId,
+                    player.inventoryMenu.getStateId(), (short) 9, (byte) 0, ContainerInput.PICKUP, changed, carried));
+
+            helper.assertTrue(player.inventoryMenu.getCarried().is(Items.COMPASS), "the click did not pick the compass up");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundContainerSetSlotPacket.class).isEmpty(),
+                    "a slot was sent again after the click");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundSetCursorItemPacket.class).isEmpty(),
+                    "the cursor was sent again after the click");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     @GameTest(environment = ITEMS)
     public void plainStacksUntouched(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "ciplainstack", GameType.CREATIVE);
@@ -304,5 +342,11 @@ public class CoordinateOffsetItemGameTests {
         ItemStack compass = new ItemStack(Items.COMPASS);
         compass.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(Level.OVERWORLD, target)), true));
         return compass;
+    }
+
+    // The way the server hashes a player's components for the clicks it checks
+    private static HashedPatchMap.HashGenerator clientHasher(ServerPlayer player) {
+        DynamicOps<HashCode> ops = player.registryAccess().createSerializationContext(HashOps.CRC32C_INSTANCE);
+        return component -> component.encodeValue(ops).getOrThrow(message -> new IllegalArgumentException(message)).asInt();
     }
 }
