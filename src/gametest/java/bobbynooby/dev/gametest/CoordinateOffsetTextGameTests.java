@@ -103,7 +103,7 @@ public class CoordinateOffsetTextGameTests {
         boolean lockoutBefore = config.deathLockout.enabled;
         boolean gravesBefore = config.graves.enabled;
         boolean hiddenBefore = config.hide.gameMessages;
-        ServerPlayer killer = TestPlayers.join(helper, "ctkiller", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+        TestPlayers.Recording killer = TestPlayers.joinRecording(helper, "ctkiller", GameType.SURVIVAL, new BlockPos(3, 1, 3));
         ServerPlayer victim = null;
         ServerPlayer bystander = null;
         try {
@@ -120,6 +120,7 @@ public class CoordinateOffsetTextGameTests {
             TestPlayers.markLoaded(victim);
             int victimMark = OffsetTestKit.mark(victim);
             int bystanderMark = OffsetTestKit.mark(bystander);
+            int killerMark = OffsetTestKit.mark(killer);
             victim.hurtServer(level, level.damageSources().playerAttack(killer), Float.MAX_VALUE);
             helper.assertTrue(victim.isDeadOrDying(), "the victim did not die");
 
@@ -134,6 +135,18 @@ public class CoordinateOffsetTextGameTests {
             helper.assertValueEqual(heard.size(), 1, "death messages with a compass the bystander got");
             helper.assertValueEqual(targets(heard.getFirst()), List.of(CoordinateOffsets.offset(watcher).shift(TARGET)),
                     "compass targets in the bystander's death message");
+
+            // The killer has no offset, so is sent the very packet: its text is the message the server gave the killer
+            helper.assertTrue(CoordinateOffsets.offset(killer).isZero(), "the killer got an offset");
+            List<Component> given = killer.messages.stream().filter(text -> !targets(text).isEmpty()).toList();
+            List<Component> killerGot = OffsetTestKit.sent(killer, killerMark, ClientboundSystemChatPacket.class).stream()
+                    .map(ClientboundSystemChatPacket::content)
+                    .filter(text -> !targets(text).isEmpty())
+                    .toList();
+            helper.assertValueEqual(given.size(), 1, "death messages with a compass the server gave the killer");
+            helper.assertValueEqual(killerGot.size(), 1, "death messages with a compass the killer got");
+            helper.assertTrue(killerGot.getFirst() == given.getFirst(), "the killer got a copy of the death message");
+            helper.assertValueEqual(targets(killerGot.getFirst()), List.of(TARGET), "compass targets in the killer's death message");
         } finally {
             rules.set(GameRules.SHOW_DEATH_MESSAGES, messagesBefore, server);
             rules.set(GameRules.PVP, pvpBefore, server);
