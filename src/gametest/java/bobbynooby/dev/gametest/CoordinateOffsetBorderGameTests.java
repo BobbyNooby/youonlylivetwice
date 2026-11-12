@@ -50,6 +50,9 @@ public class CoordinateOffsetBorderGameTests {
     private static final int NORTH = 28_999_984;
     // A max-world-size well inside the world's own edge
     private static final int SMALL_WORLD = 10_000;
+    // A flake hunt runs copies of the tick handler test at once, each starting when its chunks load. Each holds the
+    // border across a tick's end, so they take turns: one that put back a border it found mid-turn would leave it moved.
+    private static boolean borderHeld;
 
     @GameTest(environment = BORDER)
     public void wholeWorldBorderGoesOutAsItIs(GameTestHelper helper) {
@@ -229,42 +232,56 @@ public class CoordinateOffsetBorderGameTests {
     }
 
     // The same through the tick handler: a teleport on a tick that isn't a whole second gets its walls by the next tick,
-    // which the once-a-second recheck alone wouldn't send
-    @GameTest(environment = TICK, maxTicks = 20)
+    // which the once-a-second recheck alone wouldn't send. Up to two ticks of waiting for each copy ahead in a batch of 50.
+    @GameTest(environment = TICK, maxTicks = 200)
     public void tickHandlerSendsTheTeleportsWalls(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         helper.assertTrue(BorderWalls.near(server.getPlayerList().getViewDistance()) < 1_000, "a wall 1,000 off counts as near");
         ServerPlayer player = OffsetTestKit.join(helper, "cbtick", GameType.CREATIVE);
         WorldBorder real = helper.getLevel().getWorldBorder();
-        double centreX = real.getCenterX();
-        double centreZ = real.getCenterZ();
-        double sizeBefore = real.getSize();
+        // The border as this copy's turn found it, and whether the turn has begun
+        double[] before = new double[3];
+        boolean[] holding = {false};
         boolean[] cleaned = {false};
         Runnable cleanUp = () -> {
             if (!cleaned[0]) {
                 cleaned[0] = true;
-                real.setCenter(centreX, centreZ);
-                real.setSize(sizeBefore);
+                if (holding[0]) {
+                    real.setCenter(before[0], before[1]);
+                    real.setSize(before[2]);
+                    borderHeld = false;
+                }
                 TestPlayers.leave(player);
             }
         };
         helper.runBeforeTestEnd(cleanUp);
-        // The handler runs as the tick ends, at the tick count the test sees during it; a whole second runs every check
-        int delay = (server.getTickCount() + 1) % SharedConstants.TICKS_PER_SECOND == 0 ? 2 : 1;
         int[] mark = {0};
-        helper.runAfterDelay(delay, () -> {
-            try {
-                BlockPos centre = eastWallFrom(helper, 1_000);
-                real.setCenter(centre.getX(), centre.getZ());
-                real.setSize(4_000);
-                mark[0] = OffsetTestKit.mark(player);
-                player.teleportTo(helper.getLevel(), real.getMaxX() - 50.0, player.getY(), player.getZ(), Set.of(), 0.0F, 0.0F, true);
-            } catch (RuntimeException | Error e) {
-                cleanUp.run();
-                throw e;
+        helper.onEachTick(() -> {
+            if (cleaned[0]) {
+                return;
             }
-        });
-        helper.runAfterDelay(delay + 1, () -> {
+            if (!holding[0]) {
+                // The handler runs as the tick ends, at the tick count the test sees during it; a whole second runs every check
+                if (borderHeld || server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
+                    return;
+                }
+                before[0] = real.getCenterX();
+                before[1] = real.getCenterZ();
+                before[2] = real.getSize();
+                borderHeld = true;
+                holding[0] = true;
+                try {
+                    BlockPos centre = eastWallFrom(helper, 1_000);
+                    real.setCenter(centre.getX(), centre.getZ());
+                    real.setSize(4_000);
+                    mark[0] = OffsetTestKit.mark(player);
+                    player.teleportTo(helper.getLevel(), real.getMaxX() - 50.0, player.getY(), player.getZ(), Set.of(), 0.0F, 0.0F, true);
+                } catch (RuntimeException | Error e) {
+                    cleanUp.run();
+                    throw e;
+                }
+                return;
+            }
             try {
                 Offset offset = CoordinateOffsets.offset(player);
                 List<ClientboundInitializeBorderPacket> sent = OffsetTestKit.sent(player, mark[0], ClientboundInitializeBorderPacket.class);
