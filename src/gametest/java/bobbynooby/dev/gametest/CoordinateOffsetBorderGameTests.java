@@ -17,8 +17,10 @@ import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -245,6 +247,28 @@ public class CoordinateOffsetBorderGameTests {
             assertSameBorder(helper, (ClientboundInitializeBorderPacket) parts.get(2),
                     OffsetTestKit.first(helper, player, 0, ClientboundInitializeBorderPacket.class), "the bundle's last border");
         } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Far out, the target's X stops at the edge in the client's frame, not in the real one, where stopping it and then
+    // shifting it would show the offset
+    @GameTest(environment = BORDER)
+    public void northTargetStopsAtTheEdgeInTheClientsFrame(GameTestHelper helper) {
+        ServerPlayer player = withCompassSpawn(true, () -> OffsetTestKit.join(helper, "cbnorthedge", GameType.CREATIVE));
+        Vec3 joined = player.position();
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            for (int realX : new int[] {29_500_000, -29_500_000}) {
+                player.snapTo(realX + 0.5, joined.y, joined.z);
+                BlockPos target = NorthCompass.targetFor(player, helper.getLevel());
+                helper.assertValueEqual(target.getX() + offset.x(), Mth.clamp(realX + offset.x(), -NORTH, NORTH),
+                        "target x the client is shown at real x " + realX);
+            }
+        } finally {
+            player.snapTo(joined.x, joined.y, joined.z);
             TestPlayers.leave(player);
         }
         helper.succeed();

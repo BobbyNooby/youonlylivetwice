@@ -52,7 +52,8 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         TabHeaders.init();
         NameTagTeam.init();
         DebugPrivacy.init();
-        NorthCompass.init();
+        // The compass keeps its target inside the world's edge as the player's client sees it, shifted by their offset
+        NorthCompass.init(player -> CoordinateOffsets.offset(player).x());
         // Coordinate offset: its hooks are on the connection, not on an event, apart from the border recheck at the end of
         // a tick, which reads nothing another hook writes. Admin view is handed in, so an admin's next frame can be real,
         // and so is the north compass's target, whose Z is the same for everyone.

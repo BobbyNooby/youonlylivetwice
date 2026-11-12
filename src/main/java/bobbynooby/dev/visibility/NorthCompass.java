@@ -23,6 +23,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelData;
 
 import java.util.List;
+import java.util.function.ToIntFunction;
 
 /**
  * Decides which spawn each player's client is told, which is all a plain compass points at. With hide.compassSpawn on,
@@ -44,10 +45,13 @@ public final class NorthCompass {
             new ClientboundInitializeBorderPacket(new WorldBorder());
     // The target last sent to the player, for the drift check. Not saved: every join and respawn sends a new one.
     private static final AttachmentType<GlobalPos> SENT = AttachmentRegistry.create(Yolt.id("compass_target"));
+    // How far the player's client has X shifted, handed in at init so this needn't know the coordinate offset
+    private static ToIntFunction<ServerPlayer> shownXShift = player -> 0;
 
     private NorthCompass() {}
 
-    public static void init() {
+    public static void init(ToIntFunction<ServerPlayer> shownXShift) {
+        NorthCompass.shownXShift = shownXShift;
         // Once a second is plenty: the target is so far off that only a near-maximum border lets anyone drift that much
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             if (server.getTickCount() % SharedConstants.TICKS_PER_SECOND == 0) {
@@ -126,9 +130,13 @@ public final class NorthCompass {
         return pos.getZ() == -EDGE;
     }
 
-    /** Where the player's compass points in level: straight north of them, far off. */
+    /**
+     * Where the player's compass points in level: straight north of them, far off. Its X is kept inside the edge as the
+     * player's client is shown it, since a real X kept there and then shifted would show the shift.
+     */
     public static BlockPos targetFor(ServerPlayer player, ServerLevel level) {
-        return new BlockPos(Mth.clamp(player.getBlockX(), -EDGE, EDGE), level.getSeaLevel(), -EDGE);
+        int shift = shownXShift.applyAsInt(player);
+        return new BlockPos(Mth.clamp(player.getBlockX() + shift, -EDGE, EDGE) - shift, level.getSeaLevel(), -EDGE);
     }
 
     // A client keeps a spawn only inside its own border, and moves one outside it to the border's centre. So the target
