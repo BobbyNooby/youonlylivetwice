@@ -42,7 +42,8 @@ bundled SQLite driver loading its native code, and it is harmless. If a later Ja
   graves can end up there (for example when someone dies in the void and the grave falls back to the spawn column), so
   players could not open them.
 - Keep `enable-query` off unless you need it. With `hide.serverPlayerCount` on, the query port reports 0 players and
-  no names, but with that switch off it lists everyone.
+  no names. With that switch off it reports the real count, and lists names only when `serverList.hoverLines` is
+  empty. The default has one line, so by default it lists no names.
 - Pre-generate the world with Chunky. Random spawn searches on the server thread, and a spot in a chunk that doesn't
   exist yet is generated on the spot, which lags.
 
@@ -133,7 +134,8 @@ a death. With the lockout on, that is once it is over or you are revived.
 
 - It is named "<your name>'s grave" and points at the grave of your latest death. It shows no coordinates.
 - If the grave is moved (a missing head put back somewhere else), the compass follows it.
-- Once the grave is gone it spins, and from then on it is a plain compass.
+- Once the grave is gone it spins for good. It keeps its name, and never points north or at the spawn the way a plain
+  compass does.
 - In another dimension it spins, as a lodestone compass does in vanilla.
 - If you use it on a lodestone, it becomes an ordinary lodestone compass. Your choice wins.
 - A full inventory drops it at your feet, and that drop never despawns.
@@ -223,13 +225,13 @@ The Overworld and Nether share one border (default 10,000 blocks across). The En
 `worldBorder.endScale` (default 2), up to vanilla's largest border. The Nether runs 1:1 with the Overworld, so there
 is no Nether fast travel.
 
-- `/yolt border`, `center` and `endscaling` refuse a change that would leave online players, bodies, graves, the
-  End's arrival platform, or the world spawn (when new players start right on it) outside the border. Add `confirm`
-  to the command to do it anyway.
+- `/yolt border`, `center`, `endscaling` and `/yolt config worldBorder.*` refuse a change that would leave online
+  players, bodies, graves, the End's arrival platform, or the world spawn (when new players start right on it) outside
+  the border. Add `confirm` to the command to do it anyway.
 - `/yolt reload` can't be confirmed, so a reloaded border that would leave someone outside isn't applied. The live
   border stays, and the reply says how to apply it.
-- A timed vanilla `/worldborder` change is left to finish at startup and on a reload. Use `/yolt border` to set the
-  size straight away.
+- A timed vanilla `/worldborder` change is left to finish at startup and on a reload. `/yolt border`, `endscaling`
+  and `/yolt config worldBorder.*` stop it and set the size straight away, while the border feature is on.
 - If the config's border values can't be read at startup, YOLT leaves the world's own border as it is until you fix
   the config and run `/yolt reload`.
 
@@ -380,7 +382,8 @@ How the file is read:
 | `diameter` | `10000` | Overworld and Nether border width in blocks, 1 to 59,999,968. | No |
 | `endScale` | `2.0` | The End border is `diameter` times this. Above 0; the End border is capped at 59,999,968. | No |
 
-With `worldBorder.enabled` off, random spawn still stays within `worldBorder.diameter` of the border centre. Set the
+With `worldBorder.enabled` off, random spawn still picks spots in a square `worldBorder.diameter` blocks across,
+centred on the border centre (so at most half the diameter from it on each axis), and inside the live border. Set the
 diameter to the area you want people to spawn in.
 
 ## `deathLockout`
@@ -468,10 +471,10 @@ outside the Nether.
 
 ## `bodies`
 
-`enabled`, and the settings that describe how a body is built (`type`, `pose`, `movable`, `totems`), apply to bodies
-made after the change. The rest apply at once. A player body is built again each time the server starts, so after a
-restart it takes `pose` and `movable` from the config as it is then. A mannequin keeps the ones it was made with,
-since it is saved with its chunk.
+`enabled`, and the settings that describe how a body is built (`type`, `pose`, `movable`, `totems`, `copyEffects`),
+apply to bodies made after the change. The rest apply at once. A player body is built again each time the server
+starts, so after a restart it takes `pose` and `movable` from the config as it is then. A mannequin keeps the ones it
+was made with, since it is saved with its chunk.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
@@ -483,7 +486,7 @@ since it is saved with its chunk.
 | `movable` | `true` | Bodies can be pushed, fall and drift. Off pins them in place. | New bodies |
 | `totems` | `true` | A held totem can save a body. The totem is used up in your save too. | New bodies |
 | `armourWears` | `true` | A body's armour wears down when hit, and the wear carries back to you. | No |
-| `copyEffects` | `true` | A new body copies your potion effects, max health and absorption. When you log back in or the body expires, its effects replace yours. Off: the body gets no effects, and yours stay as they were. | No |
+| `copyEffects` | `true` | A new body copies your potion effects, max health and absorption. When you log back in or the body expires, its effects replace yours. Off: the body gets no effects, and yours stay as they were. Each body keeps the setting it was made with. | New bodies |
 | `ignoreVanillaKill` | `true` | Vanilla `/kill` leaves bodies standing and says how many it skipped. | No |
 
 ## `serverList`
