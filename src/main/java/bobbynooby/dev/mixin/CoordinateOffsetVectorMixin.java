@@ -12,7 +12,8 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin({Vec3Argument.class, Vec2Argument.class})
 public abstract class CoordinateOffsetVectorMixin {
-    @Shadow
+    // Mixin refuses a mapped shadow in a mixin with two targets, and the names aren't obfuscated anyway
+    @Shadow(remap = false)
     @Final
     private boolean centerCorrect;
 
