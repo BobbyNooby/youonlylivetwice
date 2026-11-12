@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
+import bobbynooby.dev.mixin.PlayerLookAtPacketAccessor;
 import bobbynooby.dev.visibility.AdminView;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -142,8 +143,10 @@ public class CoordinateOffsetCoreGameTests {
                     new ClientboundLevelChunkWithLightPacket(chunk, level.getLightEngine(), null, null);
             int mark = OffsetTestKit.mark(player);
             player.connection.send(chunkPacket);
+            helper.assertTrue(CoordinateOffsets.holdsChunk(player, pos), "the chunk sent is not held at its real position");
             player.connection.send(new ClientboundLightUpdatePacket(pos, level.getLightEngine(), null, null));
             player.connection.send(new ClientboundForgetLevelChunkPacket(pos));
+            helper.assertFalse(CoordinateOffsets.holdsChunk(player, pos), "the forgotten chunk is still held");
 
             ClientboundLevelChunkWithLightPacket sentChunk =
                     OffsetTestKit.last(helper, player, mark, ClientboundLevelChunkWithLightPacket.class);
@@ -197,6 +200,17 @@ public class CoordinateOffsetCoreGameTests {
             helper.assertValueEqual(look.getPosition(helper.getLevel()), new Vec3(10.5 + offset.x(), 70, -20.5 + offset.z()),
                     "spot looked at");
             helper.assertValueEqual(look.getFromAnchor(), EntityAnchorArgument.Anchor.EYES, "anchor looked from");
+
+            // The copy keeps the entity and the anchor on it, so the client looks at the entity wherever it shows it
+            player.connection.send(new ClientboundPlayerLookAtPacket(EntityAnchorArgument.Anchor.FEET, player,
+                    EntityAnchorArgument.Anchor.EYES));
+            ClientboundPlayerLookAtPacket atEntity = OffsetTestKit.last(helper, player, mark, ClientboundPlayerLookAtPacket.class);
+            Vec3 eyes = EntityAnchorArgument.Anchor.EYES.apply(player);
+            helper.assertValueEqual(atEntity.getPosition(helper.getLevel()), eyes, "spot looked at on the entity");
+            helper.assertValueEqual(atEntity.getFromAnchor(), EntityAnchorArgument.Anchor.FEET, "anchor looked from at the entity");
+            PlayerLookAtPacketAccessor fallback = (PlayerLookAtPacketAccessor) atEntity;
+            helper.assertValueEqual(fallback.yoltX(), eyes.x + offset.x(), "x looked at when the entity isn't there");
+            helper.assertValueEqual(fallback.yoltZ(), eyes.z + offset.z(), "z looked at when the entity isn't there");
 
             player.connection.send(new ClientboundMoveVehiclePacket(PositionAndRotation.of(new Vec3(5, 64, 6), 0.0F, 0.0F)));
             Vec3 vehicle = OffsetTestKit.last(helper, player, mark, ClientboundMoveVehiclePacket.class).movingTo().position();
