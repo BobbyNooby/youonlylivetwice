@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.coords.BorderWalls;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
@@ -16,14 +17,18 @@ import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -217,6 +222,44 @@ public class CoordinateOffsetBorderGameTests {
                 TestPlayers.leave(player);
             }
         });
+        helper.succeed();
+    }
+
+    // An op types the centre in their own numbers, as every typed spot is, though /yolt center keeps a typed 100 at 100
+    // instead of centring it. The End's border stays at 0, 0.
+    @GameTest(environment = BORDER)
+    public void typedCenterReadInTheOpsFrame(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection config = Settings.get().worldBorder;
+        boolean enabledBefore = config.enabled;
+        Map<ServerLevel, double[]> centresBefore = new HashMap<>();
+        for (ServerLevel level : server.getAllLevels()) {
+            centresBefore.put(level, new double[] {level.getWorldBorder().getCenterX(), level.getWorldBorder().getCenterZ()});
+        }
+        ServerPlayer player = OffsetTestKit.join(helper, "cbcenter", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            // The command leaves the border alone while the feature is off
+            config.enabled = true;
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            int clientX = player.getBlockX() + offset.x();
+            int clientZ = player.getBlockZ() + offset.z();
+            OffsetTestKit.type(player, "yolt center " + clientX + " " + clientZ + " confirm");
+            WorldBorder border = helper.getLevel().getWorldBorder();
+            helper.assertValueEqual(List.of(border.getCenterX(), border.getCenterZ()),
+                    List.of((double) player.getBlockX(), (double) player.getBlockZ()), "the border's real centre");
+            WorldBorder end = server.getLevel(Level.END).getWorldBorder();
+            helper.assertValueEqual(List.of(end.getCenterX(), end.getCenterZ()), List.of(0.0, 0.0), "the End border's centre");
+        } finally {
+            config.enabled = enabledBefore;
+            for (ServerLevel level : server.getAllLevels()) {
+                double[] centre = centresBefore.get(level);
+                level.getWorldBorder().setCenter(centre[0], centre[1]);
+            }
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
         helper.succeed();
     }
 

@@ -46,8 +46,8 @@ public final class TypedCoordinates {
     }
 
     /**
-     * The same for a position argument, which is a spot when it centres whole numbers. One that doesn't is a vector, such as
-     * a particle spread, whose numbers stay as typed: a spread of 0 read as a spot would go out as the offset itself.
+     * The same for a 3D position argument, which is a spot when it centres whole numbers. One that doesn't is a vector, such
+     * as a particle spread, whose numbers stay as typed: a spread of 0 read as a spot would go out as the offset itself.
      */
     public static Coordinates spotOrVector(Coordinates parsed, boolean centred) {
         return centred ? spot(parsed) : parsed;

@@ -15,7 +15,6 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -52,10 +51,10 @@ public class CoordinateOffsetCommandGameTests {
             helper.assertFalse(offset.isZero(), "the player got no offset");
             int clientX = player.getBlockX() + offset.x();
             int clientZ = player.getBlockZ() + offset.z();
-            type(player, "tp @s " + clientX + " 120 " + clientZ);
+            OffsetTestKit.type(player, "tp @s " + clientX + " 120 " + clientZ);
             Vec3 landed = new Vec3(clientX + 0.5 - offset.x(), 120.0, clientZ + 0.5 - offset.z());
             helper.assertValueEqual(player.position(), landed, "where the typed teleport went");
-            type(player, "tp @s ~1 ~ ~");
+            OffsetTestKit.type(player, "tp @s ~1 ~ ~");
             helper.assertValueEqual(player.position(), landed.add(1.0, 0.0, 0.0), "where the relative teleport went");
         } finally {
             TestPlayers.deop(player);
@@ -104,7 +103,7 @@ public class CoordinateOffsetCommandGameTests {
         try {
             TestPlayers.op(player);
             helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
-            type(player, "function " + TELEPORT_FUNCTION);
+            OffsetTestKit.type(player, "function " + TELEPORT_FUNCTION);
             helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the function's teleport went");
         } finally {
             TestPlayers.deop(player);
@@ -120,7 +119,7 @@ public class CoordinateOffsetCommandGameTests {
         try {
             TestPlayers.op(player);
             Vec3 before = player.position();
-            type(player, "tp @s ~ ~ ~ 90 0");
+            OffsetTestKit.type(player, "tp @s ~ ~ ~ 90 0");
             helper.assertValueEqual(player.getYRot(), 90.0F, "yaw");
             helper.assertValueEqual(player.position(), before, "position after turning");
         } finally {
@@ -141,7 +140,7 @@ public class CoordinateOffsetCommandGameTests {
             int clientX = player.getBlockX() + offset.x();
             int clientZ = player.getBlockZ() + offset.z();
             int mark = OffsetTestKit.mark(player);
-            type(player, "particle minecraft:flame " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @s");
+            OffsetTestKit.type(player, "particle minecraft:flame " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @s");
             ClientboundLevelParticlesPacket sent = OffsetTestKit.last(helper, player, mark, ClientboundLevelParticlesPacket.class);
             helper.assertValueEqual(List.of(sent.x(), sent.z()), List.of(clientX + 0.5, clientZ + 0.5), "spot of the particle");
             helper.assertValueEqual(List.of(sent.xDist(), sent.yDist(), sent.zDist()), List.of(0.0F, 0.0F, 0.0F), "spread");
@@ -326,10 +325,5 @@ public class CoordinateOffsetCommandGameTests {
 
     private static void run(CommandSourceStack source, String command) {
         source.getServer().getCommands().performPrefixedCommand(source, command);
-    }
-
-    // As the player's client sends a typed command, which is all that is read in their frame
-    private static void type(ServerPlayer player, String command) {
-        player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));
     }
 }

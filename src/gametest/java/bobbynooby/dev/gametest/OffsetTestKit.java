@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.Entity;
@@ -46,6 +47,11 @@ final class OffsetTestKit {
         } finally {
             hide.coordinates = before;
         }
+    }
+
+    // As the player's client sends a typed command, which is all that is read in their frame
+    static void type(ServerPlayer player, String command) {
+        player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));
     }
 
     // How many packets the player has been sent so far, to read only what comes after
