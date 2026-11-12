@@ -62,7 +62,7 @@ final class Incoming {
     }
 
     @SuppressWarnings("unchecked")
-    private static <P extends Packet<?>> @Nullable Packet<?> run(Translator<P> translator, Packet<?> packet, Context context) {
+    private static <P> @Nullable Packet<?> run(Translator<P> translator, Packet<?> packet, Context context) {
         return translator.apply((P) packet, context);
     }
 }
