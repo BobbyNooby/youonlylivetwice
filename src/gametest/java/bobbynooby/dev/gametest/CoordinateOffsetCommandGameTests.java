@@ -63,6 +63,27 @@ public class CoordinateOffsetCommandGameTests {
         helper.succeed();
     }
 
+    // A block argument is read in the frame too, through its own parser
+    @GameTest(environment = COMMANDS)
+    public void typedBlockReadInTheClientFrame(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmblock", GameType.CREATIVE);
+        BlockPos real = player.blockPosition().above(3);
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            BlockPos client = offset.shift(real);
+            OffsetTestKit.type(player, "setblock " + client.getX() + " " + client.getY() + " " + client.getZ() + " minecraft:gold_block");
+            helper.assertTrue(helper.getLevel().getBlockState(real).is(Blocks.GOLD_BLOCK),
+                    "the typed block is not at the real spot: " + helper.getLevel().getBlockState(real));
+        } finally {
+            helper.getLevel().setBlockAndUpdate(real, Blocks.AIR.defaultBlockState());
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     @GameTest(environment = COMMANDS)
     public void consoleAndExecuteUseRealCoordinates(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "cmconsole", GameType.CREATIVE);
