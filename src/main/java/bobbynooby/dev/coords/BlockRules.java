@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundTagQueryPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.game.ServerboundBlockEntityTagQueryPacket;
 import net.minecraft.network.protocol.game.ServerboundJigsawGeneratePacket;
@@ -54,6 +55,7 @@ public final class BlockRules {
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_ADD_TRANSIENT_BLOCK, BlockRules::transientBlock);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_LEVEL_EVENT, BlockRules::levelEvent);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_OPEN_SIGN_EDITOR, BlockRules::signEditor);
+        Outgoing.translate(GamePacketTypes.CLIENTBOUND_TAG_QUERY, BlockRules::tagAnswer);
         Incoming.translate(GamePacketTypes.SERVERBOUND_USE_ITEM_ON, BlockRules::useItemOn);
         Incoming.translate(GamePacketTypes.SERVERBOUND_PLAYER_ACTION, BlockRules::playerAction);
         Incoming.translate(GamePacketTypes.SERVERBOUND_SIGN_UPDATE, BlockRules::signUpdate);
@@ -196,6 +198,11 @@ public final class BlockRules {
 
     private static Packet<?> signEditor(ClientboundOpenSignEditorPacket packet, Context context) {
         return new ClientboundOpenSignEditorPacket(context.offset().shift(packet.pos()), packet.slot());
+    }
+
+    // An entity's or a block entity's whole save is full of positions, and only ops can ask, who have admin view
+    private static Packet<?> tagAnswer(ClientboundTagQueryPacket packet, Context context) {
+        return new ClientboundTagQueryPacket(packet.getTransactionId(), new CompoundTag());
     }
 
     // What the client sends comes back by the incoming offset taken off

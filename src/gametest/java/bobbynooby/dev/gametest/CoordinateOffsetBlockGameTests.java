@@ -23,13 +23,20 @@ import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket;
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundTagQueryPacket;
+import net.minecraft.network.protocol.game.ServerboundBlockEntityTagQueryPacket;
+import net.minecraft.network.protocol.game.ServerboundEntityTagQueryPacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.debug.DebugSubscription;
+import net.minecraft.util.debug.DebugSubscriptions;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.LodestoneTracker;
@@ -53,6 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 // Blocks, block entities and the packets about one block. Each test joins a player whose packets it reads, so the class
 // has a batch of its own. Creative, so a leave makes no body.
@@ -291,6 +299,57 @@ public class CoordinateOffsetBlockGameTests {
                     "the selected slot holds " + player.getInventory().getSelectedItem());
         } finally {
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Both queries are answered, with nothing in the answers
+    @GameTest(environment = BLOCKS)
+    public void tagQueriesAnsweredEmpty(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbquery", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            TheEndGatewayBlockEntity gateway = placeGateway(helper, new BlockPos(5, 1, 2));
+            Entity pig = helper.spawn(EntityTypes.PIG, new BlockPos(2, 1, 4));
+            int mark = OffsetTestKit.mark(player);
+            TestPlayers.receive(player, new ServerboundBlockEntityTagQueryPacket(7, offset.shift(gateway.getBlockPos())));
+            TestPlayers.receive(player, new ServerboundEntityTagQueryPacket(8, pig.getId()));
+            List<ClientboundTagQueryPacket> answers = OffsetTestKit.sent(player, mark, ClientboundTagQueryPacket.class);
+            helper.assertValueEqual(answers.stream().map(ClientboundTagQueryPacket::getTransactionId).toList(), List.of(7, 8),
+                    "queries answered");
+            for (ClientboundTagQueryPacket answer : answers) {
+                helper.assertValueEqual(answer.getTag(), new CompoundTag(), "answer to query " + answer.getTransactionId());
+            }
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Their values are full of positions; an op with no offset keeps them
+    @GameTest(environment = BLOCKS)
+    public void noDebugSubscriptionsWithAnOffset(GameTestHelper helper) {
+        ServerPlayer shifted = OffsetTestKit.join(helper, "cbdebug", GameType.CREATIVE);
+        ServerPlayer plain = null;
+        try {
+            plain = TestPlayers.join(helper, "cbdebugplain", GameType.CREATIVE, new BlockPos(1, 1, 1));
+            TestPlayers.op(shifted);
+            TestPlayers.op(plain);
+            Set<DebugSubscription<?>> wanted = Set.of(DebugSubscriptions.BEES);
+            shifted.requestDebugSubscriptions(wanted);
+            plain.requestDebugSubscriptions(wanted);
+            helper.assertValueEqual(shifted.debugSubscriptions(), Set.<DebugSubscription<?>>of(),
+                    "debug subscriptions with an offset");
+            helper.assertValueEqual(plain.debugSubscriptions(), wanted, "debug subscriptions of an op joined with the switch off");
+        } finally {
+            TestPlayers.deop(shifted);
+            TestPlayers.leave(shifted);
+            if (plain != null) {
+                TestPlayers.deop(plain);
+                TestPlayers.leave(plain);
+            }
         }
         helper.succeed();
     }

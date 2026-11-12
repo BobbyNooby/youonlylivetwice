@@ -19,6 +19,7 @@
     "CommandParseMixin",
     "CommandRestrictionMixin",
     "CoordinateOffsetConnectionMixin",
+    "CoordinateOffsetDebugMixin",
     "CoordinateOffsetRespawnMixin",
     "CoordinateOffsetTeleportMixin",
     "CreakingTrailMixin",

@@ -22,11 +22,6 @@ public class CoordinateOffsetCoverageGameTests {
     // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
     // types out of here as it puts them in a table.
     private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_TAG_QUERY, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_BLOCK_VALUE, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_CHUNK_VALUE, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_ENTITY_VALUE, 4),
-            Map.entry(GamePacketTypes.CLIENTBOUND_DEBUG_EVENT, 4),
             Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_CONTENT, 5),
             Map.entry(GamePacketTypes.CLIENTBOUND_CONTAINER_SET_SLOT, 5),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_CURSOR_ITEM, 5),

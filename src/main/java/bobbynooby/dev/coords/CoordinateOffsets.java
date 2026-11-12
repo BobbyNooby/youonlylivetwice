@@ -16,6 +16,7 @@ import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.util.debug.DebugSubscription;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -23,6 +24,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 
@@ -101,6 +103,14 @@ public final class CoordinateOffsets {
         }
         Connection connection = connectionOf(player);
         return connection == null ? Offset.ZERO : state(connection).frames.get().out();
+    }
+
+    /**
+     * The debug subscriptions the player is sent values for: none with an offset, as their values are full of positions
+     * and only ops get them, who have admin view for real coordinates.
+     */
+    public static Set<DebugSubscription<?>> debugSubscriptions(ServerPlayer player, Set<DebugSubscription<?>> vanilla) {
+        return offset(player).isZero() ? vanilla : Set.of();
     }
 
     /** Whether the player's client holds the chunk at this real position, by what it has been sent. */
@@ -311,5 +321,8 @@ public final class CoordinateOffsets {
                 GamePacketTypes.SERVERBOUND_USE_ITEM);
         // Coordinates typed in a command are read where the command uses them
         Incoming.elsewhere(GamePacketTypes.SERVERBOUND_CHAT_COMMAND, GamePacketTypes.SERVERBOUND_CHAT_COMMAND_SIGNED);
+        // A player with an offset has no debug subscriptions, so is sent none of these
+        Outgoing.elsewhere(GamePacketTypes.CLIENTBOUND_DEBUG_BLOCK_VALUE, GamePacketTypes.CLIENTBOUND_DEBUG_CHUNK_VALUE,
+                GamePacketTypes.CLIENTBOUND_DEBUG_ENTITY_VALUE, GamePacketTypes.CLIENTBOUND_DEBUG_EVENT);
     }
 }
