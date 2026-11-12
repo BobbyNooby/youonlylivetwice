@@ -1,6 +1,7 @@
 package bobbynooby.dev.coords;
 
 import bobbynooby.dev.coords.CoordinateOffsets.Context;
+import bobbynooby.dev.mixin.CustomDataAccessor;
 import bobbynooby.dev.mixin.ItemContainerContentsInvoker;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.component.DataComponentMap;
@@ -356,8 +357,9 @@ public final class ItemRule {
         return shifted == tag ? data : TypedEntityData.of(data.type(), shifted);
     }
 
+    // Read in place, as for entity data
     private static CustomData customData(CustomData data, Offset offset) {
-        CompoundTag tag = data.copyTag();
+        CompoundTag tag = ((CustomDataAccessor) (Object) data).yoltTag();
         CompoundTag shifted = NbtRule.shift(tag, offset);
         return shifted == tag ? data : CustomData.of(shifted);
     }
