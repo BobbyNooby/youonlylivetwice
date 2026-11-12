@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.coords.BlockRules;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Coverage;
+import bobbynooby.dev.coords.EntityRules;
 import bobbynooby.dev.coords.ItemRule;
 import bobbynooby.dev.coords.ParticleRule;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -14,6 +15,8 @@ import net.minecraft.network.ProtocolInfo;
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.network.protocol.game.GameProtocols;
 import net.minecraft.network.protocol.game.GamePacketTypes;
+import net.minecraft.network.syncher.EntityDataSerializer;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.gameevent.PositionSourceType;
 
@@ -29,11 +32,6 @@ public class CoordinateOffsetCoverageGameTests {
     // Types with positions that a later task of the plan translates, each with that task's number. The task takes its
     // types out of here as it puts them in a table.
     private static final Map<PacketType<?>, Integer> PENDING_CLIENTBOUND = Map.ofEntries(
-            Map.entry(GamePacketTypes.CLIENTBOUND_ADD_ENTITY, 7),
-            Map.entry(GamePacketTypes.CLIENTBOUND_TELEPORT_ENTITY, 7),
-            Map.entry(GamePacketTypes.CLIENTBOUND_ENTITY_POSITION_SYNC, 7),
-            Map.entry(GamePacketTypes.CLIENTBOUND_MOVE_MINECART_ALONG_TRACK, 7),
-            Map.entry(GamePacketTypes.CLIENTBOUND_SET_ENTITY_DATA, 7),
             Map.entry(GamePacketTypes.CLIENTBOUND_INITIALIZE_BORDER, 9),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_CENTER, 9),
             Map.entry(GamePacketTypes.CLIENTBOUND_SET_BORDER_SIZE, 9),
@@ -106,6 +104,21 @@ public class CoordinateOffsetCoverageGameTests {
         Object[] kinds = Class.forName("net.minecraft.world.waypoints.TrackedWaypoint$Type").getEnumConstants();
         helper.assertValueEqual(Arrays.stream(kinds).map(String::valueOf).toList(), List.of("EMPTY", "VEC3I", "CHUNK", "AZIMUTH"),
                 "waypoint types");
+        helper.succeed();
+    }
+
+    // The same for the serializers of entity data, which is part of every spawn
+    @GameTest
+    public void everyEntityDataSerializerIsClassified(GameTestHelper helper) {
+        Map<EntityDataSerializer<?>, Coverage> coverage = EntityRules.serializerCoverage();
+        List<Integer> missing = new ArrayList<>();
+        EntityDataSerializer<?> serializer;
+        for (int id = 0; (serializer = EntityDataSerializers.getSerializer(id)) != null; id++) {
+            if (!coverage.containsKey(serializer)) {
+                missing.add(id);
+            }
+        }
+        helper.assertTrue(missing.isEmpty(), "entity data serializers in no table, by id: " + missing);
         helper.succeed();
     }
 
