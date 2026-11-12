@@ -2,7 +2,6 @@ package bobbynooby.dev.coords;
 
 import net.minecraft.network.protocol.PacketType;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -23,13 +22,10 @@ public final class OffsetState {
     final Set<Long> heldChunks = ConcurrentHashMap.newKeySet();
     // The real position the client was last told
     volatile @Nullable Vec3 lastPosition;
-    // Where the frame the next Respawn packet starts is anchored, and for whom: until a respawn is done the connection
-    // still holds the old player
-    volatile @Nullable Anchor nextAnchor;
+    // The real spot the frame the next Respawn packet starts is anchored at
+    volatile @Nullable Vec3 nextAnchor;
     // Packet types whose translation failed for this connection, so each is logged once
     final Set<PacketType<?>> failed = ConcurrentHashMap.newKeySet();
 
     public OffsetState() {}
-
-    record Anchor(ServerPlayer player, Vec3 position) {}
 }

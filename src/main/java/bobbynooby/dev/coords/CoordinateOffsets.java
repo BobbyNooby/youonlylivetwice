@@ -77,8 +77,8 @@ public final class CoordinateOffsets {
     }
 
     /**
-     * Anchors the frame the next Respawn packet starts at this real spot, the player's new one. The player is passed in
-     * because during a respawn the connection still holds the one who died.
+     * Anchors the frame the next Respawn packet on the player's connection starts at this real spot, where the player
+     * arrives. The spot is passed in because during a respawn the connection still holds the player who died.
      */
     public static void anchorNextFrame(ServerPlayer player, Vec3 realPosition) {
         if (!Settings.active() || player.connection == null) {
@@ -86,7 +86,7 @@ public final class CoordinateOffsets {
         }
         Connection connection = connectionOf(player);
         if (connection != null) {
-            state(connection).nextAnchor = new OffsetState.Anchor(player, realPosition);
+            state(connection).nextAnchor = realPosition;
         }
     }
 

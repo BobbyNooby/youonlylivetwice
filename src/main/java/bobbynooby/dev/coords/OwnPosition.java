@@ -80,10 +80,12 @@ final class OwnPosition {
     // arrives. A Respawn packet sent from anywhere else has no spot to go by, so its frame is a random one.
     private static Packet<?> respawn(ClientboundRespawnPacket packet, Context context) {
         OffsetState state = context.state();
-        OffsetState.Anchor anchor = state.nextAnchor;
+        Vec3 anchor = state.nextAnchor;
         state.nextAnchor = null;
-        ServerPlayer player = anchor != null ? anchor.player() : context.listener().player;
-        Offset offset = CoordinateOffsets.frameOffset(player, anchor != null ? anchor.position() : null);
+        // Admin view is read from the player the connection holds. During a respawn that is the one who died, as the new
+        // one only gets the saved flag once the respawn is done.
+        ServerPlayer player = context.listener().player;
+        Offset offset = CoordinateOffsets.frameOffset(player, anchor);
         CommonPlayerSpawnInfo spawn = packet.commonPlayerSpawnInfo();
         if (!spawn.dimension().equals(state.dimension)) {
             // The client starts a new level, with none of the old one's chunks
@@ -94,7 +96,7 @@ final class OwnPosition {
             ChunkRules.forgetHeld(state, context.listener());
         }
         state.dimension = spawn.dimension();
-        state.lastPosition = anchor != null ? anchor.position() : player.position();
+        state.lastPosition = anchor != null ? anchor : player.position();
         // What the client sends stays in the old frame until it accepts the teleport that comes next
         state.frames.updateAndGet(frames -> new Frames(offset, frames.in(), Frames.AT_NEXT_TELEPORT));
         CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, offset);
