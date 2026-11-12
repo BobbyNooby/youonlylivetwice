@@ -221,8 +221,42 @@ What the server can and can't do:
 
 - It is all or nothing. The server sends one "reduced" flag per player, and the client decides line by line from
   that one flag. YOLT can't hide one line and keep another.
-- Minimap mods and hacked clients ignore the flag and still show real coordinates. A per-player coordinate offset
-  (fake numbers that even those can't get past) is planned next.
+- Minimap mods and hacked clients ignore the flag and show whatever coordinates they are sent. Those are real unless
+  `hide.coordinates` is on: see "Coordinate offset" below.
+
+## Coordinate offset
+
+`hide.coordinates` (off by default) gives each player fake X and Z numbers that even a minimap mod or a hacked client
+can't get past.
+
+- Every position the server sends a player is shifted by a private amount, and every position that player's game
+  sends back is shifted back, so the server itself always works in real coordinates.
+- Only X and Z move. Height stays real.
+- The amount is new at each join, each death respawn and each dimension change, never on a timer. Each stretch starts
+  you within 16 blocks of 0, 0.
+- The End is shifted too, with an amount of its own.
+- F3 stays reduced (`hide.debugScreen`). A client that ignores that still only shows shifted numbers.
+- Minimap waypoints and Nether portal maths don't carry across a reset, as the numbers change under them.
+- Border walls only show within the server's view distance plus 128 blocks. A wall further off goes out at the edge
+  of the world instead, so seeing one tells you that one real axis, nothing more.
+- Compasses still point north (`hide.compassSpawn`). With that off, they point at the world spawn, shifted, which is a
+  point every player shares.
+- Maps are unchanged: a map you hold still tells you your real X and Z, modulo the map's size.
+- The seed fingerprint the server sends is unchanged.
+- Admin view gives real coordinates from your next join, respawn or dimension change, and the `/yolt adminview` reply
+  says so.
+- Ops without admin view type coordinates in their own shifted numbers, and `~` and `^` work as usual. A particle's
+  spread is a distance, so it stays as typed. Only what a player types counts: the console, command blocks, functions
+  (a `/function` an op types included), advancement rewards and scheduled functions use real coordinates. Command
+  replies show real numbers.
+- A command in clickable chat text (from a data pack, say) is sent by the clicker's game as if they typed it, so its
+  absolute numbers are read as the clicker's shifted ones.
+- The grave notice: the kick and the login refusal name only the dimension. The chat line after a respawn shows the
+  grave in your own numbers, or only the dimension when the grave is in another one.
+- Text in chat, signs and books is never changed, so numbers someone writes stay as written. Only an item a text
+  shows on hover, such as a compass in a death message, has its target shifted.
+- Not handled: other mods that send positions in their own packets (voice chat, Distant Horizons) and packet-level
+  anticheats. Don't run them with this on.
 
 ## World border and Nether
 
@@ -246,6 +280,9 @@ Ops can run `/yolt adminview` to see what everyone else can't: the full tab list
 death, join and advancement message, every map marker, the full F3 screen and the real world spawn on a compass. It
 is off by default and remembered per admin. It stops working when the admin is de-opped, and comes back if they are
 opped again. In admin view you don't get other players' whispers, since those are private.
+
+With `hide.coordinates` on, admin view also gives you real coordinates, from your next join, respawn or dimension
+change.
 
 ## Logout bodies
 
@@ -445,6 +482,7 @@ diameter to the area you want people to spawn in.
 | `debugScreen` | `true` | Reduced F3 for every player. Admin view lifts it. | No |
 | `serverBrand` | `false` | F3 names the server "vanilla" instead of "fabric". | Next join |
 | `compassSpawn` | `true` | A normal compass points north in every dimension, not at the world spawn. Recovery, lodestone and grave compasses keep their own targets. Admin view shows the real spawn. | No |
+| `coordinates` | `false` | Each player sees X and Z shifted by a private amount, new at every join, death respawn and dimension change. Admin view sees real ones. | Next join |
 
 Notes:
 
@@ -540,6 +578,25 @@ YOLT keeps its data in versioned files, so a newer build can upgrade them:
   database from the old 1.21.5 build is moved aside to `you-only-live-twice.db.1.21.5-<time>.bak` at startup, and
   the lockouts in it end. One from a newer YOLT is left untouched, and the lockout then lets everyone in.
 
+### On every Minecraft update
+
+The coordinate offset reads every packet, so a new Minecraft version can add a position it doesn't know about. Before
+a release on a new version:
+
+- Run the coverage and leak tests (`CoordinateOffsetCoverageGameTests` and `LeakSweepGameTests`). Every new packet,
+  item component, entity data type, particle, block entity, debug subscription, position source and waypoint type
+  has to be sorted into "shifted" or "holds no position" first.
+- Compare the packet classes that changed between the two versions, and look in them for new positions, items, NBT
+  and particles.
+- Check that every method the hooks sit on still exists with the same arguments: sending and receiving on the
+  connection, the respawn, the teleport, the parsing of a typed command, the container click, the coordinate
+  arguments, the debug subscriptions and the collision shape.
+- Check that the order of things still holds: on a dimension change the respawn comes before the old chunks are
+  forgotten, a dead player is sent no forgets, the client keeps its chunks on a respawn in the same dimension, and
+  accepting a teleport ends it.
+- Read the update commit for that version in CoordinateOffset (the Paper plugin that does the same job). It lists
+  what moved.
+
 # Commands
 
 All `/yolt` commands need op (permission level 2) or the server console, except `/yolt skin` for your own skin. The
@@ -573,7 +630,8 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 
 # Known limits
 
-- **Debug privacy is all or nothing**, and minimap mods or hacked clients still show real coordinates.
+- **Debug privacy is all or nothing**, and minimap mods or hacked clients still show real coordinates, unless
+  `hide.coordinates` is on.
 - **Admins lose F3 hitboxes and chunk borders** (F3+B, F3+G) unless admin view is on.
 - **Ops are locked out like everyone else.** The console can `/yolt unkill` them.
 - **Offline-mode servers.** A lockout can't hold against a name change, since an offline player's id comes from their
@@ -616,6 +674,27 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 - **Graves from offline kills** with no body loaded (for example `/yolt kill` while the body's chunk is unloaded) show
   the skin YOLT last knew for the player (their pick, or the skin they last joined with), or the default skin with
   `skins.mode: off`.
+- **Coordinate offset** (`hide.coordinates`):
+    - A wall of a border whose size and centre are known gives that real axis away once you see it.
+    - A map you hold gives your real X and Z modulo its size, and a known seed gives everything away through the
+      terrain.
+    - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there.
+    - Amounts stop at 999,984 blocks. A player about 1,000,000 or more blocks out on an axis (a border has to reach
+      that far) starts a stretch far from 0, 0, at their real numbers moved 999,984 blocks towards 0.
+    - With `max-world-size` set in `server.properties`, the edge of the world counts as a border wall: only its near
+      part shows.
+    - These go out as an op or a data pack wrote them, with any position in them real:
+        - a position under an NBT key YOLT doesn't know. It shifts vanilla's own: keys ending in `pos`,
+          `exit_portal`, `leash`, `patrol_target`, `wander_target`, `beam_target`, a breeze's jump target and map
+          markers;
+        - the `minecraft:lock`, `minecraft:can_place_on` and `minecraft:can_break` predicates on an item, and a
+          trade's costs;
+        - the items shown in recipes, advancements and dialogs;
+        - an item shown on hover in text held in a registry entry (an instrument, a jukebox song, a trim, a painting),
+          in an item's attribute display, in the separator of a selector or NBT text, in a dialog or custom click
+          event, or in a chat type's own style.
+    - Not yet tried in a real client: walking through bamboo, a sculk sensor's particle in flight, dragging a compass
+      around the inventory, a border wall coming into view as you walk up to it, and minimap mods.
 - **Skins:**
     - A name shows the skin of whichever Mojang account owns that name now. That may be a stranger, and it changes if
       the account is renamed. A name with no account keeps the default skin.
@@ -629,8 +708,6 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 
 # Still to come
 
-- A coordinate offset: each player sees fake X and Z numbers that change at each death, login and dimension change.
-  Planned next.
 - Bodies travelling through portals (backburner). For now they can't.
 - Time slowdown and multi-version support (parked).
 - Getting your ender chest back after a dragon kill (parked, undecided).
