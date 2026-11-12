@@ -40,6 +40,7 @@
 			"bobbynooby.dev.gametest.GraveMenuGameTests",
 			"bobbynooby.dev.gametest.GraveProtectionGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
+			"bobbynooby.dev.gametest.LeakSweepGameTests",
 			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.LogoutStateGameTests",
 			"bobbynooby.dev.gametest.MapGameTests",
