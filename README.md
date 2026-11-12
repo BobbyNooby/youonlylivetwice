@@ -85,7 +85,8 @@ Try again in 1 week.
 - A locked-out player who tries to join a full server is told how long they have left, not "server is full". Bans and
   the whitelist still come first.
 - Deaths in creative or spectator mode don't count (`deathLockout.countCreativeAndSpectatorDeaths`): no lockout, no
-  grave, and the player keeps their items, XP and score.
+  grave, and the player keeps their items, XP and score. With the switch on they count. A spectator still keeps
+  everything, as in vanilla, so their grave holds only the revive head.
 - If the death database can't be opened or read, the lockout lets everyone in and logs an error, instead of locking
   everyone out. Don't let another program hold a write lock on the database while the server runs: a login check
   waits at most 250 ms for the lock, then lets the player in and logs an error.
@@ -118,14 +119,18 @@ Where the grave goes:
 - In the End, graves keep out of the spots the game rebuilds by itself: the exit portal, the arrival platform, the
   gateways and the obsidian spikes. A grave that ends up in one is moved out.
 - Graves always go inside the world border.
+- If a grave can't be made at all, your items and the revive head drop where it would have gone, and never despawn.
+  With `keepInventory` you keep your items, and only the head drops.
 
 `graves.tellLocation` says whether you are told where your grave is: `never`, `whenMoved` (the default: only when it
 is more than `graves.tellLocationDistance` blocks, default 16, from where you died, or in another dimension) or
 `always`. You are told in the lockout kick and the login screen, or in chat after you respawn if the death kicked
 nobody. Only you are told.
 
-With `graves.enabled` off, deaths drop items the vanilla way. Graves already in the world stay protected and
-openable, and missing heads are still put back. The switch only stops new graves.
+With `graves.enabled` off, deaths drop items the vanilla way. A death while you're offline (your body's, or `/yolt
+kill`) drops them where a grave's items would be safe instead, and they never despawn, since you aren't there to pick
+them up. Graves already in the world stay protected and openable, and missing heads are still put back. The switch
+only stops new graves.
 
 ## Grave compass
 
@@ -278,7 +283,8 @@ While you're offline the body is you:
   and their lockout stands. If it expires just then, they arrive at their logout spot with the body's state. Nothing
   is lost or duplicated.
 - **Leftover items** a body has to drop (an item a dispenser put on it, for example) never despawn. Under water they
-  float and can drift.
+  float and can drift. A body that dies drops them where a grave's items would be safe, never into the lava or the
+  void that killed it.
 
 ### The two body types
 
@@ -392,7 +398,7 @@ diameter to the area you want people to spawn in.
 |---|---|---|---|
 | `enabled` | `true` | Dying kicks you and blocks rejoining. | No |
 | `cooldownDays` | `7` | Days a death locks you out, 0 or more. 0 means no wait. | New deaths |
-| `countCreativeAndSpectatorDeaths` | `false` | Off: a death in creative or spectator makes no lockout, grave or death record, and the player keeps their items, XP and score. | New deaths |
+| `countCreativeAndSpectatorDeaths` | `false` | Off: a death in creative or spectator makes no lockout, grave or death record, and the player keeps their items, XP and score. On: they count, and a spectator's grave holds only the revive head. | New deaths |
 
 ## `graves`
 
