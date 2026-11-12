@@ -27,6 +27,7 @@ import net.minecraft.network.protocol.game.ServerboundSetTestBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.network.protocol.game.ServerboundTestInstanceBlockActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.phys.BlockHitResult;
@@ -190,8 +191,12 @@ public final class BlockRules {
         return new ClientboundAddTransientBlockPacket(context.offset().shift(packet.getPos()), packet.getBlockState());
     }
 
-    // The global ones too, such as a wither's spawn: the client plays them from the direction of the spot
+    // The global ones too, such as a wither's spawn: the client plays them from the direction of the spot. The portal
+    // sound is sent at the zero position, which the client ignores, and shifted it would be the offset itself.
     private static Packet<?> levelEvent(ClientboundLevelEventPacket packet, Context context) {
+        if (packet.getType() == LevelEvent.SOUND_PORTAL_TRAVEL) {
+            return packet;
+        }
         return new ClientboundLevelEventPacket(packet.getType(), context.offset().shift(packet.getPos()), packet.getData(),
                 packet.isGlobalEvent());
     }

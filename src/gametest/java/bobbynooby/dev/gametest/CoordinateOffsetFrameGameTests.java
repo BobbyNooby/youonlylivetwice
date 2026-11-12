@@ -10,6 +10,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
@@ -22,7 +23,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
@@ -166,6 +169,34 @@ public class CoordinateOffsetFrameGameTests {
             player.connection.send(new ClientboundForgetLevelChunkPacket(chunk.getPos()));
             helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundForgetLevelChunkPacket.class).isEmpty(),
                     "a chunk of the old level was forgotten in the new frame");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The portal sound comes at the zero position, which the client ignores: shifted, it would hand out the new offset
+    @GameTest(environment = FRAMES)
+    public void portalTripSendsThePortalSoundAsItIs(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "cfportal", GameType.CREATIVE);
+        try {
+            int mark = OffsetTestKit.mark(player);
+            TeleportTransition trip = new TeleportTransition(nether, new Vec3(37.5, 64.0, -50.5), Vec3.ZERO, 0.0F, 0.0F,
+                    Set.of(), TeleportTransition.PLAY_PORTAL_SOUND);
+            OffsetTestKit.withCoordinates(() -> player.teleport(trip));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the trip got no offset");
+
+            List<ClientboundLevelEventPacket> events = OffsetTestKit.sent(player, mark, ClientboundLevelEventPacket.class);
+            List<ClientboundLevelEventPacket> sounds =
+                    events.stream().filter(event -> event.getType() == LevelEvent.SOUND_PORTAL_TRAVEL).toList();
+            helper.assertValueEqual(sounds.size(), 1, "portal sounds");
+            helper.assertValueEqual(sounds.getFirst().getPos(), BlockPos.ZERO, "portal sound spot");
+            helper.assertTrue(events.stream().noneMatch(event -> event.getPos().getX() == offset.x()
+                    && event.getPos().getZ() == offset.z()), "a level event carries the offset " + offset);
         } finally {
             TestPlayers.leave(player);
         }
