@@ -426,10 +426,10 @@ public class CoordinateOffsetBlockGameTests {
             helper.assertValueEqual(jigsaw.getPlacementPriority(), 5, "jigsaw placement priority");
             TestInstanceBlockEntity.Data data = new TestInstanceBlockEntity.Data(Optional.empty(), new Vec3i(4, 5, 6), Rotation.NONE,
                     false, TestInstanceBlockEntity.Status.CLEARED, Optional.empty());
+            ServerboundTestInstanceBlockActionPacket.Action query = ServerboundTestInstanceBlockActionPacket.Action.QUERY;
             ServerboundTestInstanceBlockActionPacket action = (ServerboundTestInstanceBlockActionPacket) CoordinateOffsets.incoming(
-                    connection, new ServerboundTestInstanceBlockActionPacket(client, ServerboundTestInstanceBlockActionPacket.Action.QUERY, data));
-            helper.assertValueEqual(action, new ServerboundTestInstanceBlockActionPacket(real,
-                    ServerboundTestInstanceBlockActionPacket.Action.QUERY, data), "test instance action");
+                    connection, new ServerboundTestInstanceBlockActionPacket(client, query, data));
+            helper.assertValueEqual(action, new ServerboundTestInstanceBlockActionPacket(real, query, data), "test instance action");
         } finally {
             TestPlayers.deop(player);
             TestPlayers.leave(player);

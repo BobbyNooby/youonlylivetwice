@@ -93,8 +93,8 @@ import java.util.UUID;
 // scene joins at one fixed real spot far out with the switch on, so every real position in it falls in a narrow band
 // that no shifted one comes near, and every shifted constant in the band's mirror. Each scene also checks that the
 // shifted spots it shows were sent, so a packet that was dropped can't pass for a clean one. The scenes share the spot
-// and hold players across ticks, so each has a batch of its own. For the same reason they are not for a verify run, whose copies would break each other's
-// blocks and switches; to repeat them, run the push job again.
+// and hold players across ticks, so each has a batch of its own. For the same reason they are not for a verify run,
+// whose copies would break each other's blocks and switches; to repeat them, run the push job again.
 public class LeakSweepGameTests {
     private static final String WORLD = "you-only-live-twice-gametest:leak_sweep_world";
     private static final String ITEMS = "you-only-live-twice-gametest:leak_sweep_items";
