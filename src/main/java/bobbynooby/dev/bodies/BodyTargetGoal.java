@@ -1,6 +1,7 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.hardcore.Relentless;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
@@ -76,9 +77,11 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
         super.stop();
     }
 
+    // Vanilla's reach even when relentless mobs track further: a wider search for bodies costs more than it adds.
+    // Public so a test can read it.
     @Override
-    protected double getFollowDistance() {
-        return this.mob instanceof Phantom ? PHANTOM_RANGE : super.getFollowDistance();
+    public double getFollowDistance() {
+        return this.mob instanceof Phantom ? PHANTOM_RANGE : Relentless.vanillaFollowRange(this.mob);
     }
 
     @Override

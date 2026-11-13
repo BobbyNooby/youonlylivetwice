@@ -1,6 +1,7 @@
 {
   "type": "you-only-live-twice-gametest:config",
   "values": {
-    "hardcore.tougherMobs.enabled": "false"
+    "hardcore.tougherMobs.enabled": "false",
+    "hardcore.relentlessMobs.enabled": "false"
   }
 }

@@ -69,7 +69,7 @@ public final class Hardcore {
                 || c.hardcore.bedRest.enabled || c.hardcore.curse.enabled
                 || c.hardcore.nutrients.enabled || c.hardcore.hungerTax.multiplier != 1.0
                 || c.hardcore.mending.enabled || c.hardcore.elytra.enabled || c.hardcore.anvil.enabled
-                || c.hardcore.tougherMobs.enabled);
+                || c.hardcore.tougherMobs.enabled || c.hardcore.relentlessMobs.enabled);
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */

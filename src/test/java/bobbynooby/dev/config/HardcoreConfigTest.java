@@ -302,6 +302,11 @@ class HardcoreConfigTest {
         d.put("hardcore.tougherMobs.includeSpawners", "true");
         d.put("hardcore.tougherMobs.includeTrialSpawners", "false");
         d.put("hardcore.tougherMobs.includeCommandsAndEggs", "false");
+        d.put("hardcore.relentlessMobs.enabled", "false");
+        d.put("hardcore.relentlessMobs.followRange", "1.5");
+        d.put("hardcore.relentlessMobs.doorsAnyDifficulty", "true");
+        d.put("hardcore.relentlessMobs.doorBreakerChance", "0.25");
+        d.put("hardcore.relentlessMobs.dropBrokenDoor", "true");
         return d;
     }
 
@@ -333,6 +338,7 @@ class HardcoreConfigTest {
                 fresh.hardcore.tougherMobs.exclude);
         assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0),
                 "minecraft:creeper", Map.of("damage", 1.0)), fresh.hardcore.tougherMobs.overrides);
+        assertEquals(List.of("minecraft:warden"), fresh.hardcore.relentlessMobs.exclude);
     }
 
     // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order
@@ -377,7 +383,8 @@ class HardcoreConfigTest {
                   "anvil": {"enchantCost": 0, "repairCost": 40, "renameCost": -1, "breakChance": 2},
                   "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1},
                   "tougherMobs": {"health": 0, "damage": -1, "speed": -1, "damageAppliesTo": "villagers",
-                                  "overrides": {"minecraft:ghast": {"helth": 2.0}}}
+                                  "overrides": {"minecraft:ghast": {"helth": 2.0}}},
+                  "relentlessMobs": {"followRange": 0, "doorBreakerChance": 2}
                 }}""");
         assertFellBack(single, List.of(
                 "hardcore.slow.cap: must be 0 to 1",
@@ -436,7 +443,9 @@ class HardcoreConfigTest {
                 "hardcore.tougherMobs.damage: must be 0 or more",
                 "hardcore.tougherMobs.speed: must be 0 or more",
                 "hardcore.tougherMobs.damageAppliesTo: unknown value",
-                "hardcore.tougherMobs.overrides: every value must name health, damage or speed and be 0 or more, with health above 0"));
+                "hardcore.tougherMobs.overrides: every value must name health, damage or speed and be 0 or more, with health above 0",
+                "hardcore.relentlessMobs.followRange: must be above 0",
+                "hardcore.relentlessMobs.doorBreakerChance: must be 0 to 1"));
 
         // Each pair fine on its own but wrong together, so both of its keys go back
         ConfigLoader.Result pairs = loadJson("""

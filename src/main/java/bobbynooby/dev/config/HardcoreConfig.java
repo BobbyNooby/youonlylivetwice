@@ -24,6 +24,7 @@ public final class HardcoreConfig {
         public AnvilSection anvil = new AnvilSection();
         public ElytraSection elytra = new ElytraSection();
         public TougherMobsSection tougherMobs = new TougherMobsSection();
+        public RelentlessMobsSection relentlessMobs = new RelentlessMobsSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -239,6 +240,16 @@ public final class HardcoreConfig {
         overrides.put("minecraft:phantom", numbers("health", 1.0, "damage", 1.0));
         overrides.put("minecraft:creeper", numbers("damage", 1.0));
         return overrides;
+    }
+
+    // The warden senses through walls, so a longer reach would make it find everyone; tougherMobs.exclude is left alone too
+    public static class RelentlessMobsSection {
+        public boolean enabled = false;
+        @Applies(Applies.When.MOBS_LOAD) public double followRange = 1.5;
+        public boolean doorsAnyDifficulty = true;
+        @Applies(Applies.When.MOBS_LOAD) public double doorBreakerChance = 0.25;
+        public boolean dropBrokenDoor = true;
+        public List<String> exclude = new ArrayList<>(List.of("minecraft:warden"));
     }
 
     // Name, value, name, value..., kept in the order given

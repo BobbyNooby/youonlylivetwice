@@ -246,6 +246,14 @@ final class ConfigChecks {
             fellBack.accept("hardcore.elytra.rocketCutoffSpeed", "must be 0 or more");
         }
         tougherMobs(c.tougherMobs, fallback.tougherMobs, fellBack);
+        if (!(c.relentlessMobs.followRange > 0)) {
+            c.relentlessMobs.followRange = fallback.relentlessMobs.followRange;
+            fellBack.accept("hardcore.relentlessMobs.followRange", "must be above 0");
+        }
+        if (!isShare(c.relentlessMobs.doorBreakerChance)) {
+            c.relentlessMobs.doorBreakerChance = fallback.relentlessMobs.doorBreakerChance;
+            fellBack.accept("hardcore.relentlessMobs.doorBreakerChance", "must be 0 to 1");
+        }
         curseAndLimp(c, fallback, fellBack);
     }
 

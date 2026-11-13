@@ -1,14 +1,19 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.hardcore.MobBoosts;
+import bobbynooby.dev.hardcore.Relentless;
+import bobbynooby.dev.mixin.MobAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
@@ -19,8 +24,15 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -31,15 +43,25 @@ import static bobbynooby.dev.gametest.BodyTestKit.leaveBodyWithDefaults;
 // A mob is judged as it loads, so each feature stays on through the test's environment rather than being switched on
 // after the mob is there. Mobs are made the way their spawn reason makes them in 26.3: EntityType.create with that
 // reason, which is where Fabric records it, then added to the world, which runs the load hook. None of them gets
-// vanilla's finalizeSpawn, so no random leader or follow-range bonus muddies the numbers, and none has free will.
+// vanilla's finalizeSpawn, so no random leader or follow-range bonus muddies the numbers, and only the zombie that has
+// a door to break keeps its free will.
 public class HardcoreMobsGameTests {
     private static final String MOBS = "you-only-live-twice-gametest:hardcore_mobs";
     private static final String MOBS_ALL = "you-only-live-twice-gametest:hardcore_mobs_all";
     private static final String MOBS_TRIAL = "you-only-live-twice-gametest:hardcore_mobs_trial";
     private static final String MOBS_OFF = "you-only-live-twice-gametest:hardcore_mobs_off";
+    // Easy as well, held for the whole batch, which this test has to itself
+    private static final String MOBS_DOORS = "you-only-live-twice-gametest:hardcore_mobs_doors";
+    private static final String MOBS_NO_DOORS = "you-only-live-twice-gametest:hardcore_mobs_no_doors";
     private static final BlockPos PLAYER_AT = new BlockPos(1, 0, 1);
     private static final BlockPos MOB_AT = new BlockPos(4, 0, 4);
     private static final BlockPos VILLAGER_AT = new BlockPos(6, 0, 1);
+    private static final double CLOSE = 1e-9;
+    // A corridor along x at z 3: the zombie, an oak door, then the villager in a closed cell
+    private static final int LANE = 3;
+    private static final BlockPos ZOMBIE_AT = new BlockPos(1, 0, LANE);
+    private static final BlockPos DOOR_AT = new BlockPos(3, 0, LANE);
+    private static final BlockPos BEHIND_DOOR = new BlockPos(5, 0, LANE);
 
     // A zombie's 20 health times 1.5
     @GameTest(environment = MOBS)
@@ -197,6 +219,8 @@ public class HardcoreMobsGameTests {
                     "the zombie has a max health modifier");
             helper.assertTrue(attribute(zombie, Attributes.MOVEMENT_SPEED).getModifier(MobBoosts.TOUGHER) == null,
                     "the zombie has a speed modifier");
+            helper.assertTrue(attribute(zombie, Attributes.FOLLOW_RANGE).getModifier(Relentless.RELENTLESS) == null,
+                    "the zombie has a follow range modifier");
             assertHealth(helper, zombie, 20.0F, 20.0F, "the zombie");
         } finally {
             spawned.forEach(Entity::discard);
@@ -204,9 +228,124 @@ public class HardcoreMobsGameTests {
         helper.succeed();
     }
 
+    // Vanilla needs 240 ticks of hitting once the zombie stands at the door (26.3 BreakDoorGoal), after it finds the
+    // villager and walks the two blocks to it, so this allows more than twice that
+    @GameTest(environment = MOBS_DOORS, maxTicks = 600)
+    public void mobs4ZombieBreaksADoorOnEasyAndItDrops(GameTestHelper helper) {
+        helper.assertValueEqual(helper.getLevel().getDifficulty(), Difficulty.EASY, "difficulty");
+        buildCorridor(helper);
+        List<Entity> spawned = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            spawned.forEach(Entity::discard);
+            helper.getEntities(EntityTypes.ITEM, DOOR_AT, 3.0).forEach(Entity::discard);
+        });
+        boolean waiting = false;
+        try {
+            Zombie zombie = createFree(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, ZOMBIE_AT);
+            helper.assertTrue(zombie.canBreakDoors(), "the zombie did not win its door roll at a chance of 1");
+            // Only the villager loses its will, so it stays in its cell; a zombie goes for a villager without seeing it
+            Mob villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BEHIND_DOOR);
+            spawned.add(villager);
+            helper.runBeforeTestEnd(cleanUp);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(helper.getBlockState(DOOR_AT).isAir()
+                            && helper.getBlockState(DOOR_AT.above()).isAir(), "the door still stands"))
+                    .thenExecute(() -> {
+                        try {
+                            helper.assertItemEntityCountIs(Items.OAK_DOOR, DOOR_AT, 3.0, 1);
+                        } finally {
+                            cleanUp.run();
+                        }
+                    })
+                    .thenSucceed();
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    @GameTest(environment = MOBS_NO_DOORS)
+    public void mobs4ChanceZeroBreaksNoDoors(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            List<Zombie> zombies = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                zombies.add(create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT));
+            }
+            zombies.add(create(helper, spawned, EntityTypes.HUSK, EntitySpawnReason.NATURAL, MOB_AT));
+            for (Zombie zombie : zombies) {
+                helper.assertFalse(zombie.canBreakDoors(), "a " + zombie.getType() + " can break doors");
+                helper.assertTrue(zombie.entityTags().contains(Relentless.DOOR_ROLLED),
+                        "a " + zombie.getType() + " is not tagged " + Relentless.DOOR_ROLLED);
+            }
+        } finally {
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // A zombie's base follow range is 35; the warden is excluded, and the body search keeps vanilla's reach
+    @GameTest(environment = MOBS)
+    public void mobs5FollowRangeIsOneAndAHalfTimes(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Mob zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            AttributeInstance range = attribute(zombie, Attributes.FOLLOW_RANGE);
+            assertClose(helper, range.getValue(), range.getBaseValue() * 1.5, "the zombie's follow range");
+            Mob warden = create(helper, spawned, EntityTypes.WARDEN, EntitySpawnReason.NATURAL, MOB_AT);
+            AttributeInstance wardenRange = attribute(warden, Attributes.FOLLOW_RANGE);
+            assertClose(helper, wardenRange.getValue(), wardenRange.getBaseValue(), "the warden's follow range");
+            assertClose(helper, bodyGoal(zombie).getFollowDistance(), range.getBaseValue(), "the body goal's search range");
+        } finally {
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // Walls and a roof of stone, so the zombie has one way to go, and the cell behind the door closed at the far end
+    private static void buildCorridor(GameTestHelper helper) {
+        for (int x = 0; x <= 7; x++) {
+            for (int y = 0; y <= 1; y++) {
+                helper.setBlock(new BlockPos(x, y, LANE - 1), Blocks.STONE);
+                helper.setBlock(new BlockPos(x, y, LANE + 1), Blocks.STONE);
+            }
+            helper.setBlock(new BlockPos(x, 2, LANE), Blocks.STONE);
+        }
+        for (int y = 0; y <= 1; y++) {
+            helper.setBlock(new BlockPos(0, y, LANE), Blocks.STONE);
+            helper.setBlock(new BlockPos(6, y, LANE), Blocks.STONE);
+        }
+        // Facing along the lane, so the closed door stands across it; the bottom half first, then the top
+        BlockState door = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
+        helper.setBlock(DOOR_AT, door.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER));
+        helper.setBlock(DOOR_AT.above(), door.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+    }
+
+    private static BodyTargetGoal bodyGoal(Mob mob) {
+        return ((MobAccessor) mob).yoltTargetSelector().getAvailableGoals().stream()
+                .map(WrappedGoal::getGoal)
+                .filter(BodyTargetGoal.class::isInstance)
+                .map(BodyTargetGoal.class::cast)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no body goal on " + mob.getType()));
+    }
+
+    private static void assertClose(GameTestHelper helper, double actual, double expected, String name) {
+        helper.assertTrue(Math.abs(actual - expected) < CLOSE, name + " is " + actual + ", not " + expected);
+    }
+
     // As its spawn reason makes it: EntityType.create records the reason, and adding it to the world loads it
     static <T extends Mob> T create(GameTestHelper helper, List<Entity> spawned, EntityType<T> type, EntitySpawnReason reason,
                                     BlockPos pos) {
+        T mob = createFree(helper, spawned, type, reason, pos);
+        mob.removeFreeWill();
+        return mob;
+    }
+
+    private static <T extends Mob> T createFree(GameTestHelper helper, List<Entity> spawned, EntityType<T> type,
+                                                EntitySpawnReason reason, BlockPos pos) {
         ServerLevel level = helper.getLevel();
         T mob = type.create(level, reason);
         helper.assertTrue(mob != null, "no " + type + " made");
@@ -215,7 +354,6 @@ public class HardcoreMobsGameTests {
         mob.setPersistenceRequired();
         helper.assertTrue(level.addFreshEntity(mob), "the " + type + " was not added");
         spawned.add(mob);
-        mob.removeFreeWill();
         return mob;
     }
 

@@ -1,0 +1,7 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.relentlessMobs.enabled": "true",
+    "hardcore.relentlessMobs.doorBreakerChance": "0.0"
+  }
+}

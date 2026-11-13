@@ -51,6 +51,7 @@
     "HardcoreBedWakeMixin",
     "HardcoreCakeMixin",
     "HardcoreConsumeMixin",
+    "HardcoreDoorMixin",
     "HardcoreExhaustionMixin",
     "HardcoreFallMixin",
     "HardcoreFoodDataMixin",

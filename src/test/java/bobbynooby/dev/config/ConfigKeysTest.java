@@ -72,6 +72,7 @@ class ConfigKeysTest {
         assertTrue(leaves.remove("hardcore.nutrients.foods"));
         assertTrue(leaves.remove("hardcore.tougherMobs.exclude"));
         assertTrue(leaves.remove("hardcore.tougherMobs.overrides"));
+        assertTrue(leaves.remove("hardcore.relentlessMobs.exclude"));
         assertEquals(leaves, new HashSet<>(paths));
         assertEquals(leaves.size(), paths.size(), "a path is listed twice: " + paths);
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
@@ -186,6 +187,8 @@ class ConfigKeysTest {
                 Map.entry("hardcore.tougherMobs.includeSpawners", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.tougherMobs.includeTrialSpawners", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.tougherMobs.includeCommandsAndEggs", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.relentlessMobs.followRange", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.relentlessMobs.doorBreakerChance", Applies.When.MOBS_LOAD),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);

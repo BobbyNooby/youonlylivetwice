@@ -39,6 +39,11 @@ public final class MobBoosts {
 
     /** Decides a mob seen for the first time, then sets or removes the modifiers to match the config. */
     public static void onLoad(Mob mob, ServerLevel level) {
+        toughen(mob);
+        Relentless.onLoad(mob);
+    }
+
+    private static void toughen(Mob mob) {
         if (!Settings.on(c -> c.hardcore.tougherMobs.enabled)) {
             apply(mob, MobMaths.Boost.NONE);
             return;
