@@ -131,7 +131,9 @@ public final class Weight {
             return;
         }
         carried(player).ifPresent(carried -> {
-            boolean slowed = slow(carried.tally().load()) > 0.0;
+            // After the steps, so the player is told only once the load really slows them
+            HardcoreConfig.SlowSection steps = Settings.get().hardcore.slow;
+            boolean slowed = SlowBudget.total(steps.cap, steps.step, slow(carried.tally().load())) > 0.0;
             if (slowed && !carried.told()) {
                 Hardcore.actionBar(player, SLOWED);
             }
