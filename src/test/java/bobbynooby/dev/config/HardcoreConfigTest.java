@@ -332,6 +332,19 @@ class HardcoreConfigTest {
         d.put("hardcore.bloodMoon.warning.title", "true");
         d.put("hardcore.bloodMoon.warning.chat", "true");
         d.put("hardcore.bloodMoon.warning.sound", "true");
+        d.put("hardcore.cold.enabled", "false");
+        d.put("hardcore.cold.chillPerSecond", "0.01");
+        d.put("hardcore.cold.warmPerSecond", "0.03");
+        d.put("hardcore.cold.shelteredBelowSkyLight", "8");
+        d.put("hardcore.cold.heatRadius", "4");
+        d.put("hardcore.cold.leatherPerPiece", "0.25");
+        d.put("hardcore.cold.wetMultiplier", "2.0");
+        d.put("hardcore.cold.waterMultiplier", "4.0");
+        d.put("hardcore.cold.maxSlow", "0.2");
+        d.put("hardcore.cold.freezeDamage", "true");
+        d.put("hardcore.cold.damageEverySeconds", "2");
+        d.put("hardcore.cold.canKill", "false");
+        d.put("hardcore.cold.shiverExhaustionPerSecond", "0.05");
         return d;
     }
 
@@ -412,7 +425,10 @@ class HardcoreConfigTest {
                   "relentlessMobs": {"followRange": 0, "doorBreakerChance": 2},
                   "bloodMoon": {"chance": 2, "minNightsBetween": -1, "graceDays": -1, "health": 0, "damage": -1,
                                 "speed": -1, "spawnCap": -1, "armourChance": 2, "enchantChance": 2, "xp": -1,
-                                "extraLootRolls": -1, "chargedCreeperChance": 2}
+                                "extraLootRolls": -1, "chargedCreeperChance": 2},
+                  "cold": {"chillPerSecond": -1, "warmPerSecond": -1, "shelteredBelowSkyLight": 16, "heatRadius": 9,
+                           "leatherPerPiece": 2, "wetMultiplier": -1, "waterMultiplier": -1, "maxSlow": 2,
+                           "damageEverySeconds": 0, "shiverExhaustionPerSecond": -1}
                 }}""");
         assertFellBack(single, List.of(
                 "hardcore.slow.cap: must be 0 to 1",
@@ -485,7 +501,17 @@ class HardcoreConfigTest {
                 "hardcore.bloodMoon.enchantChance: must be 0 to 1",
                 "hardcore.bloodMoon.xp: must be 0 or more",
                 "hardcore.bloodMoon.extraLootRolls: must be 0 or more",
-                "hardcore.bloodMoon.chargedCreeperChance: must be 0 to 1"));
+                "hardcore.bloodMoon.chargedCreeperChance: must be 0 to 1",
+                "hardcore.cold.chillPerSecond: must be 0 or more",
+                "hardcore.cold.warmPerSecond: must be 0 or more",
+                "hardcore.cold.shelteredBelowSkyLight: must be 0 to 15",
+                "hardcore.cold.heatRadius: must be 0 to 8",
+                "hardcore.cold.leatherPerPiece: must be 0 to 1",
+                "hardcore.cold.wetMultiplier: must be 0 or more",
+                "hardcore.cold.waterMultiplier: must be 0 or more",
+                "hardcore.cold.maxSlow: must be 0 to 1",
+                "hardcore.cold.damageEverySeconds: must be 1 or more",
+                "hardcore.cold.shiverExhaustionPerSecond: must be 0 or more"));
 
         // Each pair fine on its own but wrong together, so both of its keys go back
         ConfigLoader.Result pairs = loadJson("""

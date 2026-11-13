@@ -156,6 +156,7 @@ public class HardcoreStatusGameTests {
         boolean bedRestBefore = config.hardcore.bedRest.enabled;
         boolean mendingBefore = config.hardcore.mending.enabled;
         double hungerBefore = config.hardcore.hungerTax.multiplier;
+        boolean coldBefore = config.hardcore.cold.enabled;
         try {
             config.restrictCommands = true;
             config.hardcore.weight.enabled = true;
@@ -166,6 +167,7 @@ public class HardcoreStatusGameTests {
             config.hardcore.bedRest.enabled = true;
             config.hardcore.mending.enabled = true;
             config.hardcore.hungerTax.multiplier = 1.5;
+            config.hardcore.cold.enabled = true;
             player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
             Legs.set(id, true);
             Curse.set(id, 1);
@@ -173,6 +175,7 @@ public class HardcoreStatusGameTests {
                 s.protein = 0.6;
                 s.vitamins = 0.1;
                 s.sugar = 0.4;
+                s.chill = 0.35;
             });
 
             helper.assertTrue(player.startSleeping(helper.absolutePos(firstBed)), "the player could not lie in the first bed");
@@ -186,7 +189,7 @@ public class HardcoreStatusGameTests {
                     && firstPos.getZ() != secondPos.getZ(), "the beds share an axis: " + firstPos + ", " + secondPos);
 
             for (String start : List.of("Load ", "  heaviest: ", "Legs ", "Total slowdown ", "Curse of the Undead ",
-                    "Nutrients ", "Resting ", "Rules ")) {
+                    "Nutrients ", "Cold ", "Resting ", "Rules ")) {
                 helper.assertTrue(first.stream().anyMatch(text -> text.startsWith(start)), "the report has no '" + start + "' line: " + first);
             }
             helper.assertTrue(first.stream().anyMatch(text -> text.startsWith("Nutrients ") && text.contains("(low: ")),
@@ -210,12 +213,14 @@ public class HardcoreStatusGameTests {
             config.hardcore.bedRest.enabled = bedRestBefore;
             config.hardcore.mending.enabled = mendingBefore;
             config.hardcore.hungerTax.multiplier = hungerBefore;
+            config.hardcore.cold.enabled = coldBefore;
             Legs.set(id, false);
             Curse.set(id, 0);
             HardcoreStates.update(id, s -> {
                 s.protein = HardcoreState.UNSET;
                 s.vitamins = HardcoreState.UNSET;
                 s.sugar = HardcoreState.UNSET;
+                s.chill = 0.0;
             });
             player.getInventory().clearContent();
             TestPlayers.leave(player);

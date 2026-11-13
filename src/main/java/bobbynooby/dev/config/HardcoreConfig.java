@@ -26,6 +26,7 @@ public final class HardcoreConfig {
         public TougherMobsSection tougherMobs = new TougherMobsSection();
         public RelentlessMobsSection relentlessMobs = new RelentlessMobsSection();
         public BloodMoonSection bloodMoon = new BloodMoonSection();
+        public ColdSection cold = new ColdSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -288,6 +289,24 @@ public final class HardcoreConfig {
         public boolean title = true;
         public boolean chat = true;
         public boolean sound = true;
+    }
+
+    // Chill is 0 to 1 and moves once a second; the multipliers scale the gain when rained or snowed on, or in water.
+    // Sky light under shelteredBelowSkyLight counts as indoors, and heatRadius is in blocks.
+    public static class ColdSection {
+        public boolean enabled = false;
+        public double chillPerSecond = 0.01;
+        public double warmPerSecond = 0.03;
+        public int shelteredBelowSkyLight = 8;
+        public int heatRadius = 4;
+        public double leatherPerPiece = 0.25;
+        public double wetMultiplier = 2.0;
+        public double waterMultiplier = 4.0;
+        public double maxSlow = 0.2;
+        public boolean freezeDamage = true;
+        public int damageEverySeconds = 2;
+        public boolean canKill = false;
+        public double shiverExhaustionPerSecond = 0.05;
     }
 
     // Name, value, name, value..., kept in the order given

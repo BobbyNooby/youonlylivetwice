@@ -46,6 +46,7 @@ public final class Hardcore {
         Elytra.init();
         Anvils.init();
         BloodMoon.init();
+        Cold.init();
         ServerTickEvents.END_SERVER_TICK.register(Hardcore::tick);
         ServerPlayerEvents.JOIN.register(Hardcore::refresh);
         // A respawn makes a new player object without the old one's transient modifiers, the End exit's included
@@ -71,7 +72,7 @@ public final class Hardcore {
                 || c.hardcore.nutrients.enabled || c.hardcore.hungerTax.multiplier != 1.0
                 || c.hardcore.mending.enabled || c.hardcore.elytra.enabled || c.hardcore.anvil.enabled
                 || c.hardcore.tougherMobs.enabled || c.hardcore.relentlessMobs.enabled
-                || c.hardcore.bloodMoon.enabled);
+                || c.hardcore.bloodMoon.enabled || c.hardcore.cold.enabled);
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */

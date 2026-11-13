@@ -2,6 +2,7 @@ package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.hardcore.Cold;
 import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -72,11 +73,24 @@ public final class RandomSpawn {
 
     /** The same inside the given area. Public for the tests, which give it an area of their own. */
     public static @Nullable BlockPos pickIn(ServerLevel level, Area area) {
+        return pickIn(level, area, true);
+    }
+
+    // With the hardcore cold on, a spot cold enough to snow is refused too. When every try was refused only for that,
+    // as in a snowy world, the search runs once more without it: a cold spawn beats none.
+    private static @Nullable BlockPos pickIn(ServerLevel level, Area area, boolean refuseCold) {
+        boolean onlyCold = true;
         for (int attempt = 1; ; attempt++) {
             Column column = pickColumn(random, area);
             BlockPos spot = spotAt(level, column.x(), column.z());
-            if (spot != null) {
+            if (spot != null && !(refuseCold && Cold.refusesSpawn(level, spot))) {
                 return spot;
+            }
+            if (spot == null) {
+                onlyCold = false;
+            }
+            if (attempt == ATTEMPTS && onlyCold) {
+                return pickIn(level, area, false);
             }
             if (attempt == ATTEMPTS) {
                 // This spot can be in a fluid

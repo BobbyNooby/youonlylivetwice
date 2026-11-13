@@ -43,6 +43,7 @@
 			"bobbynooby.dev.gametest.HardcoreAnvilGameTests",
 			"bobbynooby.dev.gametest.HardcoreBedGameTests",
 			"bobbynooby.dev.gametest.HardcoreBloodMoonGameTests",
+			"bobbynooby.dev.gametest.HardcoreColdGameTests",
 			"bobbynooby.dev.gametest.HardcoreCurseGameTests",
 			"bobbynooby.dev.gametest.HardcoreElytraGameTests",
 			"bobbynooby.dev.gametest.HardcoreHungerGameTests",

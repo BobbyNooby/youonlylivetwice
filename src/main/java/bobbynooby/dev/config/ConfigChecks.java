@@ -34,6 +34,10 @@ final class ConfigChecks {
     static final int LAST_TICK_OF_DAY = 23999;
     // An anvil price of 40 or more shows "Too Expensive!"
     static final int MAX_ANVIL_PRICE = 39;
+    // Sky light runs 0 to 15
+    static final int MAX_SKY_LIGHT = 15;
+    // The heat scan covers a cube this far out every second for each player, so it stays small
+    static final int MAX_HEAT_RADIUS = 8;
     private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
     private static final Set<String> MOB_VALUES = Set.of("health", "damage", "speed");
 
@@ -257,6 +261,7 @@ final class ConfigChecks {
             fellBack.accept("hardcore.relentlessMobs.doorBreakerChance", "must be 0 to 1");
         }
         bloodMoon(c.bloodMoon, fallback.bloodMoon, fellBack);
+        cold(c.cold, fallback.cold, fellBack);
         curseAndLimp(c, fallback, fellBack);
     }
 
@@ -347,6 +352,50 @@ final class ConfigChecks {
         if (!isShare(moon.chargedCreeperChance)) {
             moon.chargedCreeperChance = fallback.chargedCreeperChance;
             fellBack.accept("hardcore.bloodMoon.chargedCreeperChance", "must be 0 to 1");
+        }
+    }
+
+    // Freeze damage is counted in whole seconds, so the shortest gap is one
+    private static void cold(HardcoreConfig.ColdSection cold, HardcoreConfig.ColdSection fallback, BiConsumer<String, String> fellBack) {
+        if (!(cold.chillPerSecond >= 0)) {
+            cold.chillPerSecond = fallback.chillPerSecond;
+            fellBack.accept("hardcore.cold.chillPerSecond", "must be 0 or more");
+        }
+        if (!(cold.warmPerSecond >= 0)) {
+            cold.warmPerSecond = fallback.warmPerSecond;
+            fellBack.accept("hardcore.cold.warmPerSecond", "must be 0 or more");
+        }
+        if (cold.shelteredBelowSkyLight < 0 || cold.shelteredBelowSkyLight > MAX_SKY_LIGHT) {
+            cold.shelteredBelowSkyLight = fallback.shelteredBelowSkyLight;
+            fellBack.accept("hardcore.cold.shelteredBelowSkyLight", "must be 0 to " + MAX_SKY_LIGHT);
+        }
+        if (cold.heatRadius < 0 || cold.heatRadius > MAX_HEAT_RADIUS) {
+            cold.heatRadius = fallback.heatRadius;
+            fellBack.accept("hardcore.cold.heatRadius", "must be 0 to " + MAX_HEAT_RADIUS);
+        }
+        if (!isShare(cold.leatherPerPiece)) {
+            cold.leatherPerPiece = fallback.leatherPerPiece;
+            fellBack.accept("hardcore.cold.leatherPerPiece", "must be 0 to 1");
+        }
+        if (!(cold.wetMultiplier >= 0)) {
+            cold.wetMultiplier = fallback.wetMultiplier;
+            fellBack.accept("hardcore.cold.wetMultiplier", "must be 0 or more");
+        }
+        if (!(cold.waterMultiplier >= 0)) {
+            cold.waterMultiplier = fallback.waterMultiplier;
+            fellBack.accept("hardcore.cold.waterMultiplier", "must be 0 or more");
+        }
+        if (!isShare(cold.maxSlow)) {
+            cold.maxSlow = fallback.maxSlow;
+            fellBack.accept("hardcore.cold.maxSlow", "must be 0 to 1");
+        }
+        if (cold.damageEverySeconds < 1) {
+            cold.damageEverySeconds = fallback.damageEverySeconds;
+            fellBack.accept("hardcore.cold.damageEverySeconds", "must be 1 or more");
+        }
+        if (!(cold.shiverExhaustionPerSecond >= 0)) {
+            cold.shiverExhaustionPerSecond = fallback.shiverExhaustionPerSecond;
+            fellBack.accept("hardcore.cold.shiverExhaustionPerSecond", "must be 0 or more");
         }
     }
 
