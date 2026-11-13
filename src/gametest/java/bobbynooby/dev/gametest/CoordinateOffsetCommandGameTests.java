@@ -11,7 +11,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
@@ -271,9 +270,43 @@ public class CoordinateOffsetCommandGameTests {
             BlockPos shown = offset.shift(grave.pos());
             helper.assertValueEqual(graveLines(current, mark), List.of("Your grave is at " + shown.getX() + ", " + shown.getY() + ", "
                     + shown.getZ() + " in the Overworld."), "grave notices after the respawn");
-            // A grave in another dimension has no spot in this frame, so the notice names only that dimension
-            helper.assertTrue(CoordinateOffsets.shownAt(current, GlobalPos.of(Level.NETHER, grave.pos())).isEmpty(),
-                    "a grave in the nether has a spot in the overworld's frame");
+        } finally {
+            config.deathLockout.enabled = lockoutBefore;
+            config.graves.enabled = gravesBefore;
+            config.graves.tellLocation = tellBefore;
+            TestPlayers.leave(current);
+            removeGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // A grave in another dimension has no spot in the frame the respawn starts, so the notice names only that dimension.
+    // The death's grave is recorded in the nether before the respawn reads it; its head stays in the test.
+    @GameTest(environment = GRAVE_NOTICE)
+    public void graveNoticeNamesOnlyAnotherDimension(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean lockoutBefore = config.deathLockout.enabled;
+        boolean gravesBefore = config.graves.enabled;
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        ServerPlayer player = OffsetTestKit.join(helper, "cmgravenether", GameType.SURVIVAL);
+        ServerPlayer current = player;
+        try {
+            config.deathLockout.enabled = false;
+            config.graves.enabled = true;
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            Grave grave = onlyGrave(helper, player);
+            GraveStore.get(helper.getLevel().getServer()).put(new Grave(grave.id(), grave.owner(), grave.ownerName(),
+                    grave.profile(), Level.NETHER, grave.pos(), grave.items(), grave.createdAt(), grave.deathPos(),
+                    grave.compassPending()));
+            int mark = OffsetTestKit.mark(player);
+            current = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(5, 1, 5)), false);
+            helper.assertFalse(CoordinateOffsets.offset(current).isZero(), "the respawn got no offset");
+            helper.assertValueEqual(graveLines(current, mark), List.of("Your grave is in the Nether."),
+                    "grave notices after the respawn");
         } finally {
             config.deathLockout.enabled = lockoutBefore;
             config.graves.enabled = gravesBefore;
