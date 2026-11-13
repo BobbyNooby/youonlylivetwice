@@ -50,7 +50,14 @@ public final class Curse {
 
     /** A death, online or not. Only one in survival or adventure counts, whatever the lockout counts. */
     public static void onDeath(UUID uuid, GameType modeAtDeath) {
-        if (!on() || !modeAtDeath.isSurvival()) {
+        if (!on()) {
+            return;
+        }
+        if (!modeAtDeath.isSurvival()) {
+            // Still the latest death, so an unkill of it gives back nothing an older one added
+            if (HardcoreStates.read(uuid).curseLastDeathAdded != 0) {
+                HardcoreStates.update(uuid, s -> s.curseLastDeathAdded = 0);
+            }
             return;
         }
         HardcoreConfig.CurseSection cfg = cfg();
@@ -81,6 +88,9 @@ public final class Curse {
     public static int refund(UUID uuid) {
         int[] given = new int[1];
         HardcoreStates.update(uuid, s -> given[0] = CurseMaths.refundLatestDeath(s));
+        if (given[0] > 0) {
+            TELL_ON_RETURN.remove(uuid);
+        }
         return given[0];
     }
 
@@ -97,6 +107,7 @@ public final class Curse {
 
     /** Sets the hearts lost, online or not, with nothing left for an unkill to give back. The heal timer carries on. */
     public static void set(UUID uuid, int hearts) {
+        TELL_ON_RETURN.remove(uuid);
         HardcoreStates.update(uuid, s -> {
             s.curseHeartsLost = Math.max(hearts, 0);
             s.curseLastDeathAdded = 0;

@@ -91,7 +91,7 @@ class HardcoreCurseTest {
     }
 
     @Test
-    void cursePlayTimeRoundsUpToTheMinute() {
+    void curse1PlayTimeRoundsUpToTheMinute() {
         assertEquals("1h 12m", CurseMaths.playTime(72 * 1200));
         assertEquals("1h", CurseMaths.playTime(60 * 1200));
         assertEquals("1m", CurseMaths.playTime(1));
