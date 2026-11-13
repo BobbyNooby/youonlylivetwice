@@ -43,12 +43,7 @@ public final class Bodies {
 
     public static void init() {
         // LEAVE runs on the server thread before vanilla saves the player, so the save holds what this changes
-        ServerPlayerEvents.LEAVE.register(player -> {
-            // A failure here must not stop the logout save that follows
-            Guard.run(() -> BodyLogout.onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
-            Guard.run(() -> keepGroundForBody(player), "Could not keep the last ground of {} for their body",
-                    player.nameAndId().name());
-        });
+        ServerPlayerEvents.LEAVE.register(Bodies::leaveBody);
         // JOIN runs on the server thread once the player is in the world
         ServerPlayerEvents.JOIN.register(player -> {
             // Thrown out of here, it would leave the player half joined
@@ -74,10 +69,28 @@ public final class Bodies {
         // With bodies switched off too, like the death above.
         ServerTickEvents.END_SERVER_TICK.register(Bodies::noteGround);
         ServerLifecycleEvents.SERVER_STARTED.register(BodyRestart::restorePlayerBodies);
+        // Ahead of the snapshot, so the new bodies are in it
+        ServerLifecycleEvents.SERVER_STOPPING.register(Bodies::leaveBodiesAtStop);
         ServerLifecycleEvents.SERVER_STOPPING.register(BodyRestart::snapshotBodies);
         // Every save too, autosaves included, so after a crash a player body comes back as last saved, not as it logged out
         ServerLifecycleEvents.BEFORE_SAVE.register((server, flush, force) -> BodyRestart.snapshotBodies(server));
         BodyExpiry.init();
+    }
+
+    /** What a logout leaves: the body, with the player's last ground kept for it. */
+    public static void leaveBody(ServerPlayer player) {
+        // A failure here must not stop the logout save that follows
+        Guard.run(() -> BodyLogout.onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
+        Guard.run(() -> keepGroundForBody(player), "Could not keep the last ground of {} for their body",
+                player.nameAndId().name());
+    }
+
+    // The stop's kick most likely never gets as far as LEAVE, so everyone still online gets their body here. A LEAVE
+    // that does come after replaces it through the logout's own old-record path.
+    private static void leaveBodiesAtStop(MinecraftServer server) {
+        for (ServerPlayer player : List.copyOf(server.getPlayerList().getPlayers())) {
+            leaveBody(player);
+        }
     }
 
     // A body left behind keeps the player's last ground until it stands somewhere itself, so a logout in mid-fall still
