@@ -97,12 +97,13 @@ public final class Status {
 
     private static Optional<Component> totalSlowdown(ServerPlayer player) {
         // A player outside the rules carries no slowdown, whatever the parts add up to
-        if (Hardcore.exempt(player) || !(Slowdowns.raw(player) > 0.0)) {
+        double raw = Slowdowns.raw(player);
+        if (Hardcore.exempt(player) || !(raw > 0.0)) {
             return Optional.empty();
         }
         HardcoreConfig.SlowSection slow = Settings.get().hardcore.slow;
-        // Worked out here rather than read off the player, so it is right before the next tick has applied it
-        double total = SlowBudget.total(slow.cap, slow.step, Slowdowns.raw(player));
+        // Capped but not stepped, so the lines above it add up to it
+        double total = Math.min(raw, Math.max(slow.cap, 0.0));
         return Optional.of(line("Total slowdown " + percent(total) + "% (cap " + percent(slow.cap) + "%; potions not included)",
                 "Every slowdown added together, up to the cap. Potions such as Slowness come on top of it."));
     }
@@ -110,7 +111,12 @@ public final class Status {
     private static Optional<Component> rules(ServerPlayer player) {
         List<String> parts = new ArrayList<>();
         for (Function<ServerPlayer, Optional<String>> part : RULE_PARTS) {
-            part.apply(player).ifPresent(parts::add);
+            try {
+                part.apply(player).ifPresent(parts::add);
+            } catch (RuntimeException e) {
+                // The other rules still show
+                Yolt.LOGGER.error("A status rule failed for {}", player.nameAndId().name(), e);
+            }
         }
         if (parts.isEmpty()) {
             return Optional.empty();
