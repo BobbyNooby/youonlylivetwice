@@ -29,25 +29,29 @@ public final class ReviveLook {
     /**
      * On a revive paper: with the switch on, a paper with no model of its own gets reviveModel; with it off, a paper
      * showing reviveModel goes back to plain paper. A model anyone else set is left alone, and so is every other item.
+     * Returns true when the stack was changed.
      */
-    public static void apply(ItemStack stack) {
+    public static boolean apply(ItemStack stack) {
         if (!GraveItems.isReviveHead(stack)) {
-            return;
+            return false;
         }
         Identifier model = Identifier.tryParse(Settings.get().resourcePack.reviveModel);
         if (model == null) {
-            return;
+            return false;
         }
         // Every item has a model from its type; only one set on the stack itself shows up here
         boolean ownModel = stack.hasNonDefault(DataComponents.ITEM_MODEL);
         if (Settings.on(c -> c.resourcePack.reviveTexture)) {
             if (!ownModel) {
                 stack.set(DataComponents.ITEM_MODEL, model);
+                return true;
             }
         } else if (ownModel && model.equals(stack.get(DataComponents.ITEM_MODEL))) {
             // Setting the type's own model drops it from the stack; remove() would leave the paper with no model at all
             stack.set(DataComponents.ITEM_MODEL, stack.getPrototype().get(DataComponents.ITEM_MODEL));
+            return true;
         }
+        return false;
     }
 
     // Papers made before the switch changed follow it within a second. A stack is only changed when its model has to
@@ -56,11 +60,10 @@ public final class ReviveLook {
         if (!Settings.active() || server.getTickCount() % TICKS_PER_SECOND != 0) {
             return;
         }
-        Guard.run(() -> {
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                sweep(player);
-            }
-        }, "Could not update the look of revive papers");
+        // One player's failure leaves the others' papers to be swept
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            Guard.run(() -> sweep(player), "Could not update the look of {}'s revive papers", player.nameAndId().name());
+        }
     }
 
     // The whole inventory, armour and off hand included, then the cursor and the open menu's own slots (the crafting
@@ -73,8 +76,9 @@ public final class ReviveLook {
         AbstractContainerMenu menu = player.containerMenu;
         apply(menu.getCarried());
         for (Slot slot : menu.slots) {
-            if (slot.container != inventory) {
-                apply(slot.getItem());
+            // A chest's contents are saved only once the chest knows they changed
+            if (slot.container != inventory && apply(slot.getItem())) {
+                slot.setChanged();
             }
         }
     }
