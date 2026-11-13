@@ -8,7 +8,7 @@ on:
   pull_request:
   push:
   # Manual run for hunting flaky tests: filter picks GameTests by name,
-  # verify repeats each of them 100 times per rotation
+  # verify repeats each of them 100 times per rotation, and client adds the client tests
   workflow_dispatch:
     inputs:
       filter:
@@ -17,6 +17,10 @@ on:
         required: false
       verify:
         description: Repeat the selected GameTests to find flakes (needs a filter; every GameTest repeated can't finish in time)
+        type: boolean
+        default: false
+      client:
+        description: Also run the client tests (a filter or verify only changes the server GameTests)
         type: boolean
         default: false
 
@@ -76,7 +80,8 @@ jobs:
         uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
         with:
           report_paths: build/test-results/**/*.xml
-          check_name: server tests
+          # The check belongs to the commit, so a manual run on the same commit gets its own rather than replacing the push's
+          check_name: server tests${{ github.event_name == 'workflow_dispatch' && ' (manual)' || '' }}
           include_passed: false
           # A row per failed test in the job summary, not only in the check's annotations
           detailed_summary: true
@@ -97,6 +102,8 @@ jobs:
           path: build/libs/
 
   client_game_test:
+    # Every push and pull request; a manual run only when asked for
+    if: github.event_name != 'workflow_dispatch' || inputs.client
     runs-on: ubuntu-24.04
     # A client that can't open a window hangs instead of exiting
     timeout-minutes: 30
