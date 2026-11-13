@@ -18,7 +18,7 @@ resource pack.
   (`hide.coordinates`).
 
 Every feature has a switch in `config/you-only-live-twice.json`, and `/yolt config` changes them in game. The
-[README](https://github.com/BobbyNooby/youonlylivetwice/blob/release/README.md) explains each one.
+[documentation](https://github.com/BobbyNooby/youonlylivetwice/blob/release/docs/README.md) explains each one.
 
 ## Install
 
@@ -30,4 +30,4 @@ with the world border on (the default), sets the border to 10,000 blocks across.
 ## Good to know
 
 - Coming from the old 1.21.5 build: its death database is moved aside at startup, and the lockouts in it end.
-- Read "Known limits" in the README before you host.
+- Read the [known limits](https://github.com/BobbyNooby/youonlylivetwice/blob/release/docs/known-limits.md) before you host.

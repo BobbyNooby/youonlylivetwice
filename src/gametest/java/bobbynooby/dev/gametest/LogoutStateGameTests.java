@@ -75,7 +75,7 @@ public class LogoutStateGameTests {
         rideOutAndBack(helper, "HorseRider", horse);
     }
 
-    // The README's riding case
+    // The riding case in the logout bodies docs
     @GameTest
     public void logoutInMinecart(GameTestHelper helper) {
         Minecart minecart = EntityTypes.MINECART.create(helper.getLevel(), EntitySpawnReason.COMMAND);
