@@ -5,7 +5,7 @@ import java.util.function.Supplier;
 // A flake hunt runs copies of one test at once, each starting when its own chunks load. A copy that kept what it found
 // and put that back at its end could find another copy's value and leave it behind. So copies that hold the same
 // values across ticks share one hold: the first to take it keeps what was there, and the last to let go puts it back.
-// Each copy lets go once, and only if it took the hold.
+// The class doesn't check this: callers must let go once, and only if they took the hold.
 final class SharedHold {
     private int holders;
     private Runnable putBack = () -> {};
