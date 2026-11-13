@@ -56,6 +56,7 @@
     "HardcoreFoodDataMixin",
     "HardcoreJumpMixin",
     "HardcoreMendingMixin",
+    "HardcoreMobDamageMixin",
     "HardcoreRocketMixin",
     "HardcoreTotemMixin",
     "InitializeBorderPacketAccessor",

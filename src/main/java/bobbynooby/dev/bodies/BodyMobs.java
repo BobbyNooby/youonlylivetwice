@@ -2,6 +2,7 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.hardcore.MobBoosts;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
 import bobbynooby.dev.mixin.TargetGoalAccessor;
@@ -20,6 +21,7 @@ public final class BodyMobs {
         // Runs for each entity of a chunk in turn, so a throw would break off the rest
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
             if (entity instanceof Mob mob) {
+                Guard.run(() -> MobBoosts.onLoad(mob, level), "Could not boost {}", mob.getUUID());
                 Guard.run(() -> addBodyGoal(mob), "Could not let {} hunt bodies", mob.getUUID());
             }
         });

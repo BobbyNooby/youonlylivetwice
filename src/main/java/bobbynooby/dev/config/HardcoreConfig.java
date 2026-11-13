@@ -2,7 +2,9 @@ package bobbynooby.dev.config;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** The hardcore layer's settings, under "hardcore" in the config. Every feature ships off. */
@@ -21,6 +23,7 @@ public final class HardcoreConfig {
         public MendingSection mending = new MendingSection();
         public AnvilSection anvil = new AnvilSection();
         public ElytraSection elytra = new ElytraSection();
+        public TougherMobsSection tougherMobs = new TougherMobsSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -206,6 +209,36 @@ public final class HardcoreConfig {
         public boolean enabled = false;
         public double glideGravityMultiplier = 0.6;
         public double rocketCutoffSpeed = 20.0;
+    }
+
+    // Multipliers on hostile mobs, set as each mob loads; overrides name only the values that differ for that mob
+    public static class TougherMobsSection {
+        public boolean enabled = false;
+        @Applies(Applies.When.MOBS_LOAD) public double health = 1.5;
+        @Applies(Applies.When.MOBS_LOAD) public double damage = 1.25;
+        @Applies(Applies.When.MOBS_LOAD) public double speed = 1.1;
+        public DamageAppliesTo damageAppliesTo = DamageAppliesTo.PLAYERS;
+        @Applies(Applies.When.MOBS_LOAD) public boolean includeSpawners = true;
+        @Applies(Applies.When.MOBS_LOAD) public boolean includeTrialSpawners = false;
+        @Applies(Applies.When.MOBS_LOAD) public boolean includeCommandsAndEggs = false;
+        public List<String> exclude = new ArrayList<>(List.of(
+                "minecraft:wither", "minecraft:ender_dragon", "minecraft:elder_guardian", "minecraft:warden"));
+        public Map<String, Map<String, Double>> overrides = overrides();
+    }
+
+    // Players covers logout bodies too, so a body takes what its owner would
+    public enum DamageAppliesTo {
+        @SerializedName("players") PLAYERS,
+        @SerializedName("all") ALL
+    }
+
+    // Ghasts are an easy kill otherwise, phantoms are hard enough with no night skip, and a creeper's blast hits hard already
+    private static Map<String, Map<String, Double>> overrides() {
+        Map<String, Map<String, Double>> overrides = new LinkedHashMap<>();
+        overrides.put("minecraft:ghast", numbers("health", 2.0));
+        overrides.put("minecraft:phantom", numbers("health", 1.0, "damage", 1.0));
+        overrides.put("minecraft:creeper", numbers("damage", 1.0));
+        return overrides;
     }
 
     // Name, value, name, value..., kept in the order given

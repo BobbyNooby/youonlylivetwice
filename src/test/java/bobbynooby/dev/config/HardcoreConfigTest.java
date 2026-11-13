@@ -294,6 +294,14 @@ class HardcoreConfigTest {
         d.put("hardcore.elytra.enabled", "false");
         d.put("hardcore.elytra.glideGravityMultiplier", "0.6");
         d.put("hardcore.elytra.rocketCutoffSpeed", "20.0");
+        d.put("hardcore.tougherMobs.enabled", "false");
+        d.put("hardcore.tougherMobs.health", "1.5");
+        d.put("hardcore.tougherMobs.damage", "1.25");
+        d.put("hardcore.tougherMobs.speed", "1.1");
+        d.put("hardcore.tougherMobs.damageAppliesTo", "players");
+        d.put("hardcore.tougherMobs.includeSpawners", "true");
+        d.put("hardcore.tougherMobs.includeTrialSpawners", "false");
+        d.put("hardcore.tougherMobs.includeCommandsAndEggs", "false");
         return d;
     }
 
@@ -321,6 +329,10 @@ class HardcoreConfigTest {
         assertEquals(Map.of("protein", 0.5, "vitamins", 0.5), foods.get("minecraft:rabbit_stew"));
         assertEquals(Map.of("sugar", 0.5, "vitamins", 0.5), foods.get("minecraft:pumpkin_pie"));
         assertEquals(Map.of(), foods.get("minecraft:poisonous_potato"));
+        assertEquals(List.of("minecraft:wither", "minecraft:ender_dragon", "minecraft:elder_guardian", "minecraft:warden"),
+                fresh.hardcore.tougherMobs.exclude);
+        assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0),
+                "minecraft:creeper", Map.of("damage", 1.0)), fresh.hardcore.tougherMobs.overrides);
     }
 
     // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order
@@ -337,6 +349,7 @@ class HardcoreConfigTest {
         assertEquals(fresh.hardcore.weight.itemsEach, weight.itemsEach);
         assertEquals(fresh.hardcore.weight.armourFactors, weight.armourFactors);
         assertEquals(fresh.hardcore.nutrients.foods, r.config().hardcore.nutrients.foods);
+        assertEquals(fresh.hardcore.tougherMobs.overrides, r.config().hardcore.tougherMobs.overrides);
     }
 
     @Test
@@ -362,7 +375,9 @@ class HardcoreConfigTest {
                   "hungerTax": {"multiplier": -1},
                   "mending": {"durabilityPerXp": -1},
                   "anvil": {"enchantCost": 0, "repairCost": 40, "renameCost": -1, "breakChance": 2},
-                  "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1}
+                  "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1},
+                  "tougherMobs": {"health": 0, "damage": -1, "speed": -1, "damageAppliesTo": "villagers",
+                                  "overrides": {"minecraft:ghast": {"helth": 2.0}}}
                 }}""");
         assertFellBack(single, List.of(
                 "hardcore.slow.cap: must be 0 to 1",
@@ -416,7 +431,12 @@ class HardcoreConfigTest {
                 "hardcore.anvil.renameCost: must be 1 to 39",
                 "hardcore.anvil.breakChance: must be 0 to 1",
                 "hardcore.elytra.glideGravityMultiplier: must be 0 or more",
-                "hardcore.elytra.rocketCutoffSpeed: must be 0 or more"));
+                "hardcore.elytra.rocketCutoffSpeed: must be 0 or more",
+                "hardcore.tougherMobs.health: must be above 0",
+                "hardcore.tougherMobs.damage: must be 0 or more",
+                "hardcore.tougherMobs.speed: must be 0 or more",
+                "hardcore.tougherMobs.damageAppliesTo: unknown value",
+                "hardcore.tougherMobs.overrides: every value must name health, damage or speed and be 0 or more, with health above 0"));
 
         // Each pair fine on its own but wrong together, so both of its keys go back
         ConfigLoader.Result pairs = loadJson("""

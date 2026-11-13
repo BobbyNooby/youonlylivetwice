@@ -68,7 +68,8 @@ public final class Hardcore {
         return Settings.on(c -> c.hardcore.weight.enabled || c.hardcore.legs.enabled || c.hardcore.limp.enabled
                 || c.hardcore.bedRest.enabled || c.hardcore.curse.enabled
                 || c.hardcore.nutrients.enabled || c.hardcore.hungerTax.multiplier != 1.0
-                || c.hardcore.mending.enabled || c.hardcore.elytra.enabled || c.hardcore.anvil.enabled);
+                || c.hardcore.mending.enabled || c.hardcore.elytra.enabled || c.hardcore.anvil.enabled
+                || c.hardcore.tougherMobs.enabled);
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */

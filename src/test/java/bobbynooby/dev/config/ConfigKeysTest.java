@@ -70,6 +70,8 @@ class ConfigKeysTest {
         assertTrue(leaves.remove("hardcore.weight.itemsEach"));
         assertTrue(leaves.remove("hardcore.weight.armourFactors"));
         assertTrue(leaves.remove("hardcore.nutrients.foods"));
+        assertTrue(leaves.remove("hardcore.tougherMobs.exclude"));
+        assertTrue(leaves.remove("hardcore.tougherMobs.overrides"));
         assertEquals(leaves, new HashSet<>(paths));
         assertEquals(leaves.size(), paths.size(), "a path is listed twice: " + paths);
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
@@ -178,6 +180,12 @@ class ConfigKeysTest {
                 Map.entry("graves.compass", Applies.When.NEW_DEATHS),
                 Map.entry("hardcore.curse.heartsPerDeath", Applies.When.NEW_DEATHS),
                 Map.entry("hardcore.curse.heartsPerTotem", Applies.When.NEW_DEATHS),
+                Map.entry("hardcore.tougherMobs.health", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.tougherMobs.damage", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.tougherMobs.speed", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.tougherMobs.includeSpawners", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.tougherMobs.includeTrialSpawners", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.tougherMobs.includeCommandsAndEggs", Applies.When.MOBS_LOAD),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
@@ -186,6 +194,7 @@ class ConfigKeysTest {
         assertEquals(" (applies when a player next joins, respawns or changes dimension)", Applies.When.NEXT_FRAME.note());
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());
         assertEquals(" (applies to deaths from now on)", Applies.When.NEW_DEATHS.note());
+        assertEquals(" (applies to mobs as they load)", Applies.When.MOBS_LOAD.note());
     }
 
     // A reply keeps a key's name as it is, dotted or not, and drops the log form's colon

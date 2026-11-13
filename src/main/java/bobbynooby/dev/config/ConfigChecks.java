@@ -33,6 +33,7 @@ final class ConfigChecks {
     // An anvil price of 40 or more shows "Too Expensive!"
     static final int MAX_ANVIL_PRICE = 39;
     private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
+    private static final Set<String> MOB_VALUES = Set.of("health", "damage", "speed");
 
     private ConfigChecks() {}
 
@@ -244,7 +245,34 @@ final class ConfigChecks {
             c.elytra.rocketCutoffSpeed = fallback.elytra.rocketCutoffSpeed;
             fellBack.accept("hardcore.elytra.rocketCutoffSpeed", "must be 0 or more");
         }
+        tougherMobs(c.tougherMobs, fallback.tougherMobs, fellBack);
         curseAndLimp(c, fallback, fellBack);
+    }
+
+    // No health would kill a mob as it loads
+    private static void tougherMobs(HardcoreConfig.TougherMobsSection mobs, HardcoreConfig.TougherMobsSection fallback,
+                                    BiConsumer<String, String> fellBack) {
+        if (!(mobs.health > 0)) {
+            mobs.health = fallback.health;
+            fellBack.accept("hardcore.tougherMobs.health", "must be above 0");
+        }
+        if (!(mobs.damage >= 0)) {
+            mobs.damage = fallback.damage;
+            fellBack.accept("hardcore.tougherMobs.damage", "must be 0 or more");
+        }
+        if (!(mobs.speed >= 0)) {
+            mobs.speed = fallback.speed;
+            fellBack.accept("hardcore.tougherMobs.speed", "must be 0 or more");
+        }
+        if (mobs.damageAppliesTo == null) {
+            mobs.damageAppliesTo = fallback.damageAppliesTo;
+            fellBack.accept("hardcore.tougherMobs.damageAppliesTo", "unknown value");
+        }
+        if (!mobValues(mobs.overrides)) {
+            mobs.overrides = new LinkedHashMap<>(fallback.overrides);
+            fellBack.accept("hardcore.tougherMobs.overrides",
+                    "every value must name health, damage or speed and be 0 or more, with health above 0");
+        }
     }
 
     // A price of 0 could never be taken
@@ -469,6 +497,23 @@ final class ConfigChecks {
             for (Map.Entry<String, Double> share : shares.entrySet()) {
                 // A misspelt group would quietly give nothing
                 if (!FOOD_GROUPS.contains(share.getKey()) || share.getValue() == null || !isShare(share.getValue())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private static boolean mobValues(Map<String, Map<String, Double>> overrides) {
+        for (Map<String, Double> values : overrides.values()) {
+            if (values == null) {
+                return false;
+            }
+            for (Map.Entry<String, Double> value : values.entrySet()) {
+                // A misspelt name would quietly change nothing
+                Double number = value.getValue();
+                if (!MOB_VALUES.contains(value.getKey()) || number == null || !(number >= 0)
+                        || value.getKey().equals("health") && !(number > 0)) {
                     return false;
                 }
             }

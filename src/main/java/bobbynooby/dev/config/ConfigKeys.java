@@ -20,9 +20,10 @@ public final class ConfigKeys {
     private static final Set<String> NUMBER_MAPS = Set.of("hardcore.weight.groups", "hardcore.weight.items",
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
     // The same, one level deeper: each name maps to an object of numbers
-    private static final Set<String> NUMBER_MAP_MAPS = Set.of("hardcore.nutrients.foods");
+    private static final Set<String> NUMBER_MAP_MAPS = Set.of("hardcore.nutrients.foods", "hardcore.tougherMobs.overrides");
     // One typed value can't hold a list or a map, so these are changed in the file
-    private static final Set<String> FILE_ONLY = union(Set.of("serverList.hoverLines", "hide.tabHeaderLines"),
+    private static final Set<String> FILE_ONLY = union(Set.of("serverList.hoverLines", "hide.tabHeaderLines",
+                    "hardcore.tougherMobs.exclude"),
             NUMBER_MAPS, NUMBER_MAP_MAPS);
     private static final Pattern LOG_FORM = Pattern.compile("([\\w.]+): (.+)");
 
