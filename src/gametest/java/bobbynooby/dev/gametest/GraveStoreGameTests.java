@@ -250,19 +250,24 @@ public class GraveStoreGameTests {
         helper.succeed();
     }
 
-    // The save goes through a temp file and a move, so the file reads whole and nothing is left next to it
+    // The save goes through a temp file and a move, so the file reads whole and nothing is left next to it. Junk left in
+    // the temp file's place first shows the save went that way: vanilla's own write would leave it there.
     @GameTest
-    public void graveSaveLeavesNoTempFile(GameTestHelper helper) {
+    public void graveSaveLeavesNoTempFile(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         GraveStore store = GraveStore.get(server);
         Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         Grave grave = grave(new BlockPos(29_000_000, 70, 29_000_000), List.of(new ItemStack(Items.DIAMOND)));
         try {
+            Files.createDirectories(file.getParent());
+            Files.write(tmp, new byte[] {1, 2, 3, 4, 5});
             store.put(grave);
             store.saveNow(server);
             helper.assertTrue(onDisk(server).stream().anyMatch(g -> g.id().equals(grave.id())), "the grave is not in the grave file");
-            helper.assertFalse(Files.exists(file.resolveSibling(file.getFileName() + ".tmp")), "a temp file sits beside the grave file");
+            helper.assertFalse(Files.exists(tmp), "a temp file sits beside the grave file");
         } finally {
+            Files.deleteIfExists(tmp);
             store.remove(grave.id());
             store.saveNow(server);
         }
