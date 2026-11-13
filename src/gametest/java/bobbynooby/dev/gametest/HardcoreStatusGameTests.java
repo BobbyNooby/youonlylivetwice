@@ -159,6 +159,26 @@ public class HardcoreStatusGameTests {
         helper.succeed();
     }
 
+    // Legs are still off, so only the load shows of the two
+    @GameTest
+    public void status1ShowsOnlyEnabledFeatures(GameTestHelper helper) {
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Featured", GameType.SURVIVAL, AT);
+        YoltConfig config = Settings.get();
+        boolean weightBefore = config.hardcore.weight.enabled;
+        try {
+            config.hardcore.weight.enabled = true;
+            int from = player.messages.size();
+            sendCommand(player, "status");
+            List<String> lines = texts(player, from);
+            helper.assertTrue(lines.stream().anyMatch(line -> line.startsWith("Load")), "the report has no load line: " + lines);
+            helper.assertFalse(lines.stream().anyMatch(line -> line.startsWith("Legs")), "the report has a legs line: " + lines);
+        } finally {
+            config.hardcore.weight.enabled = weightBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void off1StatusSaysNothingToReport(GameTestHelper helper) {
         helper.assertFalse(Hardcore.anyOn(), "a hardcore switch is on");

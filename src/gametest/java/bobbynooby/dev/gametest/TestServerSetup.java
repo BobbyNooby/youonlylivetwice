@@ -13,6 +13,7 @@ import java.time.Duration;
 public class TestServerSetup implements ModInitializer {
     @Override
     public void onInitialize() {
+        ConfigEnvironment.register();
         // Before any server starts, so YOLT never makes its Mojang lookup and no test reaches the network
         Skins.useLookupForTesting(FakeSkinLookup.INSTANCE);
         // The skin tests pick one name after another; the wait's own test puts it back for its tick

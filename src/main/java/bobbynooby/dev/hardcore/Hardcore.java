@@ -25,6 +25,7 @@ public final class Hardcore {
 
     public static void init() {
         HardcoreStates.init();
+        Weight.init();
         ServerTickEvents.END_SERVER_TICK.register(Hardcore::tick);
         ServerPlayerEvents.JOIN.register(Hardcore::refresh);
         // A respawn makes a new player object without the old one's transient modifiers, the End exit's included

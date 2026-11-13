@@ -44,6 +44,7 @@
     "GraveProtectionPistonFrontMixin",
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
+    "HardcoreJumpMixin",
     "InitializeBorderPacketAccessor",
     "ItemContainerContentsInvoker",
     "LevelChunkPacketDataInvoker",
