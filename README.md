@@ -349,6 +349,8 @@ logs in. Only new logouts use the new setting.
     - World events treat it as a player. A Bad Omen effect copied onto it (`bodies.copyEffects`) can start a village
       raid, and trial spawners, patrols and wandering traders can pick it.
     - It never gets phantoms, doesn't pick up items, and slimes, magma cubes and pufferfish don't hurt it by touch.
+    - XP orbs fly to it as they would to a player, and circle it until they despawn or a real player comes closer.
+    - A player's punch hurts it but doesn't knock it back. Mob hits, arrows and explosions still do.
     - Piglins, hoglins, wardens, breezes and creakings see a real player in it and go after it. They ignore a
       mannequin.
     - With the `pvp` game rule off, or friendly fire off on a team, players can't hurt it (they can hurt a mannequin).
@@ -654,7 +656,8 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 - **A grave compass in a chest** doesn't spin until someone carries it.
 - **Every death saves the grave file at once**, for crash safety. With 1,000 graves that takes about 0.1 to 0.2
   seconds on the server thread, and the cost grows with the number of graves, because graves never expire. On a big
-  server, remove old graves with `/yolt grave remove`.
+  server, remove old graves with `/yolt grave remove`. The grave, body and skin files are written to a temp file
+  first and then swapped in, so a crash in the middle of a save leaves the last whole file.
 - **Portals at 1:1.** A Nether portal can link to an existing Overworld portal up to 128 blocks away, instead of making
   a new one at the same coordinates.
 - **Shared maps** show other players only to holders who can see them (`hide.mapPlayers`), but a held map still fills
@@ -672,8 +675,10 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 - **Chat after a reload.** After a `/yolt reload` that turns whispers off or `restrictCommands` on, a command a player
   sends at that same moment can break their signed chat until they rejoin. Vanilla has the same race on `/deop`.
 - **`/trigger` menus** that use chat or book click events don't work for non-ops while `restrictCommands` is on.
-- **Looting and crashes.** If the server crashes after a looter logs out, before the next world save, the grave gets
-  back what they took, and they keep it too. Vanilla chests behave the same.
+- **Looting and crashes.** A crash can duplicate or lose what a player took from a grave since they were last saved
+  (when they log out, or at a world save). If they had logged out, the grave gets back what they took, and they keep
+  it too. If they stayed online and the grave file was saved since (any death saves it), the items are in neither.
+  Vanilla chests behave the same.
 - **Unreadable items** (from a removed mod, say) stay in a player's save when they die offline, then vanish at their
   next respawn, as in vanilla. The warning in the log holds the raw entry, so an admin can put it back.
 - **Removed mods and bodies.** If a mod is removed and then added back while a player is offline, their body's copy
