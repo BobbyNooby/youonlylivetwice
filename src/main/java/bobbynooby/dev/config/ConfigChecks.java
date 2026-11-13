@@ -233,6 +233,14 @@ final class ConfigChecks {
             c.mending.durabilityPerXp = fallback.mending.durabilityPerXp;
             fellBack.accept("hardcore.mending.durabilityPerXp", "must be 0 or more");
         }
+        if (!(c.elytra.glideGravityMultiplier >= 0)) {
+            c.elytra.glideGravityMultiplier = fallback.elytra.glideGravityMultiplier;
+            fellBack.accept("hardcore.elytra.glideGravityMultiplier", "must be 0 or more");
+        }
+        if (!(c.elytra.rocketCutoffSpeed >= 0)) {
+            c.elytra.rocketCutoffSpeed = fallback.elytra.rocketCutoffSpeed;
+            fellBack.accept("hardcore.elytra.rocketCutoffSpeed", "must be 0 or more");
+        }
         curseAndLimp(c, fallback, fellBack);
     }
 

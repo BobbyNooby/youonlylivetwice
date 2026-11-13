@@ -1,0 +1,7 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.elytra.enabled": "true",
+    "hardcore.elytra.rocketCutoffSpeed": "0"
+  }
+}

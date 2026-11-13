@@ -43,6 +43,7 @@ public final class Hardcore {
         Nutrients.init();
         HungerTax.init();
         Mending.init();
+        Elytra.init();
         ServerTickEvents.END_SERVER_TICK.register(Hardcore::tick);
         ServerPlayerEvents.JOIN.register(Hardcore::refresh);
         // A respawn makes a new player object without the old one's transient modifiers, the End exit's included
@@ -66,7 +67,7 @@ public final class Hardcore {
         return Settings.on(c -> c.hardcore.weight.enabled || c.hardcore.legs.enabled || c.hardcore.limp.enabled
                 || c.hardcore.bedRest.enabled || c.hardcore.curse.enabled
                 || c.hardcore.nutrients.enabled || c.hardcore.hungerTax.multiplier != 1.0
-                || c.hardcore.mending.enabled);
+                || c.hardcore.mending.enabled || c.hardcore.elytra.enabled);
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */

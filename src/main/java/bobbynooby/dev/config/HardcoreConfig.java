@@ -19,6 +19,7 @@ public final class HardcoreConfig {
         public NutrientsSection nutrients = new NutrientsSection();
         public HungerTaxSection hungerTax = new HungerTaxSection();
         public MendingSection mending = new MendingSection();
+        public ElytraSection elytra = new ElytraSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -187,6 +188,13 @@ public final class HardcoreConfig {
     public static class MendingSection {
         public boolean enabled = false;
         public double durabilityPerXp = 0.4;
+    }
+
+    // Lighter gravity while gliding means a slower, floatier glide; rockets stop pushing past the cut-off in m/s, 0 for never
+    public static class ElytraSection {
+        public boolean enabled = false;
+        public double glideGravityMultiplier = 0.6;
+        public double rocketCutoffSpeed = 20.0;
     }
 
     // Name, value, name, value..., kept in the order given
