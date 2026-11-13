@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class ConfigLoaderTest {
     @TempDir
@@ -482,6 +483,58 @@ class ConfigLoaderTest {
         assertTrue(r.warnings().get(0).startsWith("The config file could not be rewritten ("), r.warnings().get(0));
         assertTrue(r.warnings().get(0).endsWith("), so it is left as it was."), r.warnings().get(0));
         assertEquals(text, Files.readString(file));
+    }
+
+    // A read-only folder, where the copy kept before a rewrite can't be made. Skipped where the folder stays writable
+    // (as for root).
+    private void inReadOnlyDir(Runnable test) {
+        assumeTrue(dir.toFile().setWritable(false) && !Files.isWritable(dir), "the folder can't be made read-only here");
+        try {
+            test.run();
+        } finally {
+            dir.toFile().setWritable(true);
+        }
+    }
+
+    // A bad value needs the copy first, so with no copy the file isn't rewritten: what was typed stays, and the start
+    // goes on with what was read
+    @Test
+    void startupThatCantCopyABadValuesFileKeepsWhatItRead() throws IOException {
+        Path file = dir.resolve("config.json");
+        String text = "{\"worldBorder\":{\"diameter\":5000},\"chat\":{\"radius\":2.5}}";
+        Files.writeString(file, text);
+        inReadOnlyDir(() -> {
+            ConfigLoader.Result r = assertDoesNotThrow(() -> ConfigLoader.load(file, null, true));
+            assertEquals(5000, r.config().worldBorder.diameter);
+            assertEquals(48, r.config().chat.radius);
+            assertFalse(r.rewritten());
+            assertNull(r.backup());
+            assertTrue(r.warnings().stream().anyMatch(w -> w.startsWith("The config file could not be copied before the rewrite (")
+                    && w.endsWith("), so it is left as it was.")), r.warnings().toString());
+        });
+        assertEquals(text, Files.readString(file));
+    }
+
+    // The same for an older file, which is read as upgraded but left as it was
+    @Test
+    void startupThatCantCopyAnOlderFileKeepsWhatItRead() throws IOException {
+        Path file = dir.resolve("config.json");
+        String old = "{\"configVersion\": 1, \"spawnRandomly\": false}";
+        Files.writeString(file, old);
+        List<Migrations.Step<JsonObject>> steps = List.of(new Migrations.Step<JsonObject>(1, json -> {
+            json.add("randomSpawn", json.remove("spawnRandomly"));
+            return json;
+        }));
+        inReadOnlyDir(() -> {
+            ConfigLoader.Result r = assertDoesNotThrow(() -> ConfigLoader.load(file, null, true, 2, steps));
+            assertFalse(r.config().randomSpawn);
+            assertFalse(r.rewritten());
+            assertTrue(r.warnings().contains("config was v1 and is upgraded to v2"), r.warnings().toString());
+            assertTrue(r.warnings().stream().anyMatch(w -> w.startsWith("The config file could not be copied before the rewrite (")),
+                    r.warnings().toString());
+        });
+        assertEquals(old, Files.readString(file));
+        assertFalse(Files.exists(dir.resolve("config.json.v1.bak")));
     }
 
     @Test

@@ -108,11 +108,22 @@ public final class ConfigLoader {
 
         int version = fileVersion(user, warnings);
         String backup = null;
+        // Why the copy kept before a startup rewrite couldn't be made, or null. The file is then not rewritten, so what
+        // the admin typed is never lost, and what was read still applies.
+        String copyFailed = null;
         if (version < currentVersion) {
             // Copied before anything is written, so the upgraded file never replaces the only copy of the old one
-            backup = backup(file, file.getFileName() + ".v" + version + ".bak");
+            try {
+                backup = backup(file, file.getFileName() + ".v" + version + ".bak");
+            } catch (UncheckedIOException e) {
+                if (base != null) {
+                    throw e;
+                }
+                copyFailed = e.getCause().getMessage();
+            }
             user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
-            warnings.add("config was v" + version + " and is upgraded to v" + currentVersion + ", old file saved as " + backup);
+            warnings.add("config was v" + version + " and is upgraded to v" + currentVersion
+                    + (backup != null ? ", old file saved as " + backup : ""));
         }
 
         YoltConfig fallback = base != null ? base : new YoltConfig();
@@ -143,9 +154,17 @@ public final class ConfigLoader {
         // Each warning since the merge began is something typed in the file that the rewrite leaves out or changes, so at
         // startup the admin's file is kept first, under the same name as one that can't be read. A reload keeps the live
         // values and writes no copy.
-        if (writeDefaultsOnError && warnings.size() > warningsBeforeMerge) {
-            backup = backup(file, file.getFileName() + ".bak");
-            warnings.add("old file saved as " + backup + " before the rewrite");
+        if (writeDefaultsOnError && copyFailed == null && warnings.size() > warningsBeforeMerge) {
+            try {
+                backup = backup(file, file.getFileName() + ".bak");
+                warnings.add("old file saved as " + backup + " before the rewrite");
+            } catch (UncheckedIOException e) {
+                copyFailed = e.getCause().getMessage();
+            }
+        }
+        if (copyFailed != null) {
+            warnings.add("The config file could not be copied before the rewrite (" + copyFailed + "), so it is left as it was.");
+            return new Result(config, warnings, false, borderProblem, false, backup);
         }
         try {
             write(file, config);
