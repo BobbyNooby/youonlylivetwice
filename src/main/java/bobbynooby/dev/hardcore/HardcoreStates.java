@@ -180,7 +180,12 @@ public final class HardcoreStates {
             return;
         }
         for (UUID uuid : List.copyOf(UNSAVED_PLAYERS.keySet())) {
-            savePlayer(uuid, UNSAVED_PLAYERS.get(uuid));
+            String data = UNSAVED_PLAYERS.get(uuid);
+            Cached online = ONLINE.get(uuid);
+            // The store now holds this, so a live state that has since gone back to the old saved one still gets written
+            if (savePlayer(uuid, data) && online != null) {
+                online.saved = data;
+            }
         }
         for (String key : List.copyOf(UNSAVED_WORLD.keySet())) {
             setWorld(key, UNSAVED_WORLD.get(key));
