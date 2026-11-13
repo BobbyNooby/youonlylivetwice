@@ -22,11 +22,14 @@ import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.debug.DebugSubscription;
 import net.minecraft.util.debug.DebugSubscriptions;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -188,16 +191,46 @@ public final class CoordinateOffsets {
     }
 
     /**
-     * A block's collision shape as the player it is for collides: a block placed off centre by a hash of its spot, such
-     * as bamboo, sits where that player's client puts it, so the server agrees with the client on where they can walk.
-     * Everyone else, mobs included, keeps the real shape. Runs for every block an entity touches, so the cheap checks
-     * come first.
+     * A block's collision shape, for a block placed off centre by a hash of its spot, such as bamboo. A player with an
+     * offset, and a mount they steer, collide where that player's client puts the block, so the server agrees with the
+     * client on where they can go. While the switch is on everything else, mobs, arrows and no entity at all, collides
+     * with the block centred, so nothing the server does shows the real hash. Runs for every block an entity touches, so
+     * the cheap checks come first.
      */
-    public static VoxelShape collisionFor(BlockState state, BlockPos pos, CollisionContext context, VoxelShape shape) {
-        if (!state.hasOffsetFunction() || !(context instanceof EntityCollisionContext entityContext)
-                || !(entityContext.getEntity() instanceof ServerPlayer player) || shape.isEmpty()) {
+    public static VoxelShape collisionFor(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context,
+                                          VoxelShape shape) {
+        if (!state.hasOffsetFunction() || shape.isEmpty() || !(level instanceof ServerLevel)) {
             return shape;
         }
+        ServerPlayer player = steeringPlayer(context);
+        if (player != null) {
+            return asTheClientSees(state, pos, player, shape);
+        }
+        return on() ? shape.move(state.getOffset(pos).reverse()) : shape;
+    }
+
+    /** A block's outline, which the server's item rays aim at, for a player: where their client puts the block. */
+    public static VoxelShape outlineFor(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context,
+                                        VoxelShape shape) {
+        if (!state.hasOffsetFunction() || shape.isEmpty() || !(level instanceof ServerLevel)
+                || !(context instanceof EntityCollisionContext entityContext)
+                || !(entityContext.getEntity() instanceof ServerPlayer player)) {
+            return shape;
+        }
+        return asTheClientSees(state, pos, player, shape);
+    }
+
+    // The player whose client moves this entity: the player, or the one steering their mount. A stand-in has no client.
+    private static @Nullable ServerPlayer steeringPlayer(CollisionContext context) {
+        if (!(context instanceof EntityCollisionContext entityContext) || entityContext.getEntity() == null) {
+            return null;
+        }
+        Entity entity = entityContext.getEntity();
+        Entity steering = entity instanceof ServerPlayer ? entity : entity.getControllingPassenger();
+        return steering instanceof ServerPlayer player && !StandIn.is(player) ? player : null;
+    }
+
+    private static VoxelShape asTheClientSees(BlockState state, BlockPos pos, ServerPlayer player, VoxelShape shape) {
         Offset offset = offset(player);
         if (offset.isZero()) {
             return shape;
