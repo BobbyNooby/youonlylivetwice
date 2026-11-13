@@ -239,7 +239,7 @@ public final class HardcoreConfig {
     private static Map<String, Map<String, Double>> overrides() {
         Map<String, Map<String, Double>> overrides = new LinkedHashMap<>();
         overrides.put("minecraft:ghast", numbers("health", 2.0));
-        overrides.put("minecraft:phantom", numbers("health", 1.0, "damage", 1.0));
+        overrides.put("minecraft:phantom", numbers("health", 1.0, "damage", 1.0, "speed", 1.0));
         overrides.put("minecraft:creeper", numbers("damage", 1.0));
         return overrides;
     }

@@ -361,7 +361,7 @@ class HardcoreConfigTest {
         assertEquals(Map.of(), foods.get("minecraft:poisonous_potato"));
         assertEquals(List.of("minecraft:wither", "minecraft:ender_dragon", "minecraft:elder_guardian", "minecraft:warden"),
                 fresh.hardcore.tougherMobs.exclude);
-        assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0),
+        assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0, "speed", 1.0),
                 "minecraft:creeper", Map.of("damage", 1.0)), fresh.hardcore.tougherMobs.overrides);
         assertEquals(List.of("minecraft:warden"), fresh.hardcore.relentlessMobs.exclude);
     }

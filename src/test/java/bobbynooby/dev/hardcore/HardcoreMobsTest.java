@@ -31,7 +31,7 @@ class HardcoreMobsTest {
     void mobs1DefaultsAndOverrides() {
         assertEquals(new MobMaths.Boost(1.5, 1.25, 1.1), tougher("minecraft:zombie"));
         assertBoost(2.0, 1.25, 1.1, tougher("minecraft:ghast"));
-        assertBoost(1.0, 1.0, 1.1, tougher("minecraft:phantom"));
+        assertBoost(1.0, 1.0, 1.0, tougher("minecraft:phantom"));
         assertBoost(1.5, 1.0, 1.1, tougher("minecraft:creeper"));
         assertEquals(MobMaths.Boost.NONE, tougher("minecraft:wither"));
         assertEquals(MobMaths.Boost.NONE, tougher("minecraft:warden"));
