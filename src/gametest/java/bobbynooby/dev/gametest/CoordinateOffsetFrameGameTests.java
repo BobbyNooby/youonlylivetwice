@@ -24,6 +24,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -200,6 +201,32 @@ public class CoordinateOffsetFrameGameTests {
             player.connection.send(new ClientboundForgetLevelChunkPacket(chunk.getPos()));
             helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundForgetLevelChunkPacket.class).isEmpty(),
                     "a chunk of the old level was forgotten in the new frame");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A dimension change whose teleport keeps an axis relative, as "/execute in minecraft:the_nether run tp @s ~ ~ ~"
+    // does: the arrival's teleport sends that axis as the step it is, unshifted, and the other axis in the new frame
+    @GameTest(environment = FRAMES)
+    public void relativeAxisOfADimensionChangeStaysAStep(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "cfrelative", GameType.CREATIVE);
+        try {
+            int mark = OffsetTestKit.mark(player);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 5.0, 64.0, -50.5, Set.of(Relative.X), 0.0F, 0.0F,
+                    true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the arrival got no offset");
+            int respawn = OffsetTestKit.lastIndex(helper, player, mark, ClientboundRespawnPacket.class);
+            ClientboundPlayerPositionPacket arrival = OffsetTestKit.first(helper, player, respawn + 1,
+                    ClientboundPlayerPositionPacket.class);
+            helper.assertTrue(arrival.relatives().contains(Relative.X), "the arrival's x is no longer relative");
+            helper.assertValueEqual(arrival.change().position().x, 5.0, "the arrival's relative x");
+            helper.assertValueEqual(arrival.change().position().z, -50.5 + offset.z(), "the arrival's absolute z");
         } finally {
             TestPlayers.leave(player);
         }
