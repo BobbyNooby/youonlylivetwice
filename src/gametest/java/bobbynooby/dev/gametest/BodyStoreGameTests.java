@@ -56,6 +56,20 @@ public class BodyStoreGameTests {
         return new BodyRecord(UUID.randomUUID(), "Alex", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN, 1234L, false, snapshot);
     }
 
+    // A body held on top of a vehicle keeps that through the file. A record from before it was kept isn't held.
+    @GameTest
+    public void heldSurvivesTheCodec(GameTestHelper helper) {
+        BodyRecord made = record(Map.of());
+        BodyRecord held = new BodyRecord(made.owner(), made.ownerName(), made.bodyEntity(), made.type(), made.loggedOutAt(),
+                false, made.snapshot(), made.skin(), made.emptyAtLogout(), made.copiedEffects(), true);
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        CompoundTag encoded = (CompoundTag) BodyRecord.CODEC.encodeStart(ops, held).getOrThrow();
+        helper.assertTrue(BodyRecord.CODEC.parse(ops, encoded).getOrThrow().held(), "held lost through the codec");
+        encoded.remove("held");
+        helper.assertFalse(BodyRecord.CODEC.parse(ops, encoded).getOrThrow().held(), "a record without the field is held");
+        helper.succeed();
+    }
+
     @GameTest
     public void recordRoundTripsThroughCodec(GameTestHelper helper) {
         BodyRecord before = record(Map.of(EquipmentSlot.CHEST, damaged(Items.IRON_CHESTPLATE, 10)));

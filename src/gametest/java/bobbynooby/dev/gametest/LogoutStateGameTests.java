@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
@@ -27,6 +28,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.animal.equine.Horse;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.entity.vehicle.minecart.Minecart;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -59,6 +61,7 @@ import static bobbynooby.dev.gametest.BodyTestKit.useDefaultBodies;
 // server's own back in the same tick; the ones that wait only need the body, which ticks on its own.
 public class LogoutStateGameTests {
     private static final BlockPos ON_FLOOR = new BlockPos(1, 1, 1);
+    private static final BlockPos ABOVE_POOL = new BlockPos(3, 5, 3);
 
     // Vanilla saves the horse with its rider and takes it out of the world. At login the body's state comes first,
     // then vanilla puts the owner back on the horse where it was saved, not where the body ended up.
@@ -76,6 +79,209 @@ public class LogoutStateGameTests {
         Minecart minecart = EntityTypes.MINECART.create(helper.getLevel(), EntitySpawnReason.COMMAND);
         helper.assertTrue(minecart != null, "no minecart");
         rideOutAndBack(helper, "CartRider", minecart);
+    }
+
+    // A rider's feet hang below the seat, under the water line, so the body lies on top of the boat instead. The boat
+    // goes with its only rider, and the body is held there, so it neither sinks nor runs out of air.
+    @GameTest(maxTicks = 800)
+    public void boatLogoutHoldsTheBodyOnTheWater(GameTestHelper helper) {
+        boatLogout(helper, false);
+    }
+
+    // One of two riders leaves: the boat stays with the other, and the body is held on top of it the same way
+    @GameTest(maxTicks = 800)
+    public void sharedBoatLogoutHoldsTheBodyToo(GameTestHelper helper) {
+        boatLogout(helper, true);
+    }
+
+    // On a mount that stands on dry ground, the body drops from its top and moves like any other
+    @GameTest(maxTicks = 120)
+    public void logoutOnAMountOnDryGroundLeavesTheBodyMovable(GameTestHelper helper) {
+        floor(helper);
+        Horse horse = EntityTypes.HORSE.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+        helper.assertTrue(horse != null, "no horse");
+        horse.setTamed(true);
+        Vec3 spot = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(2, 2, 2)));
+        horse.snapTo(spot.x, spot.y, spot.z, 0.0F, 0.0F);
+        helper.assertTrue(helper.getLevel().addFreshEntity(horse), "the horse was not added");
+        double floorY = helper.absolutePos(new BlockPos(2, 1, 2)).getY();
+        Logout logout = new Logout(helper, horse);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(horse.onGround(), "the horse has not landed"))
+                .thenExecute(() -> {
+                    logout.leave(TestPlayers.join(helper, "HorseGround", GameType.SURVIVAL, new BlockPos(2, 1, 2)), null);
+                    helper.assertFalse(logout.record().held(), "the body on dry ground is held");
+                    helper.assertTrue(logout.body.getY() > floorY + 0.5, "the body did not start on the horse's top: "
+                            + logout.body.getY());
+                })
+                .thenWaitUntil(() -> helper.assertTrue(logout.body.onGround() && Math.abs(logout.body.getY() - floorY) < 1.0E-6,
+                        "the body is not on the floor: " + logout.body.position()))
+                .thenExecute(() -> {
+                    try {
+                        helper.assertTrue(logout.body.isAlive(), "the body died");
+                    } finally {
+                        logout.cleanUp.run();
+                    }
+                })
+                .thenSucceed();
+    }
+
+    // The cart's top is above the rail. Wherever the body ends up, no part of it may be inside a block.
+    @GameTest(maxTicks = 160)
+    public void minecartLogoutLeavesTheBodyOnTheFloor(GameTestHelper helper) {
+        floor(helper);
+        BlockPos railAt = new BlockPos(2, 1, 2);
+        helper.setBlock(railAt, Blocks.RAIL);
+        Minecart minecart = helper.spawn(EntityTypes.MINECART, railAt);
+        double floorY = helper.absolutePos(railAt).getY();
+        Logout logout = new Logout(helper, minecart);
+        double[] expected = new double[1];
+        helper.startSequence()
+                .thenWaitUntil(settled(helper, minecart))
+                .thenExecute(() -> {
+                    double cartTop = minecart.getBoundingBox().maxY;
+                    logout.leave(TestPlayers.join(helper, "CartFloor", GameType.SURVIVAL, railAt), null);
+                    boolean held = logout.record().held();
+                    Yolt.LOGGER.info("minecartLogoutLeavesTheBodyOnTheFloor: the cart was {} ground, so the body is {}",
+                            held ? "off" : "on", held ? "held above the rail" : "movable");
+                    expected[0] = held ? cartTop : floorY;
+                })
+                .thenExecuteAfter(100, () -> {
+                    try {
+                        Mannequin body = logout.body;
+                        helper.assertTrue(body.isAlive(), "the body died");
+                        helper.assertTrue(helper.getLevel().noBlockCollision(body, body.getBoundingBox().deflate(1.0E-7)),
+                                "the body is inside a block at " + body.position());
+                        helper.assertTrue(Math.abs(body.getY() - expected[0]) < 1.0E-6,
+                                "the body is at y " + body.getY() + ", not " + expected[0]);
+                    } finally {
+                        logout.cleanUp.run();
+                    }
+                })
+                .thenSucceed();
+    }
+
+    // The boat settles on the pool first: once a player is in it, the server no longer moves it. Then 600 ticks after
+    // the logout the body is still where it was made, on the boat's top, alive and with full air.
+    private static void boatLogout(GameTestHelper helper, boolean shared) {
+        Boat boat = poolWithBoat(helper);
+        Logout logout = new Logout(helper, boat);
+        double[] boatTop = new double[1];
+        helper.startSequence()
+                .thenWaitUntil(settled(helper, boat))
+                .thenExecute(() -> {
+                    ServerPlayer stays = null;
+                    if (shared) {
+                        stays = TestPlayers.join(helper, "BoatStays", GameType.SURVIVAL, ABOVE_POOL);
+                        helper.assertTrue(stays.startRiding(boat, true, false), "the first player did not get in");
+                    }
+                    boatTop[0] = boat.getBoundingBox().maxY;
+                    logout.leave(TestPlayers.join(helper, "BoatLeaves", GameType.SURVIVAL, ABOVE_POOL), stays);
+                    helper.assertTrue(logout.record().held(), "the body on the water is not held");
+                    helper.assertTrue(Math.abs(logout.body.getY() - boatTop[0]) < 1.0E-6,
+                            "the body is at y " + logout.body.getY() + ", not the boat's top " + boatTop[0]);
+                    if (shared) {
+                        helper.assertFalse(boat.isRemoved(), "the boat left with a rider still on it");
+                        helper.assertTrue(stays.getVehicle() == boat, "the other player is not in the boat");
+                    } else {
+                        helper.assertTrue(boat.isRemoved(), "the boat stayed without its only rider");
+                    }
+                    logout.at = logout.body.position();
+                })
+                .thenExecuteAfter(600, () -> {
+                    try {
+                        Mannequin body = logout.body;
+                        helper.assertTrue(body.isAlive(), "the body died: " + body.getLastDamageSource());
+                        helper.assertValueEqual(body.getAirSupply(), body.getMaxAirSupply(), "the body's air");
+                        helper.assertValueEqual(body.position(), logout.at, "the body's position");
+                        if (shared) {
+                            helper.assertFalse(boat.isRemoved(), "the boat is gone");
+                        }
+                    } finally {
+                        logout.cleanUp.run();
+                    }
+                })
+                .thenSucceed();
+    }
+
+    // One rider's logout off a vehicle, with the clean-up that runs at the end or before the timeout
+    private static final class Logout {
+        private final GameTestHelper helper;
+        private final Entity vehicle;
+        private UUID owner;
+        private ServerPlayer stays;
+        Mannequin body;
+        Vec3 at;
+        final Runnable cleanUp;
+
+        Logout(GameTestHelper helper, Entity vehicle) {
+            this.helper = helper;
+            this.vehicle = vehicle;
+            cleanUp = once(() -> {
+                try {
+                    if (owner != null) {
+                        cleanUp(helper, owner);
+                    }
+                    if (stays != null) {
+                        TestPlayers.leave(stays);
+                    }
+                } finally {
+                    vehicle.discard();
+                }
+            });
+            helper.runBeforeTestEnd(cleanUp);
+        }
+
+        // With the default body switches on just for the logout
+        void leave(ServerPlayer player, ServerPlayer stays) {
+            owner = player.getUUID();
+            this.stays = stays;
+            YoltConfig.BodiesSection before = useDefaultBodies();
+            try {
+                helper.assertTrue(player.startRiding(vehicle, true, false), "the player did not get on");
+                body = disconnectBody(helper, player);
+            } finally {
+                Settings.get().bodies = before;
+            }
+        }
+
+        BodyRecord record() {
+            return store(helper).byOwner(owner).orElseThrow();
+        }
+    }
+
+    // A pool of still water three blocks deep, walled in glass, with a boat on it
+    private static Boat poolWithBoat(GameTestHelper helper) {
+        for (int x = 0; x <= 6; x++) {
+            for (int z = 0; z <= 6; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+                boolean edge = x == 0 || x == 6 || z == 0 || z == 6;
+                for (int y = 1; y <= 4; y++) {
+                    helper.setBlock(new BlockPos(x, y, z), edge ? Blocks.GLASS : y <= 3 ? Blocks.WATER : Blocks.AIR);
+                }
+            }
+        }
+        return helper.spawn(EntityTypes.OAK_BOAT, new BlockPos(3, 3, 3));
+    }
+
+    private static void floor(GameTestHelper helper) {
+        for (int x = 0; x <= 4; x++) {
+            for (int z = 0; z <= 4; z++) {
+                helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+            }
+        }
+    }
+
+    // Passes once the vehicle's height has stayed the same for five ticks in a row
+    private static Runnable settled(GameTestHelper helper, Entity vehicle) {
+        double[] last = {Double.NaN};
+        int[] still = {0};
+        return () -> {
+            double y = vehicle.getY();
+            still[0] = Math.abs(y - last[0]) < 1.0E-6 ? still[0] + 1 : 0;
+            last[0] = y;
+            helper.assertTrue(still[0] >= 5, "the vehicle has not settled at " + y);
+        };
     }
 
     // Gliding is the client's doing, so the body just drops, and lands with the fall it logged out with on top of its

@@ -37,11 +37,11 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
     private final Pose bodyPose;
     private final boolean movable;
 
-    private PlayerBody(ServerLevel level, GameProfile profile, UUID owner, YoltConfig.BodiesSection cfg) {
+    private PlayerBody(ServerLevel level, GameProfile profile, UUID owner, YoltConfig.BodiesSection cfg, boolean movable) {
         super(level.getServer(), level, profile, ClientInformation.createDefault());
         this.owner = owner;
         this.bodyPose = BodySpawn.pose(cfg.pose);
-        this.movable = cfg.movable;
+        this.movable = movable;
         // The owner gets the body's health back on login, so healing here would heal them for logging out
         this.foodData = new FoodData() {
             @Override
@@ -61,12 +61,12 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
         addTag(Bodies.TAG);
     }
 
-    public static PlayerBody spawn(ServerPlayer player, YoltConfig.BodiesSection cfg) {
+    public static PlayerBody spawn(ServerPlayer player, YoltConfig.BodiesSection cfg, boolean movable) {
         ServerLevel level = player.level();
         GameProfile from = player.getGameProfile();
         // A player entity's id is its profile's, and the world refuses a second entity with the owner's id
         PlayerBody body = new PlayerBody(level, new GameProfile(UUID.randomUUID(), from.name(), from.properties()),
-                player.getUUID(), cfg);
+                player.getUUID(), cfg, movable);
         BodySpawn.placeLike(player, body);
         BodySpawn.copyState(player, body, cfg);
         body.addToWorld(level);
@@ -82,7 +82,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
         }
         // Same body id as before, so the record still points at it
         PlayerBody body = new PlayerBody(level, new GameProfile(record.bodyEntity(), record.ownerName(), record.skin()),
-                record.owner(), Settings.get().bodies);
+                record.owner(), Settings.get().bodies, Settings.get().bodies.movable && !record.held());
         Vec3 pos = snapshot.pos();
         body.snapTo(pos.x, pos.y, pos.z, snapshot.yRot(), 0.0F);
         body.setYHeadRot(snapshot.yRot());

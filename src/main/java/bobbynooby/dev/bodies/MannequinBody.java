@@ -15,13 +15,13 @@ import net.minecraft.world.level.storage.TagValueInput;
 public final class MannequinBody {
     private MannequinBody() {}
 
-    public static Mannequin spawn(ServerPlayer player, YoltConfig.BodiesSection cfg) {
+    public static Mannequin spawn(ServerPlayer player, YoltConfig.BodiesSection cfg, boolean movable) {
         ServerLevel level = player.level();
         Mannequin body = new Mannequin(EntityTypes.MANNEQUIN, level);
         // These two have no public setter. They go in through the save keys /summon and old worlds use, which
         // stay stable where private method names may not. Loading resets the whole entity, so it comes first.
         CompoundTag fields = new CompoundTag();
-        fields.putBoolean("immovable", !cfg.movable);
+        fields.putBoolean("immovable", !movable);
         // Hides the "NPC" label; with no custom name there is no nametag either
         fields.putBoolean("hide_description", true);
         body.load(TagValueInput.create(ProblemReporter.DISCARDING, level.registryAccess(), fields));

@@ -15,11 +15,13 @@ import net.minecraft.world.item.ItemStack;
 final class BodySpawn {
     private BodySpawn() {}
 
-    /** Puts the body where its player stands, facing the same way. */
+    /** Puts the body where its player stands, or on top of what they ride, facing the same way. */
     static void placeLike(ServerPlayer player, Avatar body) {
         // Keeps the main-hand item in the hand the player held it in
         body.setMainArm(player.getMainArm());
-        body.snapTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
+        // A rider's own y is their feet, below the seat
+        double y = player.isPassenger() ? player.getRootVehicle().getBoundingBox().maxY : player.getY();
+        body.snapTo(player.getX(), y, player.getZ(), player.getYRot(), player.getXRot());
         body.setYHeadRot(player.getYHeadRot());
         body.setYBodyRot(player.yBodyRot);
     }

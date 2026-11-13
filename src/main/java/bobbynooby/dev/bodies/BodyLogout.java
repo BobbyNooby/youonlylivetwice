@@ -47,9 +47,13 @@ public final class BodyLogout {
             return Optional.empty();
         }
 
+        // A rider's feet hang below the seat, under the water line in a boat, so the body goes on top of the vehicle.
+        // Off dry ground it is held there, so it can't sink, burn or fall once the vehicle goes.
+        boolean held = player.isPassenger() && !onDryGround(player.getRootVehicle());
+        boolean movable = cfg.movable && !held;
         LivingEntity body = cfg.type == YoltConfig.BodyType.PLAYER
-                ? PlayerBody.spawn(player, cfg)
-                : MannequinBody.spawn(player, cfg);
+                ? PlayerBody.spawn(player, cfg, movable)
+                : MannequinBody.spawn(player, cfg, movable);
         // A player body comes back from its record after a restart, so the record keeps its skin
         PropertyMap skin = body instanceof PlayerBody playerBody
                 ? playerBody.getGameProfile().properties()
@@ -62,11 +66,15 @@ public final class BodyLogout {
         }
         // The body was built from this same section, so the record says whether it took the effects
         store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
-                System.currentTimeMillis(), false, BodySnapshot.of(body), skin, empty, cfg.copyEffects));
+                System.currentTimeMillis(), false, BodySnapshot.of(body), skin, empty, cfg.copyEffects, held));
         // After the new body is made, so a spawn that throws leaves the old one. One the world refused still replaces
         // it: the owner's next login takes over the record's state, so nothing is lost.
         old.ifPresent(record -> retire(server, player, record));
         return Optional.of(body);
+    }
+
+    private static boolean onDryGround(Entity vehicle) {
+        return vehicle.onGround() && !vehicle.isInLiquid();
     }
 
     // A pending record's body was taken over already, its gear with it. One that isn't pending is stale: its login

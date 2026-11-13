@@ -262,6 +262,35 @@ public class PlayerBodyGameTests {
         helper.succeed();
     }
 
+    // A body held on top of a vehicle stays held when it comes back from its record, whatever bodies.movable says.
+    // Made in mid-air, so a body that moves would fall.
+    @GameTest(maxTicks = 40)
+    public void heldPlayerBodyStaysHeldAfterRestart(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "HeldRestart", new BlockPos(1, 5, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        PlayerBody restored;
+        try {
+            PlayerBody body = leavePlayerBody(helper, player);
+            BodyRecord made = store(helper).byOwner(owner).orElseThrow();
+            BodyRecord held = new BodyRecord(made.owner(), made.ownerName(), made.bodyEntity(), made.type(), made.loggedOutAt(),
+                    false, BodySnapshot.of(body), made.skin(), made.emptyAtLogout(), made.copiedEffects(), true);
+            body.discard();
+            store(helper).put(held);
+            restored = PlayerBody.fromRecord(server, held);
+            helper.assertTrue(restored != null, "no player body brought back");
+        } finally {
+            Settings.get().bodies = before;
+        }
+        Vec3 at = restored.position();
+        helper.runBeforeTestEnd(() -> cleanUp(helper, owner));
+        helper.startSequence()
+                .thenExecuteAfter(20, () -> helper.assertValueEqual(restored.position(), at, "the held body's position"))
+                .thenExecute(() -> cleanUp(helper, owner))
+                .thenSucceed();
+    }
+
     // The record is by uuid. After a restart the body comes back from it under the old name, and its owner, renamed
     // since, still takes it over. The restart is done by hand, as above, and the record goes through the body file's
     // codec on the way, as a restart reads it from disk. The store itself is shared by every test running, so it is

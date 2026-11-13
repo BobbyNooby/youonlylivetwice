@@ -26,6 +26,9 @@ import java.util.UUID;
  * its effects over only then, whatever bodies.copyEffects says by that time. A record saved before this was kept
  * counts as copied: the switch is on by default, so its body most likely took them, and then its snapshot holds the
  * owner's effects as they ran on the body.
+ * <p>
+ * held is true for a body made while its owner rode a vehicle that wasn't on dry ground, so it is held where it lies
+ * over water, lava or air whatever bodies.movable says. A player body comes back from this record, so it needs it.
  */
 public record BodyRecord(
         UUID owner,
@@ -37,7 +40,8 @@ public record BodyRecord(
         BodySnapshot snapshot,
         PropertyMap skin,
         Set<EquipmentSlot> emptyAtLogout,
-        boolean copiedEffects
+        boolean copiedEffects,
+        boolean held
 ) {
     public BodyRecord {
         emptyAtLogout = Set.copyOf(emptyAtLogout);
@@ -62,8 +66,18 @@ public record BodyRecord(
             EquipmentSlot.CODEC.listOf().<Set<EquipmentSlot>>xmap(Set::copyOf, slots -> slots.stream().sorted().toList())
                     .optionalFieldOf("empty_at_logout", Set.of()).forGetter(BodyRecord::emptyAtLogout),
             // Missing from a record saved before it was kept, which counts as copied
-            Codec.BOOL.optionalFieldOf("copied_effects", true).forGetter(BodyRecord::copiedEffects)
+            Codec.BOOL.optionalFieldOf("copied_effects", true).forGetter(BodyRecord::copiedEffects),
+            // Missing from a record saved before it was kept, whose body wasn't held
+            Codec.BOOL.optionalFieldOf("held", false).forGetter(BodyRecord::held)
     ).apply(i, BodyRecord::new));
+
+    /** A record whose body isn't held, as one saved before that was kept. */
+    public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
+                      boolean pendingRemoval, BodySnapshot snapshot, PropertyMap skin, Set<EquipmentSlot> emptyAtLogout,
+                      boolean copiedEffects) {
+        this(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout, copiedEffects,
+                false);
+    }
 
     /** A record that counts nothing on its body as real and its effects as copied, as one saved before either was kept. */
     public BodyRecord(UUID owner, String ownerName, UUID bodyEntity, YoltConfig.BodyType type, long loggedOutAt,
@@ -83,11 +97,11 @@ public record BodyRecord(
 
     public BodyRecord withSnapshot(BodySnapshot snapshot) {
         return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
-                copiedEffects);
+                copiedEffects, held);
     }
 
     public BodyRecord withPendingRemoval(boolean pendingRemoval) {
         return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
-                copiedEffects);
+                copiedEffects, held);
     }
 }
