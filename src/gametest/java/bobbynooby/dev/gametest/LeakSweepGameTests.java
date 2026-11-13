@@ -108,11 +108,17 @@ public class LeakSweepGameTests {
     // Real positions within 512 blocks of the spot's chunk. Shifted, the same positions sit within 512 of 0, 0. A constant
     // shifted on its way out, such as a zero the client ignores, sits within 512 of the offset itself.
     private static final int REACH = 512;
-    private static final LeakScanner.Band BAND = LeakScanner.Band.around("real", -OFFSET.x(), -OFFSET.z(), REACH);
-    private static final LeakScanner.Band OFFSET_BAND = LeakScanner.Band.around("offset", OFFSET.x(), OFFSET.z(), REACH);
+    // Each band is named by everything that lands in it: a real place, a constant (such as a zero the client ignores)
+    // shifted in a frame, a place shifted the wrong way, or a place shifted in a frame other than its own
+    private static final LeakScanner.Band BAND = LeakScanner.Band.around(
+            "real, the End frame's constant or the nether in the overworld's frame", -OFFSET.x(), -OFFSET.z(), REACH);
+    private static final LeakScanner.Band OFFSET_BAND = LeakScanner.Band.around(
+            "the overworld frame's constant, the End's real or the overworld in the nether's frame", OFFSET.x(), OFFSET.z(),
+            REACH);
     // A real position shifted the wrong way, by minus the offset, lands near twice the spot
-    private static final LeakScanner.Band WRONG_SIGN_BAND = LeakScanner.Band.around("wrong sign or the nether's real",
-            -2 * OFFSET.x(), -2 * OFFSET.z(), REACH);
+    private static final LeakScanner.Band WRONG_SIGN_BAND = LeakScanner.Band.around(
+            "the overworld's wrong sign, the nether's real or the overworld in the End's frame", -2 * OFFSET.x(),
+            -2 * OFFSET.z(), REACH);
     // The travel scene's nether spot is twice the spot and its End spot the spot's mirror, each in a chunk column of its
     // own and at another place in its chunk, so each frame has an offset of its own. Then a position shifted in the frame
     // the client just left lands in a band too: nether places shifted by the overworld's offset in the real band, and
@@ -122,8 +128,9 @@ public class LeakSweepGameTests {
     private static final Offset NETHER_OFFSET = new Offset(-24_576, 24_576);
     private static final Vec3 END_SPOT = new Vec3(-12_277.5, 100.0, 12_290.5);
     private static final Offset END_OFFSET = new Offset(12_288, -12_288);
-    private static final LeakScanner.Band NETHER_OFFSET_BAND = LeakScanner.Band.around("the nether's offset",
-            NETHER_OFFSET.x(), NETHER_OFFSET.z(), REACH);
+    private static final LeakScanner.Band NETHER_OFFSET_BAND = LeakScanner.Band.around(
+            "the nether frame's constant, the End's wrong sign or the End in the overworld's frame", NETHER_OFFSET.x(),
+            NETHER_OFFSET.z(), REACH);
     private static final LeakScanner.Band NETHER_WRONG_SIGN_BAND = LeakScanner.Band.around("the nether's wrong sign",
             -2 * NETHER_OFFSET.x(), -2 * NETHER_OFFSET.z(), REACH);
     private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND, WRONG_SIGN_BAND, NETHER_OFFSET_BAND,
