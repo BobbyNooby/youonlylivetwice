@@ -87,6 +87,13 @@ jobs:
           detailed_summary: true
           fail_on_failure: false
           require_tests: false
+      - name: store test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: build/test-results/
+          retention-days: 14
       - name: store test reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -102,8 +109,8 @@ jobs:
           path: build/libs/
 
   client_game_test:
-    # Every push and pull request; a manual run only when asked for
-    if: github.event_name != 'workflow_dispatch' || inputs.client
+    # Pull requests, pushes to release (the release job needs it) and manual runs that ask for it. Pushes to any other branch skip it.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/release') || (github.event_name == 'workflow_dispatch' && inputs.client)
     runs-on: ubuntu-24.04
     # A client that can't open a window hangs instead of exiting
     timeout-minutes: 30
