@@ -218,10 +218,10 @@ public class BodyStoreGameTests {
     // A plain helmet in place of a named one that broke on the body is not its copy
     @GameTest
     public void gearSyncHandsOverSameItemWithOtherComponents(GameTestHelper helper) {
-        ItemStack enchanted = damaged(Items.IRON_HELMET, 5);
-        enchanted.set(DataComponents.CUSTOM_NAME, Component.literal("Lucky"));
+        ItemStack named = damaged(Items.IRON_HELMET, 5);
+        named.set(DataComponents.CUSTOM_NAME, Component.literal("Lucky"));
         Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET)),
-                Map.of(EquipmentSlot.HEAD, enchanted));
+                Map.of(EquipmentSlot.HEAD, named));
         ItemStack head = out.get(EquipmentSlot.HEAD);
         helper.assertTrue(head.is(Items.IRON_HELMET) && !head.has(DataComponents.CUSTOM_NAME), "the owner's helmet came back: " + head);
         helper.succeed();

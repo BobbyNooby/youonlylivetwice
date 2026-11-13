@@ -107,8 +107,9 @@ public class BodyHandsGameTests {
 
     // A zombie hits a player body that holds its shield up. The shield takes the hit and wears, as a player's does
     // (vanilla wears a shield on players only), and the login carries that wear back onto the real shield and changes
-    // nothing else. A copy changed in any other way no longer counts as the copy (GearSync), so nothing else changes. The shield is raised the way a client's use packet starts it; the body's own ticks then take it
-    // past the shield's delay, and the hit goes through the damage path directly.
+    // nothing else. The body's copies are left alone apart from the hit, so only the wear comes back. The shield is
+    // raised the way a client's use packet starts it; the body's own ticks then take it past the shield's delay, and
+    // the hit goes through the damage path directly.
     @GameTest(environment = PLAYER_BODY, maxTicks = 40)
     public void handsAfterBodyWasHit(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
