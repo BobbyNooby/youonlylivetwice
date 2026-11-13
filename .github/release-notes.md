@@ -6,8 +6,8 @@ resource pack.
 - **Death lockout.** Dying kicks you, and you can't rejoin for 7 days (configurable).
 - **Graves.** Your items stay in a player head where you died, and anyone can loot it. Graves can't be broken and
   never expire.
-- **Reviving.** Craft a grave head with a nether star, a netherite ingot, a gold ingot and an iron ingot into a paper
-  called "Revive <name>". Right-click with it to end that player's lockout.
+- **Reviving.** Craft a grave head with a nether star, a netherite ingot, a diamond, a gold ingot and an iron ingot
+  into a paper called "Revive <name>". Right-click with it to end that player's lockout.
 - **Logout bodies.** When you log out, your body stays where you stood. Whatever happens to it happens to you.
 - **Hidden information.** Global chat becomes proximity chat. The tab list, nametags, commands, the online player
   count, death, join and advancement messages and the coordinates on F3 are hidden. Ops can turn on an admin view to
