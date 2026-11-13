@@ -1,6 +1,7 @@
 package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.hardcore.BloodMoon;
 import net.fabricmc.fabric.api.entity.event.v1.EntitySleepEvents;
 
 /** What the sleep switches mean; the sleep and bed-respawn hooks only ask these. */
@@ -21,8 +22,9 @@ public final class Sleep {
         return Settings.on(c -> c.sleep.hideSleepers);
     }
 
+    /** True when sleeping can't skip the night: always with the switch on, and during a blood moon unless it allows it. */
     public static boolean blocksNightSkip() {
-        return Settings.on(c -> c.sleep.noNightSkip);
+        return Settings.on(c -> c.sleep.noNightSkip) || BloodMoon.blocksSkip();
     }
 
     /** True when nobody gets the "players sleeping" line; with the night blocked its count could never be reached. */

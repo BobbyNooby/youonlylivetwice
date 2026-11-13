@@ -4,6 +4,7 @@ import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.mixin.CreeperAccessor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -16,12 +17,14 @@ import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Tougher mobs: hostile mobs get more health and speed as saved attribute modifiers, set each time a mob loads, and hit
@@ -34,13 +37,63 @@ public final class MobBoosts {
     public static final String TOUGH = "yolt.tough";
     /** Left alone for good, for how it was spawned. */
     public static final String VANILLA = "yolt.vanilla";
+    public static final Identifier BLOOD_MOON = Yolt.id("blood_moon");
+    /** First seen during a blood moon, and boosted for it for life. */
+    public static final String BLOOD_MOON_MARK = "yolt.blood_moon";
 
     private MobBoosts() {}
 
     /** Decides a mob seen for the first time, then sets or removes the modifiers to match the config. */
     public static void onLoad(Mob mob, ServerLevel level) {
+        // Asked before tougher mobs tags it, which would make a new mob look seen before
+        boolean firstSight = firstSight(mob);
         toughen(mob);
+        markForBloodMoon(mob, level, firstSight);
         Relentless.onLoad(mob);
+    }
+
+    // New to the world: not loaded from disk, never ticked, and with no verdict of ours yet. A mob loads again each
+    // time its chunk starts ticking, so the tick count tells one already about from one just spawned.
+    private static boolean firstSight(Mob mob) {
+        Set<String> tags = mob.entityTags();
+        return mob.tickCount == 0 && mob.spawnReason() != EntitySpawnReason.LOAD && !tags.contains(TOUGH)
+                && !tags.contains(VANILLA) && !tags.contains(BLOOD_MOON_MARK);
+    }
+
+    // The same mobs tougher mobs would touch, whether or not tougher mobs is on; its boost goes on top of that one
+    private static void markForBloodMoon(Mob mob, ServerLevel level, boolean firstSight) {
+        if (!Settings.on(c -> c.hardcore.bloodMoon.enabled)) {
+            applyBloodMoon(mob, MobMaths.Boost.NONE);
+            return;
+        }
+        if (mob.entityTags().contains(BLOOD_MOON_MARK)) {
+            applyBloodMoon(mob, bloodMoonBoost());
+            return;
+        }
+        if (!firstSight || !BloodMoon.activeIn(level) || !eligible(mob)) {
+            return;
+        }
+        MobMaths.Boost boost = bloodMoonBoost();
+        applyBloodMoon(mob, boost);
+        // Once only, as with tougher mobs
+        mob.setHealth(mob.getHealth() * (float) boost.health());
+        mob.addTag(BLOOD_MOON_MARK);
+        if (mob instanceof Creeper creeper && creeper.getRandom().nextDouble() < Settings.get().hardcore.bloodMoon.chargedCreeperChance) {
+            creeper.getEntityData().set(CreeperAccessor.yoltPowered(), true);
+        }
+    }
+
+    private static void applyBloodMoon(Mob mob, MobMaths.Boost boost) {
+        multiply(mob, Attributes.MAX_HEALTH, BLOOD_MOON, boost.health());
+        multiply(mob, Attributes.MOVEMENT_SPEED, BLOOD_MOON, boost.speed());
+        if (mob.getHealth() > mob.getMaxHealth()) {
+            mob.setHealth(mob.getMaxHealth());
+        }
+    }
+
+    private static MobMaths.Boost bloodMoonBoost() {
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        return MobMaths.bloodMoon(config.health, config.damage, config.speed);
     }
 
     private static void toughen(Mob mob) {
@@ -75,13 +128,23 @@ public final class MobBoosts {
                 && spawnAllowed(mob.spawnReason(), config);
     }
 
-    /** The damage a hit deals: times the attacker's damage boost when a boosted mob landed it directly. */
+    /**
+     * The damage a hit deals: times the attacker's damage boosts when a boosted mob landed it directly, tougher mobs'
+     * and the blood moon's multiplied together.
+     */
     public static float damage(LivingEntity victim, DamageSource source, float amount) {
-        if (!Settings.on(c -> c.hardcore.tougherMobs.enabled)) {
+        boolean tougher = Settings.on(c -> c.hardcore.tougherMobs.enabled);
+        boolean bloodMoon = Settings.on(c -> c.hardcore.bloodMoon.enabled);
+        if (!tougher && !bloodMoon) {
             return amount;
         }
         // The one who caused it, so a skeleton's arrow counts and poison or fire, which have none, don't
-        if (!(source.getEntity() instanceof Mob attacker) || !attacker.entityTags().contains(TOUGH)) {
+        if (!(source.getEntity() instanceof Mob attacker)) {
+            return amount;
+        }
+        boolean tough = tougher && attacker.entityTags().contains(TOUGH);
+        boolean marked = bloodMoon && attacker.entityTags().contains(BLOOD_MOON_MARK);
+        if (!tough && !marked) {
             return amount;
         }
         HardcoreConfig.TougherMobsSection config = config();
@@ -89,7 +152,11 @@ public final class MobBoosts {
                 && !BodyRules.isBody(victim)) {
             return amount;
         }
-        double multiplier = boost(attacker, config).damage();
+        MobMaths.Boost boost = tough ? boost(attacker, config) : MobMaths.Boost.NONE;
+        if (marked) {
+            boost = boost.times(bloodMoonBoost());
+        }
+        double multiplier = boost.damage();
         return multiplier == 1.0 ? amount : (float) (amount * multiplier);
     }
 

@@ -307,6 +307,31 @@ class HardcoreConfigTest {
         d.put("hardcore.relentlessMobs.doorsAnyDifficulty", "true");
         d.put("hardcore.relentlessMobs.doorBreakerChance", "0.25");
         d.put("hardcore.relentlessMobs.dropBrokenDoor", "true");
+        d.put("hardcore.bloodMoon.enabled", "false");
+        d.put("hardcore.bloodMoon.chance", "0.1");
+        d.put("hardcore.bloodMoon.minNightsBetween", "5");
+        d.put("hardcore.bloodMoon.fullMoonsOnly", "false");
+        d.put("hardcore.bloodMoon.graceDays", "8");
+        d.put("hardcore.bloodMoon.startTick", "12542");
+        d.put("hardcore.bloodMoon.endTick", "23460");
+        d.put("hardcore.bloodMoon.warnTick", "9000");
+        d.put("hardcore.bloodMoon.health", "1.25");
+        d.put("hardcore.bloodMoon.damage", "1.0");
+        d.put("hardcore.bloodMoon.speed", "1.1");
+        d.put("hardcore.bloodMoon.spawnCap", "2.0");
+        d.put("hardcore.bloodMoon.capBoostNearPlayerBodies", "false");
+        d.put("hardcore.bloodMoon.canSleepThrough", "false");
+        d.put("hardcore.bloodMoon.armourChance", "0.35");
+        d.put("hardcore.bloodMoon.enchantChance", "0.25");
+        d.put("hardcore.bloodMoon.xp", "2.0");
+        d.put("hardcore.bloodMoon.extraLootRolls", "1");
+        d.put("hardcore.bloodMoon.chargedCreeperChance", "0.0");
+        d.put("hardcore.bloodMoon.bossBar", "true");
+        d.put("hardcore.bloodMoon.darkenSky", "true");
+        d.put("hardcore.bloodMoon.fog", "false");
+        d.put("hardcore.bloodMoon.warning.title", "true");
+        d.put("hardcore.bloodMoon.warning.chat", "true");
+        d.put("hardcore.bloodMoon.warning.sound", "true");
         return d;
     }
 
@@ -384,7 +409,10 @@ class HardcoreConfigTest {
                   "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1},
                   "tougherMobs": {"health": 0, "damage": -1, "speed": -1, "damageAppliesTo": "villagers",
                                   "overrides": {"minecraft:ghast": {"helth": 2.0}}},
-                  "relentlessMobs": {"followRange": 0, "doorBreakerChance": 2}
+                  "relentlessMobs": {"followRange": 0, "doorBreakerChance": 2},
+                  "bloodMoon": {"chance": 2, "minNightsBetween": -1, "graceDays": -1, "health": 0, "damage": -1,
+                                "speed": -1, "spawnCap": -1, "armourChance": 2, "enchantChance": 2, "xp": -1,
+                                "extraLootRolls": -1, "chargedCreeperChance": 2}
                 }}""");
         assertFellBack(single, List.of(
                 "hardcore.slow.cap: must be 0 to 1",
@@ -445,7 +473,19 @@ class HardcoreConfigTest {
                 "hardcore.tougherMobs.damageAppliesTo: unknown value",
                 "hardcore.tougherMobs.overrides: every value must name health, damage or speed and be 0 or more, with health above 0",
                 "hardcore.relentlessMobs.followRange: must be above 0",
-                "hardcore.relentlessMobs.doorBreakerChance: must be 0 to 1"));
+                "hardcore.relentlessMobs.doorBreakerChance: must be 0 to 1",
+                "hardcore.bloodMoon.chance: must be 0 to 1",
+                "hardcore.bloodMoon.minNightsBetween: must be 0 or more",
+                "hardcore.bloodMoon.graceDays: must be 0 or more",
+                "hardcore.bloodMoon.health: must be above 0",
+                "hardcore.bloodMoon.damage: must be 0 or more",
+                "hardcore.bloodMoon.speed: must be 0 or more",
+                "hardcore.bloodMoon.spawnCap: must be 0 or more",
+                "hardcore.bloodMoon.armourChance: must be 0 to 1",
+                "hardcore.bloodMoon.enchantChance: must be 0 to 1",
+                "hardcore.bloodMoon.xp: must be 0 or more",
+                "hardcore.bloodMoon.extraLootRolls: must be 0 or more",
+                "hardcore.bloodMoon.chargedCreeperChance: must be 0 to 1"));
 
         // Each pair fine on its own but wrong together, so both of its keys go back
         ConfigLoader.Result pairs = loadJson("""
@@ -453,7 +493,8 @@ class HardcoreConfigTest {
                   "slow": {"cap": 0.1, "step": 0.2},
                   "weight": {"freeLoad": 60, "fullLoad": 56},
                   "legs": {"breakAtDamage": 3, "breakAtDamageFullLoad": 5},
-                  "limp": {"belowHearts": 4, "recoverAtHearts": 3}
+                  "limp": {"belowHearts": 4, "recoverAtHearts": 3},
+                  "bloodMoon": {"warnTick": 13000}
                 }}""");
         assertFellBack(pairs, List.of(
                 "hardcore.slow.step: must be at most hardcore.slow.cap",
@@ -463,7 +504,10 @@ class HardcoreConfigTest {
                 "hardcore.legs.breakAtDamageFullLoad: must be at most hardcore.legs.breakAtDamage",
                 "hardcore.legs.breakAtDamage: must be at least hardcore.legs.breakAtDamageFullLoad",
                 "hardcore.limp.belowHearts: must be less than hardcore.limp.recoverAtHearts",
-                "hardcore.limp.recoverAtHearts: must be more than hardcore.limp.belowHearts"));
+                "hardcore.limp.recoverAtHearts: must be more than hardcore.limp.belowHearts",
+                "hardcore.bloodMoon.warnTick: must keep 0 <= warnTick < startTick < endTick <= 23999",
+                "hardcore.bloodMoon.startTick: must keep 0 <= warnTick < startTick < endTick <= 23999",
+                "hardcore.bloodMoon.endTick: must keep 0 <= warnTick < startTick < endTick <= 23999"));
 
         // The curse against the limp, from either side. The numbers go back and both features stay on.
         List<String> curseAndLimp = List.of(

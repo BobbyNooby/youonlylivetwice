@@ -1,0 +1,9 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.bloodMoon.enabled": "true",
+    "hardcore.bloodMoon.chance": "1.0",
+    "hardcore.bloodMoon.graceDays": "1000000000",
+    "hardcore.bloodMoon.minNightsBetween": "0"
+  }
+}

@@ -471,6 +471,10 @@ public class CommandGameTests {
                 yolt curse <player> set | literal | level 0
                 yolt curse <player> set <hearts> | brigadier:integer {"min":0} | level 0 | runs
                 yolt curse <player> clear | literal | level 0 | runs
+                yolt bloodmoon | literal | level 2
+                yolt bloodmoon start | literal | level 0 | runs
+                yolt bloodmoon stop | literal | level 0 | runs
+                yolt bloodmoon status | literal | level 0 | runs
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0
                 yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs

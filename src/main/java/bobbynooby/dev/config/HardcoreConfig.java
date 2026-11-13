@@ -25,6 +25,7 @@ public final class HardcoreConfig {
         public ElytraSection elytra = new ElytraSection();
         public TougherMobsSection tougherMobs = new TougherMobsSection();
         public RelentlessMobsSection relentlessMobs = new RelentlessMobsSection();
+        public BloodMoonSection bloodMoon = new BloodMoonSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -250,6 +251,41 @@ public final class HardcoreConfig {
         @Applies(Applies.When.MOBS_LOAD) public double doorBreakerChance = 0.25;
         public boolean dropBrokenDoor = true;
         public List<String> exclude = new ArrayList<>(List.of("minecraft:warden"));
+    }
+
+    // Ticks are times of day, 0 to 23999; a night rolls from the world seed and its day number. The multipliers go on top
+    // of tougher mobs' own, and the chances are the least a mob spawned in it gets.
+    public static class BloodMoonSection {
+        public boolean enabled = false;
+        public double chance = 0.1;
+        public int minNightsBetween = 5;
+        public boolean fullMoonsOnly = false;
+        public int graceDays = 8;
+        public int startTick = 12542;
+        public int endTick = 23460;
+        public int warnTick = 9000;
+        @Applies(Applies.When.MOBS_LOAD) public double health = 1.25;
+        public double damage = 1.0;
+        @Applies(Applies.When.MOBS_LOAD) public double speed = 1.1;
+        public double spawnCap = 2.0;
+        public boolean capBoostNearPlayerBodies = false;
+        public boolean canSleepThrough = false;
+        public double armourChance = 0.35;
+        public double enchantChance = 0.25;
+        public double xp = 2.0;
+        public int extraLootRolls = 1;
+        public double chargedCreeperChance = 0.0;
+        public boolean bossBar = true;
+        public boolean darkenSky = true;
+        public boolean fog = false;
+        public WarningSection warning = new WarningSection();
+    }
+
+    // What the warning before a blood moon sends each player in the overworld
+    public static class WarningSection {
+        public boolean title = true;
+        public boolean chat = true;
+        public boolean sound = true;
     }
 
     // Name, value, name, value..., kept in the order given

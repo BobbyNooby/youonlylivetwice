@@ -42,6 +42,7 @@ public final class YoltCommands {
             ConfigCommands.register(yolt);
             StatusCommands.register(yolt);
             CurseCommands.register(yolt);
+            BloodMoonCommands.register(yolt);
             SkinCommands.register(yolt);
             dispatcher.register(yolt);
             dispatcher.register(StatusCommands.command());

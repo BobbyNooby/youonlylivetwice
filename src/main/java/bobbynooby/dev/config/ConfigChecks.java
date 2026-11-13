@@ -30,6 +30,8 @@ final class ConfigChecks {
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
     // Each level is one more pass over the contents of the containers inside, so the count stays cheap
     static final int MAX_CONTAINER_DEPTH = 8;
+    // A day is 24,000 ticks, so a time of day runs 0 to this
+    static final int LAST_TICK_OF_DAY = 23999;
     // An anvil price of 40 or more shows "Too Expensive!"
     static final int MAX_ANVIL_PRICE = 39;
     private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
@@ -254,6 +256,7 @@ final class ConfigChecks {
             c.relentlessMobs.doorBreakerChance = fallback.relentlessMobs.doorBreakerChance;
             fellBack.accept("hardcore.relentlessMobs.doorBreakerChance", "must be 0 to 1");
         }
+        bloodMoon(c.bloodMoon, fallback.bloodMoon, fellBack);
         curseAndLimp(c, fallback, fellBack);
     }
 
@@ -280,6 +283,70 @@ final class ConfigChecks {
             mobs.overrides = new LinkedHashMap<>(fallback.overrides);
             fellBack.accept("hardcore.tougherMobs.overrides",
                     "every value must name health, damage or speed and be 0 or more, with health above 0");
+        }
+    }
+
+    // As with tougher mobs, no health would kill a mob as it loads
+    private static void bloodMoon(HardcoreConfig.BloodMoonSection moon, HardcoreConfig.BloodMoonSection fallback,
+                                  BiConsumer<String, String> fellBack) {
+        if (!isShare(moon.chance)) {
+            moon.chance = fallback.chance;
+            fellBack.accept("hardcore.bloodMoon.chance", "must be 0 to 1");
+        }
+        if (moon.minNightsBetween < 0) {
+            moon.minNightsBetween = fallback.minNightsBetween;
+            fellBack.accept("hardcore.bloodMoon.minNightsBetween", "must be 0 or more");
+        }
+        if (moon.graceDays < 0) {
+            moon.graceDays = fallback.graceDays;
+            fellBack.accept("hardcore.bloodMoon.graceDays", "must be 0 or more");
+        }
+        // All three go back, since any one of them could be the typo
+        if (!(0 <= moon.warnTick && moon.warnTick < moon.startTick && moon.startTick < moon.endTick
+                && moon.endTick <= LAST_TICK_OF_DAY)) {
+            moon.warnTick = fallback.warnTick;
+            moon.startTick = fallback.startTick;
+            moon.endTick = fallback.endTick;
+            String order = "must keep 0 <= warnTick < startTick < endTick <= " + LAST_TICK_OF_DAY;
+            fellBack.accept("hardcore.bloodMoon.warnTick", order);
+            fellBack.accept("hardcore.bloodMoon.startTick", order);
+            fellBack.accept("hardcore.bloodMoon.endTick", order);
+        }
+        if (!(moon.health > 0)) {
+            moon.health = fallback.health;
+            fellBack.accept("hardcore.bloodMoon.health", "must be above 0");
+        }
+        if (!(moon.damage >= 0)) {
+            moon.damage = fallback.damage;
+            fellBack.accept("hardcore.bloodMoon.damage", "must be 0 or more");
+        }
+        if (!(moon.speed >= 0)) {
+            moon.speed = fallback.speed;
+            fellBack.accept("hardcore.bloodMoon.speed", "must be 0 or more");
+        }
+        if (!(moon.spawnCap >= 0)) {
+            moon.spawnCap = fallback.spawnCap;
+            fellBack.accept("hardcore.bloodMoon.spawnCap", "must be 0 or more");
+        }
+        if (!isShare(moon.armourChance)) {
+            moon.armourChance = fallback.armourChance;
+            fellBack.accept("hardcore.bloodMoon.armourChance", "must be 0 to 1");
+        }
+        if (!isShare(moon.enchantChance)) {
+            moon.enchantChance = fallback.enchantChance;
+            fellBack.accept("hardcore.bloodMoon.enchantChance", "must be 0 to 1");
+        }
+        if (!(moon.xp >= 0)) {
+            moon.xp = fallback.xp;
+            fellBack.accept("hardcore.bloodMoon.xp", "must be 0 or more");
+        }
+        if (moon.extraLootRolls < 0) {
+            moon.extraLootRolls = fallback.extraLootRolls;
+            fellBack.accept("hardcore.bloodMoon.extraLootRolls", "must be 0 or more");
+        }
+        if (!isShare(moon.chargedCreeperChance)) {
+            moon.chargedCreeperChance = fallback.chargedCreeperChance;
+            fellBack.accept("hardcore.bloodMoon.chargedCreeperChance", "must be 0 to 1");
         }
     }
 
