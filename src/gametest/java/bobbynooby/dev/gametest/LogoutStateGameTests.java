@@ -186,7 +186,8 @@ public class LogoutStateGameTests {
     }
 
     // The boat settles on the pool first: once a player is in it, the server no longer moves it. Then 600 ticks after
-    // the logout the body is still where it was made, on the boat's top, alive and with full air.
+    // the logout the body is still where it was made, on the boat's top, alive and with full air. A passenger whose
+    // boat stays comes back where the body is, not on the boat.
     private static void boatLogout(GameTestHelper helper, boolean shared) {
         Boat boat = poolWithBoat(helper);
         Logout logout = new Logout(helper, boat);
@@ -221,6 +222,9 @@ public class LogoutStateGameTests {
                     helper.assertValueEqual(body.position(), logout.at, "the body's position");
                     if (shared) {
                         helper.assertFalse(boat.isRemoved(), "the boat is gone");
+                        ServerPlayer back = TestPlayers.rejoin(helper, logout.profile, GameType.SURVIVAL, ABOVE_POOL);
+                        helper.assertFalse(back.isPassenger(), "the owner came back riding " + back.getVehicle());
+                        helper.assertValueEqual(back.position(), logout.at, "the owner's spot after login");
                     }
                 }))
                 .thenSucceed();
