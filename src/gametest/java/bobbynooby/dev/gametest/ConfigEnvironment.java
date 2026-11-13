@@ -41,10 +41,8 @@ record ConfigEnvironment(Map<String, String> values) implements TestEnvironmentD
         for (Map.Entry<String, String> value : values.entrySet()) {
             ConfigKey key = ConfigKeys.find(value.getKey())
                     .orElseThrow(() -> new IllegalArgumentException("No config key is named " + value.getKey()));
-            if (key.kind() != ConfigKey.Kind.BOOLEAN && key.kind() != ConfigKey.Kind.INT && key.kind() != ConfigKey.Kind.DOUBLE) {
-                throw new IllegalArgumentException(key.path() + " is not a switch or a number");
-            }
             Object parsed;
+            // Read as the command reads it, then as the file would hold it, so every kind of key works
             try {
                 parsed = GSON.fromJson(key.parse(value.getValue()), key.field().getGenericType());
             } catch (ConfigKey.BadValue e) {
