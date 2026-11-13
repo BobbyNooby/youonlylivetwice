@@ -6,7 +6,17 @@ import bobbynooby.dev.coords.Coverage;
 import bobbynooby.dev.coords.EntityRules;
 import bobbynooby.dev.coords.ItemRule;
 import bobbynooby.dev.coords.ParticleRule;
+import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
+import com.mojang.brigadier.tree.CommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.commands.arguments.coordinates.ColumnPosArgument;
+import net.minecraft.commands.arguments.coordinates.Coordinates;
+import net.minecraft.commands.arguments.coordinates.RotationArgument;
+import net.minecraft.commands.arguments.coordinates.Vec2Argument;
+import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -19,11 +29,19 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.gameevent.PositionSourceType;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Consumer;
 
 // A packet type nobody looked at fails here, such as one a Minecraft update adds, so no position in it goes out real
 // unseen. They only read the tables, so they share the default batch.
@@ -92,6 +110,67 @@ public class CoordinateOffsetCoverageGameTests {
         helper.assertValueEqual(Arrays.stream(kinds).map(String::valueOf).toList(), List.of("EMPTY", "VEC3I", "CHUNK", "AZIMUTH"),
                 "waypoint types");
         helper.succeed();
+    }
+
+    // A typed spot is read in the typist's frame through the hooks on the coordinate arguments, and a 3D argument that
+    // keeps whole numbers as typed is taken for a vector and left alone. So a new argument type that parses coordinates,
+    // or a second such vector, would be read real; both fail here. Rotation parses coordinates too, but holds no place.
+    @GameTest
+    public void commandTreeHasOnlyKnownCoordinateArguments(GameTestHelper helper) throws ReflectiveOperationException {
+        Field centred = Vec3Argument.class.getDeclaredField("centerCorrect");
+        centred.setAccessible(true);
+        Set<Class<?>> coordinateTypes = new HashSet<>();
+        Set<String> vectors = new TreeSet<>();
+        CommandNode<CommandSourceStack> root = helper.getLevel().getServer().getCommands().getDispatcher().getRoot();
+        walk(root, "", Collections.newSetFromMap(new IdentityHashMap<>()), node -> {
+            ArgumentType<?> type = node.node().getType();
+            if (parsesCoordinates(type.getClass())) {
+                coordinateTypes.add(type.getClass());
+            }
+            if (type instanceof Vec3Argument) {
+                try {
+                    if (!centred.getBoolean(type)) {
+                        vectors.add(node.path());
+                    }
+                } catch (IllegalAccessException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        });
+        helper.assertValueEqual(coordinateTypes, Set.<Class<?>>of(BlockPosArgument.class, ColumnPosArgument.class,
+                Vec2Argument.class, Vec3Argument.class, RotationArgument.class), "argument types that parse coordinates");
+        helper.assertValueEqual(vectors, Set.of("particle name pos delta"), "3D arguments read as a vector");
+        helper.succeed();
+    }
+
+    private record Argument(ArgumentCommandNode<CommandSourceStack, ?> node, String path) {}
+
+    // Children only: a redirect such as execute's run leads back to the root
+    private static void walk(CommandNode<CommandSourceStack> node, String path, Set<CommandNode<CommandSourceStack>> seen,
+                             Consumer<Argument> each) {
+        if (!seen.add(node)) {
+            return;
+        }
+        for (CommandNode<CommandSourceStack> child : node.getChildren()) {
+            String at = path.isEmpty() ? child.getName() : path + " " + child.getName();
+            if (child instanceof ArgumentCommandNode<CommandSourceStack, ?> argument) {
+                each.accept(new Argument(argument, at));
+            }
+            walk(child, at, seen, each);
+        }
+    }
+
+    // An argument type whose parser returns Coordinates, on the class or one it extends
+    private static boolean parsesCoordinates(Class<?> type) {
+        for (Class<?> at = type; at != null; at = at.getSuperclass()) {
+            for (Type implemented : at.getGenericInterfaces()) {
+                if (implemented instanceof ParameterizedType parameterized && parameterized.getRawType() == ArgumentType.class
+                        && parameterized.getActualTypeArguments()[0] == Coordinates.class) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // The same for the serializers of entity data, which is part of every spawn
