@@ -10,6 +10,7 @@ import bobbynooby.dev.graves.GraveMenu;
 import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -108,21 +109,15 @@ public class LogoutStateGameTests {
         Logout logout = new Logout(helper, horse);
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(horse.onGround(), "the horse has not landed"))
-                .thenExecute(() -> {
+                .thenExecute(logout.step(() -> {
                     logout.leave(TestPlayers.join(helper, "HorseGround", GameType.SURVIVAL, new BlockPos(2, 1, 2)), null);
                     helper.assertFalse(logout.record().held(), "the body on dry ground is held");
                     helper.assertTrue(logout.body.getY() > floorY + 0.5, "the body did not start on the horse's top: "
                             + logout.body.getY());
-                })
+                }))
                 .thenWaitUntil(() -> helper.assertTrue(logout.body.onGround() && Math.abs(logout.body.getY() - floorY) < 1.0E-6,
                         "the body is not on the floor: " + logout.body.position()))
-                .thenExecute(() -> {
-                    try {
-                        helper.assertTrue(logout.body.isAlive(), "the body died");
-                    } finally {
-                        logout.cleanUp.run();
-                    }
-                })
+                .thenExecute(logout.last(() -> helper.assertTrue(logout.body.isAlive(), "the body died")))
                 .thenSucceed();
     }
 
@@ -138,26 +133,22 @@ public class LogoutStateGameTests {
         double[] expected = new double[1];
         helper.startSequence()
                 .thenWaitUntil(settled(helper, minecart))
-                .thenExecute(() -> {
+                .thenExecute(logout.step(() -> {
                     double cartTop = minecart.getBoundingBox().maxY;
                     logout.leave(TestPlayers.join(helper, "CartFloor", GameType.SURVIVAL, railAt), null);
                     boolean held = logout.record().held();
                     Yolt.LOGGER.info("minecartLogoutLeavesTheBodyOnTheFloor: the cart was {} ground, so the body is {}",
                             held ? "off" : "on", held ? "held above the rail" : "movable");
                     expected[0] = held ? cartTop : floorY;
-                })
-                .thenExecuteAfter(100, () -> {
-                    try {
-                        Mannequin body = logout.body;
-                        helper.assertTrue(body.isAlive(), "the body died");
-                        helper.assertTrue(helper.getLevel().noBlockCollision(body, body.getBoundingBox().deflate(1.0E-7)),
-                                "the body is inside a block at " + body.position());
-                        helper.assertTrue(Math.abs(body.getY() - expected[0]) < 1.0E-6,
-                                "the body is at y " + body.getY() + ", not " + expected[0]);
-                    } finally {
-                        logout.cleanUp.run();
-                    }
-                })
+                }))
+                .thenExecuteAfter(100, logout.last(() -> {
+                    Mannequin body = logout.body;
+                    helper.assertTrue(body.isAlive(), "the body died");
+                    helper.assertTrue(helper.getLevel().noBlockCollision(body, body.getBoundingBox().deflate(1.0E-7)),
+                            "the body is inside a block at " + body.position());
+                    helper.assertTrue(Math.abs(body.getY() - expected[0]) < 1.0E-6,
+                            "the body is at y " + body.getY() + ", not " + expected[0]);
+                }))
                 .thenSucceed();
     }
 
@@ -169,16 +160,16 @@ public class LogoutStateGameTests {
         double[] boatTop = new double[1];
         helper.startSequence()
                 .thenWaitUntil(settled(helper, boat))
-                .thenExecute(() -> {
+                .thenExecute(logout.step(() -> {
                     ServerPlayer stays = null;
                     if (shared) {
-                        stays = TestPlayers.join(helper, "BoatStays", GameType.SURVIVAL, ABOVE_POOL);
+                        stays = logout.alsoOnline(TestPlayers.join(helper, "BoatStays", GameType.SURVIVAL, ABOVE_POOL));
                         helper.assertTrue(stays.startRiding(boat, true, false), "the first player did not get in");
                     }
                     boatTop[0] = boat.getBoundingBox().maxY;
                     helper.assertTrue(boat.isInWater() && boatTop[0] > helper.absoluteVec(new Vec3(0, 4, 0)).y,
                             "the boat is not floating on the pool: its top is at " + boatTop[0]);
-                    logout.leave(TestPlayers.join(helper, "BoatLeaves", GameType.SURVIVAL, ABOVE_POOL), stays);
+                    logout.leave(TestPlayers.join(helper, "BoatLeaves", GameType.SURVIVAL, ABOVE_POOL), null);
                     helper.assertTrue(logout.record().held(), "the body on the water is not held");
                     helper.assertTrue(Math.abs(logout.body.getY() - boatTop[0]) < 1.0E-6,
                             "the body is at y " + logout.body.getY() + ", not the boat's top " + boatTop[0]);
@@ -189,29 +180,27 @@ public class LogoutStateGameTests {
                         helper.assertTrue(boat.isRemoved(), "the boat stayed without its only rider");
                     }
                     logout.at = logout.body.position();
-                })
-                .thenExecuteAfter(600, () -> {
-                    try {
-                        Mannequin body = logout.body;
-                        helper.assertTrue(body.isAlive(), "the body died: " + body.getLastDamageSource());
-                        helper.assertValueEqual(body.getAirSupply(), body.getMaxAirSupply(), "the body's air");
-                        helper.assertValueEqual(body.position(), logout.at, "the body's position");
-                        if (shared) {
-                            helper.assertFalse(boat.isRemoved(), "the boat is gone");
-                        }
-                    } finally {
-                        logout.cleanUp.run();
+                }))
+                .thenExecuteAfter(600, logout.last(() -> {
+                    Mannequin body = logout.body;
+                    helper.assertTrue(body.isAlive(), "the body died: " + body.getLastDamageSource());
+                    helper.assertValueEqual(body.getAirSupply(), body.getMaxAirSupply(), "the body's air");
+                    helper.assertValueEqual(body.position(), logout.at, "the body's position");
+                    if (shared) {
+                        helper.assertFalse(boat.isRemoved(), "the boat is gone");
                     }
-                })
+                }))
                 .thenSucceed();
     }
 
-    // One rider's logout off a vehicle, with the clean-up that runs at the end or before the timeout
+    // One rider's logout off a vehicle. A test step that fails ends the test at once, so each step cleans up before it
+    // rethrows; the last one cleans up whatever happens, and the timeout's turn covers a wait that never passes.
     private static final class Logout {
         private final GameTestHelper helper;
         private final Entity vehicle;
         private UUID owner;
         private ServerPlayer stays;
+        GameProfile profile;
         Mannequin body;
         Vec3 at;
         final Runnable cleanUp;
@@ -234,13 +223,49 @@ public class LogoutStateGameTests {
             helper.runBeforeTestEnd(cleanUp);
         }
 
-        // With the default body switches on just for the logout
-        void leave(ServerPlayer player, ServerPlayer stays) {
+        Runnable step(Runnable step) {
+            return () -> {
+                try {
+                    step.run();
+                } catch (RuntimeException e) {
+                    cleanUp.run();
+                    throw e;
+                }
+            };
+        }
+
+        Runnable last(Runnable step) {
+            return () -> {
+                try {
+                    step.run();
+                } finally {
+                    cleanUp.run();
+                }
+            };
+        }
+
+        // A player who stays online through the test, left at the clean-up
+        ServerPlayer alsoOnline(ServerPlayer player) {
+            stays = player;
+            return player;
+        }
+
+        void leave(ServerPlayer player, YoltConfig.BodyPose pose) {
+            leave(player, pose, () -> {});
+        }
+
+        // With the default body switches on just for the logout, and the pose if one is given. justBefore runs once
+        // the player is on the vehicle.
+        void leave(ServerPlayer player, YoltConfig.BodyPose pose, Runnable justBefore) {
             owner = player.getUUID();
-            this.stays = stays;
+            profile = player.getGameProfile();
             YoltConfig.BodiesSection before = useDefaultBodies();
             try {
+                if (pose != null) {
+                    Settings.get().bodies.pose = pose;
+                }
                 helper.assertTrue(player.startRiding(vehicle, true, false), "the player did not get on");
+                justBefore.run();
                 body = disconnectBody(helper, player);
             } finally {
                 Settings.get().bodies = before;
