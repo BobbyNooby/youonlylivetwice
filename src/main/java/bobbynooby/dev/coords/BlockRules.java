@@ -76,9 +76,9 @@ public final class BlockRules {
     }
 
     /** A block entity's update tag as the client is sent it: the same tag when nothing in it moves. */
-    static CompoundTag updateTag(BlockEntityType<?> type, CompoundTag tag, Offset offset) {
+    static CompoundTag updateTag(BlockEntityType<?> type, CompoundTag tag, Frame frame) {
         // A type nobody classified, such as another mod's, goes through the rule as well
-        return BLOCK_ENTITIES.getOrDefault(type, Coverage.TRANSLATED) == Coverage.TRANSLATED ? NbtRule.shift(tag, offset) : tag;
+        return BLOCK_ENTITIES.getOrDefault(type, Coverage.TRANSLATED) == Coverage.TRANSLATED ? NbtRule.shift(tag, frame) : tag;
     }
 
     // From each type's update tag in 26.3. Items are in it as NBT, where a lodestone compass's target is a pos.
@@ -175,7 +175,7 @@ public final class BlockRules {
     private static Packet<?> blockEntityData(ClientboundBlockEntityDataPacket packet, Context context) {
         Offset offset = context.offset();
         return BlockEntityDataPacketInvoker.yoltNew(offset.shift(packet.getPos()), packet.getType(),
-                updateTag(packet.getType(), packet.getTag(), offset));
+                updateTag(packet.getType(), packet.getTag(), context.frame()));
     }
 
     private static Packet<?> blockEvent(ClientboundBlockEventPacket packet, Context context) {

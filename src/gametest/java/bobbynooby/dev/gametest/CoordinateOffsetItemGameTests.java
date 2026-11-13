@@ -36,6 +36,9 @@ import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.HashOps;
@@ -73,6 +76,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 // Positions inside items, both ways, and the hashes of a click. Each test joins a player whose packets it reads, so the
@@ -82,6 +86,7 @@ public class CoordinateOffsetItemGameTests {
     // Where a compass points and where a grave lies, both far from any test
     private static final BlockPos TARGET = new BlockPos(9_001, 64, 77);
     private static final BlockPos GRAVE = new BlockPos(-4_321, 70, 1_234);
+    private static final BlockPos NETHER_TARGET = new BlockPos(-1_250, 40, 2_222);
 
     @GameTest(environment = ITEMS)
     public void compassInTheInventoryShifted(GameTestHelper helper) {
@@ -312,12 +317,103 @@ public class CoordinateOffsetItemGameTests {
     public void clickWithACompassCausesNoResync(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "ciclick", GameType.CREATIVE);
         try {
-            Offset offset = CoordinateOffsets.offset(player);
             ItemStack compass = compass(TARGET);
             player.getInventory().setItem(9, compass);
             player.inventoryMenu.sendAllDataToRemote();
             HashedPatchMap.HashGenerator hasher = clientHasher(player);
-            HashedStack carried = HashedStack.create(ItemRule.shift(compass, offset), hasher);
+            HashedStack carried = HashedStack.create(ItemRule.shift(compass, CoordinateOffsets.frame(player)), hasher);
+            Int2ObjectMap<HashedStack> changed = new Int2ObjectOpenHashMap<>();
+            changed.put(9, HashedStack.EMPTY);
+            int mark = OffsetTestKit.mark(player);
+            TestPlayers.receive(player, new ServerboundContainerClickPacket(player.inventoryMenu.containerId,
+                    player.inventoryMenu.getStateId(), (short) 9, (byte) 0, ContainerInput.PICKUP, changed, carried));
+
+            helper.assertTrue(player.inventoryMenu.getCarried().is(Items.COMPASS), "the click did not pick the compass up");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundContainerSetSlotPacket.class).isEmpty(),
+                    "a slot was sent again after the click");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundSetCursorItemPacket.class).isEmpty(),
+                    "the cursor was sent again after the click");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A target in another dimension is shown with that dimension's away amount: the same from every frame the connection
+    // has, one amount for each dimension, never a frame's own offset. Back in its own dimension it is in the frame again.
+    @GameTest(environment = ITEMS)
+    public void awayAmountIsOnePerDimensionAndStaysForTheConnection(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel nether = server.getLevel(Level.NETHER);
+        ServerLevel end = server.getLevel(Level.END);
+        helper.assertTrue(nether != null && end != null, "no nether or End to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "ciaway", GameType.CREATIVE);
+        try {
+            Offset first = CoordinateOffsets.offset(player);
+            player.getInventory().setItem(9, compass(TARGET));
+            player.getInventory().setItem(10, compassIn(Level.NETHER, NETHER_TARGET));
+
+            int mark = OffsetTestKit.mark(player);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Offset inNether = CoordinateOffsets.offset(player);
+            GlobalPos fromNether = targetIn(helper, player, mark, 9);
+
+            mark = OffsetTestKit.mark(player);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(end, 41.5, 64.0, 23.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == end, "the player did not reach the End");
+            Offset inEnd = CoordinateOffsets.offset(player);
+            GlobalPos fromEnd = targetIn(helper, player, mark, 9);
+            GlobalPos netherFromEnd = targetIn(helper, player, mark, 10);
+
+            Offset away = CoordinateOffsets.awayOffset(player, Level.OVERWORLD);
+            helper.assertValueEqual(fromNether, GlobalPos.of(Level.OVERWORLD, away.shift(TARGET)), "target seen from the nether");
+            helper.assertValueEqual(fromEnd, fromNether, "target seen from the End");
+            for (Offset frame : List.of(Offset.ZERO, first, inNether, inEnd)) {
+                helper.assertFalse(fromEnd.pos().equals(frame.shift(TARGET)), "the target went out in a frame's offset " + frame);
+            }
+            Offset netherAway = CoordinateOffsets.awayOffset(player, Level.NETHER);
+            helper.assertFalse(netherAway.equals(away), "the nether and the overworld share an away amount " + away);
+            helper.assertValueEqual(netherFromEnd, GlobalPos.of(Level.NETHER, netherAway.shift(NETHER_TARGET)),
+                    "nether target seen from the End");
+
+            mark = OffsetTestKit.mark(player);
+            BlockPos home = helper.absolutePos(new BlockPos(1, 1, 1));
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(helper.getLevel(), home.getX() + 0.5, home.getY(), home.getZ() + 0.5,
+                    Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == helper.getLevel(), "the player did not get back to the overworld");
+            helper.assertValueEqual(targetIn(helper, player, mark, 9),
+                    GlobalPos.of(Level.OVERWORLD, CoordinateOffsets.offset(player).shift(TARGET)), "target back in the overworld");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A creative client sends back the compass it was shown, in the away amount, and the server keeps the real target
+    @GameTest(environment = ITEMS)
+    public void creativeRoundTripKeepsAnAwayTarget(GameTestHelper helper) {
+        ServerPlayer player = joinInTheNether(helper, "ciawaycreative");
+        try {
+            Offset away = CoordinateOffsets.awayOffset(player, Level.OVERWORLD);
+            TestPlayers.receive(player, new ServerboundSetCreativeModeSlotPacket(36, compass(away.shift(TARGET))));
+            helper.assertValueEqual(player.inventoryMenu.getSlot(36).getItem().get(DataComponents.LODESTONE_TRACKER).target(),
+                    Optional.of(GlobalPos.of(Level.OVERWORLD, TARGET)), "target of the compass the server keeps");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The client hashes the compass it was shown, in the away amount, and the click still matches the server's stack
+    @GameTest(environment = ITEMS)
+    public void clickHashMatchesAnAwayShiftedStack(GameTestHelper helper) {
+        ServerPlayer player = joinInTheNether(helper, "ciawayclick");
+        try {
+            Offset away = CoordinateOffsets.awayOffset(player, Level.OVERWORLD);
+            player.getInventory().setItem(9, compass(TARGET));
+            player.inventoryMenu.sendAllDataToRemote();
+            HashedStack carried = HashedStack.create(compass(away.shift(TARGET)), clientHasher(player));
             Int2ObjectMap<HashedStack> changed = new Int2ObjectOpenHashMap<>();
             changed.put(9, HashedStack.EMPTY);
             int mark = OffsetTestKit.mark(player);
@@ -353,7 +449,7 @@ public class CoordinateOffsetItemGameTests {
                     "a copy of a plain stack went out");
             helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundContainerSetContentPacket.class) == content,
                     "a copy of plain contents went out");
-            helper.assertTrue(ItemRule.shift(sword, CoordinateOffsets.offset(player)) == sword, "the rule copied a plain stack");
+            helper.assertTrue(ItemRule.shift(sword, CoordinateOffsets.frame(player)) == sword, "the rule copied a plain stack");
         } finally {
             TestPlayers.leave(player);
         }
@@ -451,9 +547,35 @@ public class CoordinateOffsetItemGameTests {
     }
 
     private static ItemStack compass(BlockPos target) {
+        return compassIn(Level.OVERWORLD, target);
+    }
+
+    private static ItemStack compassIn(ResourceKey<Level> dimension, BlockPos target) {
         ItemStack compass = new ItemStack(Items.COMPASS);
-        compass.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(Level.OVERWORLD, target)), true));
+        compass.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(dimension, target)), true));
         return compass;
+    }
+
+    // The target of the compass in this inventory slot, in the last inventory sent from packet "from" on
+    private static GlobalPos targetIn(GameTestHelper helper, ServerPlayer player, int from, int slot) {
+        ItemStack sent = OffsetTestKit.last(helper, player, from, ClientboundContainerSetContentPacket.class).items().get(slot);
+        return sent.get(DataComponents.LODESTONE_TRACKER).target().orElseThrow();
+    }
+
+    // Joined in the overworld, then taken to the nether, where the client has accepted the arrival
+    private static ServerPlayer joinInTheNether(GameTestHelper helper, String name) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, name, GameType.CREATIVE);
+        try {
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            OffsetTestKit.settle(helper, player);
+        } catch (RuntimeException | Error e) {
+            TestPlayers.leave(player);
+            throw e;
+        }
+        return player;
     }
 
     // The way the server hashes a player's components for the clicks it checks

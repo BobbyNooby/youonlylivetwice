@@ -36,6 +36,7 @@ import net.minecraft.network.protocol.game.ServerboundSetStructureBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSetTestBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.debug.DebugSubscription;
@@ -212,6 +213,36 @@ public class CoordinateOffsetBlockGameTests {
             helper.assertValueEqual(exitPortal(gateway.getUpdateTag(level.registryAccess())), EXIT, "the gateway's own exit");
             helper.assertValueEqual(campfire.getItems().get(0).get(DataComponents.LODESTONE_TRACKER).target(),
                     Optional.of(GlobalPos.of(Level.OVERWORLD, TARGET)), "the campfire's own compass");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A compass saved in a block entity's tag keeps its target's dimension beside the spot: seen from the nether, an
+    // overworld target goes by the overworld's away amount and a nether one by the frame
+    @GameTest(environment = BLOCKS)
+    public void awayTargetInsideNbtFollowsItsDimension(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "cbawaytag", GameType.CREATIVE);
+        try {
+            BlockPos campfirePos = new BlockPos(3, 1, 1);
+            helper.setBlock(campfirePos, Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
+            CampfireBlockEntity campfire = (CampfireBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(campfirePos));
+            campfire.getItems().set(0, compassIn(Level.OVERWORLD, TARGET));
+            campfire.getItems().set(1, compassIn(Level.NETHER, EXIT));
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Offset offset = CoordinateOffsets.offset(player);
+            Offset away = CoordinateOffsets.awayOffset(player, Level.OVERWORLD);
+            helper.assertFalse(away.equals(offset), "the overworld's away amount is the frame's offset " + offset);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(ClientboundBlockEntityDataPacket.create(campfire));
+
+            CompoundTag tag = OffsetTestKit.last(helper, player, mark, ClientboundBlockEntityDataPacket.class).getTag();
+            helper.assertValueEqual(compassTarget(tag, 0), away.shift(TARGET), "the overworld compass's target");
+            helper.assertValueEqual(compassTarget(tag, 1), offset.shift(EXIT), "the nether compass's target");
         } finally {
             TestPlayers.leave(player);
         }
@@ -538,13 +569,24 @@ public class CoordinateOffsetBlockGameTests {
         return tags.get(at);
     }
 
+    private static ItemStack compassIn(ResourceKey<Level> dimension, BlockPos target) {
+        ItemStack compass = new ItemStack(Items.COMPASS);
+        compass.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(dimension, target)), false));
+        return compass;
+    }
+
     private static BlockPos exitPortal(CompoundTag tag) {
         int[] pos = tag.getIntArray("exit_portal").orElse(new int[3]);
         return new BlockPos(pos[0], pos[1], pos[2]);
     }
 
     private static BlockPos compassTarget(CompoundTag tag) {
-        int[] pos = tag.getListOrEmpty("Items").getCompoundOrEmpty(0).getCompoundOrEmpty("components")
+        return compassTarget(tag, 0);
+    }
+
+    // The target of the compass at this place in the tag's item list
+    private static BlockPos compassTarget(CompoundTag tag, int index) {
+        int[] pos = tag.getListOrEmpty("Items").getCompoundOrEmpty(index).getCompoundOrEmpty("components")
                 .getCompoundOrEmpty("minecraft:lodestone_tracker").getCompoundOrEmpty("target").getIntArray("pos")
                 .orElse(new int[3]);
         return new BlockPos(pos[0], pos[1], pos[2]);

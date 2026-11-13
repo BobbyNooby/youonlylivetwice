@@ -1,8 +1,12 @@
 package bobbynooby.dev.coords;
 
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.DoubleTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -12,6 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class NbtRuleTest {
     private static final Offset O = new Offset(-4_096, 2_048);
+    private static final Offset AWAY = new Offset(160_000, -32);
+    private static final ResourceKey<Level> OVERWORLD =
+            ResourceKey.create(Registries.DIMENSION, Identifier.withDefaultNamespace("overworld"));
+    // A frame in the overworld, whose every other dimension is shown with one away amount
+    private static final Frame FRAME = new Frame(O, OVERWORLD, dimension -> AWAY);
 
     @Test
     void positionKeysShifted() {
@@ -20,7 +29,7 @@ class NbtRuleTest {
         tag.putIntArray("exit_portal", new int[] {4, 5, 6});
         tag.putIntArray("SleepingPos", new int[] {7, 8, 9});
         tag.putIntArray("colors", new int[] {1, 2, 3});
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         assertArrayEquals(new int[] {1 - 4_096, 2, 3 + 2_048}, shifted.getIntArray("flower_pos").orElseThrow());
         assertArrayEquals(new int[] {4 - 4_096, 5, 6 + 2_048}, shifted.getIntArray("exit_portal").orElseThrow());
         assertArrayEquals(new int[] {7 - 4_096, 8, 9 + 2_048}, shifted.getIntArray("SleepingPos").orElseThrow());
@@ -31,7 +40,7 @@ class NbtRuleTest {
     void entityPosListShifted() {
         CompoundTag tag = new CompoundTag();
         tag.put("Pos", doubles(1.5, 64.0, 2.5));
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         assertEquals(doubles(1.5 - 4_096, 64.0, 2.5 + 2_048), shifted.getListOrEmpty("Pos"));
     }
 
@@ -44,7 +53,7 @@ class NbtRuleTest {
         tag.put("event", event);
         tag.put("current_explosion_impact_pos", doubles(1.0, 2.0, 3.0));
         tag.put("Motion", doubles(0.5, 0.0, 0.5));
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         assertEquals(doubles(10.5 - 4_096, 64.0, -3.5 + 2_048), shifted.getCompoundOrEmpty("event").getListOrEmpty("pos"));
         assertEquals(doubles(1.0 - 4_096, 2.0, 3.0 + 2_048), shifted.getListOrEmpty("current_explosion_impact_pos"));
         assertEquals(doubles(0.5, 0.0, 0.5), shifted.getListOrEmpty("Motion"));
@@ -58,7 +67,7 @@ class NbtRuleTest {
         tag.putIntArray("patrol_target", new int[] {4, 5, 6});
         tag.putIntArray("wander_target", new int[] {7, 8, 9});
         tag.putIntArray("beam_target", new int[] {10, 11, 12});
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         assertArrayEquals(new int[] {1 - 4_096, 2, 3 + 2_048}, shifted.getIntArray("leash").orElseThrow());
         assertArrayEquals(new int[] {4 - 4_096, 5, 6 + 2_048}, shifted.getIntArray("patrol_target").orElseThrow());
         assertArrayEquals(new int[] {7 - 4_096, 8, 9 + 2_048}, shifted.getIntArray("wander_target").orElseThrow());
@@ -66,7 +75,7 @@ class NbtRuleTest {
 
         CompoundTag heldByEntity = new CompoundTag();
         heldByEntity.putIntArray("leash", new int[] {1, 2, 3, 4});
-        assertSame(heldByEntity, NbtRule.shift(heldByEntity, O));
+        assertSame(heldByEntity, NbtRule.shift(heldByEntity, FRAME));
     }
 
     @Test
@@ -83,7 +92,7 @@ class NbtRuleTest {
         brain.put("memories", memories);
         CompoundTag tag = new CompoundTag();
         tag.put("Brain", brain);
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         CompoundTag shiftedMemories = shifted.getCompoundOrEmpty("Brain").getCompoundOrEmpty("memories");
         CompoundTag shiftedTarget = shiftedMemories.getCompoundOrEmpty("minecraft:breeze_jump_target");
         assertArrayEquals(new int[] {5 - 4_096, 70, -9 + 2_048}, shiftedTarget.getIntArray("value").orElseThrow());
@@ -113,7 +122,7 @@ class NbtRuleTest {
         tag.put("Items", items);
         CompoundTag before = tag.copy();
 
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         CompoundTag shiftedMarker = shifted.getListOrEmpty("Items").getCompoundOrEmpty(0).getCompoundOrEmpty("components")
                 .getCompoundOrEmpty("minecraft:map_decorations").getCompoundOrEmpty("+");
         assertEquals(1_234.5 - 4_096, shiftedMarker.getDoubleOr("x", 0.0));
@@ -125,7 +134,7 @@ class NbtRuleTest {
         // The same two keys anywhere else are no position
         CompoundTag other = new CompoundTag();
         other.put("minecraft:custom", marker.copy());
-        assertSame(other, NbtRule.shift(other, O));
+        assertSame(other, NbtRule.shift(other, FRAME));
     }
 
     @Test
@@ -146,7 +155,7 @@ class NbtRuleTest {
         tag.put("components", components.copy());
         tag.put("Items", items);
 
-        CompoundTag shifted = NbtRule.shift(tag, O);
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
         int[] expected = {10 - 4_096, 64, -20 + 2_048};
         assertArrayEquals(expected, shifted.getCompoundOrEmpty("components").getCompoundOrEmpty("minecraft:lodestone_tracker")
                 .getCompoundOrEmpty("target").getIntArray("pos").orElseThrow());
@@ -154,18 +163,40 @@ class NbtRuleTest {
                 .getCompoundOrEmpty("minecraft:lodestone_tracker").getCompoundOrEmpty("target").getIntArray("pos").orElseThrow());
     }
 
+    // A saved spot that names its dimension goes by that dimension: the frame's offset in the frame's own, the away amount
+    // in another, and the frame's offset for a name that is no dimension
+    @Test
+    void savedSpotFollowsItsDimension() {
+        CompoundTag tag = new CompoundTag();
+        tag.put("here", globalPos("minecraft:overworld"));
+        tag.put("away", globalPos("minecraft:the_nether"));
+        tag.put("broken", globalPos("Not A Name!"));
+        CompoundTag shifted = NbtRule.shift(tag, FRAME);
+        int[] inTheFrame = {10 - 4_096, 64, -20 + 2_048};
+        assertArrayEquals(inTheFrame, shifted.getCompoundOrEmpty("here").getIntArray("pos").orElseThrow());
+        assertArrayEquals(new int[] {10 + 160_000, 64, -20 - 32}, shifted.getCompoundOrEmpty("away").getIntArray("pos").orElseThrow());
+        assertArrayEquals(inTheFrame, shifted.getCompoundOrEmpty("broken").getIntArray("pos").orElseThrow());
+    }
+
+    private static CompoundTag globalPos(String dimension) {
+        CompoundTag target = new CompoundTag();
+        target.putString("dimension", dimension);
+        target.putIntArray("pos", new int[] {10, 64, -20});
+        return target;
+    }
+
     @Test
     void sameInstanceWhenNothingToShiftAndInputUntouched() {
         CompoundTag plain = new CompoundTag();
         plain.putString("id", "minecraft:chest");
         plain.putIntArray("colors", new int[] {1, 2, 3});
-        assertSame(plain, NbtRule.shift(plain, O));
+        assertSame(plain, NbtRule.shift(plain, FRAME));
 
         CompoundTag withPos = new CompoundTag();
         withPos.putIntArray("pos", new int[] {1, 2, 3});
         withPos.put("Pos", doubles(1.5, 64.0, 2.5));
         CompoundTag before = withPos.copy();
-        CompoundTag shifted = NbtRule.shift(withPos, O);
+        CompoundTag shifted = NbtRule.shift(withPos, FRAME);
         assertNotSame(withPos, shifted);
         assertEquals(before, withPos);
     }
@@ -174,10 +205,10 @@ class NbtRuleTest {
     void wrongLengthArraysUntouched() {
         CompoundTag two = new CompoundTag();
         two.putIntArray("pos", new int[] {1, 2});
-        assertSame(two, NbtRule.shift(two, O));
+        assertSame(two, NbtRule.shift(two, FRAME));
         CompoundTag four = new CompoundTag();
         four.putIntArray("pos", new int[] {1, 2, 3, 4});
-        assertSame(four, NbtRule.shift(four, O));
+        assertSame(four, NbtRule.shift(four, FRAME));
     }
 
     private static ListTag doubles(double x, double y, double z) {

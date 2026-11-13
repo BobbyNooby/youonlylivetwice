@@ -24,6 +24,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -425,6 +426,33 @@ public class CoordinateOffsetBorderGameTests {
             Offset offset = CoordinateOffsets.offset(player);
             BlockPos spawn = OffsetTestKit.last(helper, player, 0, ClientboundSetDefaultSpawnPositionPacket.class).respawnData().pos();
             helper.assertValueEqual(spawn, offset.shift(helper.getLevel().getRespawnData().pos()), "spawn sent");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // With the north compass off the world spawn is a real spot in the overworld, which seen from the nether has no place
+    // in the frame, so it goes by the overworld's away amount
+    @GameTest(environment = BORDER)
+    public void worldSpawnInAnotherDimensionUsesTheAwayAmount(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = withCompassSpawn(false, () -> OffsetTestKit.join(helper, "cbawayspawn", GameType.CREATIVE));
+        try {
+            int mark = OffsetTestKit.mark(player);
+            withCompassSpawn(false, () -> OffsetTestKit.withCoordinates(
+                    () -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true)));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Offset offset = CoordinateOffsets.offset(player);
+            Offset away = CoordinateOffsets.awayOffset(player, Level.OVERWORLD);
+            LevelData.RespawnData real = helper.getLevel().getServer().getRespawnData();
+            helper.assertValueEqual(real.dimension(), Level.OVERWORLD, "dimension of the world spawn");
+            ClientboundSetDefaultSpawnPositionPacket sent =
+                    OffsetTestKit.last(helper, player, mark, ClientboundSetDefaultSpawnPositionPacket.class);
+            helper.assertValueEqual(sent.respawnData().dimension(), Level.OVERWORLD, "dimension of the spawn sent");
+            helper.assertValueEqual(sent.respawnData().pos(), away.shift(real.pos()), "spawn sent");
+            helper.assertFalse(sent.respawnData().pos().equals(offset.shift(real.pos())), "the spawn went out in the frame's offset");
         } finally {
             TestPlayers.leave(player);
         }

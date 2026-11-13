@@ -50,7 +50,7 @@ final class EffectRules {
     // The spreads and speeds are distances, not positions
     private static Packet<?> particles(ClientboundLevelParticlesPacket packet, Context context) {
         Offset offset = context.offset();
-        return new ClientboundLevelParticlesPacket(ParticleRule.shift(packet.particle(), offset), packet.overrideLimiter(),
+        return new ClientboundLevelParticlesPacket(ParticleRule.shift(packet.particle(), context.frame()), packet.overrideLimiter(),
                 packet.alwaysShow(), offset.shiftX(packet.x()), packet.y(), offset.shiftZ(packet.z()), packet.xDist(), packet.yDist(),
                 packet.zDist(), packet.xMaxSpeed(), packet.yMaxSpeed(), packet.zMaxSpeed(), packet.count(), packet.randomizationType());
     }
@@ -59,16 +59,16 @@ final class EffectRules {
     private static Packet<?> explosion(ClientboundExplodePacket packet, Context context) {
         Offset offset = context.offset();
         return new ClientboundExplodePacket(offset.shift(packet.center()), packet.radius(), packet.blockCount(),
-                packet.playerKnockback(), ParticleRule.shift(packet.explosionParticle(), offset), packet.explosionSound(),
-                blockParticles(packet.blockParticles(), offset), packet.playSound());
+                packet.playerKnockback(), ParticleRule.shift(packet.explosionParticle(), context.frame()), packet.explosionSound(),
+                blockParticles(packet.blockParticles(), context.frame()), packet.playSound());
     }
 
     // The very list when no particle in it moves, with each weight kept
-    private static WeightedList<ExplosionParticleInfo> blockParticles(WeightedList<ExplosionParticleInfo> particles, Offset offset) {
+    private static WeightedList<ExplosionParticleInfo> blockParticles(WeightedList<ExplosionParticleInfo> particles, Frame frame) {
         List<Weighted<ExplosionParticleInfo>> entries = particles.unwrap();
         List<Weighted<ExplosionParticleInfo>> shifted = CoordinateOffsets.mapEach(entries, entry -> {
             ExplosionParticleInfo info = entry.value();
-            ParticleOptions particle = ParticleRule.shift(info.particle(), offset);
+            ParticleOptions particle = ParticleRule.shift(info.particle(), frame);
             return particle == info.particle() ? entry
                     : new Weighted<>(new ExplosionParticleInfo(particle, info.scaling(), info.speed()), entry.weight());
         });

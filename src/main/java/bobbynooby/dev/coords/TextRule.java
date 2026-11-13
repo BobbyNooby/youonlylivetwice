@@ -64,30 +64,30 @@ public final class TextRule {
 
     static void register() {
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SYSTEM_CHAT, (packet, context) -> {
-            Component content = shift(packet.content(), context.offset());
+            Component content = shift(packet.content(), context.frame());
             return content == packet.content() ? packet : new ClientboundSystemChatPacket(content, packet.overlay());
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_PLAYER_COMBAT_KILL, (packet, context) -> {
-            Component message = shift(packet.message(), context.offset());
+            Component message = shift(packet.message(), context.frame());
             return message == packet.message() ? packet : new ClientboundPlayerCombatKillPacket(packet.playerId(), message);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_DISGUISED_CHAT, TextRule::disguisedChat);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_PLAYER_CHAT, TextRule::playerChat);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_TITLE_TEXT, (packet, context) -> {
-            Component text = shift(packet.text(), context.offset());
+            Component text = shift(packet.text(), context.frame());
             return text == packet.text() ? packet : new ClientboundSetTitleTextPacket(text);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_SUBTITLE_TEXT, (packet, context) -> {
-            Component text = shift(packet.text(), context.offset());
+            Component text = shift(packet.text(), context.frame());
             return text == packet.text() ? packet : new ClientboundSetSubtitleTextPacket(text);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_ACTION_BAR_TEXT, (packet, context) -> {
-            Component text = shift(packet.text(), context.offset());
+            Component text = shift(packet.text(), context.frame());
             return text == packet.text() ? packet : new ClientboundSetActionBarTextPacket(text);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_TAB_LIST, (packet, context) -> {
-            Component header = shift(packet.header(), context.offset());
-            Component footer = shift(packet.footer(), context.offset());
+            Component header = shift(packet.header(), context.frame());
+            Component footer = shift(packet.footer(), context.frame());
             return header == packet.header() && footer == packet.footer() ? packet : new ClientboundTabListPacket(header, footer);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_BOSS_EVENT, TextRule::bossBar);
@@ -96,26 +96,26 @@ public final class TextRule {
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_OBJECTIVE, TextRule::objective);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SET_SCORE, TextRule::score);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_OPEN_SCREEN, (packet, context) -> {
-            Component title = shift(packet.getTitle(), context.offset());
+            Component title = shift(packet.getTitle(), context.frame());
             return title == packet.getTitle() ? packet
                     : new ClientboundOpenScreenPacket(packet.getContainerId(), packet.getType(), title);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_MAP_ITEM_DATA, TextRule::mapData);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_COMMAND_SUGGESTIONS, TextRule::suggestions);
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_TEST_INSTANCE_BLOCK_STATUS, (packet, context) -> {
-            Component status = shift(packet.status(), context.offset());
+            Component status = shift(packet.status(), context.frame());
             return status == packet.status() ? packet : new ClientboundTestInstanceBlockStatus(status, packet.size());
         });
         Outgoing.translate(CommonPacketTypes.CLIENTBOUND_DISCONNECT, (packet, context) -> {
-            Component reason = shift(packet.reason(), context.offset());
+            Component reason = shift(packet.reason(), context.frame());
             return reason == packet.reason() ? packet : new ClientboundDisconnectPacket(reason);
         });
         Outgoing.translate(GamePacketTypes.CLIENTBOUND_SERVER_DATA, (packet, context) -> {
-            Component motd = shift(packet.motd(), context.offset());
+            Component motd = shift(packet.motd(), context.frame());
             return motd == packet.motd() ? packet : new ClientboundServerDataPacket(motd, packet.iconBytes());
         });
         Outgoing.translate(CommonPacketTypes.CLIENTBOUND_RESOURCE_PACK_PUSH, (packet, context) -> {
-            Optional<Component> prompt = shift(packet.prompt(), context.offset());
+            Optional<Component> prompt = shift(packet.prompt(), context.frame());
             return prompt == packet.prompt() ? packet
                     : new ClientboundResourcePackPushPacket(packet.id(), packet.url(), packet.hash(), packet.required(), prompt);
         });
@@ -123,13 +123,13 @@ public final class TextRule {
     }
 
     /** The text as the client is sent it: the very text when no item shown in it holds a position. */
-    public static Component shift(Component text, Offset offset) {
-        if (offset.isZero()) {
+    public static Component shift(Component text, Frame frame) {
+        if (frame.isZero()) {
             return text;
         }
-        ComponentContents contents = contents(text.getContents(), offset);
-        Style style = style(text.getStyle(), offset);
-        List<Component> siblings = CoordinateOffsets.mapEach(text.getSiblings(), sibling -> shift(sibling, offset));
+        ComponentContents contents = contents(text.getContents(), frame);
+        Style style = style(text.getStyle(), frame);
+        List<Component> siblings = CoordinateOffsets.mapEach(text.getSiblings(), sibling -> shift(sibling, frame));
         if (contents == text.getContents() && style == text.getStyle() && siblings == text.getSiblings()) {
             return text;
         }
@@ -138,32 +138,32 @@ public final class TextRule {
         return copy;
     }
 
-    public static Optional<Component> shift(Optional<Component> text, Offset offset) {
+    public static Optional<Component> shift(Optional<Component> text, Frame frame) {
         if (text.isEmpty()) {
             return text;
         }
-        Component shifted = shift(text.get(), offset);
+        Component shifted = shift(text.get(), frame);
         return shifted == text.get() ? text : Optional.of(shifted);
     }
 
     /** The style's hover as the client is sent it: the very style when nothing in it moves. */
-    public static Style style(Style style, Offset offset) {
+    public static Style style(Style style, Frame frame) {
         HoverEvent hover = style.getHoverEvent();
         if (hover == null) {
             return style;
         }
         HoverEvent shifted = switch (hover) {
             case HoverEvent.ShowItem item -> {
-                ItemStackTemplate moved = ItemRule.shift(item.item(), offset);
+                ItemStackTemplate moved = ItemRule.shift(item.item(), frame);
                 yield moved == item.item() ? hover : new HoverEvent.ShowItem(moved);
             }
             case HoverEvent.ShowText shown -> {
-                Component moved = shift(shown.value(), offset);
+                Component moved = shift(shown.value(), frame);
                 yield moved == shown.value() ? hover : new HoverEvent.ShowText(moved);
             }
             case HoverEvent.ShowEntity entity -> {
                 HoverEvent.EntityTooltipInfo info = entity.entity();
-                Optional<Component> name = shift(info.name, offset);
+                Optional<Component> name = shift(info.name, frame);
                 yield name == info.name ? hover : new HoverEvent.ShowEntity(new HoverEvent.EntityTooltipInfo(info.type, info.uuid, name));
             }
             default -> hover;
@@ -172,7 +172,7 @@ public final class TextRule {
     }
 
     // A translated message's arguments are texts of their own, such as the names in a death message
-    private static ComponentContents contents(ComponentContents contents, Offset offset) {
+    private static ComponentContents contents(ComponentContents contents, Frame frame) {
         if (!(contents instanceof TranslatableContents translatable)) {
             return contents;
         }
@@ -180,7 +180,7 @@ public final class TextRule {
         Object[] shifted = null;
         for (int i = 0; i < args.length; i++) {
             if (args[i] instanceof Component arg) {
-                Component moved = shift(arg, offset);
+                Component moved = shift(arg, frame);
                 if (moved != arg) {
                     if (shifted == null) {
                         shifted = args.clone();
@@ -192,15 +192,15 @@ public final class TextRule {
         return shifted == null ? contents : new TranslatableContents(translatable.getKey(), translatable.getFallback(), shifted);
     }
 
-    private static ChatType.Bound chatType(ChatType.Bound bound, Offset offset) {
-        Component name = shift(bound.name(), offset);
-        Optional<Component> target = shift(bound.targetName(), offset);
+    private static ChatType.Bound chatType(ChatType.Bound bound, Frame frame) {
+        Component name = shift(bound.name(), frame);
+        Optional<Component> target = shift(bound.targetName(), frame);
         return name == bound.name() && target == bound.targetName() ? bound : new ChatType.Bound(bound.chatType(), name, target);
     }
 
     private static Packet<?> disguisedChat(ClientboundDisguisedChatPacket packet, Context context) {
-        Component message = shift(packet.message(), context.offset());
-        ChatType.Bound chatType = chatType(packet.chatType(), context.offset());
+        Component message = shift(packet.message(), context.frame());
+        ChatType.Bound chatType = chatType(packet.chatType(), context.frame());
         return message == packet.message() && chatType == packet.chatType() ? packet
                 : new ClientboundDisguisedChatPacket(message, chatType);
     }
@@ -208,8 +208,8 @@ public final class TextRule {
     // The signed body is the sender's own words, which the client checks against the signature, so only what the server
     // adds is looked at: the unsigned form and the names the chat type decorates it with
     private static Packet<?> playerChat(ClientboundPlayerChatPacket packet, Context context) {
-        Optional<Component> unsigned = shift(packet.unsignedContent(), context.offset());
-        ChatType.Bound chatType = chatType(packet.chatType(), context.offset());
+        Optional<Component> unsigned = shift(packet.unsignedContent(), context.frame());
+        ChatType.Bound chatType = chatType(packet.chatType(), context.frame());
         return unsigned == packet.unsignedContent() && chatType == packet.chatType() ? packet
                 : new ClientboundPlayerChatPacket(packet.globalIndex(), packet.sender(), packet.index(), packet.signature(),
                         packet.body(), unsigned, packet.filterMask(), chatType);
@@ -217,13 +217,13 @@ public final class TextRule {
 
     // Only adding a bar and renaming it carry a name. The packet is built from a bar of its own with the same settings.
     private static Packet<?> bossBar(ClientboundBossEventPacket packet, Context context) {
-        Offset offset = context.offset();
+        Frame frame = context.frame();
         List<Packet<?>> shifted = new ArrayList<>(1);
         packet.dispatch(new ClientboundBossEventPacket.Handler() {
             @Override
             public void add(UUID id, Component name, float progress, BossEvent.BossBarColor color, BossEvent.BossBarOverlay overlay,
                             boolean darkenScreen, boolean playMusic, boolean createWorldFog) {
-                Component moved = shift(name, offset);
+                Component moved = shift(name, frame);
                 if (moved != name) {
                     BossEvent bar = new BossEvent(id, moved, color, overlay) {};
                     bar.setProgress(progress);
@@ -234,7 +234,7 @@ public final class TextRule {
 
             @Override
             public void updateName(UUID id, Component name) {
-                Component moved = shift(name, offset);
+                Component moved = shift(name, frame);
                 if (moved != name) {
                     shifted.add(ClientboundBossEventPacket.createUpdateNamePacket(
                             new BossEvent(id, moved, BossEvent.BossBarColor.PINK, BossEvent.BossBarOverlay.PROGRESS) {}));
@@ -249,7 +249,7 @@ public final class TextRule {
             if (entry.displayName() == null) {
                 return entry;
             }
-            Component name = shift(entry.displayName(), context.offset());
+            Component name = shift(entry.displayName(), context.frame());
             return name == entry.displayName() ? entry : new ClientboundPlayerInfoUpdatePacket.Entry(entry.profileId(),
                     entry.profile(), entry.listed(), entry.latency(), entry.gameMode(), name, entry.showHat(), entry.listOrder(),
                     entry.chatSession());
@@ -267,11 +267,11 @@ public final class TextRule {
         if (packet.getParameters().isEmpty()) {
             return packet;
         }
-        Offset offset = context.offset();
+        Frame frame = context.frame();
         ClientboundSetPlayerTeamPacket.Parameters parameters = packet.getParameters().get();
-        Component displayName = shift(parameters.displayName(), offset);
-        Component prefix = shift(parameters.playerPrefix(), offset);
-        Component suffix = shift(parameters.playerSuffix(), offset);
+        Component displayName = shift(parameters.displayName(), frame);
+        Component prefix = shift(parameters.playerPrefix(), frame);
+        Component suffix = shift(parameters.playerSuffix(), frame);
         if (displayName == parameters.displayName() && prefix == parameters.playerPrefix() && suffix == parameters.playerSuffix()) {
             return packet;
         }
@@ -283,9 +283,9 @@ public final class TextRule {
 
     // Built from an objective of its own, as the packet has no other constructor
     private static Packet<?> objective(ClientboundSetObjectivePacket packet, Context context) {
-        Offset offset = context.offset();
-        Component displayName = shift(packet.getDisplayName(), offset);
-        Optional<NumberFormat> format = numberFormat(packet.getNumberFormat(), offset);
+        Frame frame = context.frame();
+        Component displayName = shift(packet.getDisplayName(), frame);
+        Optional<NumberFormat> format = numberFormat(packet.getNumberFormat(), frame);
         if (displayName == packet.getDisplayName() && format == packet.getNumberFormat()) {
             return packet;
         }
@@ -294,25 +294,25 @@ public final class TextRule {
     }
 
     private static Packet<?> score(ClientboundSetScorePacket packet, Context context) {
-        Offset offset = context.offset();
-        Optional<Component> display = shift(packet.display(), offset);
-        Optional<NumberFormat> format = numberFormat(packet.numberFormat(), offset);
+        Frame frame = context.frame();
+        Optional<Component> display = shift(packet.display(), frame);
+        Optional<NumberFormat> format = numberFormat(packet.numberFormat(), frame);
         return display == packet.display() && format == packet.numberFormat() ? packet
                 : new ClientboundSetScorePacket(packet.owner(), packet.objectiveName(), packet.score(), display, format);
     }
 
     // A fixed number shows a text of its own, and a styled one a style that can hold a hover
-    private static Optional<NumberFormat> numberFormat(Optional<NumberFormat> format, Offset offset) {
+    private static Optional<NumberFormat> numberFormat(Optional<NumberFormat> format, Frame frame) {
         if (format.isEmpty()) {
             return format;
         }
         NumberFormat shifted = switch (format.get()) {
             case FixedFormat fixed -> {
-                Component value = shift(fixed.value(), offset);
+                Component value = shift(fixed.value(), frame);
                 yield value == fixed.value() ? fixed : new FixedFormat(value);
             }
             case StyledFormat styled -> {
-                Style moved = style(styled.style(), offset);
+                Style moved = style(styled.style(), frame);
                 yield moved == styled.style() ? styled : new StyledFormat(moved);
             }
             default -> format.get();
@@ -327,7 +327,7 @@ public final class TextRule {
         }
         List<MapDecoration> decorations = packet.decorations().get();
         List<MapDecoration> shifted = CoordinateOffsets.mapEach(decorations, decoration -> {
-            Optional<Component> name = shift(decoration.name(), context.offset());
+            Optional<Component> name = shift(decoration.name(), context.frame());
             return name == decoration.name() ? decoration
                     : new MapDecoration(decoration.type(), decoration.x(), decoration.y(), decoration.rot(), name);
         });
@@ -337,7 +337,7 @@ public final class TextRule {
 
     private static Packet<?> suggestions(ClientboundCommandSuggestionsPacket packet, Context context) {
         List<ClientboundCommandSuggestionsPacket.Entry> entries = CoordinateOffsets.mapEach(packet.suggestions(), entry -> {
-            Optional<Component> tooltip = shift(entry.tooltip(), context.offset());
+            Optional<Component> tooltip = shift(entry.tooltip(), context.frame());
             return tooltip == entry.tooltip() ? entry : new ClientboundCommandSuggestionsPacket.Entry(entry.text(), tooltip);
         });
         return entries == packet.suggestions() ? packet
@@ -351,7 +351,7 @@ public final class TextRule {
             if (name == null) {
                 return link;
             }
-            Component moved = shift(name, context.offset());
+            Component moved = shift(name, context.frame());
             return moved == name ? link : new ServerLinks.UntrustedEntry(Either.right(moved), link.link());
         });
         return links == packet.links() ? packet : new ClientboundServerLinksPacket(links);

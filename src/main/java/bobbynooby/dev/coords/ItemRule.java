@@ -82,8 +82,8 @@ public final class ItemRule {
     }
 
     /** The stack as the client is sent it: the very stack when none of its own components holds a position. */
-    public static ItemStack shift(ItemStack stack, Offset offset) {
-        if (offset.isZero()) {
+    public static ItemStack shift(ItemStack stack, Frame frame) {
+        if (frame.isZero()) {
             return stack;
         }
         DataComponentPatch patch = stack.getComponentsPatch();
@@ -92,31 +92,31 @@ public final class ItemRule {
         }
         ItemStack copy = null;
         for (Rule<?> rule : RULES) {
-            copy = apply(rule, stack, patch, offset, copy);
+            copy = apply(rule, stack, patch, frame, copy);
         }
         return copy != null ? copy : stack;
     }
 
     /** The same for an item held inside another, which is a template: the very template when nothing in it moves. */
-    public static ItemStackTemplate shift(ItemStackTemplate template, Offset offset) {
-        DataComponentPatch patch = shift(template.components(), offset);
+    public static ItemStackTemplate shift(ItemStackTemplate template, Frame frame) {
+        DataComponentPatch patch = shift(template.components(), frame);
         return patch == template.components() ? template : new ItemStackTemplate(template.item(), template.count(), patch);
     }
 
-    private static DataComponentPatch shift(DataComponentPatch patch, Offset offset) {
-        if (offset.isZero() || patch.isEmpty()) {
+    private static DataComponentPatch shift(DataComponentPatch patch, Frame frame) {
+        if (frame.isZero() || patch.isEmpty()) {
             return patch;
         }
         DataComponentPatch.Builder builder = null;
         for (Rule<?> rule : RULES) {
-            builder = apply(rule, patch, offset, builder);
+            builder = apply(rule, patch, frame, builder);
         }
         return builder != null ? builder.build() : patch;
     }
 
-    private static <T> @Nullable ItemStack apply(Rule<T> rule, ItemStack stack, DataComponentPatch patch, Offset offset,
+    private static <T> @Nullable ItemStack apply(Rule<T> rule, ItemStack stack, DataComponentPatch patch, Frame frame,
                                                  @Nullable ItemStack copy) {
-        T shifted = rule.shifted(patch, offset);
+        T shifted = rule.shifted(patch, frame);
         if (shifted == null) {
             return copy;
         }
@@ -125,9 +125,9 @@ public final class ItemRule {
         return target;
     }
 
-    private static <T> DataComponentPatch.@Nullable Builder apply(Rule<T> rule, DataComponentPatch patch, Offset offset,
+    private static <T> DataComponentPatch.@Nullable Builder apply(Rule<T> rule, DataComponentPatch patch, Frame frame,
                                                                   DataComponentPatch.@Nullable Builder builder) {
-        T shifted = rule.shifted(patch, offset);
+        T shifted = rule.shifted(patch, frame);
         if (shifted == null) {
             return builder;
         }
@@ -148,19 +148,19 @@ public final class ItemRule {
     }
 
     // A component type whose value can hold a position, and how to shift it: to the very value when nothing in it moves
-    private record Rule<T>(DataComponentType<T> type, BiFunction<T, Offset, T> shift) {
+    private record Rule<T>(DataComponentType<T> type, BiFunction<T, Frame, T> shift) {
         // Null when the item's own components don't set it, or nothing in it moves
-        @Nullable T shifted(DataComponentPatch patch, Offset offset) {
+        @Nullable T shifted(DataComponentPatch patch, Frame frame) {
             T value = patch.get(DataComponentMap.EMPTY, type);
             if (value == null) {
                 return null;
             }
-            T shifted = shift.apply(value, offset);
+            T shifted = shift.apply(value, frame);
             return shifted == value ? null : shifted;
         }
     }
 
-    private static <T> void translated(DataComponentType<T> type, BiFunction<T, Offset, T> shift) {
+    private static <T> void translated(DataComponentType<T> type, BiFunction<T, Frame, T> shift) {
         RULES.add(new Rule<>(type, shift));
         COMPONENTS.put(type, Coverage.TRANSLATED);
     }
@@ -304,75 +304,75 @@ public final class ItemRule {
                 DataComponents.CUSHION_COLOR);
     }
 
-    // Shifted whatever the target's dimension, so no real number goes out; the needle spins there anyway
-    private static LodestoneTracker tracker(LodestoneTracker tracker, Offset offset) {
+    // A target in another dimension is shifted by that dimension's away amount; the needle spins there anyway
+    private static LodestoneTracker tracker(LodestoneTracker tracker, Frame frame) {
         return tracker.target().isEmpty() ? tracker
-                : new LodestoneTracker(tracker.target().map(target -> offset.shift(target)), tracker.tracked());
+                : new LodestoneTracker(tracker.target().map(target -> frame.shift(target)), tracker.tracked());
     }
 
     // An explorer map's markers, kept in the order they came in
-    private static MapDecorations decorations(MapDecorations decorations, Offset offset) {
+    private static MapDecorations decorations(MapDecorations decorations, Frame frame) {
         if (decorations.decorations().isEmpty()) {
             return decorations;
         }
         Map<String, MapDecorations.Entry> shifted = new LinkedHashMap<>();
         decorations.decorations().forEach((id, entry) -> shifted.put(id, new MapDecorations.Entry(entry.type(),
-                offset.shiftX(entry.x()), offset.shiftZ(entry.z()), entry.rotation())));
+                frame.offset().shiftX(entry.x()), frame.offset().shiftZ(entry.z()), entry.rotation())));
         return new MapDecorations(Collections.unmodifiableMap(shifted));
     }
 
     // Every slot keeps its place, empty ones too, so the copy is built from the slot list itself
-    private static ItemContainerContents container(ItemContainerContents contents, Offset offset) {
+    private static ItemContainerContents container(ItemContainerContents contents, Frame frame) {
         List<Optional<ItemStackTemplate>> slots = ((ItemContainerContentsInvoker) (Object) contents).yoltItems();
         List<Optional<ItemStackTemplate>> shifted = CoordinateOffsets.mapEach(slots, slot -> {
             if (slot.isEmpty()) {
                 return slot;
             }
-            ItemStackTemplate moved = shift(slot.get(), offset);
+            ItemStackTemplate moved = shift(slot.get(), frame);
             return moved == slot.get() ? slot : Optional.of(moved);
         });
         return shifted == slots ? contents : ItemContainerContentsInvoker.yoltNew(shifted);
     }
 
     // In order, as the client shows a bundle's items in the order they went in
-    private static BundleContents bundle(BundleContents bundle, Offset offset) {
-        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(bundle.items(), template -> shift(template, offset));
+    private static BundleContents bundle(BundleContents bundle, Frame frame) {
+        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(bundle.items(), template -> shift(template, frame));
         return shifted == bundle.items() ? bundle : new BundleContents(shifted);
     }
 
-    private static ChargedProjectiles projectiles(ChargedProjectiles projectiles, Offset offset) {
-        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(projectiles.items(), template -> shift(template, offset));
+    private static ChargedProjectiles projectiles(ChargedProjectiles projectiles, Frame frame) {
+        List<ItemStackTemplate> shifted = CoordinateOffsets.mapEach(projectiles.items(), template -> shift(template, frame));
         return shifted == projectiles.items() ? projectiles : new ChargedProjectiles(shifted);
     }
 
-    private static UseRemainder remainder(UseRemainder remainder, Offset offset) {
-        ItemStackTemplate shifted = shift(remainder.convertInto(), offset);
+    private static UseRemainder remainder(UseRemainder remainder, Frame frame) {
+        ItemStackTemplate shifted = shift(remainder.convertInto(), frame);
         return shifted == remainder.convertInto() ? remainder : new UseRemainder(shifted);
     }
 
-    private static SulfurCubeContent sulfurCube(SulfurCubeContent content, Offset offset) {
-        ItemStackTemplate shifted = shift(content.absorbedBlockItemStack(), offset);
+    private static SulfurCubeContent sulfurCube(SulfurCubeContent content, Frame frame) {
+        ItemStackTemplate shifted = shift(content.absorbedBlockItemStack(), frame);
         return shifted == content.absorbedBlockItemStack() ? content : new SulfurCubeContent(shifted);
     }
 
     // Only read here, and the NBT rule never changes a tag it is given
     @SuppressWarnings("deprecation")
-    private static <T> TypedEntityData<T> typedData(TypedEntityData<T> data, Offset offset) {
+    private static <T> TypedEntityData<T> typedData(TypedEntityData<T> data, Frame frame) {
         CompoundTag tag = data.getUnsafe();
-        CompoundTag shifted = NbtRule.shift(tag, offset);
+        CompoundTag shifted = NbtRule.shift(tag, frame);
         return shifted == tag ? data : TypedEntityData.of(data.type(), shifted);
     }
 
-    private static ItemLore lore(ItemLore lore, Offset offset) {
-        List<Component> lines = CoordinateOffsets.mapEach(lore.lines(), line -> TextRule.shift(line, offset));
+    private static ItemLore lore(ItemLore lore, Frame frame) {
+        List<Component> lines = CoordinateOffsets.mapEach(lore.lines(), line -> TextRule.shift(line, frame));
         return lines == lore.lines() ? lore : new ItemLore(lines);
     }
 
     // The title and author are plain strings; each page keeps its filtered form
-    private static WrittenBookContent book(WrittenBookContent book, Offset offset) {
+    private static WrittenBookContent book(WrittenBookContent book, Frame frame) {
         List<Filterable<Component>> pages = CoordinateOffsets.mapEach(book.pages(), page -> {
-            Component raw = TextRule.shift(page.raw(), offset);
-            Optional<Component> filtered = TextRule.shift(page.filtered(), offset);
+            Component raw = TextRule.shift(page.raw(), frame);
+            Optional<Component> filtered = TextRule.shift(page.filtered(), frame);
             return raw == page.raw() && filtered == page.filtered() ? page : new Filterable<>(raw, filtered);
         });
         return pages == book.pages() ? book
@@ -380,35 +380,35 @@ public final class ItemRule {
     }
 
     // A sign item's lines, with the filtered ones kept the same list when they are
-    private static SignText sign(SignText text, Offset offset) {
+    private static SignText sign(SignText text, Frame frame) {
         List<Component> lines = text.getMessages(false);
-        List<Component> shifted = CoordinateOffsets.mapEach(lines, line -> TextRule.shift(line, offset));
+        List<Component> shifted = CoordinateOffsets.mapEach(lines, line -> TextRule.shift(line, frame));
         List<Component> filtered = text.getMessages(true) == lines ? shifted
-                : CoordinateOffsets.mapEach(text.getMessages(true), line -> TextRule.shift(line, offset));
+                : CoordinateOffsets.mapEach(text.getMessages(true), line -> TextRule.shift(line, frame));
         return shifted == lines && filtered == text.getMessages(true) ? text
                 : new SignText(shifted, filtered, text.getColor(), text.hasGlowingText());
     }
 
     // Read in place, as for entity data
-    private static CustomData customData(CustomData data, Offset offset) {
+    private static CustomData customData(CustomData data, Frame frame) {
         CompoundTag tag = ((CustomDataAccessor) (Object) data).yoltTag();
-        CompoundTag shifted = NbtRule.shift(tag, offset);
+        CompoundTag shifted = NbtRule.shift(tag, frame);
         return shifted == tag ? data : CustomData.of(shifted);
     }
 
     // A bee's flower is kept in its entity data
-    private static Bees bees(Bees bees, Offset offset) {
+    private static Bees bees(Bees bees, Frame frame) {
         List<BeehiveBlockEntity.Occupant> shifted = CoordinateOffsets.mapEach(bees.bees(), bee -> {
-            TypedEntityData<EntityType<?>> data = typedData(bee.entityData(), offset);
+            TypedEntityData<EntityType<?>> data = typedData(bee.entityData(), frame);
             return data == bee.entityData() ? bee : new BeehiveBlockEntity.Occupant(data, bee.ticksInHive(), bee.minTicksInHive());
         });
         return shifted == bees.bees() ? bees : new Bees(shifted);
     }
 
     private static Packet<?> containerContent(ClientboundContainerSetContentPacket packet, Context context) {
-        Offset offset = context.offset();
-        List<ItemStack> items = CoordinateOffsets.mapEach(packet.items(), stack -> shift(stack, offset));
-        ItemStack carried = shift(packet.carriedItem(), offset);
+        Frame frame = context.frame();
+        List<ItemStack> items = CoordinateOffsets.mapEach(packet.items(), stack -> shift(stack, frame));
+        ItemStack carried = shift(packet.carriedItem(), frame);
         if (items == packet.items() && carried == packet.carriedItem()) {
             return packet;
         }
@@ -416,27 +416,27 @@ public final class ItemRule {
     }
 
     private static Packet<?> containerSlot(ClientboundContainerSetSlotPacket packet, Context context) {
-        ItemStack stack = shift(packet.getItem(), context.offset());
+        ItemStack stack = shift(packet.getItem(), context.frame());
         return stack == packet.getItem() ? packet
                 : new ClientboundContainerSetSlotPacket(packet.getContainerId(), packet.getStateId(), packet.getSlot(), stack);
     }
 
     private static Packet<?> cursor(ClientboundSetCursorItemPacket packet, Context context) {
-        ItemStack stack = shift(packet.contents(), context.offset());
+        ItemStack stack = shift(packet.contents(), context.frame());
         return stack == packet.contents() ? packet : new ClientboundSetCursorItemPacket(stack);
     }
 
     private static Packet<?> inventorySlot(ClientboundSetPlayerInventoryPacket packet, Context context) {
-        ItemStack stack = shift(packet.contents(), context.offset());
+        ItemStack stack = shift(packet.contents(), context.frame());
         return stack == packet.contents() ? packet : new ClientboundSetPlayerInventoryPacket(packet.slot(), stack);
     }
 
     // What another player or a mob holds and wears, such as a compass in someone's hand
     private static Packet<?> equipment(ClientboundSetEquipmentPacket packet, Context context) {
-        Offset offset = context.offset();
+        Frame frame = context.frame();
         List<Pair<EquipmentSlot, ItemStack>> slots = packet.getSlots();
         List<Pair<EquipmentSlot, ItemStack>> shifted = CoordinateOffsets.mapEach(slots, slot -> {
-            ItemStack moved = shift(slot.getSecond(), offset);
+            ItemStack moved = shift(slot.getSecond(), frame);
             return moved == slot.getSecond() ? slot : Pair.of(slot.getFirst(), moved);
         });
         return shifted == slots ? packet : new ClientboundSetEquipmentPacket(packet.getEntity(), shifted);
@@ -444,10 +444,10 @@ public final class ItemRule {
 
     // Only a data pack could put a position in what a trade gives
     private static Packet<?> offers(ClientboundMerchantOffersPacket packet, Context context) {
-        Offset offset = context.offset();
+        Frame frame = context.frame();
         MerchantOffers offers = packet.getOffers();
         List<MerchantOffer> shifted = CoordinateOffsets.mapEach(offers, offer -> {
-            ItemStack result = shift(offer.getResult(), offset);
+            ItemStack result = shift(offer.getResult(), frame);
             return result == offer.getResult() ? offer : withResult(offer, result);
         });
         if (shifted == offers) {
@@ -469,7 +469,7 @@ public final class ItemRule {
 
     // A creative client sends whole stacks, made from the shifted ones it was sent
     private static Packet<?> creativeSlot(ServerboundSetCreativeModeSlotPacket packet, Context context) {
-        ItemStack stack = shift(packet.itemStack(), context.offset().negate());
+        ItemStack stack = shift(packet.itemStack(), context.frame().negate());
         return stack == packet.itemStack() ? packet : new ServerboundSetCreativeModeSlotPacket(packet.slotNum(), stack);
     }
 }

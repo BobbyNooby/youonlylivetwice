@@ -20,6 +20,7 @@ import net.minecraft.network.protocol.cookie.CookiePacketTypes;
 import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
 import net.minecraft.network.protocol.ping.PingPacketTypes;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -27,6 +28,7 @@ import net.minecraft.util.debug.DebugSubscription;
 import net.minecraft.util.debug.DebugSubscriptions;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -66,7 +68,12 @@ public final class CoordinateOffsets {
     }
 
     /** What a translator works with: the offset for its direction, the connection's state and its listener. */
-    record Context(Offset offset, OffsetState state, ServerGamePacketListenerImpl listener) {}
+    record Context(Offset offset, OffsetState state, ServerGamePacketListenerImpl listener) {
+        /** The same offset with the frame's dimension and the away amounts, for spots that name their dimension. */
+        Frame frame() {
+            return new Frame(offset, state.dimension, state::away);
+        }
+    }
 
     public static void init(Predicate<ServerPlayer> realCoordinates, Predicate<BlockPos> northTarget) {
         CoordinateOffsets.realCoordinates = realCoordinates;
@@ -135,11 +142,19 @@ public final class CoordinateOffsets {
 
     /** The offset the player's client is sent positions in now. Zero with no frame, and for a stand-in, which has no client. */
     public static Offset offset(ServerPlayer player) {
-        if (StandIn.is(player) || player.connection == null) {
-            return Offset.ZERO;
-        }
-        Connection connection = connectionOf(player);
-        return connection == null ? Offset.ZERO : state(connection).frames.get().out();
+        return frame(player).offset();
+    }
+
+    /** The same with the frame's dimension and the away amounts for the other dimensions. */
+    public static Frame frame(ServerPlayer player) {
+        OffsetState state = stateOf(player);
+        return state == null ? Frame.NONE : state.outFrame();
+    }
+
+    /** The away amount a spot in this dimension is shown with while the frame is elsewhere. Only the tests use it. */
+    public static Offset awayOffset(ServerPlayer player, ResourceKey<Level> dimension) {
+        OffsetState state = stateOf(player);
+        return state == null ? Offset.ZERO : state.away(dimension);
     }
 
     /**
@@ -160,7 +175,8 @@ public final class CoordinateOffsets {
      * have it sent again. The very hash with no offset to read by.
      */
     public static HashedStack clientHash(ServerPlayer player, HashedStack sent) {
-        Offset in = incomingOffset(player);
+        OffsetState state = stateOf(player);
+        Frame in = state == null ? Frame.NONE : new Frame(state.frames.get().in(), state.dimension, state::away);
         if (in.isZero()) {
             return sent;
         }
@@ -256,11 +272,17 @@ public final class CoordinateOffsets {
 
     /** The offset what the player's client sends is read in now. Zero with no frame. */
     static Offset incomingOffset(ServerPlayer player) {
+        OffsetState state = stateOf(player);
+        return state == null ? Offset.ZERO : state.frames.get().in();
+    }
+
+    // Null for a stand-in, which has no client, and for a player with no connection yet
+    private static @Nullable OffsetState stateOf(ServerPlayer player) {
         if (StandIn.is(player) || player.connection == null) {
-            return Offset.ZERO;
+            return null;
         }
         Connection connection = connectionOf(player);
-        return connection == null ? Offset.ZERO : state(connection).frames.get().in();
+        return connection == null ? null : state(connection);
     }
 
     static OffsetState state(Connection connection) {

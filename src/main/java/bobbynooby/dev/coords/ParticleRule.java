@@ -33,28 +33,29 @@ public final class ParticleRule {
     }
 
     /** The particle as the client is sent it: the very particle when nothing in it moves. */
-    public static ParticleOptions shift(ParticleOptions particle, Offset offset) {
-        if (offset.isZero()) {
+    public static ParticleOptions shift(ParticleOptions particle, Frame frame) {
+        if (frame.isZero()) {
             return particle;
         }
         return switch (particle) {
-            case VibrationParticleOption vibration -> vibration(vibration, offset);
-            case TrailParticleOption trail -> new TrailParticleOption(offset.shift(trail.target()), trail.color(), trail.duration());
-            case ItemParticleOption item -> item(item, offset);
+            case VibrationParticleOption vibration -> vibration(vibration, frame);
+            case TrailParticleOption trail ->
+                    new TrailParticleOption(frame.offset().shift(trail.target()), trail.color(), trail.duration());
+            case ItemParticleOption item -> item(item, frame);
             default -> particle;
         };
     }
 
     // A sculk sensor's vibration heads for a block. One heading for an entity names it by id, which the client looks up.
-    private static ParticleOptions vibration(VibrationParticleOption vibration, Offset offset) {
+    private static ParticleOptions vibration(VibrationParticleOption vibration, Frame frame) {
         if (!(vibration.getDestination() instanceof BlockPositionSource block)) {
             return vibration;
         }
-        return new VibrationParticleOption(new BlockPositionSource(offset.shift(block.pos())), vibration.getArrivalInTicks());
+        return new VibrationParticleOption(new BlockPositionSource(frame.offset().shift(block.pos())), vibration.getArrivalInTicks());
     }
 
-    private static ParticleOptions item(ItemParticleOption item, Offset offset) {
-        ItemStackTemplate shifted = ItemRule.shift(item.getItem(), offset);
+    private static ParticleOptions item(ItemParticleOption item, Frame frame) {
+        ItemStackTemplate shifted = ItemRule.shift(item.getItem(), frame);
         return shifted == item.getItem() ? item : new ItemParticleOption(item.getType(), shifted);
     }
 

@@ -98,11 +98,12 @@ final class BorderRule {
     }
 
     // A north compass's target is a set distance north of the world's edge, so its Z is the same for everyone and
-    // shifted it would be the offset itself; its X is the player's own. Any other spawn is a real spot.
+    // shifted it would be the offset itself; its X is the player's own. Any other spawn is a real spot, shifted as its
+    // dimension's spots are.
     private static Packet<?> spawn(ClientboundSetDefaultSpawnPositionPacket packet, Context context) {
         LevelData.RespawnData spawn = packet.respawnData();
         BlockPos pos = spawn.pos();
-        Offset offset = context.offset();
+        Offset offset = context.frame().offsetIn(spawn.dimension());
         BlockPos shifted = CoordinateOffsets.isNorthTarget(pos) ? new BlockPos(pos.getX() + offset.x(), pos.getY(), pos.getZ())
                 : offset.shift(pos);
         return new ClientboundSetDefaultSpawnPositionPacket(LevelData.RespawnData.of(spawn.dimension(), shifted, spawn.yaw(),

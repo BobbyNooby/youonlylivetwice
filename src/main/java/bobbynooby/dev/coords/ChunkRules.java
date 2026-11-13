@@ -59,12 +59,12 @@ final class ChunkRules {
     private static Packet<?> chunk(ClientboundLevelChunkWithLightPacket packet, Context context) {
         Offset offset = context.offset();
         return new ClientboundLevelChunkWithLightPacket(offset.shiftChunkX(packet.x()), offset.shiftChunkZ(packet.z()),
-                withBlockEntitiesShifted(packet.chunkData(), offset), packet.lightData());
+                withBlockEntitiesShifted(packet.chunkData(), context.frame()), packet.lightData());
     }
 
     // A block entity is placed by its spot inside the chunk, which stays, so only a tag that holds a position changes.
     // With none changed the very data goes on.
-    private static ClientboundLevelChunkPacketData withBlockEntitiesShifted(ClientboundLevelChunkPacketData data, Offset offset) {
+    private static ClientboundLevelChunkPacketData withBlockEntitiesShifted(ClientboundLevelChunkPacketData data, Frame frame) {
         LevelChunkPacketDataInvoker fields = (LevelChunkPacketDataInvoker) data;
         List<Object> entries = fields.yoltBlockEntities();
         List<Object> shifted = null;
@@ -74,7 +74,7 @@ final class ChunkRules {
             if (tag == null) {
                 continue;
             }
-            CompoundTag shiftedTag = BlockRules.updateTag(entry.yoltType(), tag, offset);
+            CompoundTag shiftedTag = BlockRules.updateTag(entry.yoltType(), tag, frame);
             if (shiftedTag != tag) {
                 if (shifted == null) {
                     shifted = new ArrayList<>(entries);

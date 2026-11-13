@@ -6,8 +6,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -18,6 +20,9 @@ public final class OffsetState {
     final AtomicReference<Frames> frames = new AtomicReference<>(Frames.NONE);
     // The dimension the frame started in
     volatile @Nullable ResourceKey<Level> dimension;
+    // A hidden amount for each other dimension a spot the client is sent can be in, drawn at its first use and kept until
+    // the next login, so such a spot looks the same from every frame and never says what a frame's offset is
+    private final Map<ResourceKey<Level>, Offset> away = new ConcurrentHashMap<>();
     // Real ChunkPos.pack values of the chunks the client holds, kept whatever the frame, so a new one can forget them
     final Set<Long> heldChunks = ConcurrentHashMap.newKeySet();
     // The real position the client was last told
@@ -34,4 +39,17 @@ public final class OffsetState {
     final Set<PacketType<?>> noteFailed = ConcurrentHashMap.newKeySet();
 
     public OffsetState() {}
+
+    Offset away(ResourceKey<Level> target) {
+        return away.computeIfAbsent(target, key -> Offset.random(ThreadLocalRandom.current()));
+    }
+
+    void forgetAway() {
+        away.clear();
+    }
+
+    /** The frame the client is sent positions in now. */
+    Frame outFrame() {
+        return new Frame(frames.get().out(), dimension, this::away);
+    }
 }

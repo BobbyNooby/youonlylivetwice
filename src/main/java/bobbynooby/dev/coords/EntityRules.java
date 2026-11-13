@@ -36,7 +36,7 @@ import java.util.function.BiFunction;
 public final class EntityRules {
     // Filled at mod start, before any server thread runs, and only read after
     private static final Map<EntityDataSerializer<?>, Coverage> SERIALIZERS = new HashMap<>();
-    private static final Map<EntityDataSerializer<?>, BiFunction<?, Offset, ?>> SHIFTS = new HashMap<>();
+    private static final Map<EntityDataSerializer<?>, BiFunction<?, Frame, ?>> SHIFTS = new HashMap<>();
 
     private EntityRules() {}
 
@@ -56,7 +56,7 @@ public final class EntityRules {
 
     // From each serializer's values in 26.3. A display's translation and scale are relative to it.
     private static void classifySerializers() {
-        translated(EntityDataSerializers.BLOCK_POS, (pos, offset) -> offset.shift(pos));
+        translated(EntityDataSerializers.BLOCK_POS, (pos, frame) -> frame.offset().shift(pos));
         translated(EntityDataSerializers.OPTIONAL_BLOCK_POS, EntityRules::optionalBlockPos);
         translated(EntityDataSerializers.OPTIONAL_GLOBAL_POS, EntityRules::optionalGlobalPos);
         translated(EntityDataSerializers.ITEM_STACK, ItemRule::shift);
@@ -104,7 +104,7 @@ public final class EntityRules {
                 EntityDataSerializers.DYE_COLOR);
     }
 
-    private static <T> void translated(EntityDataSerializer<T> serializer, BiFunction<T, Offset, T> shift) {
+    private static <T> void translated(EntityDataSerializer<T> serializer, BiFunction<T, Frame, T> shift) {
         SERIALIZERS.put(serializer, Coverage.TRANSLATED);
         SHIFTS.put(serializer, shift);
     }
@@ -115,18 +115,18 @@ public final class EntityRules {
         }
     }
 
-    private static Optional<BlockPos> optionalBlockPos(Optional<BlockPos> pos, Offset offset) {
-        return pos.isEmpty() ? pos : pos.map(at -> offset.shift(at));
+    private static Optional<BlockPos> optionalBlockPos(Optional<BlockPos> pos, Frame frame) {
+        return pos.isEmpty() ? pos : pos.map(at -> frame.offset().shift(at));
     }
 
     // Defined, but no entity uses it in 26.3
-    private static Optional<GlobalPos> optionalGlobalPos(Optional<GlobalPos> pos, Offset offset) {
-        return pos.isEmpty() ? pos : pos.map(at -> offset.shift(at));
+    private static Optional<GlobalPos> optionalGlobalPos(Optional<GlobalPos> pos, Frame frame) {
+        return pos.isEmpty() ? pos : pos.map(at -> frame.shift(at));
     }
 
     // A living entity's effect particles, in order; the very list when none moves
-    private static List<ParticleOptions> particles(List<ParticleOptions> particles, Offset offset) {
-        return CoordinateOffsets.mapEach(particles, particle -> ParticleRule.shift(particle, offset));
+    private static List<ParticleOptions> particles(List<ParticleOptions> particles, Frame frame) {
+        return CoordinateOffsets.mapEach(particles, particle -> ParticleRule.shift(particle, frame));
     }
 
     // Built from its fields. Its angles are kept as bytes, and the getters' degrees pack back to the same ones. The
@@ -175,20 +175,20 @@ public final class EntityRules {
 
     // Part of every spawn, so the very packet goes on when no value in it moves
     private static Packet<?> entityData(ClientboundSetEntityDataPacket packet, Context context) {
-        Offset offset = context.offset();
+        Frame frame = context.frame();
         List<SynchedEntityData.DataValue<?>> values = packet.packedItems();
-        List<SynchedEntityData.DataValue<?>> shifted = CoordinateOffsets.mapEach(values, value -> shift(value, offset));
+        List<SynchedEntityData.DataValue<?>> shifted = CoordinateOffsets.mapEach(values, value -> shift(value, frame));
         return shifted == values ? packet : new ClientboundSetEntityDataPacket(packet.id(), shifted);
     }
 
     // Each shift was put in the table with its own serializer, so its types match the value's
     @SuppressWarnings("unchecked")
-    private static <T> SynchedEntityData.DataValue<T> shift(SynchedEntityData.DataValue<T> value, Offset offset) {
-        BiFunction<T, Offset, T> shift = (BiFunction<T, Offset, T>) SHIFTS.get(value.serializer());
+    private static <T> SynchedEntityData.DataValue<T> shift(SynchedEntityData.DataValue<T> value, Frame frame) {
+        BiFunction<T, Frame, T> shift = (BiFunction<T, Frame, T>) SHIFTS.get(value.serializer());
         if (shift == null) {
             return value;
         }
-        T shifted = shift.apply(value.value(), offset);
+        T shifted = shift.apply(value.value(), frame);
         return shifted == value.value() ? value : new SynchedEntityData.DataValue<>(value.id(), value.serializer(), shifted);
     }
 }

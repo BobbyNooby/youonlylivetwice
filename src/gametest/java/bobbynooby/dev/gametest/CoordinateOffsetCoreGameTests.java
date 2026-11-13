@@ -104,7 +104,7 @@ public class CoordinateOffsetCoreGameTests {
         ServerPlayer back = null;
         try {
             Offset first = CoordinateOffsets.offset(player);
-            player.setLastDeathLocation(Optional.of(GlobalPos.of(Level.NETHER, new BlockPos(100, 64, -200))));
+            player.setLastDeathLocation(Optional.of(GlobalPos.of(Level.OVERWORLD, new BlockPos(100, 64, -200))));
             TestPlayers.leave(player);
             // So the finally block can't remove it twice
             player = null;
@@ -116,8 +116,44 @@ public class CoordinateOffsetCoreGameTests {
             helper.assertFalse(offset.equals(first), "the rejoin kept the first frame's offset " + first);
             ClientboundLoginPacket login = OffsetTestKit.last(helper, back, 0, ClientboundLoginPacket.class);
             helper.assertValueEqual(login.commonPlayerSpawnInfo().lastDeathLocation(),
-                    Optional.of(GlobalPos.of(Level.NETHER, new BlockPos(100 + offset.x(), 64, -200 + offset.z()))),
+                    Optional.of(GlobalPos.of(Level.OVERWORLD, new BlockPos(100 + offset.x(), 64, -200 + offset.z()))),
                     "death spot in the rejoin's login");
+        } finally {
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
+            if (back != null) {
+                TestPlayers.leave(back);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A death in another dimension has no place in the frame, and the frame's offset is easy to learn, so the spot goes
+    // out shifted by that dimension's away amount
+    @GameTest(environment = CORE)
+    public void awayDeathSpotNeverUsesTheFramesAmount(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "coaway", GameType.CREATIVE);
+        GameProfile profile = player.getGameProfile();
+        ServerPlayer back = null;
+        try {
+            BlockPos death = new BlockPos(-3_300, 70, 4_100);
+            player.setLastDeathLocation(Optional.of(GlobalPos.of(Level.NETHER, death)));
+            TestPlayers.leave(player);
+            // So the finally block can't remove it twice
+            player = null;
+            BlockPos spot = new BlockPos(-90, 80, 150);
+            back = OffsetTestKit.withCoordinates(
+                    () -> TestPlayers.rejoin(helper.getLevel().getServer(), profile, GameType.CREATIVE, spot));
+            Offset offset = CoordinateOffsets.offset(back);
+            helper.assertFalse(offset.isZero(), "the rejoin got no offset");
+            Offset away = CoordinateOffsets.awayOffset(back, Level.NETHER);
+            GlobalPos sent = OffsetTestKit.last(helper, back, 0, ClientboundLoginPacket.class).commonPlayerSpawnInfo()
+                    .lastDeathLocation().orElseThrow();
+            helper.assertValueEqual(sent.dimension(), Level.NETHER, "dimension of the death spot");
+            helper.assertValueEqual(sent.pos(), away.shift(death), "death spot in the login");
+            helper.assertFalse(sent.pos().equals(death), "the death spot went out real");
+            helper.assertFalse(sent.pos().equals(offset.shift(death)), "the death spot went out in the frame's offset " + offset);
         } finally {
             if (player != null) {
                 TestPlayers.leave(player);
