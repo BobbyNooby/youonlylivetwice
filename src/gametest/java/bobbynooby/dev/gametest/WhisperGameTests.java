@@ -165,6 +165,33 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // A whisper is private, so its text never reaches the server log, as vanilla's /msg doesn't either
+    @GameTest
+    public void whisperTextStaysOutOfTheLog(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wlogfrom", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wlogto", new BlockPos(2, 0, 0));
+            String targetName = target.nameAndId().name();
+            String text = "meet me at the secret base " + CommandGameTests.uniqueName("x");
+            target.messages.clear();
+            List<String> log = OfflineGameTests.yoltLog(() -> run(sender, "w " + targetName + " " + text));
+            helper.assertValueEqual(texts(target), List.of(sender.nameAndId().name() + " whispers to you: " + text),
+                    "the whisper did not arrive");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(), List.of(), "log lines with the whisper");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
     // chat.whisperRadius 10 keeps a whisper from a player 20 blocks off, well inside the chat radius; at 0 the chat
     // radius counts again and it arrives
     @GameTest
