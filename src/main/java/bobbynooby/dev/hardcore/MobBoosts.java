@@ -69,6 +69,13 @@ public final class MobBoosts {
             return;
         }
         if (mob.entityTags().contains(BLOOD_MOON_MARK)) {
+            // A cured zombie villager carries the mark over; a villager gets nothing, and a later zombie of it starts
+            // with no mark
+            if (!(mob instanceof Enemy)) {
+                applyBloodMoon(mob, MobMaths.Boost.NONE);
+                mob.removeTag(BLOOD_MOON_MARK);
+                return;
+            }
             MobMaths.Boost boost = bloodMoonBoost();
             boolean unscaled = convertedUnscaled(mob, BLOOD_MOON);
             applyBloodMoon(mob, boost);
