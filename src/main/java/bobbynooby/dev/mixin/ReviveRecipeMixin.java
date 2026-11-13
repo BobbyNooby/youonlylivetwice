@@ -18,7 +18,7 @@ public abstract class ReviveRecipeMixin {
     @Final
     private ItemStackTemplate result;
 
-    // A shapeless result is made from scratch, so the revive head would forget whose head it was
+    // A shapeless result is made from scratch, so the revive paper would forget whose grave head it came from
     @ModifyReturnValue(method = "assemble(Lnet/minecraft/world/item/crafting/CraftingInput;)Lnet/minecraft/world/item/ItemStack;",
             at = @At("RETURN"))
     private ItemStack keepTheOwner(ItemStack made, @Local(argsOnly = true) CraftingInput input) {

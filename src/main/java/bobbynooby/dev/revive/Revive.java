@@ -29,7 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
-/** Using a revive head ends its owner's death lockout. */
+/** Using a revive paper ends its owner's death lockout. */
 public final class Revive {
     public enum Outcome {
         REVIVED,
@@ -62,7 +62,7 @@ public final class Revive {
         }
         Optional<UUID> owner = GraveItems.ownerId(stack);
         if (owner.isEmpty()) {
-            user.sendSystemMessage(Component.literal("This head has no owner."));
+            user.sendSystemMessage(Component.literal("This paper has no owner."));
             return Outcome.NO_OWNER;
         }
         String name = ownerName(stack, owner.get());
@@ -90,7 +90,7 @@ public final class Revive {
         user.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.TOTEM_USE),
                 SoundSource.PLAYERS, user.getX(), user.getY(), user.getZ(), 1.0F, 1.0F, user.getRandom().nextLong()));
         user.sendSystemMessage(Component.literal(name + " can come back now."));
-        Yolt.LOGGER.info("{} revived {} with a revive head", user.nameAndId().name(), name);
+        Yolt.LOGGER.info("{} revived {} with a revive paper", user.nameAndId().name(), name);
         return Outcome.REVIVED;
     }
 

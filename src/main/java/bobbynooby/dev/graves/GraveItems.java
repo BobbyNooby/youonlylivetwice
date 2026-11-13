@@ -5,6 +5,7 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Util;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
@@ -20,7 +21,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Builds and recognises the player heads that mark graves and revive items. */
+/** Builds and recognises the player heads that mark graves, and the revive papers crafted from them. */
 public final class GraveItems {
     private static final String ROOT = "yolt";
     private static final String GRAVE_HEAD = "grave_head";
@@ -37,8 +38,9 @@ public final class GraveItems {
     }
 
     /**
-     * The revive head the recipe makes, with every component of the grave head in the grid and the recipe's own on top,
-     * as vanilla's transmute recipe does, so it keeps the owner's skin and id. Any other result is left as it is.
+     * The revive paper the recipe makes, with every component of the grave head in the grid and the recipe's own on top,
+     * as vanilla's transmute recipe does, so it keeps the owner's profile, and named "Revive <owner>". Any other result
+     * is left as it is.
      */
     public static ItemStack reviveHeadFrom(ItemStack made, ItemStackTemplate result, CraftingInput input) {
         if (!isReviveHead(made)) {
@@ -47,7 +49,12 @@ public final class GraveItems {
         for (int slot = 0; slot < input.size(); slot++) {
             ItemStack stack = input.getItem(slot);
             if (isGraveHead(stack)) {
-                return TransmuteRecipe.createWithOriginalComponents(result, stack);
+                ItemStack paper = TransmuteRecipe.createWithOriginalComponents(result, stack);
+                ResolvableProfile profile = paper.get(DataComponents.PROFILE);
+                if (profile != null) {
+                    profile.name().ifPresent(name -> paper.set(DataComponents.ITEM_NAME, Component.literal("Revive " + name)));
+                }
+                return paper;
             }
         }
         return made;

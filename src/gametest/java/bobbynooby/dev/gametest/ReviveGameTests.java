@@ -79,7 +79,8 @@ public class ReviveGameTests {
             helper.assertValueEqual(recipe.get().id().identifier(), Yolt.id("revive"), "recipe id");
 
             ItemStack result = recipe.get().value().assemble(input);
-            helper.assertTrue(result.is(Items.PLAYER_HEAD), "result is not a player head");
+            helper.assertTrue(result.is(Items.PAPER), "result is not a paper");
+            helper.assertValueEqual(result.getHoverName().getString(), "Revive " + player.getGameProfile().name(), "result name");
             helper.assertValueEqual(result.getCount(), 1, "result count");
             helper.assertTrue(GraveItems.isReviveHead(result), "result is not a revive head");
             helper.assertFalse(GraveItems.isGraveHead(result), "result kept the grave head marker");
@@ -631,7 +632,7 @@ public class ReviveGameTests {
 
     // Built the way the recipe builds it, without the lore and looks the tests don't need
     static ItemStack reviveHead(ResolvableProfile profile, int count) {
-        ItemStack stack = new ItemStack(Items.PLAYER_HEAD, count);
+        ItemStack stack = new ItemStack(Items.PAPER, count);
         if (profile != null) {
             stack.set(DataComponents.PROFILE, profile);
         }
