@@ -78,6 +78,7 @@
     "SleepAnnounceMixin",
     "SleepStatusMixin",
     "SoundPacketAccessor",
+    "StoreSaveMixin",
     "TargetGoalAccessor",
     "VanillaKillMixin",
     "VisibilityPairingMixin",

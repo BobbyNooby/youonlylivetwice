@@ -250,6 +250,25 @@ public class GraveStoreGameTests {
         helper.succeed();
     }
 
+    // The save goes through a temp file and a move, so the file reads whole and nothing is left next to it
+    @GameTest
+    public void graveSaveLeavesNoTempFile(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GraveStore store = GraveStore.get(server);
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        Grave grave = grave(new BlockPos(29_000_000, 70, 29_000_000), List.of(new ItemStack(Items.DIAMOND)));
+        try {
+            store.put(grave);
+            store.saveNow(server);
+            helper.assertTrue(onDisk(server).stream().anyMatch(g -> g.id().equals(grave.id())), "the grave is not in the grave file");
+            helper.assertFalse(Files.exists(file.resolveSibling(file.getFileName() + ".tmp")), "a temp file sits beside the grave file");
+        } finally {
+            store.remove(grave.id());
+            store.saveNow(server);
+        }
+        helper.succeed();
+    }
+
     // The second grave has no position, so it can't be read at all
     @GameTest
     public void skippedGraveRecordKeepsFileCopy(GameTestHelper helper) throws IOException {
