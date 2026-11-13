@@ -176,6 +176,8 @@ class ConfigKeysTest {
                 Map.entry("graves.enabled", Applies.When.NEW_DEATHS),
                 Map.entry("graves.enderChestOnDeath", Applies.When.NEW_DEATHS),
                 Map.entry("graves.compass", Applies.When.NEW_DEATHS),
+                Map.entry("hardcore.curse.heartsPerDeath", Applies.When.NEW_DEATHS),
+                Map.entry("hardcore.curse.heartsPerTotem", Applies.When.NEW_DEATHS),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
