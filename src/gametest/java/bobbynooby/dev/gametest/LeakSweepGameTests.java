@@ -228,12 +228,15 @@ public class LeakSweepGameTests {
             ServerPlayer player = sweep.join("lsworld", GameType.CREATIVE, SPOT_BLOCK, true);
             helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset at the spot");
             ServerPlayer sleeper = sweep.join("lssleeper", GameType.CREATIVE, SPOT_BLOCK.offset(-3, 0, 6), true);
-            // In the next chunk east, near enough to see the scene, so each broadcast goes to two offsets
-            ServerPlayer watcher = sweep.join("lswatcher", GameType.CREATIVE, SPOT_BLOCK.offset(10, 0, 0), true);
+            // In the next chunk east, near enough to see the scene, so each broadcast goes to two offsets. Its offset is 16
+            // blocks off the player's, which no band catches, so that each viewer gets its own rests on the spots below.
+            BlockPos watchAt = SPOT_BLOCK.offset(10, 0, 0);
+            ServerPlayer watcher = sweep.join("lswatcher", GameType.CREATIVE, watchAt, true);
             Offset watching = CoordinateOffsets.offset(watcher);
             helper.assertFalse(watching.equals(OFFSET), "the watcher shares the player's offset");
             sweep.expect(player, OFFSET.shift(TARGET));
             sweep.expect(player, OFFSET.shift(EXIT));
+            sweep.expect(watcher, watching.shift(watchAt));
             sweep.expect(watcher, watching.shift(TARGET));
             sweep.expect(watcher, watching.shift(EXIT));
             sweep.at(0, () -> worldScene(helper, sweep, player, sleeper));
