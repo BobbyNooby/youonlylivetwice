@@ -26,6 +26,7 @@ import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Blocks;
@@ -56,49 +57,63 @@ public class HardcoreColdGameTests {
     private static final double CLOSE = 1e-9;
 
     // Five once-a-second steps at 0.01 each, counted from when the players join. The environment clears the weather,
-    // but rain left from before fades over up to 80 ticks and would still count as wet, so the test waits it out.
-    @GameTest(environment = COLD, maxTicks = 220, skyAccess = true)
+    // but rain left from before fades over up to 80 ticks and would still count as wet, so the test waits it out. The
+    // structure's floor is barrier, which lets sky light up through it, so the hut has a stone floor of its own and is
+    // closed on all six sides; the players join only once the light engine has darkened the hut.
+    @GameTest(environment = COLD, maxTicks = 260, skyAccess = true)
     public void cold2RisesUnderOpenSkyNotUnderARoof(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
+        Scene scene = new Scene(helper);
+        BlockPos roofed = new BlockPos(5, 1, 5);
+        BlockPos eyes = helper.absolutePos(roofed.above());
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(level.getRainLevel(1.0F) == 0, "the last rain hasn't faded"))
-                .thenExecute(() -> measureOpenAndRoofed(helper));
+                .thenExecute(() -> guarded(scene, () -> {
+                    scene.snow(AREA_FROM, AREA_TO);
+                    buildHut(helper, roofed);
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(level.getBrightness(LightLayer.SKY, eyes) == 0,
+                        "sky light " + level.getBrightness(LightLayer.SKY, eyes) + " inside the hut"))
+                .thenExecute(() -> guarded(scene, () -> measureOpenAndRoofed(helper, scene, roofed)));
     }
 
-    private static void measureOpenAndRoofed(GameTestHelper helper) {
-        Scene scene = new Scene(helper);
-        boolean waiting = false;
-        try {
-            scene.snow(AREA_FROM, AREA_TO);
-            BlockPos roofed = new BlockPos(5, 0, 5);
-            // A closed stone hut, three blocks a side, with the player inside
-            for (int x = 4; x <= 6; x++) {
-                for (int z = 4; z <= 6; z++) {
-                    helper.setBlock(new BlockPos(x, 2, z), Blocks.STONE);
-                    if (x != roofed.getX() || z != roofed.getZ()) {
-                        helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
-                        helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
-                    }
+    // Stone all round the column the player stands in: a 3×3 floor, walls two high round the middle, a 3×3 roof
+    private static void buildHut(GameTestHelper helper, BlockPos inside) {
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                helper.setBlock(inside.offset(x, -1, z), Blocks.STONE);
+                helper.setBlock(inside.offset(x, 2, z), Blocks.STONE);
+                if (x != 0 || z != 0) {
+                    helper.setBlock(inside.offset(x, 0, z), Blocks.STONE);
+                    helper.setBlock(inside.offset(x, 1, z), Blocks.STONE);
                 }
             }
-            ServerPlayer open = scene.join("OpenSky", new BlockPos(1, 0, 1));
-            ServerPlayer inside = scene.join("Indoors", roofed);
-            assertCold(helper, open, true);
-            assertCold(helper, inside, true);
-            helper.runAfterDelay(100, () -> {
-                try {
-                    assertChill(helper, open, 0.05, "after 100 ticks under open sky");
-                    assertChill(helper, inside, 0.0, "after 100 ticks under a roof");
-                } finally {
-                    scene.cleanUp.run();
-                }
-                helper.succeed();
-            });
-            waiting = true;
-        } finally {
-            if (!waiting) {
+        }
+    }
+
+    private static void measureOpenAndRoofed(GameTestHelper helper, Scene scene, BlockPos roofed) {
+        ServerPlayer open = scene.join("OpenSky", new BlockPos(1, 0, 1));
+        ServerPlayer inside = scene.join("Indoors", roofed);
+        assertCold(helper, open, true);
+        assertCold(helper, inside, true);
+        helper.runAfterDelay(100, () -> {
+            try {
+                assertChill(helper, open, 0.05, "after 100 ticks under open sky");
+                assertChill(helper, inside, 0.0, "after 100 ticks under a roof");
+            } finally {
                 scene.cleanUp.run();
             }
+            helper.succeed();
+        });
+    }
+
+    // A step that throws cleans up first, since the test then ends without its later steps
+    private static void guarded(Scene scene, Runnable step) {
+        try {
+            step.run();
+        } catch (RuntimeException e) {
+            scene.cleanUp.run();
+            throw e;
         }
     }
 
