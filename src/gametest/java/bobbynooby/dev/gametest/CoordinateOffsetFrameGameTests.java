@@ -367,7 +367,7 @@ public class CoordinateOffsetFrameGameTests {
             player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                     LevelData.RespawnData.of(level.dimension(), helper.absolutePos(RESPAWN), 0.0F, 0.0F), true), false);
             int mark = OffsetTestKit.mark(player);
-            current = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(CoordinateOffsets.offset(current), Offset.ZERO, "offset after a respawn with the switch off");
 
             int respawn = OffsetTestKit.lastIndex(helper, current, mark, ClientboundRespawnPacket.class);

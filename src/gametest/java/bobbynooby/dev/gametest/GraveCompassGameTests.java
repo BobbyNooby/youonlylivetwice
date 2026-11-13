@@ -572,7 +572,7 @@ public class GraveCompassGameTests {
 
     // Back through the death screen's respawn
     private static ServerPlayer respawn(GameTestHelper helper, ServerPlayer player) {
-        return helper.getLevel().getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        return TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
     }
 
     // As the death screen's button does it. The connection then takes the new player, and stops waiting for a respawn,

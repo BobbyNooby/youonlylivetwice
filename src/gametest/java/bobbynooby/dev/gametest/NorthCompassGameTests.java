@@ -197,7 +197,7 @@ public class NorthCompassGameTests {
             BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
             player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                     LevelData.RespawnData.of(helper.getLevel().dimension(), spot, 0.0F, 0.0F), true), false);
-            current = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertTrue(current.level() == helper.getLevel(), "the respawn did not bring the player back to the overworld");
             List<List<Packet<?>>> sends = spawnSends(current, afterRespawn(helper, current));
             helper.assertValueEqual(sends.size(), 2, "spawn sends after the respawn packet");

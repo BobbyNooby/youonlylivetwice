@@ -438,7 +438,7 @@ public class SleepGameTests {
         try {
             sleep.noBedRespawn = true;
             setSpawnpoint(helper, player, spot);
-            current = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertTrue(current.level() == helper.getLevel(), "respawned in another dimension");
             helper.assertTrue(current.position().distanceTo(Vec3.atBottomCenterOf(spot)) <= 2.0,
                     "respawned at " + current.blockPosition() + ", away from the stored point " + spot);

@@ -132,7 +132,7 @@ public class DebugPrivacyGameTests {
             BlockPos spot = helper.absolutePos(new BlockPos(2, 1, 2));
             player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                     LevelData.RespawnData.of(helper.getLevel().dimension(), spot, 0.0F, 0.0F), true), false);
-            current = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertTrue(current != player, "the respawn kept the old player object");
             int respawn = lastRespawnPacket(current);
             helper.assertTrue(respawn >= 0, "the respawn sent no respawn packet");

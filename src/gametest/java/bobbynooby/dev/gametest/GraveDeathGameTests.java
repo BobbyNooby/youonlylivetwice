@@ -1116,7 +1116,7 @@ public class GraveDeathGameTests {
                 try {
                     helper.assertTrue(server.getPlayerList().getPlayer(player.getUUID()) == player, "the revived player was kicked");
                     assertSavedDead(helper, player, "after the tick");
-                    ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+                    ServerPlayer back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
                     helper.assertValueEqual(graveLines(back), List.of(graveLine(grave)), "chat at the respawn");
                 } finally {
                     cleanUp.run();
@@ -1157,7 +1157,7 @@ public class GraveDeathGameTests {
             ServerPlayer back;
             try {
                 kill(helper, player);
-                back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+                back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             } finally {
                 config.graves.enabled = gravesBefore;
                 config.deathLockout.enabled = lockoutBefore;
@@ -1283,7 +1283,7 @@ public class GraveDeathGameTests {
             ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
             helper.assertTrue(back.isDeadOrDying(), "the owner did not come back dead");
             respawnBesideTest(helper, back);
-            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            ServerPlayer respawned = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(graveLines(respawned), List.of(graveLine(grave)), "chat at the respawn");
         } finally {
             config.graves.tellLocation = modeBefore;
@@ -1326,7 +1326,7 @@ public class GraveDeathGameTests {
                     helper.assertValueEqual(DeathLockout.revive(owner, name, "test"), DeathLockout.ReviveResult.REVIVED, "the revive");
                     ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
                     respawnBesideTest(helper, back);
-                    ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+                    ServerPlayer respawned = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
                     helper.assertValueEqual(graveLines(respawned), List.of(), "chat at the respawn after the lockout");
                 } finally {
                     cleanUp.run();
@@ -1361,9 +1361,9 @@ public class GraveDeathGameTests {
             }
             Grave grave = onlyGrave(helper, player);
             helper.assertValueEqual(grave.pos(), helper.absolutePos(new BlockPos(3, 0, 3)), "grave, 20 below the death");
-            ServerPlayer fromEnd = server.getPlayerList().respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION);
+            ServerPlayer fromEnd = TestPlayers.respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION);
             helper.assertValueEqual(graveLines(fromEnd), List.of(), "chat after the way back from the End");
-            ServerPlayer back = server.getPlayerList().respawn(fromEnd, false, Entity.RemovalReason.KILLED);
+            ServerPlayer back = TestPlayers.respawn(fromEnd, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(graveLines(back), List.of(graveLine(grave)), "chat at the death's respawn");
         } finally {
             leaveAndRemoveGraves(helper, player.getUUID());
@@ -1375,7 +1375,7 @@ public class GraveDeathGameTests {
     private static ServerPlayer dieAndRespawn(GameTestHelper helper, ServerPlayer player) {
         respawnBesideTest(helper, player);
         kill(helper, player);
-        return helper.getLevel().getServer().getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        return TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
     }
 
     static void respawnBesideTest(GameTestHelper helper, ServerPlayer player) {

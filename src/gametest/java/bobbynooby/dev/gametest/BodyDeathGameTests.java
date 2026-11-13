@@ -921,7 +921,7 @@ public class BodyDeathGameTests {
         player.addTag(Bodies.TAG);
         ServerPlayer respawned;
         try {
-            respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            respawned = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
         } catch (RuntimeException e) {
             TestPlayers.leave(player);
             throw e;

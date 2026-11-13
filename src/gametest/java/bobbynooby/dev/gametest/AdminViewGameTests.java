@@ -132,7 +132,7 @@ public class AdminViewGameTests {
             admin.setRespawnPosition(new ServerPlayer.RespawnConfig(
                     LevelData.RespawnData.of(helper.getLevel().dimension(), spot, 0.0F, 0.0F), true), false);
 
-            current = server.getPlayerList().respawn(admin, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(admin, false, Entity.RemovalReason.KILLED);
             helper.assertTrue(current != admin, "the respawn kept the old player object");
             helper.assertTrue(AdminView.isOn(current), "admin view was lost on the respawn");
             late = TestPlayers.join(helper, "avrespawnlate", GameType.SURVIVAL, new BlockPos(1, 0, 0));

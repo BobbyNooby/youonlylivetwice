@@ -586,14 +586,14 @@ public class LockoutGameTests {
             helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, at, 3.0), 0, "diamonds dropped");
             helper.assertValueEqual(orbsNear(helper, at) + orbsNear(helper, bareAt), 0, "XP orbs dropped");
 
-            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            ServerPlayer back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 3, "diamonds after the respawn");
             helper.assertValueEqual(back.getInventory().countItem(Items.IRON_HELMET), 1, "helmets after the respawn");
             helper.assertTrue(back.getItemBySlot(EquipmentSlot.HEAD).is(Items.IRON_HELMET), "the helmet is not worn after the respawn");
             helper.assertValueEqual(back.experienceLevel, 10, "XP level after the respawn");
             helper.assertValueEqual(back.getScore(), 5, "score after the respawn");
             helper.assertFalse(back.entityTags().contains(UncountedDeaths.MARK), "the respawned player still has the death's mark");
-            ServerPlayer bareBack = server.getPlayerList().respawn(bare, false, Entity.RemovalReason.KILLED);
+            ServerPlayer bareBack = TestPlayers.respawn(bare, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(bareBack.experienceLevel, 7, "XP level after the respawn of the player with no items");
         } finally {
             leaveIfOnline(player);
@@ -623,7 +623,7 @@ public class LockoutGameTests {
             helper.assertTrue(DeathLockout.refusal(uuid, "Test") == null, "a spectator's death locked them out");
             helper.assertTrue(BodyTestKit.gravesOf(helper, uuid).isEmpty(), "a spectator's death made a grave");
 
-            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            ServerPlayer back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 2, "diamonds after the respawn");
         } finally {
             leaveIfOnline(player);
@@ -688,7 +688,7 @@ public class LockoutGameTests {
 
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.CREATIVE, new BlockPos(1, 1, 1));
             helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
-            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            ServerPlayer respawned = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(respawned.getInventory().countItem(Items.DIAMOND), 4, "diamonds after the respawn");
             helper.assertValueEqual(respawned.experienceLevel, 8, "XP level after the respawn");
             helper.assertValueEqual(respawned.getScore(), 3, "score after the respawn");
@@ -719,7 +719,7 @@ public class LockoutGameTests {
             helper.assertFalse(player.entityTags().contains(UncountedDeaths.MARK), "the death that counts left the mark on");
             helper.assertTrue(orbsNear(helper, at) > 0, "the death that counts dropped no XP");
 
-            ServerPlayer back = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            ServerPlayer back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(back.experienceLevel, 0, "XP level after the respawn");
             helper.assertValueEqual(back.getScore(), 0, "score after the respawn");
         } finally {
@@ -752,7 +752,7 @@ public class LockoutGameTests {
 
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
             helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
-            ServerPlayer respawned = server.getPlayerList().respawn(back, false, Entity.RemovalReason.KILLED);
+            ServerPlayer respawned = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
             helper.assertValueEqual(respawned.getScore(), 0, "score after the respawn");
         } finally {
             leaveIfOnline(player);

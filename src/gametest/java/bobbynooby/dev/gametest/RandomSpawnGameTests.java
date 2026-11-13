@@ -103,7 +103,7 @@ public class RandomSpawnGameTests {
         try {
             Settings.get().randomSpawn = true;
             helper.assertTrue(player.getRespawnConfig() == null, "the new player has a respawn point");
-            current = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             BlockPos feet = current.blockPosition();
             helper.assertTrue(current.level() == overworld, "respawned in " + current.level().dimension().identifier());
 
