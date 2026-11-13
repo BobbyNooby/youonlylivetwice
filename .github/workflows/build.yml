@@ -149,3 +149,37 @@ jobs:
           path: |
             build/run/clientGameTest/logs
             build/run/clientGameTest/crash-reports
+
+  # A push to release whose tests all pass makes a draft release of its jar, tagged v<mod_version>, with
+  # .github/release-notes.md as its text. A draft stays private until it is published on GitHub. A version that has a
+  # release already gets no new one, so raise mod_version and rewrite the notes for the next release.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
+    needs: [build, client_game_test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v7
+      - name: get the tested jar
+        uses: actions/download-artifact@v7
+        with:
+          name: Artifacts
+          path: build/libs/
+      - name: make the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^mod_version=//p' gradle.properties)
+          minecraft=$(sed -n 's/^minecraft_version=//p' gradle.properties)
+          tag="v$version"
+          # A draft has no tag yet, so the release list is read rather than the tag
+          if gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name' | grep -qx "$tag"; then
+            echo "$tag has a release already; raise mod_version in gradle.properties for a new one"
+            exit 0
+          fi
+          jar="build/libs/you-only-live-twice-$version.jar"
+          gh release create "$tag" "$jar" --draft --target "$GITHUB_SHA" \
+            --title "You Only Live Twice $version for Minecraft $minecraft" --notes-file .github/release-notes.md
