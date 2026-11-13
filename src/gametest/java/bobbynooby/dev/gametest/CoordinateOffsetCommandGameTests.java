@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 // Coordinates an op with an offset types, and the texts that would tell a player real coordinates. The tests join
@@ -204,16 +205,22 @@ public class CoordinateOffsetCommandGameTests {
         helper.succeed();
     }
 
-    // The chat line after a respawn goes out in the new frame, so it shows the grave where that client has it
+    // The chat line after a respawn goes out in the new frame, so it shows the grave where that client has it. The join
+    // is near the world's centre, so the frame it leaves has an offset of its own, and the player then walks into the
+    // test to die there.
     @GameTest(environment = GRAVE_NOTICE)
     public void graveNoticeShiftedAfterRespawn(GameTestHelper helper) {
         YoltConfig config = Settings.get();
         boolean lockoutBefore = config.deathLockout.enabled;
         boolean gravesBefore = config.graves.enabled;
         YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
-        ServerPlayer player = OffsetTestKit.join(helper, "cmgrave", GameType.SURVIVAL);
+        ServerPlayer player = OffsetTestKit.joinNearTheCentre(helper, "cmgrave", GameType.SURVIVAL, new BlockPos(200, 80, 300));
         ServerPlayer current = player;
         try {
+            Offset joined = CoordinateOffsets.offset(player);
+            BlockPos inTheTest = helper.absolutePos(new BlockPos(1, 1, 1));
+            player.teleportTo(helper.getLevel(), inTheTest.getX() + 0.5, inTheTest.getY(), inTheTest.getZ() + 0.5, Set.of(),
+                    0.0F, 0.0F, true);
             config.deathLockout.enabled = false;
             config.graves.enabled = true;
             config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
@@ -226,6 +233,7 @@ public class CoordinateOffsetCommandGameTests {
             current = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(5, 1, 5)), false);
             Offset offset = CoordinateOffsets.offset(current);
             helper.assertFalse(offset.isZero(), "the respawn got no offset");
+            helper.assertFalse(offset.equals(joined), "the respawn's frame has the old one's offset, so a notice in either passes");
             BlockPos shown = offset.shift(grave.pos());
             helper.assertValueEqual(graveLines(current, mark), List.of("Your grave is at " + shown.getX() + ", " + shown.getY() + ", "
                     + shown.getZ() + " in the Overworld."), "grave notices after the respawn");
