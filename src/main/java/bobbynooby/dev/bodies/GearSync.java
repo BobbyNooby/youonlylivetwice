@@ -21,8 +21,8 @@ public final class GearSync {
      * <ul>
      *   <li>body empty, real not: the real slot is cleared (a popped totem, broken armour);</li>
      *   <li>body has an item, real empty: the real slot gets a copy (armour a dispenser put on the body);</li>
-     *   <li>same item: the body's damage and count go onto the real stack, never above the real count;</li>
-     *   <li>a different item: the real stack is left alone.</li>
+     *   <li>the copy: the body's damage and count go onto the real stack, never above the real count;</li>
+     *   <li>anything else: the copy was used up and a dispenser filled the slot, so the real slot gets the body's item.</li>
      * </ul>
      * Only for a body that is being removed, or the copied gear would exist twice.
      */
@@ -39,8 +39,7 @@ public final class GearSync {
             }
             if (body.isEmpty()) {
                 setReal.accept(slot, ItemStack.EMPTY);
-            } else if (ItemStack.isSameItem(body, real)) {
-                // A different item means the player swapped it elsewhere; only the same item's wear is carried over
+            } else if (isCopyOf(body, real)) {
                 ItemStack updated = real.copy();
                 // Never above the real count: a larger body stack would create items
                 updated.setCount(Math.min(body.getCount(), real.getCount()));
@@ -50,7 +49,21 @@ public final class GearSync {
                     updated.remove(DataComponents.DAMAGE);
                 }
                 setReal.accept(slot, updated);
+            } else {
+                setReal.accept(slot, body.copy());
             }
         }
+    }
+
+    // The same item apart from what the body changes on its copy: wear, count, and the totem effect it may strip
+    private static boolean isCopyOf(ItemStack body, ItemStack real) {
+        return ItemStack.isSameItemSameComponents(comparable(body), comparable(real));
+    }
+
+    private static ItemStack comparable(ItemStack stack) {
+        ItemStack copy = stack.copyWithCount(1);
+        copy.remove(DataComponents.DAMAGE);
+        copy.remove(DataComponents.DEATH_PROTECTION);
+        return copy;
     }
 }

@@ -17,6 +17,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -191,11 +192,35 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // The body's copy was used up and a dispenser filled the slot, so the real item goes and the new one is handed over
     @GameTest
-    public void gearSyncLeavesDifferentItem(GameTestHelper helper) {
-        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD)),
-                Map.of(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_AXE)));
-        helper.assertTrue(out.get(EquipmentSlot.MAINHAND).is(Items.IRON_AXE), "axe replaced");
+    public void gearSyncHandsOverDifferentItem(GameTestHelper helper) {
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD)),
+                Map.of(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING)));
+        helper.assertTrue(out.get(EquipmentSlot.OFFHAND).is(Items.SHIELD), "the totem came back: " + out.get(EquipmentSlot.OFFHAND));
+        helper.succeed();
+    }
+
+    // A plain helmet in place of a named one that broke on the body is not its copy
+    @GameTest
+    public void gearSyncHandsOverSameItemWithOtherComponents(GameTestHelper helper) {
+        ItemStack enchanted = damaged(Items.IRON_HELMET, 5);
+        enchanted.set(DataComponents.CUSTOM_NAME, Component.literal("Lucky"));
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET)),
+                Map.of(EquipmentSlot.HEAD, enchanted));
+        ItemStack head = out.get(EquipmentSlot.HEAD);
+        helper.assertTrue(head.is(Items.IRON_HELMET) && !head.has(DataComponents.CUSTOM_NAME), "the owner's helmet came back: " + head);
+        helper.succeed();
+    }
+
+    // The body's totem has its effect taken off when totems are off, and is still the copy
+    @GameTest
+    public void gearSyncKeepsTotemWithoutItsEffect(GameTestHelper helper) {
+        ItemStack stripped = new ItemStack(Items.TOTEM_OF_UNDYING);
+        stripped.remove(DataComponents.DEATH_PROTECTION);
+        ItemStack real = new ItemStack(Items.TOTEM_OF_UNDYING);
+        Map<EquipmentSlot, ItemStack> out = run(Map.of(EquipmentSlot.MAINHAND, stripped), Map.of(EquipmentSlot.MAINHAND, real));
+        helper.assertTrue(ItemStack.matches(out.get(EquipmentSlot.MAINHAND), real), "the real totem changed: " + out.get(EquipmentSlot.MAINHAND));
         helper.succeed();
     }
 

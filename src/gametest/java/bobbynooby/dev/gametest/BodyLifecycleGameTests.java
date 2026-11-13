@@ -18,6 +18,7 @@ import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.skins.Skins;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -44,6 +45,9 @@ import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DispenserBlock;
+import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -486,6 +490,54 @@ public class BodyLifecycleGameTests {
             cleanUp(helper, player.getUUID(), before);
         }
         helper.succeed();
+    }
+
+    // The totem saves the body and is used up, then a real dispenser puts a shield in the empty off hand. The owner
+    // gets the shield, and the totem stays used.
+    @GameTest(maxTicks = 40)
+    public void dispensedShieldReplacesPoppedTotem(GameTestHelper helper) {
+        BlockPos at = new BlockPos(1, 1, 1);
+        BlockPos dispenser = at.east();
+        helper.setBlock(at.below(), Blocks.STONE);
+        helper.setBlock(dispenser, Blocks.DISPENSER.defaultBlockState().setValue(DispenserBlock.FACING, Direction.WEST));
+        ServerPlayer player = join(helper, "Shielded", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Mannequin body;
+        try {
+            player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            body = leaveBody(helper, player);
+        } finally {
+            Settings.get().bodies = before;
+        }
+        Runnable cleanUp = once(() -> cleanUp(helper, owner));
+        boolean waiting = false;
+        try {
+            body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 100.0F);
+            helper.assertTrue(body.isAlive() && body.getItemBySlot(EquipmentSlot.OFFHAND).isEmpty(), "the totem did not save the body");
+            helper.getBlockEntity(dispenser, DispenserBlockEntity.class).setItem(0, new ItemStack(Items.SHIELD));
+            helper.setBlock(dispenser.east(), Blocks.REDSTONE_BLOCK);
+            helper.runBeforeTestEnd(cleanUp);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(body.getItemBySlot(EquipmentSlot.OFFHAND).is(Items.SHIELD),
+                            "the dispenser has not equipped the body"))
+                    .thenExecute(() -> {
+                        try {
+                            ServerPlayer back = rejoin(helper, player);
+                            helper.assertTrue(back.getItemBySlot(EquipmentSlot.OFFHAND).is(Items.SHIELD),
+                                    "off hand after login: " + back.getItemBySlot(EquipmentSlot.OFFHAND));
+                            helper.assertValueEqual(back.getInventory().countItem(Items.TOTEM_OF_UNDYING), 0, "totems after login");
+                        } finally {
+                            cleanUp.run();
+                        }
+                    })
+                    .thenSucceed();
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     @GameTest
