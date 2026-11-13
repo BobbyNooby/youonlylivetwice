@@ -47,7 +47,8 @@ final class Incoming {
     /**
      * The packet the server handles in place of this one, translated with the incoming offset. After a new frame starts
      * that is the old one, up to the client's accept of the frame's first teleport, which is read in the new one along
-     * with everything after it. With no offset to take off it is the very packet. A translator that throws drops it,
+     * with everything after it. The frames' own markers are negative, as no teleport id is, so an accept a client makes up
+     * with one can't switch early. With no offset to take off it is the very packet. A translator that throws drops it,
      * since as sent it would be read in the wrong frame.
      */
     static @Nullable Packet<?> apply(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet) {
@@ -57,7 +58,8 @@ final class Incoming {
                 return packet;
             }
             Offset offset = frames.in();
-            if (packet instanceof ServerboundAcceptTeleportationPacket accept && accept.id() == frames.switchAt()) {
+            if (packet instanceof ServerboundAcceptTeleportationPacket accept && frames.switchAt() >= 0
+                    && accept.id() == frames.switchAt()) {
                 offset = frames.out();
                 state.frames.compareAndSet(frames, new Frames(frames.out(), frames.out(), Frames.NO_SWITCH));
             }

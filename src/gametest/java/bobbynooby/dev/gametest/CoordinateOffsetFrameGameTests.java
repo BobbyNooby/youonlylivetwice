@@ -291,6 +291,31 @@ public class CoordinateOffsetFrameGameTests {
         helper.succeed();
     }
 
+    // The frames' own markers are negative, as no teleport id is, so an accept a client makes up with one switches nothing
+    @GameTest(environment = FRAMES)
+    public void madeUpAcceptKeepsTheOldFrame(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cfmarker", GameType.CREATIVE);
+        try {
+            Offset old = CoordinateOffsets.offset(player);
+            Connection connection = OffsetTestKit.connection(player);
+            ServerLevel level = helper.getLevel();
+            // A new frame with no teleport yet, which waits for the next one
+            OffsetTestKit.withCoordinates(() -> {
+                player.connection.send(new ClientboundRespawnPacket(player.createCommonSpawnInfo(level), (byte) 0));
+                return null;
+            });
+            helper.assertFalse(CoordinateOffsets.offset(player).equals(old), "the respawn packet kept the old frame's offset " + old);
+            CoordinateOffsets.incoming(connection, new ServerboundAcceptTeleportationPacket(-1, 0.5, 80.0, 0.5, 0.0F, 0.0F));
+            ServerboundMovePlayerPacket move = (ServerboundMovePlayerPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundMovePlayerPacket.Pos(0.5, 80.0, 0.5, false, false));
+            helper.assertValueEqual(move.getX(0.0), 0.5 - old.x(), "x of a move after the made-up accept");
+            helper.assertValueEqual(move.getZ(0.0), 0.5 - old.z(), "z of a move after the made-up accept");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // A teleport sent in a bundle names the accept that moves the client's moves to the new frame, as one on its own does
     @GameTest(environment = FRAMES)
     public void teleportInABundleNamesTheSwitch(GameTestHelper helper) {
