@@ -287,10 +287,11 @@ public class LockoutGameTests {
                 nextReadMillis = (System.nanoTime() - start) / 1_000_000;
                 statement.execute("ROLLBACK");
             }
-            // DeathStore waits 250 ms for a read and 3 s for a write
-            helper.assertTrue(readMillis >= 200 && readMillis < 1500, "the login check waited " + readMillis + " ms");
+            // DeathStore waits 250 ms for a read and 3 s for a write. The lower bounds prove the waits; the upper ones
+            // only that a read doesn't take the write's wait, with room for a runner that stalls
+            helper.assertTrue(readMillis >= 200 && readMillis < 2500, "the login check waited " + readMillis + " ms");
             helper.assertTrue(writeMillis >= 2500, "the death's write waited only " + writeMillis + " ms");
-            helper.assertTrue(nextReadMillis >= 200 && nextReadMillis < 1500,
+            helper.assertTrue(nextReadMillis >= 200 && nextReadMillis < 2500,
                     "the login check after the write waited " + nextReadMillis + " ms");
             helper.assertTrue(refusedForLockout(loginRefusal(server, who)), "not refused once the lock is gone");
         }
