@@ -36,10 +36,11 @@ final class AdminCommands {
         ServerPlayer player = source.getPlayerOrException();
         boolean on = AdminView.toggle(player);
         LOGGER.info("{} turned admin view {}", source.getTextName(), on ? "on" : "off");
-        // An offset only changes when a frame starts, so the admin's coordinates follow at the next join
+        // An offset only changes when a frame starts, so the admin's coordinates follow at the next frame
         if (CoordinateOffsets.on()) {
-            return YoltCommands.done(source, on ? "Admin view on. Rejoin to see real coordinates."
-                    : "Admin view off. Rejoin to see offset coordinates.");
+            return YoltCommands.done(source, on
+                    ? "Admin view on. Real coordinates start at your next join, respawn or dimension change."
+                    : "Admin view off. Offset coordinates start at your next join, respawn or dimension change.");
         }
         return YoltCommands.done(source, on ? "Admin view on." : "Admin view off.");
     }

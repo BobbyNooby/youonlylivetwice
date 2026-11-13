@@ -106,7 +106,10 @@ public final class CoordinateOffsets {
         classifyTheRest();
     }
 
-    /** True when frames that start now get an offset. Read only as a frame starts, so a change waits for a rejoin. */
+    /**
+     * True when frames that start now get an offset. Read as a frame starts, so a change waits for the player's next join,
+     * respawn or dimension change.
+     */
     public static boolean on() {
         return Settings.on(c -> c.hide.coordinates);
     }

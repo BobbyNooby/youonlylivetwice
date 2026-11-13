@@ -14,6 +14,7 @@ public @interface Applies {
     enum When {
         NOW(""),
         NEXT_JOIN(" (applies when a player next joins)"),
+        NEXT_FRAME(" (applies when a player next joins, respawns or changes dimension)"),
         NEW_BODIES(" (applies to new bodies)"),
         NEW_DEATHS(" (applies to deaths from now on)"),
         RESTART(" (needs a restart)");

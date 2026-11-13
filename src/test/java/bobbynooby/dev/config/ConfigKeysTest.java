@@ -171,10 +171,11 @@ class ConfigKeysTest {
                 Map.entry("graves.enderChestOnDeath", Applies.When.NEW_DEATHS),
                 Map.entry("graves.compass", Applies.When.NEW_DEATHS),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
-                Map.entry("hide.coordinates", Applies.When.NEXT_JOIN),
+                Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
         assertEquals("", Applies.When.NOW.note());
         assertEquals(" (applies when a player next joins)", Applies.When.NEXT_JOIN.note());
+        assertEquals(" (applies when a player next joins, respawns or changes dimension)", Applies.When.NEXT_FRAME.note());
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());
         assertEquals(" (applies to deaths from now on)", Applies.When.NEW_DEATHS.note());
     }

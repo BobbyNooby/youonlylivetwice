@@ -426,8 +426,9 @@ public class CoordinateOffsetCoreGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         byte[] fileBefore = Files.readAllBytes(Settings.path());
         try {
-            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.coordinates true"),
-                    List.of("hide.coordinates changed from false to true (applies when a player next joins)."), "reply");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.coordinates true"), List.of(
+                    "hide.coordinates changed from false to true (applies when a player next joins, respawns or changes dimension)."),
+                    "reply");
             helper.assertTrue(Settings.get().hide.coordinates, "live hide.coordinates is still false");
         } finally {
             ConfigCommandGameTests.restore(server, fileBefore);

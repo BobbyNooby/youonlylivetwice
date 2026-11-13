@@ -193,8 +193,9 @@ public class CoordinateOffsetCommandGameTests {
             List<String> replies = admin.messages.stream().map(Component::getString)
                     .filter(text -> text.startsWith("Admin view"))
                     .toList();
-            helper.assertValueEqual(replies, List.of("Admin view on. Rejoin to see real coordinates.",
-                    "Admin view off. Rejoin to see offset coordinates."), "replies");
+            helper.assertValueEqual(replies, List.of(
+                    "Admin view on. Real coordinates start at your next join, respawn or dimension change.",
+                    "Admin view off. Offset coordinates start at your next join, respawn or dimension change."), "replies");
         } finally {
             AdminView.set(admin, false);
             TestPlayers.deop(admin);
