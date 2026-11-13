@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -672,12 +673,39 @@ public class LeakSweepGameTests {
             }
             cleanUp();
             helper.assertValueEqual(unwritable, List.of(), "packets the game's codec couldn't write and read back");
-            helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
-                    + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
+            helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent, by band and packet: "
+                    + summary(found) + ". The first ones: " + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
             helper.assertValueEqual(missing, List.of(), "shifted spots the scene shows that no packet held");
             helper.assertValueEqual(unreadMinecraft, List.of(), "Minecraft parts the scan couldn't read, of " + unread.size()
                     + " unread in all");
             helper.succeed();
+        }
+
+        // How many findings each band and packet type has, as "band packet x count"
+        private static String summary(List<String> found) {
+            Map<String, Integer> counts = new TreeMap<>();
+            for (String finding : found) {
+                counts.merge(bandAndPacket(finding), 1, Integer::sum);
+            }
+            List<String> lines = new ArrayList<>();
+            counts.forEach((key, count) -> lines.add(key + " x" + count));
+            return String.join(", ", lines);
+        }
+
+        // A finding reads "player: Packet.path: band what value"; this keeps the band and the packet's class
+        private static String bandAndPacket(String finding) {
+            String rest = finding.substring(finding.indexOf(": ") + 2);
+            int colon = rest.indexOf(": ");
+            String packet = rest.substring(0, colon);
+            int dot = packet.indexOf('.');
+            String band = rest.substring(colon + 2);
+            for (LeakScanner.Band known : BANDS) {
+                if (band.startsWith(known.name() + " ")) {
+                    band = known.name();
+                    break;
+                }
+            }
+            return band + " " + (dot < 0 ? packet : packet.substring(0, dot));
         }
 
         void guard(Runnable step) {
