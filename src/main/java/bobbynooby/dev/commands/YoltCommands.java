@@ -27,6 +27,7 @@ public final class YoltCommands {
 
     public static void register() {
         SkinCommands.init();
+        StatusCommands.init();
         CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, selection) -> {
             LiteralArgumentBuilder<CommandSourceStack> yolt = Commands.literal("yolt")
                     // Commands are registered before any server exists, so single-player is checked on each use. A
@@ -39,8 +40,10 @@ public final class YoltCommands {
             GraveCommands.register(yolt);
             AdminCommands.register(yolt);
             ConfigCommands.register(yolt);
+            StatusCommands.register(yolt);
             SkinCommands.register(yolt);
             dispatcher.register(yolt);
+            dispatcher.register(StatusCommands.command());
         });
     }
 

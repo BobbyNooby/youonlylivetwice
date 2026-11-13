@@ -1,6 +1,7 @@
 package bobbynooby.dev.chat;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.hardcore.Hardcore;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.RootCommandNode;
@@ -16,18 +17,25 @@ import org.jspecify.annotations.Nullable;
 import java.util.function.Supplier;
 
 /**
- * Holds non-op players to /help, plus /w when whispers are on and /yolt skin when players may pick their skin: what they
- * may run, are sent and get suggested.
+ * Holds non-op players to /help, plus /w when whispers are on, /status while a hardcore feature is on and /yolt skin when
+ * players may pick their skin: what they may run, are sent and get suggested.
  */
 public final class CommandRestriction {
     // The /yolt a non-op may run for their own skin. The commands hand it in at startup, so chat needn't import them.
     private static @Nullable Supplier<LiteralArgumentBuilder<CommandSourceStack>> ownSkinCommand;
+    // The /status everyone may run, handed in the same way
+    private static @Nullable Supplier<LiteralArgumentBuilder<CommandSourceStack>> statusCommand;
 
     private CommandRestriction() {}
 
     /** Takes the /yolt that sets and clears a non-op's own skin, for the non-op tree. */
     public static void useOwnSkinCommand(Supplier<LiteralArgumentBuilder<CommandSourceStack>> command) {
         ownSkinCommand = command;
+    }
+
+    /** Takes the /status a player runs for their own body, for the non-op tree. */
+    public static void useStatusCommand(Supplier<LiteralArgumentBuilder<CommandSourceStack>> command) {
+        statusCommand = command;
     }
 
     /** Whether this player is held to the non-op tree: what it may run, what its client is sent and what it gets suggested. */
@@ -49,11 +57,18 @@ public final class CommandRestriction {
     }
 
     public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers, boolean allowSkinChoice) {
+        return nonOpTree(allowWhispers, allowSkinChoice, false);
+    }
+
+    public static RootCommandNode<CommandSourceStack> nonOpTree(boolean allowWhispers, boolean allowSkinChoice, boolean status) {
         RootCommandNode<CommandSourceStack> root = new RootCommandNode<>();
         // help is answered in blocks(), so its body never runs
         root.addChild(Commands.literal("help").executes(c -> 1).build());
         if (allowWhispers) {
             root.addChild(Whispers.command().build());
+        }
+        if (status && statusCommand != null) {
+            root.addChild(statusCommand.get().build());
         }
         // Only the part for the player's own skin, so read against this tree nothing else of /yolt parses
         if (allowSkinChoice && ownSkinCommand != null) {
@@ -68,7 +83,7 @@ public final class CommandRestriction {
     }
 
     private static RootCommandNode<CommandSourceStack> liveNonOpTree() {
-        return nonOpTree(Settings.get().chat.allowWhispers, Settings.get().skins.allowPlayerChoice);
+        return nonOpTree(Settings.get().chat.allowWhispers, Settings.get().skins.allowPlayerChoice, Hardcore.anyOn());
     }
 
     /** True when a typed command must not run; a restricted player's /help gets its answer here. */
@@ -86,6 +101,11 @@ public final class CommandRestriction {
                 return false;
             }
             source.sendFailure(Component.literal(Whispers.TURNED_OFF));
+        }
+
+        // Read against the player's own tree, which has /status only while a hardcore feature is on
+        if (commandRoot.equals("status") && Hardcore.anyOn()) {
+            return false;
         }
 
         // A restricted player's command was read against their own tree, whose /yolt holds only their own skin

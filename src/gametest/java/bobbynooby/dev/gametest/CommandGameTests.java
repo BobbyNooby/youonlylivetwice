@@ -464,6 +464,8 @@ public class CommandGameTests {
                 yolt config | literal | level 2
                 yolt config <key> | brigadier:string {"type":"word"} | own suggestions | level 0 | runs
                 yolt config <key> <value> | brigadier:string {"type":"greedy"} | own suggestions | level 0 | runs
+                yolt status | literal | level 2
+                yolt status <player> | brigadier:string {"type":"phrase"} | level 0 | runs
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0
                 yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs
