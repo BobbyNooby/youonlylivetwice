@@ -1358,6 +1358,41 @@ public class SkinGameTests {
         return output;
     }
 
+    // A new answer drops the old ones that would be asked again anyway and that nobody picked or joined as, so a player
+    // picking name after name can't grow the file for good. A fresh one, a picked one, a joined one and the new one stay.
+    @GameTest
+    public void oldUnusedSkinAnswersGoAtTheNextAnswer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        SkinStore store = SkinStore.get(server);
+        String unused = uniqueName("Old");
+        String fresh = uniqueName("Fresh");
+        String picked = uniqueName("Picked");
+        String joinedAs = uniqueName("Joined");
+        String newest = uniqueName("New");
+        UUID picker = UUID.randomUUID();
+        long now = System.currentTimeMillis();
+        try {
+            store.choose(picker, picked);
+            joinedBefore(server, joinedAs);
+            store.putSkin(CachedSkin.found(fresh, FakeSkinLookup.texturesOf(fresh), now));
+            store.putSkin(CachedSkin.found(picked, FakeSkinLookup.texturesOf(picked), 0L));
+            store.putSkin(CachedSkin.found(joinedAs, FakeSkinLookup.texturesOf(joinedAs), 0L));
+            // Last, since each answer saved drops the old unused ones before it
+            store.putSkin(CachedSkin.found(unused, FakeSkinLookup.texturesOf(unused), 0L));
+            helper.assertTrue(store.skin(unused) != null, "the old answer went as it was saved");
+
+            store.putSkin(CachedSkin.found(newest, FakeSkinLookup.texturesOf(newest), now));
+            assertEqual(helper, store.skin(unused), null, "the old answer nobody uses");
+            helper.assertTrue(store.skin(fresh) != null, "the fresh answer went");
+            helper.assertTrue(store.skin(picked) != null, "the old answer someone picked went");
+            helper.assertTrue(store.skin(joinedAs) != null, "the old answer someone joined as went");
+            helper.assertTrue(store.skin(newest) != null, "the new answer went");
+        } finally {
+            store.clearChoice(picker);
+        }
+        helper.succeed();
+    }
+
     // A current file loads as it was saved, and one from a newer YOLT still gives what this one can read
     @GameTest
     public void skinStoreReadsWhatItSaves(GameTestHelper helper) {

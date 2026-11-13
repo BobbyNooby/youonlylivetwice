@@ -1,5 +1,6 @@
 package bobbynooby.dev.skins;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.LenientCodecs;
 import bobbynooby.dev.core.Migrations;
 import bobbynooby.dev.core.StoreVersions;
@@ -20,6 +21,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -211,7 +213,18 @@ public final class SkinStore extends SavedData {
 
     public void putSkin(CachedSkin skin) {
         skins.put(key(skin.name()), skin);
+        dropStale(System.currentTimeMillis(), Settings.get().skins.refreshHours, key(skin.name()));
         setDirty();
+    }
+
+    // Other answers that would be asked again anyway and that no pick or join refers to, so picking name after name
+    // can't grow the file for good
+    private void dropStale(long now, int refreshHours, String kept) {
+        Set<String> used = new HashSet<>();
+        used.add(kept);
+        choices.values().forEach(name -> used.add(key(name)));
+        joined.values().forEach(name -> used.add(key(name)));
+        skins.entrySet().removeIf(entry -> !entry.getValue().fresh(now, refreshHours) && !used.contains(entry.getKey()));
     }
 
     /** The skin this player last joined with, or null if they had none. */
