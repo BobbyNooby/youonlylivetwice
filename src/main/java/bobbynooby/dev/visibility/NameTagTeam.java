@@ -92,6 +92,11 @@ public final class NameTagTeam {
         return team.getName().equals(TEAM_NAME);
     }
 
+    /** True for our team, whose members are no one's allies for being in it: it is only there to hide nametags. */
+    public static boolean alliesNobody(Team team) {
+        return Settings.active() && team instanceof PlayerTeam playerTeam && isOurs(playerTeam);
+    }
+
     /** Our team as a joining client first gets it. Fabric's join event has already put the joiner in it. */
     public static ClientboundSetPlayerTeamPacket joinPacket(ServerPlayer joiner, PlayerTeam team) {
         Set<String> members = members(joiner, team.getPlayers());

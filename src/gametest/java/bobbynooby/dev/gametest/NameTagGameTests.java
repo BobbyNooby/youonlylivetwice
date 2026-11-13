@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.gametest.mixin.AttackStrengthAccessor;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -11,8 +12,16 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerScoreboard;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+import net.minecraft.world.entity.animal.wolf.Wolf;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 
@@ -266,6 +275,86 @@ public class NameTagGameTests {
         } finally {
             restoreTeam(server);
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Every player is in our team, which must not make them allies: a sword's sweep still reaches a player beside the
+    // one it hits, as for players in no team. PvP goes back in the same tick.
+    @GameTest
+    public void sweepHitsAnotherPlayerInOurTeam(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GameRules rules = level.getGameRules();
+        boolean pvpBefore = rules.get(GameRules.PVP);
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            rules.set(GameRules.PVP, true, server);
+            ServerPlayer attacker = join(helper, joined, "tagsweep", new BlockPos(1, 1, 1));
+            ServerPlayer target = join(helper, joined, "tagsweept", new BlockPos(2, 1, 1));
+            ServerPlayer beside = join(helper, joined, "tagsweepb", new BlockPos(2, 1, 2));
+            TestPlayers.markLoaded(target);
+            TestPlayers.markLoaded(beside);
+            helper.assertTrue(attacker.getTeam() != null && attacker.getTeam() == beside.getTeam()
+                    && NameTagTeam.isOurs(attacker.getTeam()), "the players are not both in " + TEAM_NAME);
+            helper.assertFalse(attacker.isAlliedTo(beside), "players in our team count as allies");
+
+            // A full-strength hit on the ground with a sword is a sweep
+            attacker.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
+            attacker.setOnGround(true);
+            ((AttackStrengthAccessor) attacker).yoltSetAttackStrengthTicker(100);
+            attacker.attack(target);
+            helper.assertTrue(target.getHealth() < target.getMaxHealth(), "the hit did not land on its target");
+            helper.assertTrue(beside.getHealth() < beside.getMaxHealth(), "the sweep skipped the player beside the target");
+        } finally {
+            rules.set(GameRules.PVP, pvpBefore, server);
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A tamed wolf goes for whoever hurts its owner. Owner and attacker share our team, so the wolf must not see the
+    // attacker as an ally.
+    @GameTest
+    public void wolfMayTargetAPlayerInItsOwnersTeam(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<ServerPlayer> joined = new ArrayList<>();
+        Wolf wolf = null;
+        try {
+            ServerPlayer owner = join(helper, joined, "tagwolfo", new BlockPos(1, 1, 1));
+            ServerPlayer attacker = join(helper, joined, "tagwolfa", new BlockPos(3, 1, 1));
+            wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, new BlockPos(2, 1, 2));
+            wolf.tame(owner);
+            // The ally check is what this is about, so the line of sight is left out
+            TargetingConditions combat = TargetingConditions.forCombat().ignoreLineOfSight();
+            helper.assertTrue(combat.test(level, wolf, attacker), "the wolf may not target a player in its owner's team");
+            helper.assertFalse(combat.test(level, wolf, owner), "the wolf may target its owner");
+        } finally {
+            if (wolf != null) {
+                wolf.discard();
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Only our team stops being one for allies: a team an admin makes keeps vanilla's answer
+    @GameTest
+    public void adminTeamStillMakesAllies(GameTestHelper helper) {
+        ServerScoreboard scoreboard = helper.getLevel().getServer().getScoreboard();
+        PlayerTeam admins = scoreboard.addPlayerTeam(CommandGameTests.uniqueName("tagadmins"));
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            ServerPlayer a = join(helper, joined, "tagadmina", new BlockPos(1, 1, 1));
+            ServerPlayer b = join(helper, joined, "tagadminb", new BlockPos(3, 1, 1));
+            helper.assertFalse(a.isAlliedTo(b), "players in our team count as allies");
+            scoreboard.addPlayerToTeam(a.getScoreboardName(), admins);
+            scoreboard.addPlayerToTeam(b.getScoreboardName(), admins);
+            helper.assertTrue(a.isAlliedTo(b), "players in an admin's team are not allies");
+            helper.assertTrue(admins.isAlliedTo(admins), "an admin's team is not allied to itself");
+        } finally {
+            leaveAll(joined);
+            scoreboard.removePlayerTeam(admins);
         }
         helper.succeed();
     }

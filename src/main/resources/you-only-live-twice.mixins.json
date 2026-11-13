@@ -51,6 +51,7 @@
     "LoginSkinMixin",
     "MapPlayersMixin",
     "MobAccessor",
+    "NameTagTeamAlliesMixin",
     "NameCacheAccessor",
     "NameCacheEntryAccessor",
     "NearestAttackableTargetGoalAccessor",

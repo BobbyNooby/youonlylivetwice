@@ -3,6 +3,7 @@
   "package": "bobbynooby.dev.gametest.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "AttackStrengthAccessor",
     "ServerGamePacketListenerInvoker"
   ],
   "injectors": {
