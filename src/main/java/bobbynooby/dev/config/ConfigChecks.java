@@ -396,7 +396,7 @@ final class ConfigChecks {
     // The curse must always leave more hearts than the limp needs to stop, or a cursed player could limp for good
     private static void curseAndLimp(HardcoreConfig.HardcoreSection c, HardcoreConfig.HardcoreSection fallback,
                                      BiConsumer<String, String> fellBack) {
-        if (!c.curse.enabled || !c.limp.enabled || 10 - c.curse.maxLostHearts > c.limp.recoverAtHearts) {
+        if (!limpsForGood(c)) {
             return;
         }
         // Both go back, since either one could be the typo
@@ -409,6 +409,24 @@ final class ConfigChecks {
             c.limp.belowHearts = fallback.limp.belowHearts;
             fellBack.accept("hardcore.limp.belowHearts", "must be less than hardcore.limp.recoverAtHearts");
         }
+        // Numbers that were fine with one of the two off can still clash once it goes on, so the switch that turned it
+        // on goes back too. That is how /yolt config refuses it.
+        if (limpsForGood(c)) {
+            String problem = "the curse would leave no more hearts than hardcore.limp.recoverAtHearts, so a cursed player"
+                    + " could limp for good";
+            if (c.curse.enabled != fallback.curse.enabled) {
+                c.curse.enabled = fallback.curse.enabled;
+                fellBack.accept("hardcore.curse.enabled", problem);
+            }
+            if (c.limp.enabled != fallback.limp.enabled) {
+                c.limp.enabled = fallback.limp.enabled;
+                fellBack.accept("hardcore.limp.enabled", problem);
+            }
+        }
+    }
+
+    private static boolean limpsForGood(HardcoreConfig.HardcoreSection c) {
+        return c.curse.enabled && c.limp.enabled && !(10 - c.curse.maxLostHearts > c.limp.recoverAtHearts);
     }
 
     // Written so NaN fails too
