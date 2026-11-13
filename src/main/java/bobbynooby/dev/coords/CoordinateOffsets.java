@@ -57,6 +57,8 @@ public final class CoordinateOffsets {
     private static Predicate<ServerPlayer> realCoordinates = player -> false;
     // The north compass: whether a spawn is the far north target it sends, whose Z is the same for everyone
     private static Predicate<BlockPos> northTarget = pos -> false;
+    // Debug privacy: a player whose F3 screen is kept from showing where they are
+    private static Predicate<ServerPlayer> hidesPosition = player -> false;
     // How many times the border walls were rechecked. Only the tests read it.
     private static int borderRechecks;
 
@@ -75,9 +77,11 @@ public final class CoordinateOffsets {
         }
     }
 
-    public static void init(Predicate<ServerPlayer> realCoordinates, Predicate<BlockPos> northTarget) {
+    public static void init(Predicate<ServerPlayer> realCoordinates, Predicate<BlockPos> northTarget,
+                            Predicate<ServerPlayer> hidesPosition) {
         CoordinateOffsets.realCoordinates = realCoordinates;
         CoordinateOffsets.northTarget = northTarget;
+        CoordinateOffsets.hidesPosition = hidesPosition;
         // Once a second, as the walls a player is near change only as fast as they travel, and at the end of any tick that
         // teleported someone
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -199,6 +203,17 @@ public final class CoordinateOffsets {
             return shape;
         }
         return shape.move(state.getOffset(offset.shift(pos)).subtract(state.getOffset(pos)));
+    }
+
+    /**
+     * The block a spawn protection line names. A player whose F3 screen hides where they are gets no numbers at all,
+     * as the line would show them their real spot; anyone else gets the block in their own numbers.
+     */
+    public static String spawnProtectionSpot(ServerPlayer player, BlockPos pos) {
+        if (hidesPosition.test(player)) {
+            return "This block";
+        }
+        return offset(player).shift(pos).toShortString();
     }
 
     /**

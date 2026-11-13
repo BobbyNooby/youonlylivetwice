@@ -30,6 +30,11 @@ public final class DebugPrivacy {
         if (player.level().getGameRules().get(GameRules.REDUCED_DEBUG_INFO)) {
             return true;
         }
+        return hidesPosition(player);
+    }
+
+    /** True when YOLT keeps the player's screen from showing where they are, so nothing else should say it either. */
+    public static boolean hidesPosition(ServerPlayer player) {
         return Settings.on(c -> c.hide.debugScreen) && !AdminView.isOn(player);
     }
 

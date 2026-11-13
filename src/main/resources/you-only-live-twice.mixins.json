@@ -24,6 +24,7 @@
     "CoordinateOffsetContainerClickMixin",
     "CoordinateOffsetDebugMixin",
     "CoordinateOffsetRespawnMixin",
+    "CoordinateOffsetSpawnProtectionMixin",
     "CoordinateOffsetTeleportMixin",
     "CoordinateOffsetTypedCommandMixin",
     "CoordinateOffsetVectorMixin",

@@ -90,6 +90,64 @@ public class CoordinateOffsetTextGameTests {
     // Where the compass points, far from any test
     private static final BlockPos TARGET = new BlockPos(8_123, 64, -2_345);
 
+    // The spawn protection line names the block as text. With the F3 screen kept from showing where the player is, it
+    // names no block at all. The test server has no spawn protection, so the line is sent straight to the player.
+    @GameTest(environment = TEXT)
+    public void spawnProtectionLineHidesTheBlockUnderDebugPrivacy(GameTestHelper helper) {
+        TestPlayers.Recording player = OffsetTestKit.joinRecording(helper, "ctspawnhide", GameType.CREATIVE);
+        try {
+            BlockPos real = helper.absolutePos(new BlockPos(2, 1, 2));
+            withDebugScreen(true, () -> player.sendSpawnProtectionMessage(real));
+            String spot = spawnProtectionSpot(helper, player);
+            helper.assertValueEqual(spot, "This block", "the block the line names");
+            helper.assertFalse(spot.contains(String.valueOf(real.getX())) || spot.contains(String.valueOf(real.getZ())),
+                    "the line holds the real x or z: " + spot);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Without debug privacy the player sees their own numbers on F3, so the line names the block in them
+    @GameTest(environment = TEXT)
+    public void spawnProtectionLineShowsTheShiftedBlock(GameTestHelper helper) {
+        TestPlayers.Recording player = OffsetTestKit.joinRecording(helper, "ctspawnshift", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            BlockPos real = helper.absolutePos(new BlockPos(2, 1, 2));
+            withDebugScreen(false, () -> player.sendSpawnProtectionMessage(real));
+            helper.assertValueEqual(spawnProtectionSpot(helper, player), offset.shift(real).toShortString(), "the block the line names");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static void withDebugScreen(boolean on, Runnable body) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean before = hide.debugScreen;
+        hide.debugScreen = on;
+        try {
+            body.run();
+        } finally {
+            hide.debugScreen = before;
+        }
+    }
+
+    // What the last spawn protection line the player got says in place of vanilla's numbers
+    private static String spawnProtectionSpot(GameTestHelper helper, TestPlayers.Recording player) {
+        for (int i = player.messages.size() - 1; i >= 0; i--) {
+            if (player.messages.get(i).getContents() instanceof TranslatableContents line
+                    && line.getKey().equals("build.spawn_protection")) {
+                helper.assertValueEqual(line.getArgs().length, 1, "arguments of the line");
+                return String.valueOf(line.getArgs()[0]);
+            }
+        }
+        helper.fail("no spawn protection line was sent");
+        return "";
+    }
+
     // A player killed by someone holding a named compass is told so with the compass in the message, and so is everyone
     // else. Death messages for all, and no lockout or grave, so the death is only vanilla's.
     @GameTest(environment = TEXT)

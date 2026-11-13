@@ -56,8 +56,9 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         NorthCompass.init(player -> CoordinateOffsets.offset(player).x());
         // Coordinate offset: its hooks are on the connection, not on an event, apart from the border recheck at the end of
         // a tick, which reads nothing another hook writes. Admin view is handed in, so an admin's next frame can be real,
-        // and so is the north compass's target, whose Z is the same for everyone.
-        CoordinateOffsets.init(AdminView::isOn, NorthCompass::isNorthTarget);
+        // and so are the north compass's target, whose Z is the same for everyone, and debug privacy, which keeps the spawn
+        // protection line from naming a block.
+        CoordinateOffsets.init(AdminView::isOn, NorthCompass::isNorthTarget, DebugPrivacy::hidesPosition);
         ChatDelivery.init();
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads
