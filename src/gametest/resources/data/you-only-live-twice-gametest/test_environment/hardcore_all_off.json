@@ -1,0 +1,19 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.weight.enabled": "false",
+    "hardcore.legs.enabled": "false",
+    "hardcore.limp.enabled": "false",
+    "hardcore.bedRest.enabled": "false",
+    "hardcore.curse.enabled": "false",
+    "hardcore.nutrients.enabled": "false",
+    "hardcore.mending.enabled": "false",
+    "hardcore.anvil.enabled": "false",
+    "hardcore.elytra.enabled": "false",
+    "hardcore.tougherMobs.enabled": "false",
+    "hardcore.relentlessMobs.enabled": "false",
+    "hardcore.bloodMoon.enabled": "false",
+    "hardcore.cold.enabled": "false",
+    "hardcore.hungerTax.multiplier": "1.0"
+  }
+}

@@ -223,8 +223,15 @@ class HardcoreConfigTest {
         return ConfigKeys.all().stream().filter(k -> k.path().startsWith("hardcore.")).toList();
     }
 
-    // Section 6's defaults as the file writes them. Two differ from its text on purpose: "default" is defaultWeight,
-    // which Java can name, and healEveryDays is a decimal.
+    // Every key the table below must hold: the hardcore layer's and the resource pack's
+    private static List<ConfigKey> specKeys() {
+        return ConfigKeys.all().stream()
+                .filter(k -> k.path().startsWith("hardcore.") || k.path().startsWith("resourcePack."))
+                .toList();
+    }
+
+    // Section 6's defaults as the file writes them, one line a key, maps and lists left out. Some differ from its text
+    // on purpose: "default" is defaultWeight, which Java can name, and healEveryDays is a decimal.
     private static Map<String, String> specDefaults() {
         Map<String, String> d = new LinkedHashMap<>();
         d.put("hardcore.slow.cap", "0.5");
@@ -349,14 +356,14 @@ class HardcoreConfigTest {
     }
 
     @Test
-    void config1EveryBuiltKeyHasItsSpecDefault() {
+    void config1EveryHardcoreKeyHasItsSpecDefault() {
         Map<String, String> expected = specDefaults();
         YoltConfig fresh = new YoltConfig();
         Map<String, String> actual = new LinkedHashMap<>();
-        for (ConfigKey key : hardcoreKeys()) {
+        for (ConfigKey key : specKeys()) {
             actual.put(key.path(), key.show(fresh));
         }
-        // Equal as maps, so a new key without a line here fails too
+        // Equal as maps, so a key without a line here fails, and so does a line with no key
         assertEquals(expected, actual);
         // The deepest key, five levels down
         assertEquals("0.5", key("hardcore.nutrients.penalties.protein.healingMultiplier").show(fresh));
@@ -377,6 +384,14 @@ class HardcoreConfigTest {
         assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0, "speed", 1.0),
                 "minecraft:creeper", Map.of("damage", 1.0)), fresh.hardcore.tougherMobs.overrides);
         assertEquals(List.of("minecraft:warden"), fresh.hardcore.relentlessMobs.exclude);
+    }
+
+    // One of each kind of label; the full list of keys that wait is ConfigKeysTest's
+    @Test
+    void config1AppliesLabels() {
+        assertEquals(Applies.When.NEW_DEATHS, key("hardcore.curse.heartsPerDeath").when());
+        assertEquals(Applies.When.MOBS_LOAD, key("hardcore.tougherMobs.health").when());
+        assertEquals(Applies.When.NOW, key("hardcore.weight.freeLoad").when());
     }
 
     // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order

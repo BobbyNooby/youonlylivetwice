@@ -40,6 +40,7 @@
 			"bobbynooby.dev.gametest.GraveMenuGameTests",
 			"bobbynooby.dev.gametest.GraveProtectionGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
+			"bobbynooby.dev.gametest.HardcoreAllGameTests",
 			"bobbynooby.dev.gametest.HardcoreAnvilGameTests",
 			"bobbynooby.dev.gametest.HardcoreBedGameTests",
 			"bobbynooby.dev.gametest.HardcoreBloodMoonGameTests",
