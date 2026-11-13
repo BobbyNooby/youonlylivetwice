@@ -7,9 +7,12 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.util.Util;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.TransmuteRecipe;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import org.jspecify.annotations.Nullable;
@@ -31,6 +34,23 @@ public final class GraveItems {
         stack.set(DataComponents.PROFILE, profile);
         stack.set(DataComponents.CUSTOM_DATA, marker(GRAVE_HEAD));
         return stack;
+    }
+
+    /**
+     * The revive head the recipe makes, with every component of the grave head in the grid and the recipe's own on top,
+     * as vanilla's transmute recipe does, so it keeps the owner's skin and id. Any other result is left as it is.
+     */
+    public static ItemStack reviveHeadFrom(ItemStack made, ItemStackTemplate result, CraftingInput input) {
+        if (!isReviveHead(made)) {
+            return made;
+        }
+        for (int slot = 0; slot < input.size(); slot++) {
+            ItemStack stack = input.getItem(slot);
+            if (isGraveHead(stack)) {
+                return TransmuteRecipe.createWithOriginalComponents(result, stack);
+            }
+        }
+        return made;
     }
 
     public static boolean isGraveHead(ItemStack stack) {

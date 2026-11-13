@@ -70,12 +70,12 @@ import java.util.stream.Stream;
 // Owners are fresh random uuids, so a death recorded here never locks out anyone else
 public class ReviveGameTests {
     @GameTest
-    public void recipeTransmutesGraveHeadToReviveHead(GameTestHelper helper) {
+    public void recipeTurnsGraveHeadIntoReviveHead(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Crafted", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
-            CraftingInput input = grid(GraveItems.graveHead(Profiles.of(player)), new ItemStack(Items.NETHER_STAR));
+            CraftingInput input = grid(withMaterials(GraveItems.graveHead(Profiles.of(player))));
             Optional<RecipeHolder<CraftingRecipe>> recipe = findRecipe(helper, input);
-            helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and a nether star");
+            helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and its four materials");
             helper.assertValueEqual(recipe.get().id().identifier(), Yolt.id("revive"), "recipe id");
 
             ItemStack result = recipe.get().value().assemble(input);
@@ -143,8 +143,22 @@ public class ReviveGameTests {
 
     @GameTest
     public void plainHeadDoesNotMatchRecipe(GameTestHelper helper) {
-        CraftingInput input = grid(new ItemStack(Items.PLAYER_HEAD), new ItemStack(Items.NETHER_STAR));
-        helper.assertTrue(findRecipe(helper, input).isEmpty(), "a plain head and a nether star made something");
+        CraftingInput input = grid(withMaterials(new ItemStack(Items.PLAYER_HEAD)));
+        helper.assertTrue(findRecipe(helper, input).isEmpty(), "a plain head and the four materials made something");
+        helper.succeed();
+    }
+
+    // Each material is needed, and the old recipe of a grave head and a nether star alone makes nothing
+    @GameTest
+    public void recipeNeedsEveryMaterial(GameTestHelper helper) {
+        List<ItemStack> full = withMaterials(GraveItems.graveHead(staticProfile(UUID.randomUUID())));
+        for (int left = 1; left < full.size(); left++) {
+            List<ItemStack> without = new ArrayList<>(full);
+            ItemStack missing = without.remove(left);
+            helper.assertTrue(findRecipe(helper, grid(without)).isEmpty(), "a revive head was made without " + missing);
+        }
+        helper.assertTrue(findRecipe(helper, grid(List.of(full.get(0), new ItemStack(Items.NETHER_STAR)))).isEmpty(),
+                "a grave head and a nether star alone made something");
         helper.succeed();
     }
 
@@ -595,11 +609,18 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // The two stacks go in the top-left corner of an otherwise empty 3x3 grid
-    private static CraftingInput grid(ItemStack first, ItemStack second) {
+    // The head and the recipe's four materials
+    private static List<ItemStack> withMaterials(ItemStack head) {
+        return List.of(head, new ItemStack(Items.NETHER_STAR), new ItemStack(Items.NETHERITE_INGOT),
+                new ItemStack(Items.GOLD_INGOT), new ItemStack(Items.IRON_INGOT));
+    }
+
+    // The stacks fill an otherwise empty 3x3 grid from its top-left corner
+    private static CraftingInput grid(List<ItemStack> stacks) {
         List<ItemStack> items = new ArrayList<>(Collections.nCopies(9, ItemStack.EMPTY));
-        items.set(0, first);
-        items.set(1, second);
+        for (int i = 0; i < stacks.size(); i++) {
+            items.set(i, stacks.get(i));
+        }
         return CraftingInput.of(3, 3, items);
     }
 

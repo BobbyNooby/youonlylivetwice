@@ -500,9 +500,11 @@ public class GraveClientTest implements FabricClientGameTest {
                 .filter(GraveItems::isGraveHead)
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the grave holds no grave head"));
-        CraftingInput input = CraftingInput.of(2, 1, List.of(graveHead.copy(), new ItemStack(Items.NETHER_STAR)));
+        CraftingInput input = CraftingInput.of(3, 2, List.of(graveHead.copy(), new ItemStack(Items.NETHER_STAR),
+                new ItemStack(Items.NETHERITE_INGOT), new ItemStack(Items.GOLD_INGOT), new ItemStack(Items.IRON_INGOT),
+                ItemStack.EMPTY));
         return server.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, input, server.getLevel(grave.dimension()))
-                .orElseThrow(() -> new AssertionError("no recipe for a grave head and a nether star"))
+                .orElseThrow(() -> new AssertionError("no recipe for a grave head and its four materials"))
                 .value()
                 .assemble(input);
     }

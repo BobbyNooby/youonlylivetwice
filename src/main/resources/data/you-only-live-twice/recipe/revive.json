@@ -1,12 +1,17 @@
 {
-  "type": "minecraft:crafting_transmute",
+  "type": "minecraft:crafting_shapeless",
   "category": "misc",
-  "input": {
-    "fabric:type": "fabric:custom_data",
-    "base": "minecraft:player_head",
-    "nbt": "{yolt:{grave_head:1b}}"
-  },
-  "material": "minecraft:nether_star",
+  "ingredients": [
+    {
+      "fabric:type": "fabric:custom_data",
+      "base": "minecraft:player_head",
+      "nbt": "{yolt:{grave_head:1b}}"
+    },
+    "minecraft:nether_star",
+    "minecraft:netherite_ingot",
+    "minecraft:gold_ingot",
+    "minecraft:iron_ingot"
+  ],
   "result": {
     "id": "minecraft:player_head",
     "components": {
