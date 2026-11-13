@@ -243,7 +243,8 @@ public final class HardcoreConfig {
         return overrides;
     }
 
-    // The warden senses through walls, so a longer reach would make it find everyone; tougherMobs.exclude is left alone too
+    // The warden senses through walls, so a longer reach would make it find everyone; tougherMobs.exclude is left alone too.
+    // A broken door drops as one item, as in vanilla, unless dropBrokenDoor is off, when it is gone with no drop.
     public static class RelentlessMobsSection {
         public boolean enabled = false;
         @Applies(Applies.When.MOBS_LOAD) public double followRange = 1.5;

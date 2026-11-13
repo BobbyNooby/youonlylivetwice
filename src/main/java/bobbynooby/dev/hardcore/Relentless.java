@@ -59,14 +59,16 @@ public final class Relentless {
                 && mob instanceof Zombie && touches(mob);
     }
 
-    /** True when a door this mob breaks should drop rather than vanish. */
-    public static boolean dropsBrokenDoor(Mob mob) {
-        return Settings.on(c -> c.hardcore.relentlessMobs.enabled && c.hardcore.relentlessMobs.dropBrokenDoor) && touches(mob);
+    /** True when a door this mob breaks is broken our way, with or without its drop as the config says. */
+    public static boolean handlesBrokenDoor(Mob mob) {
+        return Settings.on(c -> c.hardcore.relentlessMobs.enabled) && touches(mob);
     }
 
     /**
-     * Breaks the door with its drop. The mob's goal points at the top half, and a door drops only from its bottom
-     * half, so that is the half broken; the top then goes with it and drops nothing, which makes one door item.
+     * Breaks the door, dropping one door item or nothing. The mob's goal points at the top half, and a door drops only
+     * from its bottom half. With the drop on, the bottom half is broken with drops, as vanilla's removal of the top half
+     * ends up doing. With it off, the bottom half is removed outright; the top half then breaks by itself, and its own
+     * loot is empty, so nothing drops.
      */
     public static boolean breakDoor(Level level, BlockPos pos, Mob mob) {
         BlockState state = level.getBlockState(pos);
@@ -74,7 +76,12 @@ public final class Relentless {
         BlockState belowState = level.getBlockState(below);
         boolean topHalf = state.getBlock() instanceof DoorBlock && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER
                 && belowState.getBlock() instanceof DoorBlock && belowState.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER;
-        return level.destroyBlock(topHalf ? below : pos, true, mob);
+        BlockPos bottom = topHalf ? below : pos;
+        if (config().dropBrokenDoor) {
+            return level.destroyBlock(bottom, true, mob);
+        }
+        // removeBlock never drops the block it removes; the neighbour update it sends breaks the top half
+        return level.removeBlock(bottom, false);
     }
 
     // Hostile mobs only, and never one on either exclude list

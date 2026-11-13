@@ -27,8 +27,8 @@ public abstract class HardcoreDoorMixin extends DoorInteractGoal {
 
     @WrapOperation(method = "tick", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/Level;removeBlock(Lnet/minecraft/core/BlockPos;Z)Z"))
-    private boolean breakWithDrop(Level level, BlockPos pos, boolean movedByPiston, Operation<Boolean> original) {
-        if (Relentless.dropsBrokenDoor(this.mob)) {
+    private boolean breakTheDoor(Level level, BlockPos pos, boolean movedByPiston, Operation<Boolean> original) {
+        if (Relentless.handlesBrokenDoor(this.mob)) {
             return Relentless.breakDoor(level, pos, this.mob);
         }
         return original.call(level, pos, movedByPiston);

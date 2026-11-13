@@ -53,6 +53,7 @@ public class HardcoreMobsGameTests {
     private static final String MOBS_OFF = "you-only-live-twice-gametest:hardcore_mobs_off";
     // Easy as well, held for the whole batch, which this test has to itself
     private static final String MOBS_DOORS = "you-only-live-twice-gametest:hardcore_mobs_doors";
+    private static final String MOBS_DOORS_NO_DROP = "you-only-live-twice-gametest:hardcore_mobs_doors_nodrop";
     private static final String MOBS_NO_DOORS = "you-only-live-twice-gametest:hardcore_mobs_no_doors";
     private static final BlockPos PLAYER_AT = new BlockPos(1, 0, 1);
     private static final BlockPos MOB_AT = new BlockPos(4, 0, 4);
@@ -256,6 +257,17 @@ public class HardcoreMobsGameTests {
     // villager and walks the two blocks to it, so this allows more than twice that
     @GameTest(environment = MOBS_DOORS, maxTicks = 600)
     public void mobs4ZombieBreaksADoorOnEasyAndItDrops(GameTestHelper helper) {
+        breaksDoor(helper, 1);
+    }
+
+    // dropBrokenDoor off: the same break, and the door is gone with nothing dropped
+    @GameTest(environment = MOBS_DOORS_NO_DROP, maxTicks = 600)
+    public void mobs4BrokenDoorDropsNothingWhenTheDropIsOff(GameTestHelper helper) {
+        breaksDoor(helper, 0);
+    }
+
+    // A zombie with a villager behind an oak door breaks it on Easy; then this many door items lie by it
+    private static void breaksDoor(GameTestHelper helper, int doorItems) {
         helper.assertValueEqual(helper.getLevel().getDifficulty(), Difficulty.EASY, "difficulty");
         buildCorridor(helper);
         List<Entity> spawned = new ArrayList<>();
@@ -278,7 +290,7 @@ public class HardcoreMobsGameTests {
                             && helper.getBlockState(DOOR_AT.above()).isAir(), "the door still stands"))
                     .thenExecute(() -> {
                         try {
-                            helper.assertItemEntityCountIs(Items.OAK_DOOR, DOOR_AT, 3.0, 1);
+                            helper.assertItemEntityCountIs(Items.OAK_DOOR, DOOR_AT, 3.0, doorItems);
                         } finally {
                             cleanUp.run();
                         }
