@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.advancements.triggers.Criterion;
 import net.minecraft.core.BlockPos;
@@ -7,6 +9,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.core.component.DataComponentType;
@@ -18,9 +21,13 @@ import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NumericTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.BundlePacket;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
@@ -31,6 +38,7 @@ import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
+import net.minecraft.network.protocol.game.GameProtocols;
 import net.minecraft.network.syncher.EntityDataSerializer;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -154,6 +162,41 @@ final class LeakScanner {
     }
 
     private LeakScanner() {}
+
+    /**
+     * Writes packets through the game protocol's own codec and reads them back, as a client gets them. A packet that
+     * can't be written, or reads back short or long, throws, as it would close a real client's connection.
+     */
+    static final class Wire {
+        private final StreamCodec<ByteBuf, Packet<? super ClientGamePacketListener>> codec;
+
+        Wire(RegistryAccess registries) {
+            codec = GameProtocols.CLIENTBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries)).codec();
+        }
+
+        // A bundle goes as its parts, each written on its own
+        @SuppressWarnings("unchecked")
+        Packet<?> roundTrip(Packet<?> packet) {
+            if (packet instanceof ClientboundBundlePacket bundle) {
+                List<Packet<? super ClientGamePacketListener>> parts = new ArrayList<>();
+                for (Packet<? super ClientGamePacketListener> part : bundle.subPackets()) {
+                    parts.add((Packet<? super ClientGamePacketListener>) roundTrip(part));
+                }
+                return new ClientboundBundlePacket(parts);
+            }
+            ByteBuf buffer = Unpooled.buffer();
+            try {
+                codec.encode(buffer, (Packet<? super ClientGamePacketListener>) packet);
+                Packet<?> back = codec.decode(buffer);
+                if (buffer.isReadable()) {
+                    throw new IllegalStateException(packet.type() + " read back with " + buffer.readableBytes() + " bytes left");
+                }
+                return back;
+            } finally {
+                buffer.release();
+            }
+        }
+    }
 
     /** One line per place in a band in the packet. */
     static List<String> findings(Object packet, Band... bands) {

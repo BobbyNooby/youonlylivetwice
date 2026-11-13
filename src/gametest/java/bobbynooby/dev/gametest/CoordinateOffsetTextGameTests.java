@@ -293,7 +293,10 @@ public class CoordinateOffsetTextGameTests {
                     new ClientboundContainerSetContentPacket(0, 1, List.of(named), ItemStack.EMPTY),
                     plain);
             sent.forEach(player.connection::send);
-            List<Packet<?>> got = TestPlayers.sentPackets(player).subList(mark, mark + sent.size());
+            List<Packet<?>> out = TestPlayers.sentPackets(player).subList(mark, mark + sent.size());
+            // As the client gets them: a packet rebuilt for the client that its codec can't write fails here
+            LeakScanner.Wire wire = new LeakScanner.Wire(player.registryAccess());
+            List<Packet<?>> got = out.stream().<Packet<?>>map(wire::roundTrip).toList();
 
             helper.assertValueEqual(targets(((ClientboundSystemChatPacket) got.get(0)).content()), client, "system chat");
             helper.assertValueEqual(targets(((ClientboundPlayerCombatKillPacket) got.get(1)).message()), client, "death screen");
@@ -304,7 +307,7 @@ public class CoordinateOffsetTextGameTests {
             ClientboundPlayerChatPacket chat = (ClientboundPlayerChatPacket) got.get(3);
             helper.assertValueEqual(targets(chat.unsignedContent().orElseThrow()), client, "player chat's unsigned form");
             helper.assertValueEqual(targets(chat.chatType().name()), client, "player chat's sender name");
-            helper.assertTrue(chat.body() == body, "the signed body of a player chat was copied");
+            helper.assertTrue(((ClientboundPlayerChatPacket) out.get(3)).body() == body, "the signed body of a player chat was copied");
             helper.assertValueEqual(targets(((ClientboundSetTitleTextPacket) got.get(4)).text()), client, "title");
             helper.assertValueEqual(targets(((ClientboundSetSubtitleTextPacket) got.get(5)).text()), client, "subtitle's shown entity");
             helper.assertValueEqual(targets(((ClientboundSetActionBarTextPacket) got.get(6)).text()), client, "action bar");
@@ -355,7 +358,7 @@ public class CoordinateOffsetTextGameTests {
             helper.assertValueEqual(targets(page.filtered().orElseThrow()), client, "filtered book page");
             helper.assertValueEqual(targets(item.get(DataComponents.SIGN_TEXT_FRONT).getMessages(false).getFirst()), client,
                     "sign item's line");
-            helper.assertTrue(got.get(24) == plain, "plain text was copied");
+            helper.assertTrue(out.get(24) == plain, "plain text was copied");
             helper.assertValueEqual(targets(named.get(DataComponents.CUSTOM_NAME)), List.of(TARGET), "the server's own item name");
         } finally {
             TestPlayers.leave(player);

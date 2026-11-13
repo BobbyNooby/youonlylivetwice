@@ -89,11 +89,11 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
-// Every packet of a whole scene, read for a real X or Z, or a constant sent shifted. Each scene joins at one fixed real
-// spot far out with the switch on, so every real position in it falls in a narrow band that no shifted one comes near,
-// and every shifted constant in the band's mirror. Each scene also checks that the shifted spots it shows were sent, so
-// a packet that was dropped can't pass for a clean one. The scenes share the spot and hold players across ticks, so each
-// has a batch of its own. For the same reason they are not for a verify run, whose copies would break each other's
+// Every packet of a whole scene, as the client reads it, checked for a real X or Z, or a constant sent shifted. Each
+// scene joins at one fixed real spot far out with the switch on, so every real position in it falls in a narrow band
+// that no shifted one comes near, and every shifted constant in the band's mirror. Each scene also checks that the
+// shifted spots it shows were sent, so a packet that was dropped can't pass for a clean one. The scenes share the spot
+// and hold players across ticks, so each has a batch of its own. For the same reason they are not for a verify run, whose copies would break each other's
 // blocks and switches; to repeat them, run the push job again.
 public class LeakSweepGameTests {
     private static final String WORLD = "you-only-live-twice-gametest:leak_sweep_world";
@@ -642,8 +642,11 @@ public class LeakSweepGameTests {
             helper.runBeforeTestEnd(this::cleanUp);
         }
 
-        // Each scanned player's packets in a scan of its own, so a spot it must hold can't be found in another's
+        // Each scanned player's packets in a scan of its own, so a spot it must hold can't be found in another's. Each
+        // packet is read as the client would get it, written through the game's codec and read back.
         private void finish() {
+            LeakScanner.Wire wire = new LeakScanner.Wire(server.registryAccess());
+            List<String> unwritable = new ArrayList<>();
             List<String> found = new ArrayList<>();
             List<String> missing = new ArrayList<>();
             Set<String> unread = new TreeSet<>();
@@ -653,7 +656,11 @@ public class LeakSweepGameTests {
                 String name = player.nameAndId().name();
                 LeakScanner.Scan scan = new LeakScanner.Scan(BANDS, expected.getOrDefault(id, List.of()));
                 for (Packet<?> packet : TestPlayers.sentPackets(player)) {
-                    scan.packet(packet);
+                    try {
+                        scan.packet(wire.roundTrip(packet));
+                    } catch (RuntimeException e) {
+                        unwritable.add(name + ": " + packet.type() + ": " + e);
+                    }
                 }
                 scan.findings().forEach(finding -> found.add(name + ": " + finding));
                 scan.missing().forEach(spot -> missing.add(name + ": " + spot.toShortString()));
@@ -661,6 +668,7 @@ public class LeakSweepGameTests {
                 scan.unreadMinecraft().forEach(part -> unreadMinecraft.add(name + ": " + part));
             }
             cleanUp();
+            helper.assertValueEqual(unwritable, List.of(), "packets the game's codec couldn't write and read back");
             helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
                     + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
             helper.assertValueEqual(missing, List.of(), "shifted spots the scene shows that no packet held");
