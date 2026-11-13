@@ -139,7 +139,10 @@ final class LeakScanner {
             return watched.stream().filter(spot -> !seen.contains(spot)).sorted().toList();
         }
 
-        /** Each class whose fields couldn't be listed, and each field that couldn't be read, by its class's name. */
+        /**
+         * Each class whose fields couldn't be listed, each field that couldn't be read, by its class's name, and each
+         * class the depth limit stopped the walk at.
+         */
         Set<String> unread() {
             return unread;
         }
@@ -260,7 +263,12 @@ final class LeakScanner {
             if (inLeafPackage(type) || type.isHidden() || type.isSynthetic()) {
                 return;
             }
-            if (special(value, depth) || depth >= MAX_DEPTH) {
+            if (special(value, depth)) {
+                return;
+            }
+            // Cut short, so what lies deeper wasn't read
+            if (depth >= MAX_DEPTH) {
+                scan.unread.add(type.getName() + " (cut at depth " + MAX_DEPTH + ")");
                 return;
             }
             Parts parts = partsOf(type);

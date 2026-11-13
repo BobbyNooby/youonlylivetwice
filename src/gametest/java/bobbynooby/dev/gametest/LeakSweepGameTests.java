@@ -149,6 +149,15 @@ public class LeakSweepGameTests {
             LeakScanner.Scan locked = new LeakScanner.Scan(BANDS, List.of());
             locked.packet(new Unreadable(TARGET.getX()));
             helper.assertValueEqual(List.copyOf(locked.unread()), List.of(Unreadable.class.getName() + ".x"), "parts left unread");
+            // A walk the depth limit cuts short is unread too, so a place below it can't pass unseen
+            LeakScanner.Scan deep = new LeakScanner.Scan(BANDS, List.of());
+            Nest nest = new Nest(null);
+            for (int i = 0; i < 16; i++) {
+                nest = new Nest(nest);
+            }
+            deep.packet(nest);
+            helper.assertTrue(deep.unread().stream().anyMatch(part -> part.startsWith(Nest.class.getName() + " (cut at depth")),
+                    "a walk cut by the depth limit left nothing unread: " + deep.unread());
         } finally {
             TestPlayers.leave(player);
         }
@@ -446,6 +455,9 @@ public class LeakSweepGameTests {
         }
         return found;
     }
+
+    // One inside the next, deeper than the walk goes
+    private record Nest(@Nullable Nest inner) {}
 
     // A part that throws as it is read, as a field locked by a later access rule would
     private record Unreadable(int x) {
