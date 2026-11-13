@@ -41,7 +41,7 @@ bundled SQLite driver loading its native code, and it is harmless. If a later Ja
 - Set `spawn-protection=0` in `server.properties`. Vanilla stops non-ops from using blocks near the world spawn, and
   graves can end up there (for example when someone dies in the void and the grave falls back to the spawn column), so
   players could not open them. With `hide.coordinates` on there is a second reason: vanilla's "is under spawn
-  protection" line names the block. YOLT names it in the player's own numbers, or as "This block" while F3 is reduced,
+  protection" line names the block. YOLT names it in the player's own numbers, or as "This block" while YOLT reduces F3,
   but with the setting at 0 the line never comes up.
 - Keep `enable-query` off unless you need it. With `hide.serverPlayerCount` on, the query port reports 0 players and
   no names. With that switch off it reports the real count, and lists names only when `serverList.hoverLines` is
