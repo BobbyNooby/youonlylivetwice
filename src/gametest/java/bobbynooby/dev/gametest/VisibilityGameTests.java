@@ -35,6 +35,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.CreakingHeartBlockEntity;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.security.KeyPair;
 import java.time.Duration;
 import java.time.Instant;
@@ -77,6 +79,36 @@ public class VisibilityGameTests {
         } finally {
             hide.distantPlayers = distantBefore;
             leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // /yolt config brings every client online in line at once: turning hide.distantPlayers on drops the far players
+    // each one knew, without waiting for a rejoin. The command writes the config file, so this runs with the other
+    // tests that do and puts the file back in the same tick.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void configCommandDropsFarPlayers(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            CommandGameTests.run(server, "yolt config hide.distantPlayers false");
+            helper.assertFalse(Settings.get().hide.distantPlayers, "hide.distantPlayers is still on");
+            ServerPlayer far = join(helper, joined, "viscfgfar", new BlockPos(1, 0, 0));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            ServerPlayer viewer = join(helper, joined, "viscfg", BlockPos.ZERO);
+            helper.assertTrue(PlayerVisibility.known(viewer).contains(far.getUUID()), "with the switch off the viewer doesn't know the far player");
+            helper.assertTrue(PlayerVisibility.known(far).contains(viewer.getUUID()), "with the switch off the far player doesn't know the viewer");
+
+            CommandGameTests.run(server, "yolt config hide.distantPlayers true");
+            helper.assertTrue(Settings.get().hide.distantPlayers, "hide.distantPlayers is still off");
+            helper.assertFalse(PlayerVisibility.known(viewer).contains(far.getUUID()), "the viewer still knows the far player");
+            helper.assertFalse(PlayerVisibility.known(far).contains(viewer.getUUID()), "the far player still knows the viewer");
+            helper.assertTrue(gotRemove(viewer, far), "the viewer's client was not told to remove the far player");
+            helper.assertTrue(gotRemove(far, viewer), "the far player's client was not told to remove the viewer");
+        } finally {
+            leaveAll(joined);
+            ConfigCommandGameTests.restore(server, fileBefore);
         }
         helper.succeed();
     }
