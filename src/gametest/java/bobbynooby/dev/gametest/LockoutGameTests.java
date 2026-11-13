@@ -508,6 +508,36 @@ public class LockoutGameTests {
         }
     }
 
+    // A server running behind can handle the client's respawn before the kick runs. The kick must still find the
+    // player, now a new player object, by their id.
+    @GameTest(maxTicks = 20)
+    public void kickFindsAPlayerWhoRespawnedFirst(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Quick", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        boolean waiting = false;
+        try {
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            killWithoutGrave(helper, player);
+            player.connection.handleClientCommand(new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
+            ServerPlayer back = server.getPlayerList().getPlayer(uuid);
+            helper.assertTrue(back != null && back != player, "the player did not respawn");
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(server.getPlayerList().getPlayer(uuid) == null, "the respawned player was not kicked");
+                } finally {
+                    leaveIfOnline(player);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                leaveIfOnline(player);
+            }
+        }
+    }
+
     // A death in creative doesn't count: no grave, no death record and no lockout, no XP dropped, and the respawn hands
     // the items, XP and score back the way keepInventory would, each once. A second player with no items at all keeps
     // their XP too. All in one tick.
