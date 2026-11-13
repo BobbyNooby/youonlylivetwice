@@ -421,6 +421,7 @@ public class LeakSweepGameTests {
             ServerPlayer player = sweep.current(id);
             player.setHealth(0.0F);
             ServerPlayer back = OffsetTestKit.respawn(helper, player, SPOT_BLOCK, false);
+            helper.assertValueEqual(back.blockPosition(), SPOT_BLOCK, "where the player stands after the respawn");
             helper.assertValueEqual(CoordinateOffsets.offset(back), OFFSET, "offset after the respawn");
         });
         sweep.at(STEP, () -> travel(helper, sweep, id, nether, NETHER_SPOT, NETHER_OFFSET));
@@ -430,6 +431,7 @@ public class LeakSweepGameTests {
         sweep.at(4 * STEP, () -> {
             ServerPlayer back = OffsetTestKit.respawn(helper, sweep.current(id), SPOT_BLOCK, true);
             helper.assertTrue(back.level() == overworld, "the way back from the End did not reach the overworld");
+            helper.assertValueEqual(back.blockPosition(), SPOT_BLOCK, "where the player stands after the way back from the End");
             helper.assertValueEqual(CoordinateOffsets.offset(back), OFFSET, "offset on the way back from the End");
         });
         sweep.at(5 * STEP, () -> {
@@ -457,6 +459,7 @@ public class LeakSweepGameTests {
         OffsetTestKit.withCoordinates(() -> player.teleport(new TeleportTransition(to, spot, Vec3.ZERO, 0.0F, 0.0F,
                 TeleportTransition.PLAY_PORTAL_SOUND)));
         helper.assertTrue(player.level() == to, "the player did not reach " + to.dimension().identifier());
+        helper.assertValueEqual(player.position(), spot, "where the player stands in " + to.dimension().identifier());
         helper.assertValueEqual(CoordinateOffsets.offset(player), offset, "offset in " + to.dimension().identifier());
         loadAround(to, BlockPos.containing(spot));
     }
