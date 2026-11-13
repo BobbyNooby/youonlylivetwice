@@ -9,6 +9,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.util.GoalUtils;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.level.Level;
@@ -36,7 +37,9 @@ public final class Relentless {
         HardcoreConfig.RelentlessMobsSection config = config();
         MobBoosts.multiply(mob, Attributes.FOLLOW_RANGE, RELENTLESS, config.followRange);
         // A zombie that won keeps it for good, saved with it, even once the feature is off
-        if (mob instanceof Zombie zombie && !zombie.entityTags().contains(DOOR_ROLLED)) {
+        // Only one that can really break doors now: a drowned in the water would waste its roll, as vanilla ignores it
+        if (mob instanceof Zombie zombie && !zombie.entityTags().contains(DOOR_ROLLED)
+                && GoalUtils.hasGroundPathNavigation(zombie)) {
             if (zombie.getRandom().nextDouble() < config.doorBreakerChance) {
                 zombie.setCanBreakDoors(true);
             }
