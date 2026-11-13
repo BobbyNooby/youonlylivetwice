@@ -40,7 +40,9 @@ bundled SQLite driver loading its native code, and it is harmless. If a later Ja
 
 - Set `spawn-protection=0` in `server.properties`. Vanilla stops non-ops from using blocks near the world spawn, and
   graves can end up there (for example when someone dies in the void and the grave falls back to the spawn column), so
-  players could not open them.
+  players could not open them. With `hide.coordinates` on there is a second reason: vanilla's "is under spawn
+  protection" line names the block. YOLT names it in the player's own numbers, or as "This block" while F3 is reduced,
+  but with the setting at 0 the line never comes up.
 - Keep `enable-query` off unless you need it. With `hide.serverPlayerCount` on, the query port reports 0 players and
   no names. With that switch off it reports the real count, and lists names only when `serverList.hoverLines` is
   empty. The default has one line, so by default it lists no names.
@@ -226,15 +228,17 @@ What the server can and can't do:
 
 ## Coordinate offset
 
-`hide.coordinates` (off by default) gives each player fake X and Z numbers that even a minimap mod or a hacked client
-can't get past.
+`hide.coordinates` (off by default) gives each player fake X and Z numbers. A minimap mod or a hacked client gets the
+fake ones too, though a client built for it can still work some real numbers out (see "Known limits").
 
 - Every position the server sends a player is shifted by a private amount, and every position that player's game
   sends back is shifted back, so the server itself always works in real coordinates.
 - Only X and Z move. Height stays real.
 - The amount is new at each join, each death respawn and each dimension change, never on a timer. Each stretch starts
   you within 16 blocks of 0, 0.
-- The End is shifted too, with an amount of its own.
+- Every dimension is shifted, each stretch with its amount. A spot in another dimension than the one you are in, such
+  as your last death or a lodestone compass's target, is shifted by a separate hidden amount for that dimension, which
+  stays the same until you next join.
 - F3 stays reduced (`hide.debugScreen`). A client that ignores that still only shows shifted numbers.
 - Minimap waypoints and Nether portal maths don't carry across a reset, as the numbers change under them.
 - Border walls only show within the server's view distance plus 128 blocks. A wall further off goes out at the edge
@@ -393,6 +397,7 @@ No setting needs a restart. The "Restart?" column says when a change shows:
 
 - **No:** at once.
 - **Next join:** when a player next joins.
+- **Next join, respawn or dimension change:** for each player, at the first of those.
 - **New bodies:** for bodies made from then on. Bodies already standing keep how they were made.
 - **New deaths:** for deaths from then on. Graves and lockouts already there stay as they are.
 
@@ -487,7 +492,7 @@ diameter to the area you want people to spawn in.
 | `debugScreen` | `true` | Reduced F3 for every player. Admin view lifts it. | No |
 | `serverBrand` | `false` | F3 names the server "vanilla" instead of "fabric". | Next join |
 | `compassSpawn` | `true` | A normal compass points north in every dimension, not at the world spawn. Recovery, lodestone and grave compasses keep their own targets. Admin view shows the real spawn. | No |
-| `coordinates` | `false` | Each player sees X and Z shifted by a private amount, new at every join, death respawn and dimension change. Admin view sees real ones. | Next join |
+| `coordinates` | `false` | Each player sees X and Z shifted by a private amount, new at every join, death respawn and dimension change. Admin view sees real ones. | Next join, respawn or dimension change |
 
 Notes:
 
@@ -684,7 +689,19 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
     - A wall of a border whose size and centre are known gives that real axis away once you see it.
     - A map you hold gives your real X and Z modulo its size, and a known seed gives everything away through the
       terrain.
-    - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there.
+    - Some terrain is the same in every world, whatever the seed: where snow starts on a mountain, where frozen-ocean
+      ice ends, and which flowers grow where in a flower field. A client built for it can match what it sees against
+      that and find its real X and Z. The seed fingerprint the server sends also lets it check where snowy biomes end.
+    - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there, and spots
+      in other dimensions are never shown in it.
+    - Each stretch puts you in chunk 0, 0 at its start, so a stretch that starts in the real chunk at 0, 0 shows real
+      numbers. With `randomSpawn` off, a player with no bed respawns at the world spawn each time, so those stretches
+      all get the same amount, and anyone who knows where the spawn is knows it.
+    - With `hide.compassSpawn` off, a player who knows where the world spawn really is (often near 0, 0) can work out
+      their amount from where the compass points.
+    - A modified client can carry its own numbers across a death or a relog: your last death spot and the grave
+      compass's target come again in the new numbers, so it can work out how far they moved. It still learns no real
+      coordinate.
     - Amounts stop at 999,984 blocks. A player about 1,000,000 or more blocks out on an axis (a border has to reach
       that far) starts a stretch far from 0, 0, at their real numbers moved 999,984 blocks towards 0.
     - With `max-world-size` set in `server.properties`, the edge of the world counts as a border wall: only its near
@@ -698,6 +715,7 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
         - the `minecraft:lock`, `minecraft:can_place_on` and `minecraft:can_break` predicates on an item, and a
           trade's costs;
         - the items shown in recipes, advancements and dialogs;
+        - a command block minecart's command and last output, which every client near it is sent;
         - an item shown on hover in text held in a registry entry (an instrument, a jukebox song, a trim, a painting),
           in an item's attribute display, in the separator of a selector or NBT text, in a dialog or custom click
           event, or in a chat type's own style.
