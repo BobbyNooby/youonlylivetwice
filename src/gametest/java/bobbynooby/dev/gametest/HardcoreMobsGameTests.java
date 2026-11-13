@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.ConversionParams;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
@@ -91,6 +92,29 @@ public class HardcoreMobsGameTests {
             assertHealth(helper, zombie, 30.0F, 20.0F, "loaded with the feature on again");
         } finally {
             config.enabled = enabledBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // A converted mob gets the zombie's tags but neither its health nor its modifiers (26.3 ConversionType), so it is
+    // scaled once as it loads
+    @GameTest(environment = MOBS)
+    public void mobs2ConvertedMobKeepsItsExtraHealth(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Mob zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            assertHealth(helper, zombie, 30.0F, 30.0F, "of the zombie");
+            Mob drowned = zombie.convertTo(EntityTypes.DROWNED, ConversionParams.single(zombie, true, true), converted -> {
+            });
+            helper.assertTrue(drowned != null, "the zombie did not convert");
+            spawned.add(drowned);
+            helper.assertTrue(drowned.entityTags().contains(MobBoosts.TOUGH), "the drowned is not tagged " + MobBoosts.TOUGH);
+            assertHealth(helper, drowned, 30.0F, 30.0F, "of the drowned");
+            // Loading again doesn't scale it a second time
+            MobBoosts.onLoad(drowned, helper.getLevel());
+            assertHealth(helper, drowned, 30.0F, 30.0F, "of the drowned loaded again");
+        } finally {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();

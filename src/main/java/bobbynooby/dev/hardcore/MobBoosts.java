@@ -67,7 +67,12 @@ public final class MobBoosts {
             return;
         }
         if (mob.entityTags().contains(BLOOD_MOON_MARK)) {
-            applyBloodMoon(mob, bloodMoonBoost());
+            MobMaths.Boost boost = bloodMoonBoost();
+            boolean unscaled = convertedUnscaled(mob, BLOOD_MOON);
+            applyBloodMoon(mob, boost);
+            if (unscaled) {
+                mob.setHealth(mob.getHealth() * (float) boost.health());
+            }
             return;
         }
         if (!firstSight || !BloodMoon.activeIn(level) || !eligible(mob)) {
@@ -104,7 +109,12 @@ public final class MobBoosts {
         HardcoreConfig.TougherMobsSection config = config();
         if (mob.entityTags().contains(TOUGH)) {
             // An id added to exclude since takes the boost off again, but its health was scaled already
-            apply(mob, boost(mob, config));
+            MobMaths.Boost boost = boost(mob, config);
+            boolean unscaled = convertedUnscaled(mob, TOUGHER);
+            apply(mob, boost);
+            if (unscaled) {
+                mob.setHealth(mob.getHealth() * (float) boost.health());
+            }
             return;
         }
         if (!(mob instanceof Enemy) || excluded(mob, config) || mob.entityTags().contains(VANILLA)) {
@@ -119,6 +129,17 @@ public final class MobBoosts {
         // Once only: the modifier is saved with the mob, and so is the health it already has
         mob.setHealth(mob.getHealth() * (float) boost.health());
         mob.addTag(TOUGH);
+    }
+
+    // A mob converted from a boosted one (a zombie that drowned, a skeleton that froze) gets the old mob's tags but not
+    // its health or modifiers, so its health is scaled once more. The modifier, missing until then, keeps a second load
+    // of the same mob from scaling it again.
+    private static boolean convertedUnscaled(Mob mob, Identifier id) {
+        if (mob.spawnReason() != EntitySpawnReason.CONVERSION || mob.isLoadedFromDisk()) {
+            return false;
+        }
+        AttributeInstance maxHealth = mob.getAttribute(Attributes.MAX_HEALTH);
+        return maxHealth != null && maxHealth.getModifier(id) == null;
     }
 
     /** True for a hostile mob tougher mobs would boost on first sight. */
