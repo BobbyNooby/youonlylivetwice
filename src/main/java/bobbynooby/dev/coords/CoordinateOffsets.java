@@ -72,11 +72,13 @@ public final class CoordinateOffsets {
         @Nullable Packet<?> apply(P packet, Context context);
     }
 
-    /** What a translator works with: the offset for its direction, the connection's state and its listener. */
-    record Context(Offset offset, OffsetState state, ServerGamePacketListenerImpl listener) {
-        /** The same offset with the frame's dimension and the away amounts, for spots that name their dimension. */
-        Frame frame() {
-            return new Frame(offset, state.dimension, state::away);
+    /**
+     * What a translator works with: the frame for its direction, the connection's state and its listener. The frame's
+     * dimension and away amounts are for spots that name their dimension.
+     */
+    record Context(Frame frame, OffsetState state, ServerGamePacketListenerImpl listener) {
+        Offset offset() {
+            return frame.offset();
         }
     }
 
@@ -186,7 +188,7 @@ public final class CoordinateOffsets {
      */
     public static HashedStack clientHash(ServerPlayer player, HashedStack sent) {
         OffsetState state = stateOf(player);
-        Frame in = state == null ? Frame.NONE : new Frame(state.frames.get().in(), state.dimension, state::away);
+        Frame in = state == null ? Frame.NONE : state.inFrame();
         if (in.isZero()) {
             return sent;
         }

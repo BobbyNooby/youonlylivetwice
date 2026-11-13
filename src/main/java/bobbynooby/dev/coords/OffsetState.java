@@ -52,4 +52,10 @@ public final class OffsetState {
     Frame outFrame() {
         return new Frame(frames.get().out(), dimension, this::away);
     }
+
+    /** The frame what the client sends is read in now, which lags behind until it accepts the new frame's teleport. */
+    Frame inFrame() {
+        Frames now = frames.get();
+        return new Frame(now.in(), now.inDimension(), this::away);
+    }
 }

@@ -405,6 +405,26 @@ public class CoordinateOffsetItemGameTests {
         helper.succeed();
     }
 
+    // Until the client accepts the arrival's teleport it still sends stacks in the old frame, the overworld's, so a
+    // compass it was shown there comes back with its real target, though the new frame is in the nether
+    @GameTest(environment = ITEMS)
+    public void creativeSlotBeforeTheAcceptKeepsTheOldFrame(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "ciawayearly", GameType.CREATIVE);
+        try {
+            Offset old = CoordinateOffsets.offset(player);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            TestPlayers.receive(player, new ServerboundSetCreativeModeSlotPacket(36, compass(old.shift(TARGET))));
+            helper.assertValueEqual(player.inventoryMenu.getSlot(36).getItem().get(DataComponents.LODESTONE_TRACKER).target(),
+                    Optional.of(GlobalPos.of(Level.OVERWORLD, TARGET)), "target of the compass the server keeps");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // The client hashes the compass it was shown, in the away amount, and the click still matches the server's stack
     @GameTest(environment = ITEMS)
     public void clickHashMatchesAnAwayShiftedStack(GameTestHelper helper) {

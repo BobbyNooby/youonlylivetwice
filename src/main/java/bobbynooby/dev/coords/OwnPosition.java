@@ -60,7 +60,7 @@ final class OwnPosition {
                 relatives.contains(Relative.Y) ? before.y + to.y : to.y, relatives.contains(Relative.Z) ? before.z + to.z : to.z);
         state.borderRecheck = true;
         state.frames.updateAndGet(frames -> frames.switchAt() == Frames.AT_NEXT_TELEPORT
-                ? new Frames(frames.out(), frames.in(), teleport.id()) : frames);
+                ? new Frames(frames.out(), frames.in(), teleport.id(), frames.inDimension()) : frames);
     }
 
     // The first game packet of every login, re-configuration included, so a new frame starts here, at the exact
@@ -71,12 +71,12 @@ final class OwnPosition {
         Offset offset = CoordinateOffsets.frameOffset(player, player.position());
         OffsetState state = context.state();
         CommonPlayerSpawnInfo spawn = packet.commonPlayerSpawnInfo();
-        state.frames.set(new Frames(offset, offset, Frames.NO_SWITCH));
+        state.frames.set(new Frames(offset, offset, Frames.NO_SWITCH, spawn.dimension()));
         state.dimension = spawn.dimension();
         state.forgetAway();
         state.heldChunks.clear();
         state.lastPosition = player.position();
-        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, new Frame(offset, spawn.dimension(), state::away));
+        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, state.outFrame());
         if (shifted == spawn) {
             return packet;
         }
@@ -107,8 +107,8 @@ final class OwnPosition {
         state.dimension = spawn.dimension();
         state.lastPosition = anchor != null ? anchor : player.position();
         // What the client sends stays in the old frame until it accepts the teleport that comes next
-        state.frames.updateAndGet(frames -> new Frames(offset, frames.in(), Frames.AT_NEXT_TELEPORT));
-        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, new Frame(offset, spawn.dimension(), state::away));
+        state.frames.updateAndGet(frames -> new Frames(offset, frames.in(), Frames.AT_NEXT_TELEPORT, frames.inDimension()));
+        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, state.outFrame());
         return shifted == spawn ? packet : new ClientboundRespawnPacket(shifted, packet.dataToKeep());
     }
 

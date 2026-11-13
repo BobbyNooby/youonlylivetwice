@@ -62,7 +62,7 @@ final class Outgoing {
         boolean asItIs = type != GamePacketTypes.CLIENTBOUND_LOGIN && type != GamePacketTypes.CLIENTBOUND_RESPAWN
                 && frames.out().isZero();
         try {
-            Packet<?> sent = asItIs ? packet : translateOne(packet, new Context(frames.out(), state, listener));
+            Packet<?> sent = asItIs ? packet : translateOne(packet, new Context(state.outFrame(), state, listener));
             ChunkRules.keepHeld(state, packet);
             OwnPosition.keepTeleport(state, packet);
             return sent;

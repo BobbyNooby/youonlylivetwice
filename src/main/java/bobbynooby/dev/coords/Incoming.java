@@ -57,14 +57,14 @@ final class Incoming {
             if (frames.out().isZero() && frames.in().isZero()) {
                 return packet;
             }
-            Offset offset = frames.in();
+            Frame frame = state.inFrame();
             if (packet instanceof ServerboundAcceptTeleportationPacket accept && frames.switchAt() >= 0
                     && accept.id() == frames.switchAt()) {
-                offset = frames.out();
-                state.frames.compareAndSet(frames, new Frames(frames.out(), frames.out(), Frames.NO_SWITCH));
+                frame = state.outFrame();
+                state.frames.compareAndSet(frames, new Frames(frames.out(), frames.out(), Frames.NO_SWITCH, state.dimension));
             }
             Translator<?> translator = TRANSLATORS.get(packet.type());
-            return translator == null || offset.isZero() ? packet : run(translator, packet, new Context(offset, state, listener));
+            return translator == null || frame.isZero() ? packet : run(translator, packet, new Context(frame, state, listener));
         } catch (RuntimeException e) {
             CoordinateOffsets.dropped(state, listener, packet, e);
             return null;
