@@ -12,7 +12,6 @@ import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.LevelData;
@@ -70,10 +69,9 @@ final class OffsetTestKit {
     static ServerPlayer respawn(GameTestHelper helper, ServerPlayer player, BlockPos spot, boolean fromEnd) {
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                 LevelData.RespawnData.of(helper.getLevel().dimension(), spot, 0.0F, 0.0F), true), false);
-        PlayerList players = helper.getLevel().getServer().getPlayerList();
         return withCoordinates(() -> fromEnd
-                ? players.respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION)
-                : players.respawn(player, false, Entity.RemovalReason.KILLED));
+                ? TestPlayers.respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION)
+                : TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED));
     }
 
     // What a real client does once it has joined: it says the world has loaded and accepts the join's teleport. Until it

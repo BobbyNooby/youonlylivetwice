@@ -17,6 +17,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
@@ -98,6 +99,14 @@ public final class TestPlayers {
 
     public static void op(ServerPlayer player, LevelBasedPermissionSet level) {
         player.level().getServer().getPlayerList().op(player.nameAndId(), Optional.of(level), Optional.empty());
+    }
+
+    // A respawn straight through the player list. Vanilla's own callers put the new player on the connection right
+    // after, and so does this, so the connection never goes on with the one who died.
+    public static ServerPlayer respawn(ServerPlayer player, boolean keepAllPlayerData, Entity.RemovalReason reason) {
+        ServerPlayer back = player.level().getServer().getPlayerList().respawn(player, keepAllPlayerData, reason);
+        back.connection.player = back;
+        return back;
     }
 
     public static void deop(ServerPlayer player) {
