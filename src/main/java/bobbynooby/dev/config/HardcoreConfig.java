@@ -13,6 +13,7 @@ public final class HardcoreConfig {
         public LegsSection legs = new LegsSection();
         public LimpSection limp = new LimpSection();
         public BedRestSection bedRest = new BedRestSection();
+        public CurseSection curse = new CurseSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -87,6 +88,19 @@ public final class HardcoreConfig {
         public int healEveryTicks = 50;
         public double exhaustionPerHeal = 0.0;
         public double legHealSpeed = 2.0;
+    }
+
+    // Hearts, two health points each; a heal comes after healEveryDays of the player's own online play, 24,000 ticks a day
+    public static class CurseSection {
+        public boolean enabled = false;
+        @Applies(Applies.When.NEW_DEATHS) public int heartsPerDeath = 1;
+        @Applies(Applies.When.NEW_DEATHS) public int heartsPerTotem = 1;
+        public int maxLostHearts = 2;
+        public int healHearts = 1;
+        public double healEveryDays = 5.0;
+        public boolean countAfk = true;
+        public int reviveRefundHearts = 0;
+        public boolean unkillRefunds = true;
     }
 
     // Name, value, name, value..., kept in the order given

@@ -4,6 +4,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.visibility.NameTagTeam;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.SectionPos;
@@ -89,6 +90,7 @@ public final class PlayerBody extends ServerPlayer implements StandIn {
         body.setYBodyRot(snapshot.yRot());
         snapshot.gear().forEach((slot, stack) -> body.setItemSlot(slot, stack.copy()));
         BodySpawn.applyGearModifiers(body);
+        Curse.applyTo(body, record.owner());
         // Its effects are its own, from when it was made
         snapshot.applyTo(body, true);
         return body.addToWorld(level) ? body : null;

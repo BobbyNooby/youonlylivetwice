@@ -3,6 +3,7 @@ package bobbynooby.dev.bodies;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.hardcore.Curse;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,7 +47,7 @@ public final class BodyChunks {
         // A new body loads before its record exists, and needs nothing here
         if (entity instanceof Mannequin body) {
             BodyStore.get(server).byEntity(entity.getUUID()).filter(record -> !record.pendingRemoval())
-                    .ifPresent(record -> restoreHealth(body, record.snapshot()));
+                    .ifPresent(record -> restoreHealth(body, record));
         }
         // Changing the entity list during a load can throw, so this waits. The check waits too: a new body loads
         // before its record.
@@ -67,8 +68,11 @@ public final class BodyChunks {
     // Loading sets the health before the gear's modifiers are back (LivingEntity.readAdditionalSaveData), which clamps
     // it to the base maximum. The record was saved with the chunk, so it holds what the body had. A body saved while
     // dying keeps dying: its record isn't updated then.
-    private static void restoreHealth(LivingEntity body, BodySnapshot saved) {
+    private static void restoreHealth(LivingEntity body, BodyRecord record) {
+        BodySnapshot saved = record.snapshot();
         BodySpawn.applyGearModifiers(body);
+        // The curse's modifier isn't saved with the body either
+        Curse.applyTo(body, record.owner());
         if (!body.isDeadOrDying() && saved.health() > body.getHealth()) {
             body.setHealth(saved.health());
         }

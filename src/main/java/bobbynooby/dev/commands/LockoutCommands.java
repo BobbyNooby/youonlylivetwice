@@ -5,6 +5,7 @@ import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -103,7 +104,11 @@ final class LockoutCommands {
         return switch (DeathLockout.revive(who.get().id(), found, reviver(source))) {
             case REVIVED -> {
                 Yolt.LOGGER.info("{} revived {}", source.getTextName(), found);
-                yield YoltCommands.done(source, "Revived " + found + ".");
+                // Undoing the death undoes what it cost; a revive paper's revive never comes here
+                int back = Settings.on(c -> c.hardcore.curse.enabled && c.hardcore.curse.unkillRefunds)
+                        ? Curse.refund(who.get().id()) : 0;
+                yield YoltCommands.done(source, "Revived " + found + "."
+                        + (back > 0 ? " Gave back " + back + (back == 1 ? " max heart." : " max hearts.") : ""));
             }
             case ALREADY_ENDED -> YoltCommands.fail(source, found + "'s lockout had already ended.");
             case NO_DEATH -> YoltCommands.fail(source, found + " has no death to undo.");

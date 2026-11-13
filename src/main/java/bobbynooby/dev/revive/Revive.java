@@ -5,6 +5,7 @@ import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
@@ -80,6 +81,8 @@ public final class Revive {
             user.sendSystemMessage(Component.literal(notDead(name)));
             return Outcome.NOT_DEAD;
         }
+        // A revive is still a death for the curse; only a share the server sets comes back
+        Guard.run(() -> Curse.refundRevivePaper(owner.get()), "Could not give back {}'s curse hearts", name);
         // As with vanilla's own items, a creative user keeps the head
         stack.consume(1, user);
         // The revive is on disk already, so the used head goes there too: a crash before the next autosave would give it

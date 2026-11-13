@@ -177,7 +177,7 @@ public final class Legs {
     }
 
     // Mannequin and player bodies alike are found by their entity in the body store
-    private static Optional<UUID> ownerOfBody(LivingEntity entity) {
+    static Optional<UUID> ownerOfBody(LivingEntity entity) {
         if (!BodyRules.isBody(entity) || !(entity.level() instanceof ServerLevel level)) {
             return Optional.empty();
         }

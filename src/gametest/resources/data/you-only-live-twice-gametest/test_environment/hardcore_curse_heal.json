@@ -1,0 +1,7 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.curse.enabled": "true",
+    "hardcore.curse.healEveryDays": "0.008333333333333333"
+  }
+}

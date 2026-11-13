@@ -27,6 +27,7 @@ import java.util.function.Consumer;
 public final class Hardcore {
     private static final List<Consumer<ServerPlayer>> TICKS = new ArrayList<>();
     private static final List<Consumer<ServerPlayer>> REFRESHES = new ArrayList<>();
+    private static final List<Consumer<ServerPlayer>> EXEMPTS = new ArrayList<>();
     // Copy on write, so a listener added while a death is passed on can't upset the loop
     private static final List<BiConsumer<UUID, GameType>> DEATHS = new CopyOnWriteArrayList<>();
 
@@ -38,6 +39,7 @@ public final class Hardcore {
         Legs.init();
         Limp.init();
         BedRest.init();
+        Curse.init();
         ServerTickEvents.END_SERVER_TICK.register(Hardcore::tick);
         ServerPlayerEvents.JOIN.register(Hardcore::refresh);
         // A respawn makes a new player object without the old one's transient modifiers, the End exit's included
@@ -59,7 +61,7 @@ public final class Hardcore {
     /** True while any hardcore feature is switched on. */
     public static boolean anyOn() {
         return Settings.on(c -> c.hardcore.weight.enabled || c.hardcore.legs.enabled || c.hardcore.limp.enabled
-                || c.hardcore.bedRest.enabled);
+                || c.hardcore.bedRest.enabled || c.hardcore.curse.enabled);
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */
@@ -70,6 +72,14 @@ public final class Hardcore {
     /** Runs after a join, a respawn and a dimension change, so a feature can put its modifiers back. */
     public static void onRefresh(Consumer<ServerPlayer> reapply) {
         REFRESHES.add(reapply);
+    }
+
+    /**
+     * Runs in place of the tick and the refresh for a player outside the rules, so a feature can take its modifiers
+     * off. It runs every tick they stay exempt, so it must cost nothing when there is nothing to take off.
+     */
+    public static void onExempt(Consumer<ServerPlayer> remove) {
+        EXEMPTS.add(remove);
     }
 
     /**
@@ -108,7 +118,7 @@ public final class Hardcore {
 
     private static void tickPlayer(ServerPlayer player) {
         if (exempt(player)) {
-            Slowdowns.clear(player);
+            leaveRules(player);
             return;
         }
         for (Consumer<ServerPlayer> perPlayer : TICKS) {
@@ -127,12 +137,19 @@ public final class Hardcore {
 
     private static void refreshPlayer(ServerPlayer player) {
         if (exempt(player)) {
-            Slowdowns.clear(player);
+            leaveRules(player);
             return;
         }
         for (Consumer<ServerPlayer> reapply : REFRESHES) {
             Guard.run(() -> reapply.accept(player), "A hardcore refresh failed for {}", player.nameAndId().name());
         }
         Slowdowns.refresh(player);
+    }
+
+    private static void leaveRules(ServerPlayer player) {
+        Slowdowns.clear(player);
+        for (Consumer<ServerPlayer> remove : EXEMPTS) {
+            Guard.run(() -> remove.accept(player), "A hardcore exempt hook failed for {}", player.nameAndId().name());
+        }
     }
 }

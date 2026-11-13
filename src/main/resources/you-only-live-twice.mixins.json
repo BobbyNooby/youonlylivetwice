@@ -48,6 +48,7 @@
     "HardcoreBedWakeMixin",
     "HardcoreFallMixin",
     "HardcoreJumpMixin",
+    "HardcoreTotemMixin",
     "InitializeBorderPacketAccessor",
     "ItemContainerContentsInvoker",
     "LevelChunkPacketDataInvoker",

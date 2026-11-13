@@ -1,6 +1,7 @@
 package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.hardcore.Curse;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Avatar;
@@ -52,6 +53,8 @@ final class BodySpawn {
         if (cfg.copyEffects) {
             body.getAttribute(Attributes.MAX_HEALTH).setBaseValue(player.getAttributeBaseValue(Attributes.MAX_HEALTH));
         }
+        // Before the health, which is clamped to the maximum, so the body never has more hearts than its owner
+        Curse.applyTo(body, player.getUUID());
         // Logging out mid-fall, on fire or under water doesn't get the player out of it. Without the effects, the
         // health is clamped to the body's own maximum and there is no absorption cap to keep any.
         BodySnapshot.of(player).applyTo(body, cfg.copyEffects);

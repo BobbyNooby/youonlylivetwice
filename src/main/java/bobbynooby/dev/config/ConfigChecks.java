@@ -221,6 +221,8 @@ final class ConfigChecks {
         legs(c.legs, fallback.legs, fellBack);
         limp(c.limp, fallback.limp, fellBack);
         bedRest(c.bedRest, fallback.bedRest, fellBack);
+        curse(c.curse, fallback.curse, fellBack);
+        curseAndLimp(c, fallback, fellBack);
     }
 
     private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {
@@ -300,6 +302,52 @@ final class ConfigChecks {
         if (!(bedRest.legHealSpeed >= 0)) {
             bedRest.legHealSpeed = fallback.legHealSpeed;
             fellBack.accept("hardcore.bedRest.legHealSpeed", "must be 0 or more");
+        }
+    }
+
+    private static void curse(HardcoreConfig.CurseSection curse, HardcoreConfig.CurseSection fallback,
+                              BiConsumer<String, String> fellBack) {
+        if (curse.heartsPerDeath < 0) {
+            curse.heartsPerDeath = fallback.heartsPerDeath;
+            fellBack.accept("hardcore.curse.heartsPerDeath", "must be 0 or more");
+        }
+        if (curse.heartsPerTotem < 0) {
+            curse.heartsPerTotem = fallback.heartsPerTotem;
+            fellBack.accept("hardcore.curse.heartsPerTotem", "must be 0 or more");
+        }
+        if (curse.maxLostHearts < 0) {
+            curse.maxLostHearts = fallback.maxLostHearts;
+            fellBack.accept("hardcore.curse.maxLostHearts", "must be 0 or more");
+        }
+        if (curse.healHearts < 0) {
+            curse.healHearts = fallback.healHearts;
+            fellBack.accept("hardcore.curse.healHearts", "must be 0 or more");
+        }
+        if (!(curse.healEveryDays > 0)) {
+            curse.healEveryDays = fallback.healEveryDays;
+            fellBack.accept("hardcore.curse.healEveryDays", "must be above 0");
+        }
+        if (curse.reviveRefundHearts < 0) {
+            curse.reviveRefundHearts = fallback.reviveRefundHearts;
+            fellBack.accept("hardcore.curse.reviveRefundHearts", "must be 0 or more");
+        }
+    }
+
+    // The curse must always leave more hearts than the limp needs to stop, or a cursed player could limp for good
+    private static void curseAndLimp(HardcoreConfig.HardcoreSection c, HardcoreConfig.HardcoreSection fallback,
+                                     BiConsumer<String, String> fellBack) {
+        if (!c.curse.enabled || !c.limp.enabled || 10 - c.curse.maxLostHearts > c.limp.recoverAtHearts) {
+            return;
+        }
+        // Both go back, since either one could be the typo
+        c.curse.maxLostHearts = fallback.curse.maxLostHearts;
+        c.limp.recoverAtHearts = fallback.limp.recoverAtHearts;
+        fellBack.accept("hardcore.curse.maxLostHearts", "must leave more than hardcore.limp.recoverAtHearts of the 10 hearts");
+        fellBack.accept("hardcore.limp.recoverAtHearts", "must be less than the 10 hearts hardcore.curse.maxLostHearts leaves");
+        // The limp's own pair has to hold with the recovery line it got back
+        if (!(c.limp.belowHearts < c.limp.recoverAtHearts)) {
+            c.limp.belowHearts = fallback.limp.belowHearts;
+            fellBack.accept("hardcore.limp.belowHearts", "must be less than hardcore.limp.recoverAtHearts");
         }
     }
 

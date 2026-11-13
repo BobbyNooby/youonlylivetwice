@@ -466,6 +466,11 @@ public class CommandGameTests {
                 yolt config <key> <value> | brigadier:string {"type":"greedy"} | own suggestions | level 0 | runs
                 yolt status | literal | level 2
                 yolt status <player> | brigadier:string {"type":"phrase"} | level 0 | runs
+                yolt curse | literal | level 2
+                yolt curse <player> | brigadier:string {"type":"phrase"} | level 0
+                yolt curse <player> set | literal | level 0
+                yolt curse <player> set <hearts> | brigadier:integer {"min":0} | level 0 | runs
+                yolt curse <player> clear | literal | level 0 | runs
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0
                 yolt skin set <mojangName> | brigadier:string {"type":"word"} | level 0 | runs

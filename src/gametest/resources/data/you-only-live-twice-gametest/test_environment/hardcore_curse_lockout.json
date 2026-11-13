@@ -1,0 +1,8 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.curse.enabled": "true",
+    "deathLockout.countCreativeAndSpectatorDeaths": "true",
+    "graves.enabled": "false"
+  }
+}
