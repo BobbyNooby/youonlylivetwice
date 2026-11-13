@@ -47,7 +47,8 @@ public final class Limp {
     }
 
     private static void tick(ServerPlayer player) {
-        if (!on() || StandIn.is(player)) {
+        // A dead player starts the next life whole, so the respawn mustn't put a limp on them for a tick
+        if (!on() || StandIn.is(player) || player.isDeadOrDying()) {
             LIMPING.remove(player.getUUID());
             return;
         }

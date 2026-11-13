@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.StandIn;
 import bobbynooby.dev.core.Yolt;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,6 +47,8 @@ public final class Curse {
         Hardcore.onExempt(Curse::clear);
         Hardcore.onDeath(Curse::onDeath);
         Status.register(STATUS_ORDER, Curse::statusLine);
+        // A notice belongs to this server's deaths, not to the next server started in the same process
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> TELL_ON_RETURN.clear());
     }
 
     /** A death, online or not. Only one in survival or adventure counts, whatever the lockout counts. */
