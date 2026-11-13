@@ -1,0 +1,8 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.legs.enabled": "true",
+    "hardcore.legs.heavyLandings": "true",
+    "hardcore.weight.enabled": "true"
+  }
+}

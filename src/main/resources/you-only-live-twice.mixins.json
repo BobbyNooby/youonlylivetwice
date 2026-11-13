@@ -44,6 +44,7 @@
     "GraveProtectionPistonFrontMixin",
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
+    "HardcoreFallMixin",
     "HardcoreJumpMixin",
     "InitializeBorderPacketAccessor",
     "ItemContainerContentsInvoker",

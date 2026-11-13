@@ -10,6 +10,7 @@ public final class HardcoreConfig {
     public static class HardcoreSection {
         public SlowSection slow = new SlowSection();
         public WeightSection weight = new WeightSection();
+        public LegsSection legs = new LegsSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -48,6 +49,24 @@ public final class HardcoreConfig {
         public int containerDepth = 3;
         public boolean countCursorAndGrid = true;
         public double heavyJumpExhaustion = 0.2;
+    }
+
+    // Damage is what is left after armour and protection enchantments; ticks are per heal point, and 0 means none
+    public static class LegsSection {
+        public boolean enabled = false;
+        public double breakAtDamage = 6.0;
+        public boolean heavyLandings = false;
+        public double breakAtDamageFullLoad = 4.0;
+        public boolean includeElytraCrash = false;
+        public double slow = 0.2;
+        public int healPoints = 30;
+        public int healTicks = 80;
+        public int healTicksSaturated = 40;
+        public double exhaustionPerPoint = 3.0;
+        public boolean healthFirst = true;
+        public boolean regenEffectHeals = true;
+        public int healTicksNoRegenRule = 1200;
+        public boolean bodiesCanBreakLegs = true;
     }
 
     // Name, value, name, value..., kept in the order given

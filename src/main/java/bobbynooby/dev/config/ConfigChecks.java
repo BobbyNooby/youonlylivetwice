@@ -217,6 +217,50 @@ final class ConfigChecks {
             weight.heavyJumpExhaustion = weightFallback.heavyJumpExhaustion;
             fellBack.accept("hardcore.weight.heavyJumpExhaustion", "must be 0 or more");
         }
+
+        legs(c.legs, fallback.legs, fellBack);
+    }
+
+    private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {
+        if (!(legs.breakAtDamage >= 0)) {
+            legs.breakAtDamage = fallback.breakAtDamage;
+            fellBack.accept("hardcore.legs.breakAtDamage", "must be 0 or more");
+        }
+        if (!(legs.breakAtDamageFullLoad >= 0)) {
+            legs.breakAtDamageFullLoad = fallback.breakAtDamageFullLoad;
+            fellBack.accept("hardcore.legs.breakAtDamageFullLoad", "must be 0 or more");
+        }
+        // Both go back, since either one could be the typo
+        if (legs.breakAtDamageFullLoad > legs.breakAtDamage) {
+            legs.breakAtDamage = fallback.breakAtDamage;
+            legs.breakAtDamageFullLoad = fallback.breakAtDamageFullLoad;
+            fellBack.accept("hardcore.legs.breakAtDamageFullLoad", "must be at most hardcore.legs.breakAtDamage");
+            fellBack.accept("hardcore.legs.breakAtDamage", "must be at least hardcore.legs.breakAtDamageFullLoad");
+        }
+        if (!isShare(legs.slow)) {
+            legs.slow = fallback.slow;
+            fellBack.accept("hardcore.legs.slow", "must be 0 to 1");
+        }
+        if (legs.healPoints < 0) {
+            legs.healPoints = fallback.healPoints;
+            fellBack.accept("hardcore.legs.healPoints", "must be 0 or more");
+        }
+        if (legs.healTicks < 0) {
+            legs.healTicks = fallback.healTicks;
+            fellBack.accept("hardcore.legs.healTicks", "must be 0 or more");
+        }
+        if (legs.healTicksSaturated < 0) {
+            legs.healTicksSaturated = fallback.healTicksSaturated;
+            fellBack.accept("hardcore.legs.healTicksSaturated", "must be 0 or more");
+        }
+        if (legs.healTicksNoRegenRule < 0) {
+            legs.healTicksNoRegenRule = fallback.healTicksNoRegenRule;
+            fellBack.accept("hardcore.legs.healTicksNoRegenRule", "must be 0 or more");
+        }
+        if (!(legs.exhaustionPerPoint >= 0)) {
+            legs.exhaustionPerPoint = fallback.exhaustionPerPoint;
+            fellBack.accept("hardcore.legs.exhaustionPerPoint", "must be 0 or more");
+        }
     }
 
     // Written so NaN fails too

@@ -8,6 +8,7 @@ import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.graves.LastGround;
+import bobbynooby.dev.hardcore.Hardcore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathMessages;
 import bobbynooby.dev.lockout.UncountedDeaths;
@@ -114,6 +115,8 @@ public final class OfflineDeath {
             throw e;
         }
 
+        // The dead save is committed, so the death has happened, whatever comes after
+        Hardcore.died(who.id(), mode);
         if (!uncounted) {
             DeathLockout.recordDeath(who.id(), who.name(), DeathMessages.whileAway(bodyDeathMessage));
         }
