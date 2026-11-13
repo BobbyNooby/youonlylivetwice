@@ -4,6 +4,7 @@ import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.coords.CoordinateOffsets.Translator;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketType;
+import net.minecraft.network.protocol.common.CommonPacketTypes;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.GamePacketTypes;
@@ -52,8 +53,8 @@ final class Outgoing {
     /**
      * The packet to send in place of this one. A login or a respawn always starts a new frame. Otherwise, with no
      * outgoing offset the very packet goes on, whatever the incoming one still is. Either way the chunks the client holds
-     * and the teleports it is sent are noted. A translator that throws drops the packet, and the exception never reaches
-     * the sender.
+     * and the teleports it is sent are noted. A translator that throws drops the packet, apart from a disconnect, and the
+     * exception never reaches the sender.
      */
     static @Nullable Packet<?> apply(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet) {
         Frames frames = state.frames.get();
@@ -70,6 +71,10 @@ final class Outgoing {
             // would in vanilla
             if (asItIs) {
                 CoordinateOffsets.unnoted(state, listener, packet, e);
+                return packet;
+            }
+            if (type == CommonPacketTypes.CLIENTBOUND_DISCONNECT) {
+                CoordinateOffsets.sentUntranslated(state, listener, packet, e);
                 return packet;
             }
             CoordinateOffsets.dropped(state, listener, packet, e);

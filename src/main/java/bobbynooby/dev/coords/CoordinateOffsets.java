@@ -391,6 +391,17 @@ public final class CoordinateOffsets {
     }
 
     /**
+     * A disconnect whose reason couldn't be translated goes out as it is, with the listener that closes the connection, as
+     * dropping it would leave the player stuck online. It holds only text. Logged once per packet type for each connection.
+     */
+    static void sentUntranslated(OffsetState state, ServerGamePacketListenerImpl listener, Packet<?> packet, RuntimeException e) {
+        if (state.dropFailed.add(packet.type())) {
+            Yolt.LOGGER.error("Could not translate the coordinates in a {} packet for {}, so it was sent as it is, as are later "
+                    + "ones of that type that fail", packet.type(), listener.player.getPlainTextName(), e);
+        }
+    }
+
+    /**
      * A packet that goes as it is couldn't be noted, so it goes on, but the chunks the client holds or the teleport that
      * ends a frame switch may now be wrong. Logged once per packet type for each connection.
      */

@@ -12,7 +12,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.PositionAndRotation;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentContents;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundChunksBiomesPacket;
@@ -25,6 +29,7 @@ import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
@@ -32,6 +37,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.ChunkPos;
@@ -447,6 +453,79 @@ public class CoordinateOffsetCoreGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // A kick's listener is what closes the connection, so a kick whose reason can't be translated still goes, as it is
+    // and with its listener; it holds only text. Anything else that can't be translated still goes nowhere. The listener
+    // runs when the write is done, which the test waits for.
+    @GameTest(environment = CORE, maxTicks = 20)
+    public void failedDisconnectStillGoesWithItsListener(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cokick", GameType.CREATIVE);
+        boolean[] ran = {false};
+        boolean[] cleaned = {false};
+        Runnable cleanUp = () -> {
+            if (!cleaned[0]) {
+                cleaned[0] = true;
+                TestPlayers.leave(player);
+            }
+        };
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            Component unreadable = unreadableText();
+            ClientboundDisconnectPacket kick = new ClientboundDisconnectPacket(unreadable);
+            int mark = OffsetTestKit.mark(player);
+            List<String> log = OfflineGameTests.yoltLog(() -> {
+                player.connection.send(new ClientboundSystemChatPacket(unreadable, false));
+                OffsetTestKit.connection(player).send(kick, future -> ran[0] = true);
+            });
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundSystemChatPacket.class).stream()
+                    .noneMatch(chat -> chat.content() == unreadable), "a chat line that could not be translated went out");
+            helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundDisconnectPacket.class).stream().anyMatch(sent -> sent == kick),
+                    "the kick did not go out as it is");
+            assertOneDropLine(helper, log, "clientbound/minecraft:system_chat", player);
+            String sentLine = "Could not translate the coordinates in a clientbound/minecraft:disconnect packet for "
+                    + player.getPlainTextName() + ", so it was sent as it is";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith(sentLine)).count(), 1L, "lines for the kick in " + log);
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+        helper.onEachTick(() -> {
+            if (cleaned[0] || !ran[0] && helper.getTick() < 19) {
+                return;
+            }
+            try {
+                helper.assertTrue(ran[0], "the kick's listener never ran");
+            } finally {
+                cleanUp.run();
+            }
+            helper.succeed();
+        });
+    }
+
+    // Text whose contents can't be read, as a reason holding a broken item would be
+    private static Component unreadableText() {
+        return new Component() {
+            @Override
+            public Style getStyle() {
+                return Style.EMPTY;
+            }
+
+            @Override
+            public ComponentContents getContents() {
+                throw new IllegalStateException("unreadable on purpose");
+            }
+
+            @Override
+            public List<Component> getSiblings() {
+                return List.of();
+            }
+
+            @Override
+            public FormattedCharSequence getVisualOrderText() {
+                return FormattedCharSequence.EMPTY;
+            }
+        };
     }
 
     // The same for what the client sends: as it is, the server would read it in the wrong frame
