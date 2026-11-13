@@ -18,10 +18,13 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.level.gamerules.GameRules;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Broken legs: a long fall breaks them, and they slow the player until they heal, which takes food the way health
@@ -35,13 +38,16 @@ public final class Legs {
 
     // Ticks towards the next heal point, by player object, so a respawn starts afresh. Server thread only.
     private static final Map<ServerPlayer, Double> TIMERS = new WeakHashMap<>();
+    // Multiplied together into the heal timer's speed each tick. Copy on write, as the other registries are.
+    private static final List<ToDoubleFunction<ServerPlayer>> SPEED_FACTORS = new CopyOnWriteArrayList<>();
 
     private Legs() {}
 
     static void init() {
         Slowdowns.register("legs", Legs::slowShare);
         Status.register(STATUS_ORDER, Legs::statusLine);
-        Hardcore.onTick(player -> heal(player, 1.0));
+        // The one call a tick; anything that speeds healing up or slows it down goes in as a factor
+        Hardcore.onTick(player -> heal(player, speed(player)));
         // A new life, whatever the game mode was
         Hardcore.onDeath((uuid, mode) -> {
             if (on()) {
@@ -114,6 +120,14 @@ public final class Legs {
         }
     }
 
+    /**
+     * Adds a factor to the heal timer's speed: 1.0 leaves it alone, 2.0 heals twice as fast, 0.5 half as fast. Each
+     * feature registers once, at init, and its factor returns 1.0 while it is off.
+     */
+    public static void speedFactor(ToDoubleFunction<ServerPlayer> factor) {
+        SPEED_FACTORS.add(factor);
+    }
+
     /** Sets the stored legs, online or not, with no heal progress. A death clears them with false. */
     public static void set(UUID uuid, boolean broken) {
         HardcoreStates.update(uuid, state -> {
@@ -125,6 +139,14 @@ public final class Legs {
 
     private static boolean on() {
         return Settings.on(c -> c.hardcore.legs.enabled);
+    }
+
+    private static double speed(ServerPlayer player) {
+        double speed = 1.0;
+        for (ToDoubleFunction<ServerPlayer> factor : SPEED_FACTORS) {
+            speed *= factor.applyAsDouble(player);
+        }
+        return speed;
     }
 
     // Ender pearls count as falls in vanilla's tag, but never break legs

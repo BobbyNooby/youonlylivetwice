@@ -220,6 +220,7 @@ final class ConfigChecks {
 
         legs(c.legs, fallback.legs, fellBack);
         limp(c.limp, fallback.limp, fellBack);
+        bedRest(c.bedRest, fallback.bedRest, fellBack);
     }
 
     private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {
@@ -283,6 +284,22 @@ final class ConfigChecks {
         if (!isShare(limp.slow)) {
             limp.slow = fallback.slow;
             fellBack.accept("hardcore.limp.slow", "must be 0 to 1");
+        }
+    }
+
+    private static void bedRest(HardcoreConfig.BedRestSection bedRest, HardcoreConfig.BedRestSection fallback,
+                                BiConsumer<String, String> fellBack) {
+        if (bedRest.healEveryTicks < 0) {
+            bedRest.healEveryTicks = fallback.healEveryTicks;
+            fellBack.accept("hardcore.bedRest.healEveryTicks", "must be 0 or more");
+        }
+        if (!(bedRest.exhaustionPerHeal >= 0)) {
+            bedRest.exhaustionPerHeal = fallback.exhaustionPerHeal;
+            fellBack.accept("hardcore.bedRest.exhaustionPerHeal", "must be 0 or more");
+        }
+        if (!(bedRest.legHealSpeed >= 0)) {
+            bedRest.legHealSpeed = fallback.legHealSpeed;
+            fellBack.accept("hardcore.bedRest.legHealSpeed", "must be 0 or more");
         }
     }
 

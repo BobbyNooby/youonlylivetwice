@@ -1,6 +1,7 @@
 package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.hardcore.BedRest;
 import bobbynooby.dev.world.Sleep;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
@@ -28,6 +29,12 @@ public abstract class SleepStatusMixin {
     @ModifyVariable(method = "update", at = @At("HEAD"), argsOnly = true)
     private List<ServerPlayer> withoutBodies(List<ServerPlayer> players) {
         return StandIn.without(players);
+    }
+
+    // A daytime nap never moves the clock: vanilla skips once enough have slept long enough, at any time of day
+    @ModifyVariable(method = "areEnoughDeepSleeping", at = @At("HEAD"), argsOnly = true)
+    private List<ServerPlayer> withoutNappers(List<ServerPlayer> players) {
+        return BedRest.withoutNappers(players);
     }
 
     @Inject(method = "sleepersNeeded", at = @At("HEAD"), cancellable = true)

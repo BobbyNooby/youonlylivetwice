@@ -44,6 +44,8 @@
     "GraveProtectionPistonFrontMixin",
     "GraveProtectionPistonMixin",
     "GraveProtectionWitherMixin",
+    "HardcoreBedRuleMixin",
+    "HardcoreBedWakeMixin",
     "HardcoreFallMixin",
     "HardcoreJumpMixin",
     "InitializeBorderPacketAccessor",

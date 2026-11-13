@@ -12,6 +12,7 @@ public final class HardcoreConfig {
         public WeightSection weight = new WeightSection();
         public LegsSection legs = new LegsSection();
         public LimpSection limp = new LimpSection();
+        public BedRestSection bedRest = new BedRestSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -77,6 +78,15 @@ public final class HardcoreConfig {
         public double recoverAtHearts = 3.0;
         public double slow = 0.2;
         public boolean countAbsorption = false;
+    }
+
+    // Ticks per health point healed in bed, 0 for none; legHealSpeed multiplies the broken legs' own pace
+    public static class BedRestSection {
+        public boolean enabled = false;
+        public boolean allowDaytime = true;
+        public int healEveryTicks = 50;
+        public double exhaustionPerHeal = 0.0;
+        public double legHealSpeed = 2.0;
     }
 
     // Name, value, name, value..., kept in the order given
