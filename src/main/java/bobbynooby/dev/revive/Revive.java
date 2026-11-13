@@ -1,10 +1,12 @@
 package bobbynooby.dev.revive;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.mixin.PlayerListInvoker;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.core.component.DataComponents;
@@ -80,6 +82,10 @@ public final class Revive {
         }
         // As with vanilla's own items, a creative user keeps the head
         stack.consume(1, user);
+        // The revive is on disk already, so the used head goes there too: a crash before the next autosave would give it
+        // back
+        Guard.run(() -> ((PlayerListInvoker) user.level().getServer().getPlayerList()).yoltSave(user),
+                "Could not save {} after their revive, so the head is in their save until the next one", user.nameAndId().name());
         // Sent straight to the user: Player.playSound skips the player it is played for
         user.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.TOTEM_USE),
                 SoundSource.PLAYERS, user.getX(), user.getY(), user.getZ(), 1.0F, 1.0F, user.getRandom().nextLong()));

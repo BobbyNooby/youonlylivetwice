@@ -10,6 +10,7 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.revive.Revive;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -158,6 +159,28 @@ public class ReviveGameTests {
             helper.assertValueEqual(Revive.tryUse(user, heads), Revive.Outcome.REVIVED, "outcome");
             helper.assertValueEqual(heads.getCount(), 1, "heads left");
             helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "owner is still locked out");
+        } finally {
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
+    // The revive is on disk at once, so the user is saved with the head gone: a crash before the next autosave can't
+    // give it back
+    @GameTest
+    public void reviveSavesTheUser(GameTestHelper helper) {
+        UUID owner = UUID.randomUUID();
+        DeathLockout.recordDeath(owner, "Ghost");
+        ServerPlayer user = TestPlayers.join(helper, "SavedReviver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            user.setItemInHand(InteractionHand.MAIN_HAND, reviveHead(staticProfile(owner), 2));
+            helper.assertValueEqual(Revive.tryUse(user, user.getMainHandItem()), Revive.Outcome.REVIVED, "outcome");
+            MinecraftServer server = helper.getLevel().getServer();
+            Optional<CompoundTag> saved = OfflinePlayerData.load(server, user.nameAndId());
+            helper.assertTrue(saved.isPresent(), "the user was not saved");
+            int heads = OfflinePlayerData.takeInventory(saved.get(), server.registryAccess(), user.nameAndId().name()).stream()
+                    .filter(GraveItems::isReviveHead).mapToInt(ItemStack::getCount).sum();
+            helper.assertValueEqual(heads, 1, "revive heads in the user's save");
         } finally {
             TestPlayers.leave(user);
         }
