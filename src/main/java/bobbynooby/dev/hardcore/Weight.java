@@ -87,7 +87,7 @@ public final class Weight {
         return carried(player).map(carried -> WeightTable.loadShare(carried.tally().load(), cfg.freeLoad, cfg.fullLoad)).orElse(0.0);
     }
 
-    /** What the player carries right now under these settings, worked out afresh. */
+    /** What the player carries right now under these settings, worked out afresh. Not gated by the switch: for tests. */
     public static double carriedWeight(ServerPlayer player, HardcoreConfig.WeightSection cfg) {
         return tally(player, cfg).load();
     }
@@ -175,8 +175,9 @@ public final class Weight {
             }
             double weight = weigh(stack, cfg, 0);
             load += weight;
-            // The item's own name, never one a player gave it
-            byKind.merge(stack.getItem(), new Heavy(stack.getItemName().getString(), stack.getCount(), weight), Heavy::plus);
+            // Named by the item alone: a stack's own components can name a player, as a grave head or a revive paper does
+            String kind = stack.getItem().getDefaultInstance().getItemName().getString();
+            byKind.merge(stack.getItem(), new Heavy(kind, stack.getCount(), weight), Heavy::plus);
         }
         List<Heavy> heaviest = byKind.values().stream()
                 .sorted(Comparator.comparingDouble(Heavy::weight).reversed())

@@ -3,12 +3,16 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.gametest.mixin.FoodDataAccessor;
+import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.hardcore.Slowdowns;
+import bobbynooby.dev.hardcore.Status;
 import bobbynooby.dev.hardcore.Weight;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -17,6 +21,7 @@ import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 
 import java.io.IOException;
@@ -28,6 +33,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 // Weighing is worked out straight from a fresh set of the default numbers, so those tests need no switch. The tests that
 // wait for the tick hold weight on through their environment, which puts it back when the batch ends.
@@ -37,7 +43,7 @@ public class HardcoreWeightGameTests {
     private static final String WEIGHT_CONFIG = "you-only-live-twice-gametest:hardcore_weight_config";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final double CLOSE = 1e-9;
-    // Long enough for the load to be weighed again and the slowdown to follow
+    // Weight weighs again every 10 ticks, plus 2 for the slowdown to follow; raise it with that interval
     private static final int SETTLE = 12;
 
     @GameTest
@@ -117,6 +123,35 @@ public class HardcoreWeightGameTests {
             player.getEnderChestInventory().clearContent();
             player.containerMenu.setCarried(ItemStack.EMPTY);
             player.inventoryMenu.getCraftSlots().clearContent();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A grave head and a revive paper both name someone, so the line names each by its kind. Weight is on for this one
+    // tick only.
+    @GameTest
+    public void status1HeaviestLineNeverNamesAPlayer(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Mourner", GameType.SURVIVAL, AT);
+        ResolvableProfile someone = ResolvableProfile.createResolved(new GameProfile(UUID.randomUUID(), "Someone"));
+        ItemStack paper = ReviveGameTests.reviveHead(someone, 1);
+        paper.set(DataComponents.ITEM_NAME, Component.literal("Revive Someone"));
+        HardcoreConfig.WeightSection weight = Settings.get().hardcore.weight;
+        boolean before = weight.enabled;
+        try {
+            player.getInventory().clearContent();
+            player.getInventory().add(GraveItems.graveHead(someone));
+            player.getInventory().add(paper);
+            weight.enabled = true;
+            List<String> heaviest = Status.lines(player).stream().map(Component::getString)
+                    .filter(line -> line.startsWith("  heaviest:")).toList();
+            helper.assertTrue(heaviest.size() == 1, "heaviest lines: " + heaviest);
+            String line = heaviest.getFirst();
+            helper.assertTrue(line.contains("Player Head") && line.contains("Paper"), "the heaviest line: " + line);
+            helper.assertFalse(line.contains("Someone"), "the heaviest line names a player: " + line);
+        } finally {
+            weight.enabled = before;
+            player.getInventory().clearContent();
             TestPlayers.leave(player);
         }
         helper.succeed();
