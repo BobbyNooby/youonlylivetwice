@@ -43,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -55,6 +54,8 @@ public class BodyMobGameTests {
     // Each of these holds mobsAttack off across ticks, so each has a batch of its own
     private static final String MOBS_IGNORE = "you-only-live-twice-gametest:mobs_ignore";
     private static final String MOBS_STOP = "you-only-live-twice-gametest:mobs_stop";
+    private static final SharedHold IGNORE_HOLD = new SharedHold();
+    private static final SharedHold STOP_HOLD = new SharedHold();
     // The clock stopped at midnight, so daylight can't decide a hunt: a zombie burns in it, and a spider won't start one
     private static final String MIDNIGHT = "you-only-live-twice-gametest:midnight";
     private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
@@ -85,18 +86,16 @@ public class BodyMobGameTests {
 
     @GameTest(maxTicks = 200, environment = MOBS_IGNORE)
     public void zombieIgnoresBodyWhenSwitchOff(GameTestHelper helper) {
-        YoltConfig.BodiesSection bodies = Settings.get().bodies;
-        boolean before = bodies.mobsAttack;
-        bodies.mobsAttack = false;
+        holdMobsAttackOff(IGNORE_HOLD);
         ignoresBody(helper, "SwitchedOff", EntityTypes.ZOMBIE, FOUR_AWAY,
                 (zombie, body) -> helper.assertValueEqual(body.getHealth(), body.getMaxHealth(), "body health"),
-                () -> bodies.mobsAttack = before);
+                BodyTestKit.once(IGNORE_HOLD::release));
     }
 
-    // Waits for the hunt to start, then turns the switch off and keeps it off until the end
+    // Waits for the hunt to start, then turns the switch off and keeps it off until the end. A copy in a flake hunt
+    // needs the switch on until its own hunt starts, so it waits for any copy holding it off to finish.
     @GameTest(maxTicks = 400, environment = MOBS_STOP)
     public void huntStopsWhenSwitchTurnedOff(GameTestHelper helper) {
-        YoltConfig.BodiesSection bodies = Settings.get().bodies;
         List<Entity> spawned = new ArrayList<>();
         UUID owner = null;
         boolean waiting = false;
@@ -107,21 +106,23 @@ public class BodyMobGameTests {
             Mob zombie = helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY);
             spawned.add(zombie);
             UUID bodyOwner = owner;
-            // Empty until the switch is turned off
-            AtomicReference<Boolean> before = new AtomicReference<>();
-            Runnable finish = () -> {
-                Boolean was = before.getAndSet(null);
-                if (was != null) {
-                    bodies.mobsAttack = was;
+            // Set once the switch is turned off
+            AtomicBoolean holding = new AtomicBoolean();
+            Runnable finish = BodyTestKit.once(() -> {
+                if (holding.get()) {
+                    STOP_HOLD.release();
                 }
                 cleanUp(helper, bodyOwner, spawned);
-            };
+            });
             helper.runBeforeTestEnd(finish);
             helper.startSequence()
-                    .thenWaitUntil(() -> helper.assertTrue(zombie.getTarget() == body, "the zombie has not gone for the body"))
+                    .thenWaitUntil(() -> {
+                        helper.assertFalse(STOP_HOLD.held(), "another copy holds the switch off");
+                        helper.assertTrue(zombie.getTarget() == body, "the zombie has not gone for the body");
+                    })
                     .thenExecute(() -> {
-                        before.set(bodies.mobsAttack);
-                        bodies.mobsAttack = false;
+                        holdMobsAttackOff(STOP_HOLD);
+                        holding.set(true);
                     })
                     // A mob rechecks its running target goals every other tick
                     .thenExecuteAfter(4, () -> {
@@ -607,6 +608,16 @@ public class BodyMobGameTests {
                 cleanUp(helper, owner, spawned);
             }
         }
+    }
+
+    // Copies of one test in a flake hunt share the hold, so the last to finish turns the switch back on
+    private static void holdMobsAttackOff(SharedHold hold) {
+        YoltConfig.BodiesSection bodies = Settings.get().bodies;
+        hold.take(() -> {
+            boolean mobsAttack = bodies.mobsAttack;
+            return () -> bodies.mobsAttack = mobsAttack;
+        });
+        bodies.mobsAttack = false;
     }
 
     private static ServerPlayer join(GameTestHelper helper, String name) {

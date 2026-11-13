@@ -58,6 +58,9 @@ public class LockoutGameTests {
     private static final SocketAddress ADDRESS = new InetSocketAddress("127.0.0.1", 25565);
     // A batch of its own: the join test keeps bodies on across ticks, so another test's logout would leave a body
     private static final String LOCKED_OUT_JOIN = "you-only-live-twice-gametest:locked_out_join";
+    private static final int KICK_TICKS = 20;
+    // Copies of the join test in a flake hunt all want bodies on until their kick
+    private static final SharedHold KICK_BODIES = new SharedHold();
     // The GameTest server allows one player (GameTestServer.getMaxPlayers), and vanilla refuses "server full" before
     // our check runs. Batches run one at a time, so in this one no other test's player can be online.
     static final String LOGIN_CHECK = "you-only-live-twice-gametest:login_check";
@@ -408,33 +411,45 @@ public class LockoutGameTests {
 
     // A death recorded after the login check, as when a body dies while its owner's spawn area loads. A test player
     // joins without the login check, like a player who passed it before the death.
-    @GameTest(maxTicks = 20, environment = LOCKED_OUT_JOIN)
+    @GameTest(maxTicks = KICK_TICKS, environment = LOCKED_OUT_JOIN)
     public void lockedOutJoinerIsKicked(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         UUID uuid = UUID.randomUUID();
         GameProfile profile = new GameProfile(uuid, "Late" + uuid.toString().substring(0, 8));
         // On until the kick's logout, so a body that logout wrongly left would show
-        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        KICK_BODIES.take(() -> {
+            YoltConfig.BodiesSection kept = Settings.get().bodies;
+            return () -> Settings.get().bodies = kept;
+        });
+        Settings.get().bodies = new YoltConfig.BodiesSection();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            KICK_BODIES.release();
+            BodyTestKit.cleanUp(helper, uuid);
+        });
         boolean waiting = false;
         try {
             DeathLockout.recordDeath(uuid, profile.name());
             ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
             // The kick waits for the end of the tick, so the rest of the join still runs
             helper.assertTrue(server.getPlayerList().getPlayer(uuid) == player, "kicked inside the join");
-            // A server running behind still runs queued tasks within 4 ticks
-            helper.runAfterDelay(5, () -> {
+            // The kick is a queued task, which a busy server can hold for a few ticks, so this waits for it up to the
+            // last tick, which checks whatever there is
+            helper.onEachTick(() -> {
+                if (server.getPlayerList().getPlayer(uuid) != null && helper.getTick() < KICK_TICKS - 1) {
+                    return;
+                }
                 try {
                     helper.assertTrue(server.getPlayerList().getPlayer(uuid) == null, "locked-out joiner was not kicked");
                     helper.assertTrue(BodyStore.get(server).byOwner(uuid).isEmpty(), "the kick left a body");
                 } finally {
-                    BodyTestKit.cleanUp(helper, uuid, before);
+                    cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                BodyTestKit.cleanUp(helper, uuid, before);
+                cleanUp.run();
             }
         }
     }

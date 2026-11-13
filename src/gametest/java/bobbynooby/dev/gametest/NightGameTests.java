@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 // puts the clock back when it ends. The clock keeps running, so each test moves it to midnight itself: a test only
 // starts once its chunks are ready, which can take thousands of ticks.
 // Test players get no living tick from a client, so each test drives the sleeper's, which counts how long it has slept.
+// Copies of one test in a flake hunt share the switch through a hold, but not the clock or the overworld's sleepers:
+// each copy moves the clock to midnight and adds a sleeper of its own, so leave these out of a verify run.
 public class NightGameTests {
     private static final String NIGHT = "you-only-live-twice-gametest:night";
     private static final String NIGHT_SKIP = "you-only-live-twice-gametest:night_skip";
@@ -31,17 +33,18 @@ public class NightGameTests {
     private static final String NIGHT_THUNDER = "you-only-live-twice-gametest:night_thunder";
     // Vanilla skips the night once everyone has slept this long
     private static final int DEEP_SLEEP_TICKS = 100;
+    private static final SharedHold NO_SKIP_HOLD = new SharedHold();
+    private static final SharedHold SKIP_HOLD = new SharedHold();
+    private static final SharedHold THUNDER_HOLD = new SharedHold();
 
     @GameTest(environment = NIGHT, maxTicks = 140, skyAccess = true)
     public void nightDoesNotSkipWithEveryoneAsleep(GameTestHelper helper) {
         BlockPos head = SleepGameTests.placeBed(helper);
         TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "NightOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
-        YoltConfig.SleepSection sleep = Settings.get().sleep;
-        boolean before = sleep.noNightSkip;
-        Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
+        holdNightSkip(NO_SKIP_HOLD, true);
+        Runnable cleanUp = cleanUp(sleeper, NO_SKIP_HOLD::release);
         boolean waiting = false;
         try {
-            sleep.noNightSkip = true;
             long asleepAt = goToSleep(helper, sleeper, head);
             helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night would not skip anyway");
             helper.runAfterDelay(DEEP_SLEEP_TICKS + 10, () -> {
@@ -69,12 +72,10 @@ public class NightGameTests {
     public void nightSkipsWhenSwitchOff(GameTestHelper helper) {
         BlockPos head = SleepGameTests.placeBed(helper);
         TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "EarlyBird", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
-        YoltConfig.SleepSection sleep = Settings.get().sleep;
-        boolean before = sleep.noNightSkip;
-        Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
+        holdNightSkip(SKIP_HOLD, false);
+        Runnable cleanUp = cleanUp(sleeper, SKIP_HOLD::release);
         boolean waiting = false;
         try {
-            sleep.noNightSkip = false;
             long asleepAt = goToSleep(helper, sleeper, head);
             helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night can't skip");
             helper.runBeforeTestEnd(cleanUp);
@@ -100,12 +101,10 @@ public class NightGameTests {
         BlockPos head = SleepGameTests.placeBed(helper);
         TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "StormOwl", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
         WeatherData weather = helper.getLevel().getWeatherData();
-        YoltConfig.SleepSection sleep = Settings.get().sleep;
-        boolean before = sleep.noNightSkip;
-        Runnable cleanUp = cleanUp(sleeper, () -> sleep.noNightSkip = before);
+        holdNightSkip(THUNDER_HOLD, true);
+        Runnable cleanUp = cleanUp(sleeper, THUNDER_HOLD::release);
         boolean waiting = false;
         try {
-            sleep.noNightSkip = true;
             helper.assertTrue(weather.isThundering() && weather.isRaining(), "no thunderstorm to sleep through");
             helper.assertTrue(helper.getLevel().getGameRules().get(GameRules.ADVANCE_WEATHER),
                     "the weather doesn't advance, so a night skip wouldn't clear it either");
@@ -170,6 +169,17 @@ public class NightGameTests {
         } finally {
             sleep.noNightSkip = before;
         }
+    }
+
+    // Copies of one test in a flake hunt all want the switch the same way, so they share the hold and the last to
+    // finish puts it back
+    private static void holdNightSkip(SharedHold hold, boolean noNightSkip) {
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        hold.take(() -> {
+            boolean before = sleep.noNightSkip;
+            return () -> sleep.noNightSkip = before;
+        });
+        sleep.noNightSkip = noNightSkip;
     }
 
     // Puts the switch back and the sleeper out, once only, at the test's end or just before its timeout

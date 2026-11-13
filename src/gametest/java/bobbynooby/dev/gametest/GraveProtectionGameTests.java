@@ -82,6 +82,9 @@ public class GraveProtectionGameTests {
     private static final String GRAVES_SWITCH = "you-only-live-twice-gametest:graves_switch";
     // The test server keeps the re-check off, since tests leave graves without a head on purpose; this one turns it on
     private static final String GRAVE_RECHECK = "you-only-live-twice-gametest:grave_recheck";
+    // Copies of a test in a flake hunt that hold the same switch across ticks
+    private static final SharedHold RECHECK_HOLD = new SharedHold();
+    private static final SharedHold GRAVES_OFF_HOLD = new SharedHold();
 
     @GameTest
     public void playerCannotBreakGrave(GameTestHelper helper) {
@@ -455,12 +458,15 @@ public class GraveProtectionGameTests {
         Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         ChunkPos chunk = ChunkPos.containing(grave.pos());
         YoltConfig.GravesSection graves = Settings.get().graves;
-        int secondsBefore = graves.recheckSeconds;
-        Runnable cleanUp = () -> {
-            graves.recheckSeconds = secondsBefore;
+        RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> graves.recheckSeconds = seconds;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            RECHECK_HOLD.release();
             LiveSettings.applyAll(server);
             removeGraves(helper, List.of(grave));
-        };
+        });
         boolean waiting = false;
         try {
             graves.recheckSeconds = 1;
@@ -646,13 +652,16 @@ public class GraveProtectionGameTests {
         store.put(far);
         ServerPlayer player = TestPlayers.join(helper, "OffOpener", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         YoltConfig.GravesSection graves = Settings.get().graves;
-        boolean before = graves.enabled;
-        Runnable cleanUp = () -> {
-            graves.enabled = before;
+        GRAVES_OFF_HOLD.take(() -> {
+            boolean enabled = graves.enabled;
+            return () -> graves.enabled = enabled;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            GRAVES_OFF_HOLD.release();
             TestPlayers.leave(player);
             removeGraves(helper, List.of(grave, far));
             level.setChunkForced(chunk.x(), chunk.z(), false);
-        };
+        });
         boolean waiting = false;
         try {
             graves.enabled = false;

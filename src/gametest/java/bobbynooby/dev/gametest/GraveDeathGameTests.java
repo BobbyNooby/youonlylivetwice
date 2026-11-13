@@ -79,6 +79,8 @@ import java.util.UUID;
 public class GraveDeathGameTests {
     // Holds graves.tellLocation across ticks, until a kick
     private static final String GRAVE_NOTICE = "you-only-live-twice-gametest:grave_notice";
+    private static final int TELL_TICKS = 30;
+    private static final SharedHold TELL_HOLD = new SharedHold();
 
     @GameTest
     public void deathCreatesGraveWithItemsAndHead(GameTestHelper helper) {
@@ -1015,20 +1017,27 @@ public class GraveDeathGameTests {
     // Never says nothing even for a grave far below the death, and always tells even for one where the player died: in
     // chat after the respawn while the lockout is off, and in the kick while it is on. The setting is held until the
     // kick, so the test runs apart.
-    @GameTest(environment = GRAVE_NOTICE, skyAccess = true, maxTicks = 30)
+    @GameTest(environment = GRAVE_NOTICE, skyAccess = true, maxTicks = TELL_TICKS)
     public void tellLocationNeverAndAlways(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         MinecraftServer server = level.getServer();
         YoltConfig config = Settings.get();
-        YoltConfig.TellLocation modeBefore = config.graves.tellLocation;
-        boolean lockoutBefore = config.deathLockout.enabled;
         ServerPlayer quiet = TestPlayers.join(helper, "Quiet", GameType.SURVIVAL, new BlockPos(3, 20, 3));
         ServerPlayer told = TestPlayers.join(helper, "Told", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         ServerPlayer kicked = TestPlayers.join(helper, "KickTold", GameType.SURVIVAL, new BlockPos(5, 1, 5));
         List<UUID> owners = List.of(quiet.getUUID(), told.getUUID(), kicked.getUUID());
-        Runnable cleanUp = () -> {
-            config.graves.tellLocation = modeBefore;
-            config.deathLockout.enabled = lockoutBefore;
+        // Each copy holds always and the lockout as it was until its own kick, so copies share the hold
+        TELL_HOLD.take(() -> {
+            YoltConfig.TellLocation mode = config.graves.tellLocation;
+            boolean lockout = config.deathLockout.enabled;
+            return () -> {
+                config.graves.tellLocation = mode;
+                config.deathLockout.enabled = lockout;
+            };
+        });
+        boolean lockoutBefore = config.deathLockout.enabled;
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            TELL_HOLD.release();
             for (UUID owner : owners) {
                 ServerPlayer online = server.getPlayerList().getPlayer(owner);
                 if (online != null) {
@@ -1036,7 +1045,7 @@ public class GraveDeathGameTests {
                 }
                 removeGraves(helper, owner);
             }
-        };
+        });
         boolean waiting = false;
         try {
             config.deathLockout.enabled = false;
@@ -1056,8 +1065,12 @@ public class GraveDeathGameTests {
             config.deathLockout.enabled = lockoutBefore;
             kill(helper, kicked);
             Grave kickedGrave = onlyGrave(helper, kicked);
-            // A server running behind still runs queued tasks within 4 ticks
-            helper.runAfterDelay(5, () -> {
+            // The kick is a queued task, which a busy server can hold for a few ticks, so this waits for it up to the
+            // last tick, which checks whatever there is
+            helper.onEachTick(() -> {
+                if (server.getPlayerList().getPlayer(kicked.getUUID()) != null && helper.getTick() < TELL_TICKS - 1) {
+                    return;
+                }
                 try {
                     helper.assertTrue(server.getPlayerList().getPlayer(kicked.getUUID()) == null, "the dead player was not kicked");
                     String reason = LockoutGameTests.disconnectReason(kicked);

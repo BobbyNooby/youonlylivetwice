@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 // Switches are restored in a finally block in the same tick, apart from the signed whisper's, which waits in a batch of its own.
 public class WhisperGameTests {
     private static final String SIGNED_WHISPER = "you-only-live-twice-gametest:signed_whisper";
+    private static final SharedHold SIGNED_HOLD = new SharedHold();
 
     // The reply a restricted player's /w gets with whispers off is checked in whisperOffReplyIsSameWhenRestricted
     @GameTest
@@ -366,16 +367,22 @@ public class WhisperGameTests {
     @GameTest(environment = SIGNED_WHISPER, maxTicks = 20)
     public void signedWhisperDeliversWhenRestricted(GameTestHelper helper) {
         YoltConfig config = Settings.get();
-        boolean restrictBefore = config.restrictCommands;
-        boolean whispersBefore = config.chat.allowWhispers;
-        int radiusBefore = config.chat.radius;
+        // Copies of this test in a flake hunt all want the same switches until their own whisper, so they share the hold
+        SIGNED_HOLD.take(() -> {
+            boolean restrict = config.restrictCommands;
+            boolean whispers = config.chat.allowWhispers;
+            int radius = config.chat.radius;
+            return () -> {
+                config.restrictCommands = restrict;
+                config.chat.allowWhispers = whispers;
+                config.chat.radius = radius;
+            };
+        });
         List<ServerPlayer> joined = new ArrayList<>();
         AtomicBoolean cleaned = new AtomicBoolean();
         Runnable cleanUp = () -> {
             if (cleaned.compareAndSet(false, true)) {
-                config.restrictCommands = restrictBefore;
-                config.chat.allowWhispers = whispersBefore;
-                config.chat.radius = radiusBefore;
+                SIGNED_HOLD.release();
                 leaveAll(joined);
             }
         };
