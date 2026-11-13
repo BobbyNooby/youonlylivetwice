@@ -59,8 +59,10 @@ public class HardcoreColdGameTests {
     // Five once-a-second steps at 0.01 each, counted from when the players join. The environment clears the weather,
     // but rain left from before fades over up to 80 ticks and would still count as wet, so the test waits it out. The
     // structure's floor is barrier, which lets sky light up through it, so the hut has a stone floor of its own and is
-    // closed on all six sides; the players join only once the light engine has darkened the hut.
-    @GameTest(environment = COLD, maxTicks = 260, skyAccess = true)
+    // closed on all six sides; the players join only once the light engine has darkened the hut. The limit is large
+    // because the test server ticks without sleeping while the light engine works in real time, so that wait can take
+    // a couple of thousand ticks.
+    @GameTest(environment = COLD, maxTicks = 2400, skyAccess = true)
     public void cold2RisesUnderOpenSkyNotUnderARoof(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         Scene scene = new Scene(helper);
