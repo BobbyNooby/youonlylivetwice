@@ -190,6 +190,9 @@ class ConfigKeysTest {
                 Map.entry("hardcore.relentlessMobs.doorBreakerChance", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.bloodMoon.health", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.bloodMoon.speed", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.bloodMoon.armourChance", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.bloodMoon.enchantChance", Applies.When.MOBS_LOAD),
+                Map.entry("hardcore.bloodMoon.chargedCreeperChance", Applies.When.MOBS_LOAD),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
                 Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);

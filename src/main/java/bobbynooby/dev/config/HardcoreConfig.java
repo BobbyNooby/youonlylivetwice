@@ -272,11 +272,11 @@ public final class HardcoreConfig {
         public double spawnCap = 2.0;
         public boolean capBoostNearPlayerBodies = false;
         public boolean canSleepThrough = false;
-        public double armourChance = 0.35;
-        public double enchantChance = 0.25;
+        @Applies(Applies.When.MOBS_LOAD) public double armourChance = 0.35;
+        @Applies(Applies.When.MOBS_LOAD) public double enchantChance = 0.25;
         public double xp = 2.0;
         public int extraLootRolls = 1;
-        public double chargedCreeperChance = 0.0;
+        @Applies(Applies.When.MOBS_LOAD) public double chargedCreeperChance = 0.0;
         public boolean bossBar = true;
         public boolean darkenSky = true;
         public boolean fog = false;
