@@ -69,9 +69,15 @@ public final class Cold {
         return level.dimension() == Level.OVERWORLD && level.getBiome(pos).value().coldEnoughToSnow(pos, level.getSeaLevel());
     }
 
-    /** True for a player whose freezing comes from our chill, not from something stronger such as powder snow. */
+    /**
+     * True for a player whose freezing comes from our chill. Powder snow that can freeze the player is vanilla's: its
+     * slowdown and its freeze hit stay as they are, even at a full chill.
+     */
     public static boolean chills(LivingEntity entity) {
         if (!(entity instanceof ServerPlayer player) || !counts(player)) {
+            return false;
+        }
+        if (player.isInPowderSnow && player.canFreeze()) {
             return false;
         }
         double chill = HardcoreStates.of(player).chill;

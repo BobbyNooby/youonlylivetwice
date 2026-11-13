@@ -170,7 +170,8 @@ public class HardcoreColdGameTests {
     }
 
     // The first player is never ticked by vanilla, so nothing takes frozen ticks off and the chill alone sets them. The
-    // second stands in powder snow with no chill while the test runs vanilla's own tick.
+    // second stands in powder snow with no chill while the test runs vanilla's own tick; the third too, at a full chill,
+    // and powder snow's slowdown stays vanilla's for them as well.
     @GameTest(environment = FROST, maxTicks = 30)
     public void cold4FrozenTicksFollowChill(GameTestHelper helper) {
         Scene scene = new Scene(helper);
@@ -182,11 +183,18 @@ public class HardcoreColdGameTests {
             helper.setBlock(new BlockPos(5, 1, 5), Blocks.POWDER_SNOW);
             helper.setBlock(new BlockPos(5, 2, 5), Blocks.POWDER_SNOW);
             ServerPlayer sinking = scene.join("Sinking", new BlockPos(5, 1, 5));
+            helper.setBlock(new BlockPos(2, 0, 6), Blocks.STONE);
+            helper.setBlock(new BlockPos(2, 1, 6), Blocks.POWDER_SNOW);
+            helper.setBlock(new BlockPos(2, 2, 6), Blocks.POWDER_SNOW);
+            ServerPlayer frozenInSnow = scene.join("FrozenInSnow", new BlockPos(2, 1, 6));
             setChill(chilled, 0.5);
             setChill(sinking, 0.0);
+            setChill(frozenInSnow, 1.0);
             helper.onEachTick(() -> {
-                if (!sinking.isRemoved()) {
-                    tickVanilla(sinking, scene.cleanUp);
+                for (ServerPlayer player : List.of(sinking, frozenInSnow)) {
+                    if (!player.isRemoved()) {
+                        tickVanilla(player, scene.cleanUp);
+                    }
                 }
             });
             helper.runAfterDelay(2, () -> {
@@ -209,6 +217,9 @@ public class HardcoreColdGameTests {
                     AttributeInstance speed = sinking.getAttribute(Attributes.MOVEMENT_SPEED);
                     helper.assertTrue(speed != null && speed.getModifier(POWDER_SNOW_SLOW) != null,
                             "vanilla's powder snow slowdown is missing");
+                    AttributeInstance frozenSpeed = frozenInSnow.getAttribute(Attributes.MOVEMENT_SPEED);
+                    helper.assertTrue(frozenSpeed != null && frozenSpeed.getModifier(POWDER_SNOW_SLOW) != null,
+                            "vanilla's powder snow slowdown is missing at a full chill");
                 } finally {
                     scene.cleanUp.run();
                 }
