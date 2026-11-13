@@ -404,11 +404,11 @@ public class CoordinateOffsetCoreGameTests {
             TestPlayers.receive(player, new ServerboundMovePlayerPacket.Pos(client.x + 1, client.y, client.z, false, false));
             helper.assertValueEqual(player.getX(), real.x + 1, "x after a step east");
             helper.assertValueEqual(player.getZ(), real.z, "z after a step east");
-            // Walking while turning, the move a real client sends most
-            TestPlayers.receive(player, new ServerboundMovePlayerPacket.PosRot(client.x + 1, client.y, client.z + 1, 90.0F, 10.0F,
+            // Walking while turning, the move a real client sends most: back west to the join spot, which is clear
+            TestPlayers.receive(player, new ServerboundMovePlayerPacket.PosRot(client.x, client.y, client.z, 90.0F, 10.0F,
                     false, false));
-            helper.assertValueEqual(player.getX(), real.x + 1, "x after a step south while turning");
-            helper.assertValueEqual(player.getZ(), real.z + 1, "z after a step south while turning");
+            helper.assertValueEqual(player.getX(), real.x, "x after a step back west while turning");
+            helper.assertValueEqual(player.getZ(), real.z, "z after a step back west while turning");
             helper.assertValueEqual(player.getYRot(), 90.0F, "turn after the step");
             // A ridden mount's move, read the same way
             ServerboundMoveVehiclePacket vehicle = (ServerboundMoveVehiclePacket) CoordinateOffsets.incoming(
