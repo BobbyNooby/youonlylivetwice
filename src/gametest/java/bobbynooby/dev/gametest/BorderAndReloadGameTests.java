@@ -247,7 +247,7 @@ public class BorderAndReloadGameTests {
             // confirm, because the test structures and anything in them sit far outside a 100 block border
             List<String> output = run(server, "yolt center " + (spawn.getX() + 10000) + " " + spawn.getZ() + " confirm");
             helper.assertTrue(output.size() == 1
-                            && output.get(0).endsWith(" The world spawn is outside the new border; move it with /setworldspawn."),
+                            && output.get(0).endsWith(SPAWN_NOTE + OFFLINE_NOTE),
                     "command output: " + output);
 
             // Centred on the spawn, it stays inside, so there's no note
