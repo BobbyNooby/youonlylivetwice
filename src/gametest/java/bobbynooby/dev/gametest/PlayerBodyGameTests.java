@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
@@ -159,6 +160,42 @@ public class PlayerBodyGameTests {
     @GameTest(maxTicks = 60, environment = PLAYER_BODY)
     public void playerBodyStaysWhenImmovable(GameTestHelper helper) {
         fallTest(helper, "PlayerStays", false);
+    }
+
+    // The stop's body, then a LEAVE after it, for a player body: still one body and one record, and the gear comes
+    // back once
+    @GameTest(environment = PLAYER_BODY)
+    public void stopThenLeaveLeavesOnePlayerBody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "StoppedPlayer", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            Bodies.leaveBody(player);
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "no body record after the stop");
+            helper.assertValueEqual(playerBodiesOf(helper, owner).size(), 1, "player bodies after the stop");
+
+            TestPlayers.leave(player);
+            List<PlayerBody> bodies = playerBodiesOf(helper, owner);
+            helper.assertValueEqual(bodies.size(), 1, "player bodies after the stop and LEAVE");
+            PlayerBody body = bodies.get(0);
+            helper.assertValueEqual(store(helper).byOwner(owner).map(BodyRecord::bodyEntity), Optional.of(body.getUUID()),
+                    "record's body");
+            helper.assertTrue(ItemStack.matches(body.getItemBySlot(EquipmentSlot.CHEST), new ItemStack(Items.IRON_CHESTPLATE)),
+                    "chest slot of the body: " + body.getItemBySlot(EquipmentSlot.CHEST));
+            AABB around = new AABB(body.position(), body.position()).inflate(2.0);
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).isEmpty(), "items dropped by the bodies");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, ON_FLOOR);
+            helper.assertValueEqual(back.getInventory().countItem(Items.IRON_CHESTPLATE), 1, "chestplates after login");
+            helper.assertValueEqual(back.getInventory().countItem(Items.IRON_SWORD), 1, "swords after login");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "body record kept after login");
+            helper.assertTrue(playerBodiesOf(helper, owner).isEmpty(), "a player body is left after login");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
     }
 
     @GameTest
