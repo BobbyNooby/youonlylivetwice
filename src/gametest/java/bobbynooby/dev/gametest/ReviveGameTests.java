@@ -75,7 +75,7 @@ public class ReviveGameTests {
         try {
             CraftingInput input = grid(withMaterials(GraveItems.graveHead(Profiles.of(player))));
             Optional<RecipeHolder<CraftingRecipe>> recipe = findRecipe(helper, input);
-            helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and its four materials");
+            helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and its five materials");
             helper.assertValueEqual(recipe.get().id().identifier(), Yolt.id("revive"), "recipe id");
 
             ItemStack result = recipe.get().value().assemble(input);
@@ -145,7 +145,7 @@ public class ReviveGameTests {
     @GameTest
     public void plainHeadDoesNotMatchRecipe(GameTestHelper helper) {
         CraftingInput input = grid(withMaterials(new ItemStack(Items.PLAYER_HEAD)));
-        helper.assertTrue(findRecipe(helper, input).isEmpty(), "a plain head and the four materials made something");
+        helper.assertTrue(findRecipe(helper, input).isEmpty(), "a plain head and the five materials made something");
         helper.succeed();
     }
 
@@ -610,10 +610,10 @@ public class ReviveGameTests {
         helper.succeed();
     }
 
-    // The head and the recipe's four materials
+    // The head and the recipe's five materials
     private static List<ItemStack> withMaterials(ItemStack head) {
         return List.of(head, new ItemStack(Items.NETHER_STAR), new ItemStack(Items.NETHERITE_INGOT),
-                new ItemStack(Items.GOLD_INGOT), new ItemStack(Items.IRON_INGOT));
+                new ItemStack(Items.DIAMOND), new ItemStack(Items.GOLD_INGOT), new ItemStack(Items.IRON_INGOT));
     }
 
     // The stacks fill an otherwise empty 3x3 grid from its top-left corner
