@@ -451,6 +451,17 @@ public final class ConfigLoader {
 
             if (value == null) {
                 result.add(key, def);
+            } else if (ConfigKeys.numberMap(path) || ConfigKeys.numberMapOfMaps(path)) {
+                // Read whole, so the file's names are never unknown keys and a name it leaves out is gone
+                boolean nested = ConfigKeys.numberMapOfMaps(path);
+                if (nested ? isMapOfNumberMaps(value) : isNumberMap(value)) {
+                    result.add(key, value);
+                } else {
+                    result.add(key, def);
+                    refused.add(path);
+                    warnings.add(path + ": expected an object of " + (nested ? "objects of numbers" : "numbers")
+                            + ", using " + fallbackName);
+                }
             } else if (def.isJsonObject()) {
                 if (value.isJsonObject()) {
                     result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, refused));
@@ -486,6 +497,32 @@ public final class ConfigLoader {
             }
         }
         return result;
+    }
+
+    // Every value a finite number, so Gson can read it into a map of doubles and write it back
+    private static boolean isNumberMap(JsonElement value) {
+        if (!value.isJsonObject()) {
+            return false;
+        }
+        for (Map.Entry<String, JsonElement> entry : value.getAsJsonObject().entrySet()) {
+            JsonElement item = entry.getValue();
+            if (!item.isJsonPrimitive() || !item.getAsJsonPrimitive().isNumber() || !Double.isFinite(item.getAsDouble())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isMapOfNumberMaps(JsonElement value) {
+        if (!value.isJsonObject()) {
+            return false;
+        }
+        for (Map.Entry<String, JsonElement> entry : value.getAsJsonObject().entrySet()) {
+            if (!isNumberMap(entry.getValue())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isStringArray(JsonElement value) {

@@ -1,7 +1,9 @@
 package bobbynooby.dev.config;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 
 /** Range checks on a loaded config. A value that fails is replaced by the fallback's. */
@@ -25,6 +27,8 @@ final class ConfigChecks {
     // is a real, smaller search. At 32 it reads up to 4,225 columns.
     static final int MIN_VOID_SEARCH_RADIUS = 1;
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
+    // Each level is one more pass over the contents of the containers inside, so the count stays cheap
+    static final int MAX_CONTAINER_DEPTH = 8;
 
     private ConfigChecks() {}
 
@@ -130,7 +134,103 @@ final class ConfigChecks {
                 "serverList.hoverLines", warnings);
         c.hide.tabHeaderLines = capped(c.hide.tabHeaderLines, MAX_TAB_HEADER_LINES, MAX_TAB_HEADER_LINE_LENGTH,
                 "hide.tabHeaderLines", warnings);
+        hardcore(c.hardcore, fallback.hardcore, fellBack);
         return reset;
+    }
+
+    private static void hardcore(HardcoreConfig.HardcoreSection c, HardcoreConfig.HardcoreSection fallback,
+                                 BiConsumer<String, String> fellBack) {
+        HardcoreConfig.SlowSection slow = c.slow;
+        if (!isShare(slow.cap)) {
+            slow.cap = fallback.slow.cap;
+            fellBack.accept("hardcore.slow.cap", "must be 0 to 1");
+        }
+        if (!(slow.step > 0)) {
+            slow.step = fallback.slow.step;
+            fellBack.accept("hardcore.slow.step", "must be above 0");
+        }
+        // Both go back, since either one could be the typo
+        if (slow.step > slow.cap) {
+            slow.cap = fallback.slow.cap;
+            slow.step = fallback.slow.step;
+            fellBack.accept("hardcore.slow.step", "must be at most hardcore.slow.cap");
+            fellBack.accept("hardcore.slow.cap", "must be at least hardcore.slow.step");
+        }
+
+        HardcoreConfig.WeightSection weight = c.weight;
+        HardcoreConfig.WeightSection weightFallback = fallback.weight;
+        if (!(weight.freeLoad >= 0)) {
+            weight.freeLoad = weightFallback.freeLoad;
+            fellBack.accept("hardcore.weight.freeLoad", "must be 0 or more");
+        }
+        if (!(weight.fullLoad >= 0)) {
+            weight.fullLoad = weightFallback.fullLoad;
+            fellBack.accept("hardcore.weight.fullLoad", "must be 0 or more");
+        }
+        if (!(weight.freeLoad < weight.fullLoad)) {
+            weight.freeLoad = weightFallback.freeLoad;
+            weight.fullLoad = weightFallback.fullLoad;
+            fellBack.accept("hardcore.weight.freeLoad", "must be below hardcore.weight.fullLoad");
+            fellBack.accept("hardcore.weight.fullLoad", "must be above hardcore.weight.freeLoad");
+        }
+        if (!isShare(weight.maxSlow)) {
+            weight.maxSlow = weightFallback.maxSlow;
+            fellBack.accept("hardcore.weight.maxSlow", "must be 0 to 1");
+        }
+        if (!(weight.defaultWeight >= 0)) {
+            weight.defaultWeight = weightFallback.defaultWeight;
+            fellBack.accept("hardcore.weight.defaultWeight", "must be 0 or more");
+        }
+        if (!(weight.unstackableWeight >= 0)) {
+            weight.unstackableWeight = weightFallback.unstackableWeight;
+            fellBack.accept("hardcore.weight.unstackableWeight", "must be 0 or more");
+        }
+        if (!(weight.toolWeight >= 0)) {
+            weight.toolWeight = weightFallback.toolWeight;
+            fellBack.accept("hardcore.weight.toolWeight", "must be 0 or more");
+        }
+        if (!noneNegative(weight.groups)) {
+            weight.groups = new LinkedHashMap<>(weightFallback.groups);
+            fellBack.accept("hardcore.weight.groups", "every weight must be 0 or more");
+        }
+        if (!noneNegative(weight.items)) {
+            weight.items = new LinkedHashMap<>(weightFallback.items);
+            fellBack.accept("hardcore.weight.items", "every weight must be 0 or more");
+        }
+        if (!noneNegative(weight.itemsEach)) {
+            weight.itemsEach = new LinkedHashMap<>(weightFallback.itemsEach);
+            fellBack.accept("hardcore.weight.itemsEach", "every weight must be 0 or more");
+        }
+        if (!noneNegative(weight.armourFactors)) {
+            weight.armourFactors = new LinkedHashMap<>(weightFallback.armourFactors);
+            fellBack.accept("hardcore.weight.armourFactors", "every factor must be 0 or more");
+        }
+        if (!isShare(weight.containerContents)) {
+            weight.containerContents = weightFallback.containerContents;
+            fellBack.accept("hardcore.weight.containerContents", "must be 0 to 1");
+        }
+        if (weight.containerDepth < 0 || weight.containerDepth > MAX_CONTAINER_DEPTH) {
+            weight.containerDepth = weightFallback.containerDepth;
+            fellBack.accept("hardcore.weight.containerDepth", "must be 0 to " + MAX_CONTAINER_DEPTH);
+        }
+        if (!(weight.heavyJumpExhaustion >= 0)) {
+            weight.heavyJumpExhaustion = weightFallback.heavyJumpExhaustion;
+            fellBack.accept("hardcore.weight.heavyJumpExhaustion", "must be 0 or more");
+        }
+    }
+
+    // Written so NaN fails too
+    private static boolean isShare(double value) {
+        return value >= 0 && value <= 1;
+    }
+
+    private static boolean noneNegative(Map<String, Double> values) {
+        for (Double value : values.values()) {
+            if (value == null || !(value >= 0)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Like the End cap, what fits is kept rather than the whole list falling back. A list that fits comes back as it is.

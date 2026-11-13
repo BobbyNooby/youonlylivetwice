@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -15,8 +16,14 @@ import java.util.regex.Pattern;
 public final class ConfigKeys {
     // The file's layout, not a setting
     private static final String VERSION = "configVersion";
-    // One typed value can't hold a list, so these are changed in the file
-    private static final Set<String> FILE_ONLY = Set.of("serverList.hoverLines", "hide.tabHeaderLines");
+    // Maps of names to numbers, read whole from the file: the file's object replaces the default rather than adding to it
+    private static final Set<String> NUMBER_MAPS = Set.of("hardcore.weight.groups", "hardcore.weight.items",
+            "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
+    // The same, one level deeper: each name maps to an object of numbers
+    private static final Set<String> NUMBER_MAP_MAPS = Set.of();
+    // One typed value can't hold a list or a map, so these are changed in the file
+    private static final Set<String> FILE_ONLY = union(Set.of("serverList.hoverLines", "hide.tabHeaderLines"),
+            NUMBER_MAPS, NUMBER_MAP_MAPS);
     private static final Pattern LOG_FORM = Pattern.compile("([\\w.]+): (.+)");
 
     private ConfigKeys() {}
@@ -33,6 +40,25 @@ public final class ConfigKeys {
     /** True for a setting that has no key here because it is changed only in the file, then reloaded. */
     public static boolean fileOnly(String path) {
         return FILE_ONLY.contains(path);
+    }
+
+    /** True for a map of names to numbers, which the loader reads whole. */
+    static boolean numberMap(String path) {
+        return NUMBER_MAPS.contains(path);
+    }
+
+    /** True for a map of names to objects of numbers, which the loader reads whole. */
+    static boolean numberMapOfMaps(String path) {
+        return NUMBER_MAP_MAPS.contains(path);
+    }
+
+    @SafeVarargs
+    private static Set<String> union(Set<String>... sets) {
+        Set<String> all = new HashSet<>();
+        for (Set<String> set : sets) {
+            all.addAll(set);
+        }
+        return Set.copyOf(all);
     }
 
     /**

@@ -34,7 +34,8 @@ class ConfigKeysTest {
     // Every leaf of the file a fresh config writes, found from the JSON rather than the fields
     private static void leaves(JsonObject json, String prefix, Set<String> paths) {
         for (Map.Entry<String, JsonElement> entry : json.entrySet()) {
-            if (entry.getValue().isJsonObject()) {
+            // A file-only map is one leaf: its names are data, not keys
+            if (entry.getValue().isJsonObject() && !ConfigKeys.fileOnly(prefix + entry.getKey())) {
                 leaves(entry.getValue().getAsJsonObject(), prefix + entry.getKey() + ".", paths);
             } else {
                 paths.add(prefix + entry.getKey());
@@ -64,6 +65,10 @@ class ConfigKeysTest {
         assertTrue(leaves.remove("configVersion"));
         assertTrue(leaves.remove("serverList.hoverLines"));
         assertTrue(leaves.remove("hide.tabHeaderLines"));
+        assertTrue(leaves.remove("hardcore.weight.groups"));
+        assertTrue(leaves.remove("hardcore.weight.items"));
+        assertTrue(leaves.remove("hardcore.weight.itemsEach"));
+        assertTrue(leaves.remove("hardcore.weight.armourFactors"));
         assertEquals(leaves, new HashSet<>(paths));
         assertEquals(leaves.size(), paths.size(), "a path is listed twice: " + paths);
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());

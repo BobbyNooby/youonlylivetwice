@@ -23,6 +23,7 @@ public class YoltConfig {
     public BodiesSection bodies = new BodiesSection();
     public ServerListSection serverList = new ServerListSection();
     public SkinsSection skins = new SkinsSection();
+    public HardcoreConfig.HardcoreSection hardcore = new HardcoreConfig.HardcoreSection();
 
     public static class WorldBorderSection {
         public boolean enabled = true;
