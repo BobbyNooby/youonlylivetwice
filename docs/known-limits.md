@@ -63,7 +63,8 @@
   (`hardcore.tougherMobs.includeSpawners`).
 - **Mobs from before tougher mobs.** A mob saved before tougher mobs was first turned on counts as naturally spawned
   when it next loads, so it is boosted even if it came from a spawn egg or a command back then.
-- **The revive paper texture** needs a required resource pack, which turns away players who decline it. Revive papers
+- **The revive paper texture** comes from a resource pack the server can make optional or required. With it required,
+  players who decline it can't join; with it optional, they see the missing texture on revive papers. Revive papers
   outside a player's inventory or open container (item frames, the ground, bundles, shulker boxes, closed chests)
   keep the model they had until a player has them again, so after the switch is turned off they show the missing
   texture to players without the pack.

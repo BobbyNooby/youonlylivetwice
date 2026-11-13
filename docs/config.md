@@ -300,7 +300,7 @@ See [Curse of the Undead](hardcore.md#curse-of-the-undead). In hearts.
 | `heartsPerTotem` | `1` | Hearts a totem takes, 0 or more. 0 makes totems free. | New deaths |
 | `maxLostHearts` | `2` | The most hearts the curse takes in all, 0 or more. | No |
 | `healHearts` | `1` | Hearts that come back each time, 0 or more. | No |
-| `healEveryDays` | `5.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play per heal. Decimals work. Above 0. | No |
+| `healEveryDays` | `5.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play in survival or adventure per heal. Decimals work. Above 0. | No |
 | `countAfk` | `true` | Online time counts while the player stands idle. Off: not after 5 minutes without moving or acting. | No |
 | `reviveRefundHearts` | `0` | Hearts a revive paper gives back, 0 or more. | No |
 | `unkillRefunds` | `true` | `/yolt unkill` gives back what the death it undoes took. | No |
@@ -406,7 +406,7 @@ mobs' own, and the chances are the least a mob spawned in a blood moon gets.
 | `chance` | `0.1` | The chance each night is a blood moon, 0 to 1. | No |
 | `minNightsBetween` | `5` | Calm nights at least between two, 0 or more. | No |
 | `fullMoonsOnly` | `false` | Only full moons can roll. | No |
-| `graceDays` | `8` | No blood moon before this day of the world, 0 or more. | No |
+| `graceDays` | `8` | No blood moon in the world's first this many days (days count from 0), 0 or more. | No |
 | `startTick` | `12542` | When the night starts. | No |
 | `endTick` | `23460` | When the night ends. | No |
 | `warnTick` | `9000` | When the warning goes out. | No |
@@ -471,7 +471,7 @@ match nothing.
 | `hardcore.weight.groups` | An item tag (without `#`) and a stack weight. An item in several takes the first in the list, so put specific tags first. | `c:ores`, `c:raw_materials`, `c:ingots`, `c:stones`, `c:cobblestones`, `c:obsidians`, `minecraft:stone_bricks`, `minecraft:logs`: 3.0. `c:storage_blocks/iron`, `/gold`, `/copper`, `/netherite`, `/raw_iron`, `/raw_gold`, `/raw_copper`: 27.0. `c:storage_blocks`: 9.0. `c:feathers`, `c:strings`: 0.25. |
 | `hardcore.weight.items` | An item id and a stack weight. Beats armour, tools and groups. | `minecraft:paper` 0.25, `minecraft:anvil` 9.0 |
 | `hardcore.weight.itemsEach` | An item id and a weight for each single item. Beats everything else. | `minecraft:elytra` 1.5, `minecraft:mace` 2.0 |
-| `hardcore.weight.armourFactors` | An armour material and a factor. A worn piece weighs its armour points times its factor. A material not listed weighs `defaultWeight`. | `leather` 0.15, `copper` 0.25, `chainmail` 0.25, `gold` 0.25, `iron` 0.3, `turtle_scute` 0.3, `diamond` 0.35, `netherite` 0.45 |
+| `hardcore.weight.armourFactors` | An armour material and a factor. An armour piece, worn or carried, weighs its armour points times its factor. A material not listed weighs `defaultWeight`. | `leather` 0.15, `copper` 0.25, `chainmail` 0.25, `gold` 0.25, `iron` 0.3, `turtle_scute` 0.3, `diamond` 0.35, `netherite` 0.45 |
 | `hardcore.nutrients.foods` | An item id, or `#` and an item tag, and an object of shares: `{"protein": 0.5, "vitamins": 0.5}`. Groups are `protein`, `vitamins` and `sugar`, shares 0 to 1. An id beats a tag, and the first tag in the list wins. `{}` gives nothing. | Every vanilla food, 41 entries, listed below. |
 | `hardcore.tougherMobs.exclude` | A list of mob ids never boosted. Relentless mobs leaves them alone too. | `minecraft:wither`, `minecraft:ender_dragon`, `minecraft:elder_guardian`, `minecraft:warden` |
 | `hardcore.tougherMobs.overrides` | A mob id and an object naming only the values that differ for it: `health`, `damage`, `speed`. | `minecraft:ghast` `{"health": 2.0}`, `minecraft:phantom` `{"health": 1.0, "damage": 1.0, "speed": 1.0}`, `minecraft:creeper` `{"damage": 1.0}` |

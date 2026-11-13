@@ -25,7 +25,7 @@ paper's texture.
 - **Off by default:** a grave compass that points at your latest grave, and fake X and Z coordinates for each player.
 - **Hardcore layer, all off by default.** Carried weight, broken legs, a limp, bed rest, a Curse of the Undead that
   takes max hearts, nutrients, a hunger tax, a Mending nerf, flat anvil prices, an elytra nerf, tougher and more
-  relentless mobs, blood moons, cold, and a texture for revive papers. Each part has its own switch.
+  relentless mobs, blood moons, cold, and a texture for revive papers. Each part is turned on on its own.
 
 Every feature has a switch in the config.
 

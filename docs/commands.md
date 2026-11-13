@@ -18,7 +18,7 @@ console has no player, so `/yolt adminview`, `/status` and the own-skin forms of
 | `/yolt reload` | Ops, console | Re-reads the config file and re-applies it. |
 | `/yolt status <player>` | Ops, console | Shows an online player's `/status` report. |
 | `/yolt curse <player> set <hearts>` | Ops, console | Sets how many max hearts the Curse of the Undead has taken, online or offline, up to `hardcore.curse.maxLostHearts`. Refused while the curse is off. |
-| `/yolt curse <player> clear` | Ops, console | Clears a player's curse. |
+| `/yolt curse <player> clear` | Ops, console | Clears a player's curse. Refused while the curse is off. |
 | `/yolt bloodmoon start` | Ops, console | Starts a blood moon now, for a night's length, whatever tonight's roll says. It counts as the last blood moon for `hardcore.bloodMoon.minNightsBetween`. Refused while the blood moon is off. |
 | `/yolt bloodmoon stop` | Ops, console | Ends the blood moon that is up, as dawn would. The roll won't start another that day. |
 | `/yolt bloodmoon status` | Ops, console | Says whether a blood moon is up and how much of it is left, or whether one rises tonight. |

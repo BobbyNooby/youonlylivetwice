@@ -11,8 +11,8 @@ Everything builds and tests on GitHub Actions, nothing needs to run locally. Eve
 tests and the server GameTests. Their results are in the `test-results` artifact, kept for 14 days. The client
 GameTests, which save screenshots in the `client-screenshots` artifact, run on pull requests, on pushes to `release`
 and on manual runs with the `client` option. The jar and the revive paper's resource pack zip are in the `Artifacts`
-download. Real skins aren't checked in CI: test players have no skins, and CI never asks
-Mojang. These tests haven't replaced a hands-on session in a real client, which I haven't done yet.
+download. Real skins aren't checked in CI: test players have no skins, and CI never asks Mojang. These tests haven't
+replaced a hands-on session in a real client, which I haven't done yet.
 
 ## On every Minecraft update
 

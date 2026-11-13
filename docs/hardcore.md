@@ -34,10 +34,10 @@ Contents:
 - Players in survival and adventure play by these rules. Creative and spectator players are left out: switching to
   either takes every hardcore slowdown and heart off at once, and they come back on a switch back.
 - Logout bodies are you, so some features reach them. Each section below says how. In short: a body's fall can break
-  your legs, a body has your curse, a body's totem costs you a heart, and mobs hit a body as hard as they hit you. A body
-  carries no weight, no nutrients and no chill, and it never heals its legs.
-- A death resets what a new life resets: broken legs clear, nutrients go back to their start level and chill goes to 0.
-  The curse grows.
+  your legs, a body has your curse, a body's totem costs you a heart, and mobs hit a body as hard as they hit you. A
+  body carries no weight, no nutrients and no chill, and it never heals its legs.
+- A death resets what a new life resets: broken legs clear, chill goes to 0, and nutrients go back to their start
+  level (nutrients only after a death in survival or adventure). The curse grows.
 - While you are offline nothing ticks: no curse healing, no nutrient drain, no chill. Only what happens to your body
   reaches you.
 - Nothing in this layer puts an icon on screen. Vanilla clients see only vanilla things: a slower walk, a shorter heart
@@ -54,7 +54,7 @@ Your body
 Load 31.5 / 56 (free up to 16) → 19% slower
   heaviest: Cobblestone ×192 (9.0), Shulker Box (14.2), Iron Chestplate (1.8)
 Legs   broken → 20% slower · healing 12/30 (uses food once your health is full)
-Total slowdown 39% (cap 50%; potions not included)
+Total slowdown 46% (cap 50%; potions not included)
 Curse of the Undead  −2 max hearts (the most it takes) · next heart back after 1h 12m more play
 Nutrients  protein 62% · vitamins 18% (low: mining 15% slower) · sugar 40%
 Cold   chilly 35% · warming (torch)
@@ -82,7 +82,7 @@ cap.
 - It slows walking and running on the ground. It doesn't slow jumping through the air: a sprint-jump gets a fixed push
   from the game, so sprint-jumping mostly skips the slowdown. Swimming, ladders, elytra, horses, boats and minecarts
   ignore it too.
-- `/status` shows the total, capped, as "Total slowdown 39% (cap 50%; potions not included)".
+- `/status` shows the total, capped, as "Total slowdown 46% (cap 50%; potions not included)".
 
 **Field of view:** a slowed vanilla client narrows its view a little, the same way it widens it when you sprint. That
 is the cue that you are slow. Players who dislike it can turn down vanilla's "FOV Effects" slider in their own game
@@ -114,8 +114,8 @@ What weighs what, from first match to last:
 
 1. `itemsEach`: a weight per single item, for things that stack to 1. Elytra 1.5, mace 2.0.
 2. `items`: a stack weight per item id. Paper 0.25, anvil 9.0.
-3. Worn armour: its armour points times its material's factor (`armourFactors`). An iron chestplate (6 points, factor
-   0.3) weighs 1.8. Horse and wolf armour aren't armour for this.
+3. Armour (worn or carried): its armour points times its material's factor (`armourFactors`). An iron chestplate
+   (6 points, factor 0.3) weighs 1.8. Horse and wolf armour aren't armour for this.
 4. Swords, axes, pickaxes, shovels, hoes and spears: 0.5 each (`toolWeight`).
 5. `groups`: a stack weight per item tag, the first tag in the list that matches. Ores, raw metals, ingots, stone,
    cobblestone, obsidian, stone bricks and logs weigh 3.0 a stack. Iron, gold, copper, netherite and raw metal blocks
@@ -185,7 +185,8 @@ Lying in a bed heals you at Regeneration's pace and makes broken legs heal faste
   applies. With it off, vanilla's own rule decides when you can sleep.
 - In bed you heal half a heart every 50 ticks (2.5 seconds, `healEveryTicks`), the pace of Regeneration I, with no food
   used (`exhaustionPerHeal` 0). 0 means no healing. It only fills the hearts you have; it never lifts the curse.
-- Broken legs heal twice as fast in bed (`legHealSpeed`). They still need full health and food, like all leg healing.
+- Broken legs heal twice as fast in bed (`legHealSpeed`). The usual leg-healing rules still apply: full health first
+  (by default), and food at 18 or more, except under Regeneration or with `natural_health_regeneration` off.
 - Getting up stops it. Taking damage wakes you, as in vanilla.
 - Low protein halves it, as it does other healing.
 - A daytime nap never skips time: it doesn't count towards skipping the night, even on a server with
@@ -199,14 +200,14 @@ Settings: [`hardcore.bedRest`](config.md#hardcorebedrest).
 
 Every return from death, by dying or by a totem, takes a max heart. The hearts come back one at a time as you play.
 
-- **Dying:** when you come back (after the lockout, or early with a revive paper or `/yolt unkill`), you have 1 fewer
-  heart (`heartsPerDeath`). The hotbar line tells you when you are back.
+- **Dying:** when you come back (after the lockout, or early with a revive paper), you have 1 fewer heart
+  (`heartsPerDeath`). `/yolt unkill` gives it back (see below). The hotbar line tells you when you are back.
 - **A totem** (or anything with death protection) costs 1 max heart at once (`heartsPerTotem`).
 - It takes at most 2 hearts in all (`maxLostHearts`). Past that, more deaths and totems cost nothing extra until a
   heart comes back.
 - **Healing:** 1 heart (`healHearts`) comes back after every 5 Minecraft days (`healEveryDays`, decimals allowed) of
-  your own online play. A day is 24,000 ticks, so that is 100 minutes of play. Only your time online counts, never
-  world time. Losing another heart doesn't restart the count.
+  your own online play in survival or adventure. A day is 24,000 ticks, so that is 100 minutes of play. Only your
+  time online counts, never world time. Losing another heart doesn't restart the count.
 - With `countAfk` off, time doesn't count while you haven't moved or acted for 5 minutes.
 - Every counted death counts: dying online, your logout body being killed, and `/yolt kill` while you are offline.
   Deaths in creative or spectator never count, even with `deathLockout.countCreativeAndSpectatorDeaths` on.
@@ -216,7 +217,8 @@ Every return from death, by dying or by a totem, takes a max heart. The hearts c
   top.
 - **Logout bodies** have your curse, so a body never has more hearts than you. A totem that saves your body costs you
   the heart.
-- The hotbar line reads "Curse of the Undead: −1 max heart." when you lose one, and "+1 max heart" when one comes back.
+- The hotbar line reads "Curse of the Undead: −1 max heart." when you lose one, and "+1 max heart" when one comes
+  back.
 - `/status` shows the hearts lost and the play time until the next one comes back.
 
 Settings: [`hardcore.curse`](config.md#hardcorecurse).
@@ -235,7 +237,8 @@ Foods carry hidden protein, vitamins and sugar. Eat a mix, or the group you are 
   - low sugar: 10% slower while sprinting (`penalties.sugar.sprintSlow`), inside the slowdown cap;
   - low vitamins: mining is 15% slower (`penalties.vitamins.miningSlow`).
 - The hotbar line tells you once when a group runs low ("You're low on vitamins.") and once when it is back up.
-- Milk doesn't cure it, since these aren't potion effects. On Peaceful nothing changes.
+- Milk doesn't cure it, since these aren't potion effects. On Peaceful the levels don't move, but a group that is
+  already low still costs you.
 - Which food is in which group is in the [`foods` table](config.md#file-only-settings). Meat and fish are protein,
   fruit and vegetables vitamins, bread, cookies, honey and cake sugar, and a few foods are mixed. A food the table
   doesn't list gives nothing (`unknownFood`).
@@ -278,7 +281,8 @@ Every anvil use costs one fixed price, set by the biggest kind of job in it, and
 | repairing, but no enchanting | 5 (`repairCost`) |
 | only a rename | 1 (`renameCost`) |
 
-- One use that enchants and renames costs 6, not 7. Combining two worn, enchanted swords costs 6.
+- One use that enchants and renames costs 6, not 7. Combining two worn swords where the right one adds an
+  enchantment costs 6, not 11.
 - The price never grows with use. Vanilla's hidden "prior work" counter stops growing while this is on, and adds
   nothing to the price.
 - A use that wouldn't change the item has no result, and nothing is charged or used up.
@@ -319,7 +323,7 @@ Hostile mobs have more health, hit harder and move a little faster.
 - Spawner mobs are boosted (`includeSpawners`). Trial spawner mobs (`includeTrialSpawners`) and mobs from spawn eggs,
   dispensed eggs and commands (`includeCommandsAndEggs`) stay vanilla by default. How a mob spawned is judged once,
   the first time YOLT sees it.
-- Bosses and the warden are never touched (`exclude`: wither, ender dragon, elder guardian, warden).
+- Bosses and the warden are left alone by default (`exclude`: wither, ender dragon, elder guardian, warden).
 - Per-mob overrides: ghasts get 2 times the health, phantoms stay fully vanilla (health, damage and speed 1.0), and
   creepers get no damage boost.
 - Endermen, zombified piglins, piglins and spiders count as hostile, so they are boosted too. Add them to `exclude` if
@@ -385,8 +389,8 @@ On some nights, picked by chance, more mobs come out, and they are tougher, bett
   - one extra roll of their own loot table when a player kills them (`extraLootRolls`). Gear they wear or picked up
     drops once, as in vanilla.
 - `chargedCreeperChance` (0) can make creepers spawn charged.
-- You can't sleep through it. Core blocks the night skip already (`sleep.noNightSkip`); on a server that turned that off,
-  a blood moon still blocks the skip for its night, unless `canSleepThrough` is on.
+- You can't sleep through it. Core blocks the night skip already (`sleep.noNightSkip`); on a server that turned that
+  off, a blood moon still blocks the skip for its night, unless `canSleepThrough` is on.
 - Marked mobs keep their boosts after dawn. Most burn in the sun anyway.
 
 Ops can test it with `/yolt bloodmoon start`, `stop` and `status`.
@@ -451,8 +455,8 @@ What the switch does:
   (`you-only-live-twice:revive_paper`, the model in the pack). The name and lore still say whose paper it is.
 - Papers in a player's inventory, and in a container the player has open, follow the switch within a second, both
   ways. Papers elsewhere (in item frames, on the ground, in bundles, shulker boxes and closed chests) keep the model
-  they had until they are back in a player's inventory or in a container a player has open. So after you turn the switch off, those show the purple-and-black missing
-  texture to players without the pack.
+  they had until they are back in a player's inventory or in a container a player has open. So after you turn the
+  switch off, those show the purple-and-black missing texture to players without the pack.
 - A model an admin set on a paper by hand is never touched.
 - With the pack required, players who decline it can't join (vanilla). With it not required, players without it see
   the missing texture on revive papers.
@@ -462,9 +466,10 @@ Settings: [`resourcePack`](config.md#resourcepack).
 
 ## Where it is stored
 
-Each player's hardcore state (broken legs, the curse, nutrient levels and chill) and the day of the last blood moon
-are kept in their own file, `<world>/database/you-only-live-twice-hardcore.db`. It is made only when something is first
-stored, so a server that never turns the layer on never gets one. An online player's state is saved when they leave
-and every 5 minutes. If the file can't be opened, the state lasts until the server stops and an error is logged.
+Every player's hardcore state (broken legs, the curse, nutrient levels and chill) and the day of the last blood moon
+are kept in one file for the world, `<world>/database/you-only-live-twice-hardcore.db`. It is made only when something
+is first stored, so a server that never turns the layer on never gets one. An online player's state is saved when
+they leave and every 5 minutes. If the file can't be opened, the state lasts until the server stops and an error is
+logged.
 
 [All pages](README.md)
