@@ -919,7 +919,13 @@ public class BodyDeathGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = join(helper, "TagRespawn");
         player.addTag(Bodies.TAG);
-        ServerPlayer respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        ServerPlayer respawned;
+        try {
+            respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        } catch (RuntimeException e) {
+            TestPlayers.leave(player);
+            throw e;
+        }
         AtomicBoolean checked = new AtomicBoolean();
         Later.afterTick(server, () -> checked.set(true));
         // Before the timeout as well, since a test that ends early never gets there

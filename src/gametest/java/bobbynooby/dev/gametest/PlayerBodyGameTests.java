@@ -269,6 +269,9 @@ public class PlayerBodyGameTests {
         ServerPlayer player = join(helper, "HeldRestart", new BlockPos(1, 5, 1));
         UUID owner = player.getUUID();
         MinecraftServer server = helper.getLevel().getServer();
+        // The switches go back before it runs, so the owner's player isn't given a second body
+        Runnable cleanUp = BodyTestKit.once(() -> cleanUp(helper, owner));
+        helper.runBeforeTestEnd(cleanUp);
         YoltConfig.BodiesSection before = usePlayerBodies();
         PlayerBody restored;
         try {
@@ -280,14 +283,22 @@ public class PlayerBodyGameTests {
             store(helper).put(held);
             restored = PlayerBody.fromRecord(server, held);
             helper.assertTrue(restored != null, "no player body brought back");
+        } catch (RuntimeException e) {
+            Settings.get().bodies = before;
+            cleanUp.run();
+            throw e;
         } finally {
             Settings.get().bodies = before;
         }
         Vec3 at = restored.position();
-        helper.runBeforeTestEnd(() -> cleanUp(helper, owner));
         helper.startSequence()
-                .thenExecuteAfter(20, () -> helper.assertValueEqual(restored.position(), at, "the held body's position"))
-                .thenExecute(() -> cleanUp(helper, owner))
+                .thenExecuteAfter(20, () -> {
+                    try {
+                        helper.assertValueEqual(restored.position(), at, "the held body's position");
+                    } finally {
+                        cleanUp.run();
+                    }
+                })
                 .thenSucceed();
     }
 

@@ -502,15 +502,19 @@ public class BodyLifecycleGameTests {
         helper.setBlock(dispenser, Blocks.DISPENSER.defaultBlockState().setValue(DispenserBlock.FACING, Direction.WEST));
         ServerPlayer player = join(helper, "Shielded", GameType.SURVIVAL);
         UUID owner = player.getUUID();
+        Runnable cleanUp = once(() -> cleanUp(helper, owner));
         YoltConfig.BodiesSection before = useDefaultBodies();
         Mannequin body;
         try {
             player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
             body = leaveBody(helper, player);
+        } catch (RuntimeException e) {
+            Settings.get().bodies = before;
+            cleanUp.run();
+            throw e;
         } finally {
             Settings.get().bodies = before;
         }
-        Runnable cleanUp = once(() -> cleanUp(helper, owner));
         boolean waiting = false;
         try {
             body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 100.0F);
