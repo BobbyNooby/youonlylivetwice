@@ -864,6 +864,41 @@ public class SkinGameTests {
         helper.succeed();
     }
 
+    // A name someone here joined as is refused at once, before the saved answer or Mojang is asked, so how long the
+    // reply takes can't tell whether that player logged in lately. Mojang never answers about it, so a lookup would
+    // leave no reply in this tick. Every switch goes back in the same tick.
+    @GameTest
+    public void knownNameRefusedBeforeAnyLookup(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean refuseBefore = config.skins.refuseKnownPlayers;
+        ServerPlayer member = TestPlayers.join(helper, "Known", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String memberName = member.nameAndId().name();
+        TestPlayers.leave(member);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Prober", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            MOJANG.neverAnswer(memberName);
+            int askedBefore = MOJANG.timesAsked(memberName);
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.refuseKnownPlayers = true;
+            player.messages.clear();
+            type(player, "yolt skin set " + memberName.toUpperCase(Locale.ROOT));
+            helper.assertValueEqual(texts(player), List.of("You can't use " + memberName + "'s skin. Pick another."),
+                    "reply to a known name");
+            helper.assertValueEqual(MOJANG.timesAsked(memberName), askedBefore, "times Mojang was asked");
+            assertEqual(helper, SkinStore.get(helper.getLevel().getServer()).choice(player.getUUID()), null, "the pick after the refusal");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.refuseKnownPlayers = refuseBefore;
+            TestPlayers.leave(player);
+            MOJANG.forget(memberName);
+        }
+        helper.succeed();
+    }
+
     // An account another player picked is taken while they wear it, and free once they clear it
     @GameTest
     public void skinWornByAnotherRefused(GameTestHelper helper) {

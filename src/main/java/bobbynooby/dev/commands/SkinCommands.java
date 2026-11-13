@@ -127,6 +127,14 @@ public final class SkinCommands {
             return YoltCommands.fail(source, wait);
         }
         MinecraftServer server = source.getServer();
+        // Refused before any lookup: a saved answer comes back at once and Mojang's later, so the wait would say whether
+        // that player logged in lately
+        if (heldToRules(source, own) && Settings.get().skins.refuseKnownPlayers) {
+            Optional<String> known = SkinOwners.knownName(server, mojangName, who);
+            if (known.isPresent()) {
+                return YoltCommands.fail(source, taken(known.get()));
+            }
+        }
         CompletableFuture<CachedSkin> answer = Skins.lookUp(server, mojangName);
         // A saved answer is there at once. Mojang's own comes later, off the server thread, so the reply waits for it.
         if (answer.isDone()) {
@@ -163,7 +171,7 @@ public final class SkinCommands {
         boolean held = heldToRules(source, own);
         if (held && Settings.get().skins.refuseKnownPlayers
                 && SkinOwners.taken(source.getServer(), skin, mojangName, who)) {
-            return YoltCommands.fail(source, "You can't use " + skin.name() + "'s skin. Pick another.");
+            return YoltCommands.fail(source, taken(skin.name()));
         }
         // An op's pick is kept apart, since a player who joins takes their own skin back only from players' picks
         store.choose(who.id(), skin.name(), !held);
@@ -233,6 +241,10 @@ public final class SkinCommands {
         } catch (RuntimeException e) {
             LOGGER.error("Could not save {}'s skin pick at once, so it is saved with the world", who.name(), e);
         }
+    }
+
+    private static String taken(String name) {
+        return "You can't use " + name + "'s skin. Pick another.";
     }
 
     private static String noAccount(String mojangName) {

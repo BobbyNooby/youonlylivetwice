@@ -292,6 +292,24 @@ public final class SkinStore extends SavedData {
     }
 
     /**
+     * How a player other than this one last joined under or picked this name, in any case, so a command can say it as
+     * they spell it. Empty when nobody did.
+     */
+    public Optional<String> knownAs(String name, UUID except) {
+        for (Map.Entry<UUID, String> entry : joined.entrySet()) {
+            if (!entry.getKey().equals(except) && entry.getValue().equalsIgnoreCase(name)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+        for (Map.Entry<UUID, String> entry : choices.entrySet()) {
+            if (!entry.getKey().equals(except) && entry.getValue().equalsIgnoreCase(name)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * A player whose last join was under this name. One in the same case wins, since an offline-mode server gives
      * "Steve" and "steve" different ids.
      */

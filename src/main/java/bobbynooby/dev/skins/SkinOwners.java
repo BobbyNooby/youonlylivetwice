@@ -53,6 +53,18 @@ public final class SkinOwners {
     }
 
     /**
+     * The name as a player other than this one joined under or picked it, which a non-op can't pick, or empty. Only
+     * YOLT's own records, so it is known without asking Mojang or reading a saved answer. A player's own name is
+     * always theirs.
+     */
+    public static Optional<String> knownName(MinecraftServer server, String name, NameAndId by) {
+        if (name.equalsIgnoreCase(by.name())) {
+            return Optional.empty();
+        }
+        return SkinStore.get(server).knownAs(name, by.id());
+    }
+
+    /**
      * True when a player other than this one has joined as the account: under its name or an id of it in YOLT's record
      * of joins, or with a save in players/data. The ids tried are the account's own, for online mode, the one an
      * offline-mode server gives the name as asked and as Mojang spells it, and the one vanilla's name cache holds for
