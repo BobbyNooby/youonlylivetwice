@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -216,5 +217,234 @@ class HardcoreConfigTest {
         assertEquals(6, fine.config().hardcore.curse.maxLostHearts);
         assertTrue(fine.config().hardcore.curse.enabled);
         assertTrue(fine.config().hardcore.limp.enabled);
+    }
+
+    private static List<ConfigKey> hardcoreKeys() {
+        return ConfigKeys.all().stream().filter(k -> k.path().startsWith("hardcore.")).toList();
+    }
+
+    // Section 6's defaults as the file writes them. Two differ from its text on purpose: "default" is defaultWeight,
+    // which Java can name, and healEveryDays is a decimal.
+    private static Map<String, String> specDefaults() {
+        Map<String, String> d = new LinkedHashMap<>();
+        d.put("hardcore.slow.cap", "0.5");
+        d.put("hardcore.slow.step", "0.05");
+        d.put("hardcore.weight.enabled", "false");
+        d.put("hardcore.weight.freeLoad", "16.0");
+        d.put("hardcore.weight.fullLoad", "56.0");
+        d.put("hardcore.weight.maxSlow", "0.5");
+        d.put("hardcore.weight.defaultWeight", "1.0");
+        d.put("hardcore.weight.unstackableWeight", "0.25");
+        d.put("hardcore.weight.toolWeight", "0.5");
+        d.put("hardcore.weight.countContainers", "true");
+        d.put("hardcore.weight.containerContents", "1.0");
+        d.put("hardcore.weight.containerDepth", "3");
+        d.put("hardcore.weight.countCursorAndGrid", "true");
+        d.put("hardcore.weight.heavyJumpExhaustion", "0.2");
+        d.put("hardcore.legs.enabled", "false");
+        d.put("hardcore.legs.breakAtDamage", "6.0");
+        d.put("hardcore.legs.heavyLandings", "false");
+        d.put("hardcore.legs.breakAtDamageFullLoad", "4.0");
+        d.put("hardcore.legs.includeElytraCrash", "false");
+        d.put("hardcore.legs.slow", "0.2");
+        d.put("hardcore.legs.healPoints", "30");
+        d.put("hardcore.legs.healTicks", "80");
+        d.put("hardcore.legs.healTicksSaturated", "40");
+        d.put("hardcore.legs.exhaustionPerPoint", "3.0");
+        d.put("hardcore.legs.healthFirst", "true");
+        d.put("hardcore.legs.regenEffectHeals", "true");
+        d.put("hardcore.legs.healTicksNoRegenRule", "1200");
+        d.put("hardcore.legs.bodiesCanBreakLegs", "true");
+        d.put("hardcore.limp.enabled", "false");
+        d.put("hardcore.limp.belowHearts", "2.0");
+        d.put("hardcore.limp.recoverAtHearts", "3.0");
+        d.put("hardcore.limp.slow", "0.2");
+        d.put("hardcore.limp.countAbsorption", "false");
+        d.put("hardcore.bedRest.enabled", "false");
+        d.put("hardcore.bedRest.allowDaytime", "true");
+        d.put("hardcore.bedRest.healEveryTicks", "50");
+        d.put("hardcore.bedRest.exhaustionPerHeal", "0.0");
+        d.put("hardcore.bedRest.legHealSpeed", "2.0");
+        d.put("hardcore.curse.enabled", "false");
+        d.put("hardcore.curse.heartsPerDeath", "1");
+        d.put("hardcore.curse.heartsPerTotem", "1");
+        d.put("hardcore.curse.maxLostHearts", "2");
+        d.put("hardcore.curse.healHearts", "1");
+        d.put("hardcore.curse.healEveryDays", "5.0");
+        d.put("hardcore.curse.countAfk", "true");
+        d.put("hardcore.curse.reviveRefundHearts", "0");
+        d.put("hardcore.curse.unkillRefunds", "true");
+        d.put("hardcore.nutrients.enabled", "false");
+        d.put("hardcore.nutrients.gainPerPoint", "0.03");
+        d.put("hardcore.nutrients.decayPerPoint", "0.01");
+        d.put("hardcore.nutrients.startLevel", "0.6");
+        d.put("hardcore.nutrients.deficientBelow", "0.25");
+        d.put("hardcore.nutrients.penalties.protein.healingMultiplier", "0.5");
+        d.put("hardcore.nutrients.penalties.sugar.sprintSlow", "0.1");
+        d.put("hardcore.nutrients.penalties.vitamins.miningSlow", "0.15");
+        d.put("hardcore.nutrients.unknownFood", "none");
+        d.put("hardcore.hungerTax.multiplier", "1.0");
+        d.put("hardcore.mending.enabled", "false");
+        d.put("hardcore.mending.durabilityPerXp", "0.4");
+        d.put("hardcore.elytra.enabled", "false");
+        d.put("hardcore.elytra.glideGravityMultiplier", "0.6");
+        d.put("hardcore.elytra.rocketCutoffSpeed", "20.0");
+        return d;
+    }
+
+    @Test
+    void config1EveryBuiltKeyHasItsSpecDefault() {
+        Map<String, String> expected = specDefaults();
+        YoltConfig fresh = new YoltConfig();
+        Map<String, String> actual = new LinkedHashMap<>();
+        for (ConfigKey key : hardcoreKeys()) {
+            actual.put(key.path(), key.show(fresh));
+        }
+        // Equal as maps, so a new key without a line here fails too
+        assertEquals(expected, actual);
+        // The deepest key, five levels down
+        assertEquals("0.5", key("hardcore.nutrients.penalties.protein.healingMultiplier").show(fresh));
+
+        // The foods table, spot-checked
+        Map<String, Map<String, Double>> foods = fresh.hardcore.nutrients.foods;
+        assertEquals(41, foods.size());
+        assertEquals(Map.of("protein", 1.0), foods.get("minecraft:cooked_beef"));
+        assertEquals(Map.of("protein", 0.75), foods.get("minecraft:beef"));
+        assertEquals(Map.of("protein", 0.5), foods.get("minecraft:rotten_flesh"));
+        assertEquals(Map.of("vitamins", 1.0), foods.get("minecraft:apple"));
+        assertEquals(Map.of("sugar", 1.0), foods.get("minecraft:cake"));
+        assertEquals(Map.of("protein", 0.5, "vitamins", 0.5), foods.get("minecraft:rabbit_stew"));
+        assertEquals(Map.of("sugar", 0.5, "vitamins", 0.5), foods.get("minecraft:pumpkin_pie"));
+        assertEquals(Map.of(), foods.get("minecraft:poisonous_potato"));
+    }
+
+    // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order
+    private static void assertFellBack(ConfigLoader.Result r, List<String> expected) {
+        List<String> hardcore = r.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList();
+        assertEquals(expected.stream().map(w -> w + ", using default").toList(), hardcore);
+        YoltConfig fresh = new YoltConfig();
+        for (ConfigKey key : hardcoreKeys()) {
+            assertEquals(key.show(fresh), key.show(r.config()), key.path());
+        }
+        HardcoreConfig.WeightSection weight = r.config().hardcore.weight;
+        assertEquals(fresh.hardcore.weight.groups, weight.groups);
+        assertEquals(fresh.hardcore.weight.items, weight.items);
+        assertEquals(fresh.hardcore.weight.itemsEach, weight.itemsEach);
+        assertEquals(fresh.hardcore.weight.armourFactors, weight.armourFactors);
+        assertEquals(fresh.hardcore.nutrients.foods, r.config().hardcore.nutrients.foods);
+    }
+
+    @Test
+    void config1EveryLoadCheckFallsBack() throws IOException {
+        // One bad value for each check on a single key
+        ConfigLoader.Result single = loadJson("""
+                {"hardcore": {
+                  "slow": {"cap": 1.5, "step": -1},
+                  "weight": {"freeLoad": -1, "fullLoad": -1, "maxSlow": 2, "defaultWeight": -1, "unstackableWeight": -1,
+                             "toolWeight": -1, "groups": {"c:ores": -1}, "items": {"minecraft:paper": -1},
+                             "itemsEach": {"minecraft:elytra": -1}, "armourFactors": {"iron": -1},
+                             "containerContents": -1, "containerDepth": 9, "heavyJumpExhaustion": -1},
+                  "legs": {"breakAtDamage": -1, "breakAtDamageFullLoad": -1, "slow": 2, "healPoints": -1, "healTicks": -1,
+                           "healTicksSaturated": -1, "healTicksNoRegenRule": -1, "exhaustionPerPoint": -1},
+                  "limp": {"belowHearts": 0, "recoverAtHearts": 0, "slow": 2},
+                  "bedRest": {"healEveryTicks": -1, "exhaustionPerHeal": -1, "legHealSpeed": -1},
+                  "curse": {"heartsPerDeath": -1, "heartsPerTotem": -1, "maxLostHearts": -1, "healHearts": -1,
+                            "healEveryDays": 0, "reviveRefundHearts": -1},
+                  "nutrients": {"gainPerPoint": -1, "decayPerPoint": -1, "startLevel": 2, "deficientBelow": 2,
+                                "penalties": {"protein": {"healingMultiplier": -1}, "sugar": {"sprintSlow": 2},
+                                              "vitamins": {"miningSlow": 2}},
+                                "foods": {"minecraft:apple": {"protien": 1.0}}, "unknownFood": "sometimes"},
+                  "hungerTax": {"multiplier": -1},
+                  "mending": {"durabilityPerXp": -1},
+                  "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1}
+                }}""");
+        assertFellBack(single, List.of(
+                "hardcore.slow.cap: must be 0 to 1",
+                "hardcore.slow.step: must be above 0",
+                "hardcore.weight.freeLoad: must be 0 or more",
+                "hardcore.weight.fullLoad: must be 0 or more",
+                "hardcore.weight.maxSlow: must be 0 to 1",
+                "hardcore.weight.defaultWeight: must be 0 or more",
+                "hardcore.weight.unstackableWeight: must be 0 or more",
+                "hardcore.weight.toolWeight: must be 0 or more",
+                "hardcore.weight.groups: every weight must be 0 or more",
+                "hardcore.weight.items: every weight must be 0 or more",
+                "hardcore.weight.itemsEach: every weight must be 0 or more",
+                "hardcore.weight.armourFactors: every factor must be 0 or more",
+                "hardcore.weight.containerContents: must be 0 to 1",
+                "hardcore.weight.containerDepth: must be 0 to 8",
+                "hardcore.weight.heavyJumpExhaustion: must be 0 or more",
+                "hardcore.legs.breakAtDamage: must be 0 or more",
+                "hardcore.legs.breakAtDamageFullLoad: must be 0 or more",
+                "hardcore.legs.slow: must be 0 to 1",
+                "hardcore.legs.healPoints: must be 0 or more",
+                "hardcore.legs.healTicks: must be 0 or more",
+                "hardcore.legs.healTicksSaturated: must be 0 or more",
+                "hardcore.legs.healTicksNoRegenRule: must be 0 or more",
+                "hardcore.legs.exhaustionPerPoint: must be 0 or more",
+                "hardcore.limp.belowHearts: must be more than 0",
+                "hardcore.limp.recoverAtHearts: must be more than 0",
+                "hardcore.limp.slow: must be 0 to 1",
+                "hardcore.bedRest.healEveryTicks: must be 0 or more",
+                "hardcore.bedRest.exhaustionPerHeal: must be 0 or more",
+                "hardcore.bedRest.legHealSpeed: must be 0 or more",
+                "hardcore.curse.heartsPerDeath: must be 0 or more",
+                "hardcore.curse.heartsPerTotem: must be 0 or more",
+                "hardcore.curse.maxLostHearts: must be 0 or more",
+                "hardcore.curse.healHearts: must be 0 or more",
+                "hardcore.curse.healEveryDays: must be above 0",
+                "hardcore.curse.reviveRefundHearts: must be 0 or more",
+                "hardcore.nutrients.gainPerPoint: must be 0 or more",
+                "hardcore.nutrients.decayPerPoint: must be 0 or more",
+                "hardcore.nutrients.startLevel: must be 0 to 1",
+                "hardcore.nutrients.deficientBelow: must be 0 to 1",
+                "hardcore.nutrients.penalties.protein.healingMultiplier: must be 0 or more",
+                "hardcore.nutrients.penalties.sugar.sprintSlow: must be 0 to 1",
+                "hardcore.nutrients.penalties.vitamins.miningSlow: must be 0 to 1",
+                "hardcore.nutrients.foods: every share must be 0 to 1 and name protein, vitamins or sugar",
+                "hardcore.nutrients.unknownFood: unknown value",
+                "hardcore.hungerTax.multiplier: must be 0 or more",
+                "hardcore.mending.durabilityPerXp: must be 0 or more",
+                "hardcore.elytra.glideGravityMultiplier: must be 0 or more",
+                "hardcore.elytra.rocketCutoffSpeed: must be 0 or more"));
+
+        // Each pair fine on its own but wrong together, so both of its keys go back
+        ConfigLoader.Result pairs = loadJson("""
+                {"hardcore": {
+                  "slow": {"cap": 0.1, "step": 0.2},
+                  "weight": {"freeLoad": 60, "fullLoad": 56},
+                  "legs": {"breakAtDamage": 3, "breakAtDamageFullLoad": 5},
+                  "limp": {"belowHearts": 4, "recoverAtHearts": 3}
+                }}""");
+        assertFellBack(pairs, List.of(
+                "hardcore.slow.step: must be at most hardcore.slow.cap",
+                "hardcore.slow.cap: must be at least hardcore.slow.step",
+                "hardcore.weight.freeLoad: must be below hardcore.weight.fullLoad",
+                "hardcore.weight.fullLoad: must be above hardcore.weight.freeLoad",
+                "hardcore.legs.breakAtDamageFullLoad: must be at most hardcore.legs.breakAtDamage",
+                "hardcore.legs.breakAtDamage: must be at least hardcore.legs.breakAtDamageFullLoad",
+                "hardcore.limp.belowHearts: must be less than hardcore.limp.recoverAtHearts",
+                "hardcore.limp.recoverAtHearts: must be more than hardcore.limp.belowHearts"));
+
+        // The curse against the limp, from either side. The numbers go back and both features stay on.
+        List<String> curseAndLimp = List.of(
+                "hardcore.curse.maxLostHearts: must leave more than hardcore.limp.recoverAtHearts of the 10 hearts, using default",
+                "hardcore.limp.recoverAtHearts: must be less than the 10 hearts hardcore.curse.maxLostHearts leaves, using default");
+        for (String json : List.of(
+                "{\"hardcore\":{\"curse\":{\"enabled\":true,\"maxLostHearts\":8},\"limp\":{\"enabled\":true}}}",
+                "{\"hardcore\":{\"curse\":{\"enabled\":true},\"limp\":{\"enabled\":true,\"recoverAtHearts\":8}}}")) {
+            ConfigLoader.Result r = loadJson(json);
+            assertEquals(curseAndLimp, r.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList(), json);
+            assertEquals(2, r.config().hardcore.curse.maxLostHearts, json);
+            assertEquals(3.0, r.config().hardcore.limp.recoverAtHearts, json);
+            assertTrue(r.config().hardcore.curse.enabled, json);
+            assertTrue(r.config().hardcore.limp.enabled, json);
+        }
+
+        // Right on the edges nothing falls back: the same damage twice, and one heart more than the limp's line
+        ConfigLoader.Result edges = loadJson("{\"hardcore\":{\"legs\":{\"breakAtDamage\":5,\"breakAtDamageFullLoad\":5},"
+                + "\"curse\":{\"enabled\":true,\"maxLostHearts\":6},\"limp\":{\"enabled\":true}}}");
+        assertEquals(List.of(), edges.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList());
+        assertEquals(6, edges.config().hardcore.curse.maxLostHearts);
     }
 }
