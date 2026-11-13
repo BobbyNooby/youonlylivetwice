@@ -243,7 +243,8 @@ final class BorderCommands {
         }
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
-        YoltCommands.reply(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote());
+        YoltCommands.reply(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote()
+                + offlineNote());
         ConfigCommands.tellBackup(source, change);
         return 1;
     }
@@ -275,7 +276,8 @@ final class BorderCommands {
             }
         });
         LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
-        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + outside.spawnNote());
+        return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + outside.spawnNote()
+                + offlineNote());
     }
 
     private static int endScaling(CommandSourceStack source, double scaling, boolean confirmed) {
@@ -295,7 +297,8 @@ final class BorderCommands {
         }
         WorldBorders.apply(source.getServer(), true);
         LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
-        YoltCommands.reply(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote());
+        YoltCommands.reply(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote()
+                + offlineNote());
         ConfigCommands.tellBackup(source, change);
         return 1;
     }
@@ -308,6 +311,15 @@ final class BorderCommands {
     // 100 is shown as "100" and 100.5 as "100.5"
     private static String number(double value) {
         return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+    }
+
+    // An offline player is only checked through their body, so one without a body may now be outside. With bodies on and
+    // staying until their owner is back, every offline survival player has one.
+    private static String offlineNote() {
+        YoltConfig config = Settings.get();
+        return !config.worldBorder.enabled || config.bodies.enabled && config.bodies.duration.isOffline()
+                ? ""
+                : " Offline players without a body were not checked.";
     }
 
     // With the feature off YOLT sizes no border: border and endscaling only save their value, and center is refused

@@ -56,6 +56,8 @@ public class BorderAndReloadGameTests {
     // A batch of its own: it holds the border, which every border command and reload reads
     private static final String STARTUP_BORDER = "you-only-live-twice-gametest:startup_border";
     private static final String SPAWN_NOTE = " The world spawn is outside the new border; move it with /setworldspawn.";
+    // The test server keeps bodies off, so every border reply with the feature on says this
+    private static final String OFFLINE_NOTE = " Offline players without a body were not checked.";
     // Test structures, and the world spawn among them, sit within ±15 million blocks, so a border this wide around 0, 0
     // holds them all, and BEYOND is past its edge
     private static final int WIDE = 50_000_000;
@@ -71,11 +73,16 @@ public class BorderAndReloadGameTests {
         Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
         try {
             Settings.get().worldBorder.enabled = true;
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000." + SPAWN_NOTE),
-                    "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"),
+                    List.of("World border diameter set to 3000." + SPAWN_NOTE + OFFLINE_NOTE), "command output");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 3000, "diameter setting");
             helper.assertTrue(Files.readString(Settings.path()).contains("\"diameter\": 3000"), "diameter not saved to the config file");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), 3000.0, "overworld border size");
+            // With bodies on until their owner is back, every offline survival player has a body to check. Back off in
+            // the finally, in this tick.
+            Settings.get().bodies.enabled = true;
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000." + SPAWN_NOTE),
+                    "command output with bodies on");
         } finally {
             Files.writeString(Settings.path(), fileBefore);
             restoreConfig(server);
@@ -151,7 +158,8 @@ public class BorderAndReloadGameTests {
         border.enabled = true;
         try {
             level(helper, Level.END).getWorldBorder().setCenter(5, 5);
-            helper.assertValueEqual(run(server, "yolt center 100 -200"), List.of("World border center set to 100, -200."), "command output");
+            helper.assertValueEqual(run(server, "yolt center 100 -200"), List.of("World border center set to 100, -200." + OFFLINE_NOTE),
+                    "command output");
             assertCentre(helper, server.overworld(), 100, -200);
             assertCentre(helper, level(helper, Level.NETHER), 100, -200);
             assertCentre(helper, level(helper, Level.END), 0, 0);
@@ -244,7 +252,8 @@ public class BorderAndReloadGameTests {
 
             // Centred on the spawn, it stays inside, so there's no note
             helper.assertValueEqual(run(server, "yolt center " + spawn.getX() + " " + spawn.getZ() + " confirm"),
-                    List.of("World border center set to " + spawn.getX() + ", " + spawn.getZ() + "."), "output with the spawn inside");
+                    List.of("World border center set to " + spawn.getX() + ", " + spawn.getZ() + "." + OFFLINE_NOTE),
+                    "output with the spawn inside");
         } finally {
             config.randomSpawn = randomSpawnBefore;
             config.worldBorder.enabled = enabledBefore;
@@ -416,8 +425,8 @@ public class BorderAndReloadGameTests {
                     + "'s body outside the world border. Add confirm to the command to do it anyway."), "refusal over the body");
 
             store.put(standing.withPendingRemoval(true));
-            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "."),
-                    "output over the taken-over body");
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("World border diameter set to " + WIDE + "." + OFFLINE_NOTE), "output over the taken-over body");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
         } finally {
             store.remove(standing.owner());
@@ -454,7 +463,8 @@ public class BorderAndReloadGameTests {
                     "overworld border size after the refusal");
 
             helper.assertValueEqual(run(server, "yolt border " + WIDE + " confirm"),
-                    List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE), "output with confirm");
+                    List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE + OFFLINE_NOTE),
+                    "output with confirm");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size with confirm");
         } finally {
             Files.writeString(Settings.path(), fileBefore);
@@ -481,7 +491,8 @@ public class BorderAndReloadGameTests {
         try {
             centreAll(server);
             moveSpawn(server, BEYOND);
-            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE),
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE + OFFLINE_NOTE),
                     "command output");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
         } finally {
@@ -507,7 +518,8 @@ public class BorderAndReloadGameTests {
         border.endScale = 1.0;
         try {
             centreAll(server);
-            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "."), "command output");
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("World border diameter set to " + WIDE + "." + OFFLINE_NOTE), "command output");
             helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
         } finally {
             Files.writeString(Settings.path(), fileBefore);
@@ -540,7 +552,8 @@ public class BorderAndReloadGameTests {
             helper.assertValueEqual(Settings.get().worldBorder.endScale, endScaleBefore, "end scale setting after the refusal");
 
             helper.assertValueEqual(run(server, "yolt endscaling 0.000002 confirm"),
-                    List.of("End world border scaling factor set to " + 0.000002 + "."), "output with confirm");
+                    List.of("End world border scaling factor set to " + 0.000002 + "." + OFFLINE_NOTE),
+                    "output with confirm");
             helper.assertValueEqual(end.getSize(), WIDE * 0.000002, "end border size with confirm");
             helper.assertValueEqual(Settings.get().worldBorder.endScale, 0.000002, "end scale setting with confirm");
         } finally {
@@ -598,8 +611,8 @@ public class BorderAndReloadGameTests {
             overworld.lerpSizeBetween(size, size - 1000, 1_000_000L, server.overworld().getGameTime());
             // confirm, because the test structures sit far outside a 3000 block border. So does the world spawn, which
             // the reply notes.
-            helper.assertValueEqual(run(server, "yolt border 3000 confirm"), List.of("World border diameter set to 3000." + SPAWN_NOTE),
-                    "command output");
+            helper.assertValueEqual(run(server, "yolt border 3000 confirm"),
+                    List.of("World border diameter set to 3000." + SPAWN_NOTE + OFFLINE_NOTE), "command output");
             helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
             helper.assertValueEqual(overworld.getSize(), 3000.0, "overworld border size");
         } finally {
