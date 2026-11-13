@@ -39,6 +39,10 @@ class OffsetTest {
         assertEquals(new Offset(-999_984, 0), Offset.at(1_000_000.5, 0.0));
         assertEquals(new Offset(0, 999_984), Offset.at(0.0, -999_984.0));
         assertEquals(new Offset(0, 999_984), Offset.at(0.0, -999_984.5));
+        assertEquals(new Offset(999_984, 0), Offset.at(-999_984.0, 0.0));
+        assertEquals(new Offset(999_984, 0), Offset.at(-999_984.5, 0.0));
+        assertEquals(new Offset(0, -999_984), Offset.at(0.0, 999_999.5));
+        assertEquals(new Offset(0, -999_984), Offset.at(0.0, 1_000_000.5));
     }
 
     @Test
