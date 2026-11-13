@@ -6,19 +6,26 @@ import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.TrailParticleOption;
 import net.minecraft.core.particles.VibrationParticleOption;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
@@ -46,6 +53,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.LodestoneTracker;
+import net.minecraft.world.item.component.MapDecorations;
 import net.minecraft.world.item.trading.ItemCost;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
@@ -62,9 +70,11 @@ import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.gameevent.BlockPositionSource;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -97,7 +107,10 @@ public class LeakSweepGameTests {
     private static final int REACH = 512;
     private static final LeakScanner.Band BAND = LeakScanner.Band.around("real", -OFFSET.x(), -OFFSET.z(), REACH);
     private static final LeakScanner.Band OFFSET_BAND = LeakScanner.Band.around("offset", OFFSET.x(), OFFSET.z(), REACH);
-    private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND);
+    // A real position shifted the wrong way, by minus the offset, lands near twice the spot
+    private static final LeakScanner.Band WRONG_SIGN_BAND = LeakScanner.Band.around("wrong sign", -2 * OFFSET.x(), -2 * OFFSET.z(),
+            REACH);
+    private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND, WRONG_SIGN_BAND);
     // A north compass's target Z, the same for everyone
     private static final int NORTH_Z = -28_999_984;
     // A compass's target and a gateway's exit, in the band, so a leak of either shows
@@ -141,6 +154,24 @@ public class LeakSweepGameTests {
             // The zero a portal sound is played at, sent shifted, which is the offset itself
             helper.assertValueEqual(findingsIn(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, OFFSET.shift(BlockPos.ZERO), 0,
                     false)).size(), 1, "findings for a portal sound at the shifted zero");
+            helper.assertValueEqual(findingsIn(new ClientboundBlockUpdatePacket(OFFSET.negate().shift(TARGET), stone)).size(), 1,
+                    "findings in a block update shifted the wrong way");
+            // Each packet whose place is read from numbers by their name, so a rename can't blind the scan unseen
+            ServerLevel level = helper.getLevel();
+            LevelChunk spotChunk = level.getChunkAt(SPOT_BLOCK);
+            assertTwoFindings(helper, new ClientboundLevelChunkWithLightPacket(spotChunk, level.getLightEngine(), null, null), "a chunk");
+            assertTwoFindings(helper, new ClientboundLightUpdatePacket(spotChunk.getPos(), level.getLightEngine(), null, null),
+                    "a light update");
+            assertTwoFindings(helper, new ClientboundAddEntityPacket(4_646, UUID.randomUUID(), SPOT.x, SPOT.y, SPOT.z, 0.0F, 0.0F,
+                    EntityTypes.PIG, 0, Vec3.ZERO, 0.0), "an entity spawn");
+            assertTwoFindings(helper, new ClientboundLevelParticlesPacket(ParticleTypes.FLAME, false, false, SPOT.x, SPOT.y, SPOT.z,
+                    0.0F, 0.0F, 0.0F, 0.0F, 1), "particles");
+            assertTwoFindings(helper, new ClientboundPlayerLookAtPacket(EntityAnchorArgument.Anchor.EYES, SPOT.x, SPOT.y, SPOT.z),
+                    "a look-at");
+            ItemStack map = new ItemStack(Items.FILLED_MAP);
+            map.set(DataComponents.MAP_DECORATIONS, MapDecorations.EMPTY.withDecoration("+",
+                    new MapDecorations.Entry(MapDecorationTypes.RED_X, SPOT.x, SPOT.z, 0.0F)));
+            assertTwoFindings(helper, new ClientboundContainerSetContentPacket(0, 1, List.of(map), ItemStack.EMPTY), "a map marker");
 
             LeakScanner.Scan watching = new LeakScanner.Scan(BANDS, List.of(OFFSET.shift(TARGET)));
             helper.assertValueEqual(watching.missing(), List.of(OFFSET.shift(TARGET)), "watched spots missing before any packet");
@@ -445,7 +476,13 @@ public class LeakSweepGameTests {
     }
 
     private static List<String> findingsIn(Object packet) {
-        return LeakScanner.findings(packet, BAND, OFFSET_BAND);
+        return LeakScanner.findings(packet, BANDS.toArray(LeakScanner.Band[]::new));
+    }
+
+    // A packet sent at the real spot: one finding each for its x and z
+    private static void assertTwoFindings(GameTestHelper helper, Object packet, String what) {
+        List<String> found = findingsIn(packet);
+        helper.assertValueEqual(found.size(), 2, "findings in " + what + ", one each for x and z: " + found);
     }
 
     private static List<String> scan(List<Packet<?>> packets) {
