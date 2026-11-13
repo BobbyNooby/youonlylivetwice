@@ -76,20 +76,21 @@ public final class RandomSpawn {
         return pickIn(level, area, true);
     }
 
-    // With the hardcore cold on, a spot cold enough to snow is refused too. When every try was refused only for that,
-    // as in a snowy world, the search runs once more without it: a cold spawn beats none.
+    // With the hardcore cold on, a spot cold enough to snow is refused too. When no try was taken and the cold refused
+    // at least one safe spot, as in a snowy world, the normal search runs once more: a safe cold spawn beats the
+    // last-resort surface, which can be in a fluid.
     private static @Nullable BlockPos pickIn(ServerLevel level, Area area, boolean refuseCold) {
-        boolean onlyCold = true;
+        boolean sawCold = false;
         for (int attempt = 1; ; attempt++) {
             Column column = pickColumn(random, area);
             BlockPos spot = spotAt(level, column.x(), column.z());
-            if (spot != null && !(refuseCold && Cold.refusesSpawn(level, spot))) {
-                return spot;
+            if (spot != null) {
+                if (!(refuseCold && Cold.refusesSpawn(level, spot))) {
+                    return spot;
+                }
+                sawCold = true;
             }
-            if (spot == null) {
-                onlyCold = false;
-            }
-            if (attempt == ATTEMPTS && onlyCold) {
+            if (attempt == ATTEMPTS && sawCold) {
                 return pickIn(level, area, false);
             }
             if (attempt == ATTEMPTS) {

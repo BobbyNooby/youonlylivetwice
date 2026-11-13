@@ -49,6 +49,7 @@ public class HardcoreColdGameTests {
     // canKill on, and the lockout and graves off, so a death neither kicks the player nor leaves a grave
     private static final String KILL = "you-only-live-twice-gametest:hardcore_cold_kill";
     private static final String SPAWN = "you-only-live-twice-gametest:hardcore_cold_spawn";
+    private static final String SPAWN_WATER = "you-only-live-twice-gametest:hardcore_cold_spawn_water";
     // Cold explicitly off
     private static final String OFF = "you-only-live-twice-gametest:hardcore_cold_off";
     // The structure and two blocks round it, so the biome blur at its edges still reads the new biome
@@ -330,6 +331,36 @@ public class HardcoreColdGameTests {
             RandomSpawn.useRandomForTesting(null);
             HardcoreStates.update(player.getUUID(), state -> state.chill = 0.0);
             leave(back != null ? back : player);
+            biome.run();
+        }
+        helper.succeed();
+    }
+
+    // Two columns, both in the snow: water in one, grass in the other. Every try in the first search is refused, for
+    // cold or for the water, so the normal search runs again and must take the grass, not the surface of the water.
+    // Over in the one tick, so the water has no time to flow.
+    @GameTest(environment = SPAWN_WATER, skyAccess = true)
+    public void cold7AllColdWithAWaterColumnStillSpawnsDry(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos water = new BlockPos(3, 0, 3);
+        BlockPos grass = new BlockPos(4, 0, 3);
+        Runnable biome = () -> {};
+        try {
+            biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
+            helper.setBlock(water, Blocks.WATER);
+            helper.setBlock(grass, Blocks.GRASS_BLOCK);
+            BlockPos dry = helper.absolutePos(grass.above());
+            helper.assertTrue(Cold.coldSpot(level, dry), "the grass column isn't cold");
+            BlockPos low = helper.absolutePos(water);
+            RandomSpawn.Area twoColumns = new RandomSpawn.Area(low.getX(), low.getX() + 2, low.getZ(), low.getZ() + 1);
+            RandomSpawn.useRandomForTesting(new Random(9));
+            for (int pick = 0; pick < 20; pick++) {
+                BlockPos spot = RandomSpawn.pickIn(level, twoColumns);
+                helper.assertValueEqual(spot, dry, "spawn " + pick);
+            }
+        } finally {
+            RandomSpawn.useRandomForTesting(null);
+            helper.setBlock(water, Blocks.AIR);
             biome.run();
         }
         helper.succeed();
