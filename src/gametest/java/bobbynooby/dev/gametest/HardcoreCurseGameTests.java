@@ -1,6 +1,9 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.Kills;
+import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.HardcoreStates;
@@ -166,6 +169,31 @@ public class HardcoreCurseGameTests {
             Curse.set(holderId, 0);
             BodyTestKit.cleanUp(helper, owner, before);
             BodyTestKit.cleanUp(helper, holderId, before);
+        }
+        helper.succeed();
+    }
+
+    // A player body is rebuilt from its record at a restart, through the routine the start runs for each one. The
+    // modifier isn't saved with the body, so the rebuilt one has to read its owner's curse again.
+    @GameTest(environment = CURSE)
+    public void curse5APlayerBodyKeepsTheCurseWhenRebuilt(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseRebuilt");
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = BodyTestKit.usePlayerBodies();
+        try {
+            Curse.set(owner, 2);
+            PlayerBody body = BodyTestKit.leavePlayerBody(helper, player);
+            assertMaxHealth(helper, body, 16.0F, "on the player body at the logout");
+            BodyRecord saved = BodyTestKit.store(helper).byOwner(owner).orElseThrow().withSnapshot(BodySnapshot.of(body));
+            body.discard();
+            BodyTestKit.store(helper).put(saved);
+            PlayerBody rebuilt = PlayerBody.fromRecord(server, saved);
+            helper.assertTrue(rebuilt != null, "no player body brought back");
+            assertMaxHealth(helper, rebuilt, 16.0F, "on the rebuilt player body");
+        } finally {
+            Curse.set(owner, 0);
+            BodyTestKit.cleanUp(helper, owner, before);
         }
         helper.succeed();
     }

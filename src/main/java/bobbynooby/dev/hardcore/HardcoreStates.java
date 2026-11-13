@@ -52,7 +52,9 @@ public final class HardcoreStates {
     private HardcoreStates() {}
 
     static void init() {
-        ServerLifecycleEvents.SERVER_STARTED.register(started -> {
+        // Before the worlds load, so bodies made again at start-up read their owner's state. Settings decides whether
+        // YOLT is active in an earlier listener of the same event.
+        ServerLifecycleEvents.SERVER_STARTING.register(started -> {
             if (!Settings.active()) {
                 return;
             }
