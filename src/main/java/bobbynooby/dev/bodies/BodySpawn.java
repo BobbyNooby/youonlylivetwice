@@ -4,6 +4,7 @@ import bobbynooby.dev.config.YoltConfig;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Pose;
@@ -19,11 +20,22 @@ final class BodySpawn {
     static void placeLike(ServerPlayer player, Avatar body) {
         // Keeps the main-hand item in the hand the player held it in
         body.setMainArm(player.getMainArm());
-        // A rider's own y is their feet, below the seat
-        double y = player.isPassenger() ? player.getRootVehicle().getBoundingBox().maxY : player.getY();
+        double y = player.isPassenger() ? riderY(player, body) : player.getY();
         body.snapTo(player.getX(), y, player.getZ(), player.getYRot(), player.getXRot());
         body.setYHeadRot(player.getYHeadRot());
         body.setYBodyRot(player.yBodyRot);
+    }
+
+    // A rider's own y is their feet, below the seat, so the body goes on top of what they ride. Where it doesn't fit
+    // there in its pose, its eyes go where the rider's were, which were clear. Blocks only: the vehicle itself is
+    // still in the world now.
+    private static double riderY(ServerPlayer player, Avatar body) {
+        EntityDimensions size = body.getDimensions(body.getPose());
+        double top = player.getRootVehicle().getBoundingBox().maxY;
+        if (player.level().noBlockCollision(body, size.makeBoundingBox(player.getX(), top, player.getZ()))) {
+            return top;
+        }
+        return player.getEyeY() - size.eyeHeight();
     }
 
     /** What both body types take from their player: fall, fire and air, copies of the gear, health and effects. */

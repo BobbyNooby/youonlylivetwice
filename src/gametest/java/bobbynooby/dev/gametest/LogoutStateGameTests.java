@@ -26,6 +26,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.animal.equine.Horse;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -148,6 +149,38 @@ public class LogoutStateGameTests {
                             "the body is inside a block at " + body.position());
                     helper.assertTrue(Math.abs(body.getY() - expected[0]) < 1.0E-6,
                             "the body is at y " + body.getY() + ", not " + expected[0]);
+                }))
+                .thenSucceed();
+    }
+
+    // A standing body doesn't fit on top of a cart under a roof two blocks above the rail, so it goes with its eyes
+    // where the rider's were, which were clear of the roof
+    @GameTest(maxTicks = 160)
+    public void standingBodyInALowTunnelKeepsItsEyesClear(GameTestHelper helper) {
+        floor(helper);
+        for (int x = 0; x <= 4; x++) {
+            for (int z = 0; z <= 4; z++) {
+                helper.setBlock(new BlockPos(x, 3, z), Blocks.STONE);
+            }
+        }
+        BlockPos railAt = new BlockPos(2, 1, 2);
+        helper.setBlock(railAt, Blocks.RAIL);
+        Minecart minecart = helper.spawn(EntityTypes.MINECART, railAt);
+        Logout logout = new Logout(helper, minecart);
+        double[] eyeY = new double[1];
+        helper.startSequence()
+                .thenWaitUntil(settled(helper, minecart))
+                .thenExecute(logout.step(() -> {
+                    ServerPlayer player = TestPlayers.join(helper, "CartTunnel", GameType.SURVIVAL, railAt);
+                    logout.leave(player, YoltConfig.BodyPose.STANDING, () -> eyeY[0] = player.getEyeY());
+                    helper.assertValueEqual(logout.body.getPose(), Pose.STANDING, "the body's pose");
+                }))
+                .thenExecuteAfter(100, logout.last(() -> {
+                    Mannequin body = logout.body;
+                    helper.assertTrue(body.isAlive(), "the body died: " + body.getLastDamageSource());
+                    helper.assertFalse(body.isInWall(), "the body's head is in the roof at " + body.position());
+                    helper.assertTrue(Math.abs(body.getEyeY() - eyeY[0]) < 1.0E-6,
+                            "the body's eyes are at y " + body.getEyeY() + ", not the rider's " + eyeY[0]);
                 }))
                 .thenSucceed();
     }
