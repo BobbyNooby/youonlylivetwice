@@ -33,6 +33,8 @@ public final class RandomSpawn {
     // Set while spotAt runs vanilla's column check, which is the method our hook replaces, so the hook lets it through.
     // Spawn searches only run on the server thread.
     private static boolean checkingColumn;
+    // The tick whose search found no ground, so the rest of it is vanilla's. Spawn searches only run on the server thread.
+    private static int noGroundTick = -1;
 
     record Column(int x, int z) {}
 
@@ -41,7 +43,8 @@ public final class RandomSpawn {
 
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
-        return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
+        return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD
+                && level.getServer().getTickCount() != noGroundTick;
     }
 
     /**
@@ -53,14 +56,19 @@ public final class RandomSpawn {
         return appliesTo(spawnLevel) && server.getWorldData().getGameType() != GameType.ADVENTURE;
     }
 
-    /** A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn always exists. */
-    public static BlockPos pick(ServerLevel level) {
+    /**
+     * A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn exists
+     * wherever there is ground. Null when that column has no ground at all: the search is then vanilla's for the rest
+     * of this tick, which ends it at the world spawn.
+     */
+    public static @Nullable BlockPos pick(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
         return pickIn(level, area(border.getMinX(), border.getMaxX(), border.getMinZ(), border.getMaxZ(),
                 border.getCenterX(), border.getCenterZ(), Settings.get().worldBorder.diameter));
     }
 
-    private static BlockPos pickIn(ServerLevel level, Area area) {
+    /** The same inside the given area. Public for the tests, which give it an area of their own. */
+    public static @Nullable BlockPos pickIn(ServerLevel level, Area area) {
         for (int attempt = 1; ; attempt++) {
             Column column = pickColumn(random, area);
             BlockPos spot = spotAt(level, column.x(), column.z());
@@ -68,10 +76,17 @@ public final class RandomSpawn {
                 return spot;
             }
             if (attempt == ATTEMPTS) {
-                // This spot can be in a fluid or over the void
+                // This spot can be in a fluid
                 int y = level.getChunk(SectionPos.blockToSectionCoord(column.x()), SectionPos.blockToSectionCoord(column.z()))
                         .getHeight(Heightmap.Types.WORLD_SURFACE, column.x(), column.z()) + 1;
                 BlockPos fallback = new BlockPos(column.x(), y, column.z());
+                // An empty column, as on a void map: a spot over the void kills, so vanilla's own spawn is better
+                if (y <= level.getMinY()) {
+                    LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground, so vanilla picks the spawn",
+                            ATTEMPTS);
+                    noGroundTick = level.getServer().getTickCount();
+                    return null;
+                }
                 LOGGER.warn("No safe random spawn found in {} columns, using {}", ATTEMPTS, fallback.toShortString());
                 return fallback;
             }

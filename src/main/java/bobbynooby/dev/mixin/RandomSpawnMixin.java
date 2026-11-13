@@ -15,7 +15,11 @@ public abstract class RandomSpawnMixin {
     @Inject(method = "getLevelRespawnPos", at = @At("HEAD"), cancellable = true)
     private static void findOverworldSpawn(ServerLevel level, int x, int z, CallbackInfoReturnable<BlockPos> cir) {
         if (RandomSpawn.appliesTo(level)) {
-            cir.setReturnValue(RandomSpawn.pick(level));
+            // No spot means no ground was found, and vanilla's own check runs for this candidate
+            BlockPos spot = RandomSpawn.pick(level);
+            if (spot != null) {
+                cir.setReturnValue(spot);
+            }
         }
     }
 

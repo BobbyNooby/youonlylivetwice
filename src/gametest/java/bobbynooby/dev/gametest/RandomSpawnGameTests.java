@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import bobbynooby.dev.world.RandomSpawn;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -13,15 +14,20 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // The column tests build each column inside the test structure on its barrier floor. skyAccess leaves off the
 // barrier ceiling, so the blocks placed here are the top of the column.
 public class RandomSpawnGameTests {
     private static final BlockPos GROUND = new BlockPos(3, 0, 3);
+    // The tick that finds no ground has no random spawn for the rest of it, so that test runs on its own
+    private static final String NO_GROUND = "you-only-live-twice-gametest:random_spawn_no_ground";
 
     @GameTest(skyAccess = true)
     public void powderSnowColumnRefused(GameTestHelper helper) {
@@ -120,5 +126,43 @@ public class RandomSpawnGameTests {
             TestPlayers.leave(current);
         }
         helper.succeed();
+    }
+
+    // A column dug out from the bottom of the world to the top, as on a void map, is the only one the search may pick.
+    // With no ground in it after every try, the search gives no spot, vanilla's own check answers that candidate (no
+    // spot either), and the hook stays out for the rest of the tick, so vanilla's search ends on the world spawn. The
+    // next tick has random spawn again. Each switch goes back in its own tick.
+    @GameTest(environment = NO_GROUND, maxTicks = 20)
+    public void noGroundLeavesTheSearchToVanilla(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos column = helper.absolutePos(GROUND);
+        Map<BlockPos, BlockState> before = new HashMap<>();
+        boolean randomBefore = Settings.get().randomSpawn;
+        try {
+            Settings.get().randomSpawn = true;
+            VoidGraveGameTests.dig(level, column.atY(level.getMaxY() + 1), before);
+            RandomSpawn.Area only = new RandomSpawn.Area(column.getX(), column.getX() + 1, column.getZ(), column.getZ() + 1);
+            BlockPos[] spot = new BlockPos[1];
+            List<String> log = OfflineGameTests.yoltLog(() -> spot[0] = RandomSpawn.pickIn(level, only));
+            helper.assertTrue(spot[0] == null, "the search over the void gave the spot " + spot[0]);
+            helper.assertValueEqual(log, List.of("No safe random spawn found in 50 columns, and the last one has no ground,"
+                    + " so vanilla picks the spawn"), "log");
+            helper.assertFalse(RandomSpawn.appliesTo(level), "random spawn still answers in the tick that found no ground");
+            BlockPos vanilla = PlayerSpawnFinderInvoker.yoltLevelRespawnPos(level, column.getX(), column.getZ());
+            helper.assertTrue(vanilla == null, "vanilla's check of the empty column gave the spot " + vanilla);
+        } finally {
+            Settings.get().randomSpawn = randomBefore;
+            VoidGraveGameTests.putBack(level, before);
+        }
+        helper.runAfterDelay(1, () -> {
+            boolean randomThen = Settings.get().randomSpawn;
+            try {
+                Settings.get().randomSpawn = true;
+                helper.assertTrue(RandomSpawn.appliesTo(level), "random spawn is still off a tick later");
+            } finally {
+                Settings.get().randomSpawn = randomThen;
+            }
+            helper.succeed();
+        });
     }
 }
