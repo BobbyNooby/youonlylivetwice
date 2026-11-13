@@ -85,6 +85,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 // Every packet of a whole scene, read for a real X or Z, or a constant sent shifted. Each scene joins at one fixed real
@@ -108,9 +110,23 @@ public class LeakSweepGameTests {
     private static final LeakScanner.Band BAND = LeakScanner.Band.around("real", -OFFSET.x(), -OFFSET.z(), REACH);
     private static final LeakScanner.Band OFFSET_BAND = LeakScanner.Band.around("offset", OFFSET.x(), OFFSET.z(), REACH);
     // A real position shifted the wrong way, by minus the offset, lands near twice the spot
-    private static final LeakScanner.Band WRONG_SIGN_BAND = LeakScanner.Band.around("wrong sign", -2 * OFFSET.x(), -2 * OFFSET.z(),
-            REACH);
-    private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND, WRONG_SIGN_BAND);
+    private static final LeakScanner.Band WRONG_SIGN_BAND = LeakScanner.Band.around("wrong sign or the nether's real",
+            -2 * OFFSET.x(), -2 * OFFSET.z(), REACH);
+    // The travel scene's nether spot is twice the spot and its End spot the spot's mirror, each in a chunk column of its
+    // own and at another place in its chunk, so each frame has an offset of its own. Then a position shifted in the frame
+    // the client just left lands in a band too: nether places shifted by the overworld's offset in the real band, and
+    // overworld ones shifted by the nether's in the offset band; End places by the overworld's near twice the offset, and
+    // overworld ones by the End's near twice the spot.
+    private static final Vec3 NETHER_SPOT = new Vec3(24_579.5, 100.0, -24_563.5);
+    private static final Offset NETHER_OFFSET = new Offset(-24_576, 24_576);
+    private static final Vec3 END_SPOT = new Vec3(-12_277.5, 100.0, 12_290.5);
+    private static final Offset END_OFFSET = new Offset(12_288, -12_288);
+    private static final LeakScanner.Band NETHER_OFFSET_BAND = LeakScanner.Band.around("the nether's offset",
+            NETHER_OFFSET.x(), NETHER_OFFSET.z(), REACH);
+    private static final LeakScanner.Band NETHER_WRONG_SIGN_BAND = LeakScanner.Band.around("the nether's wrong sign",
+            -2 * NETHER_OFFSET.x(), -2 * NETHER_OFFSET.z(), REACH);
+    private static final List<LeakScanner.Band> BANDS = List.of(BAND, OFFSET_BAND, WRONG_SIGN_BAND, NETHER_OFFSET_BAND,
+            NETHER_WRONG_SIGN_BAND);
     // A north compass's target Z, the same for everyone
     private static final int NORTH_Z = -28_999_984;
     // A compass's target and a gateway's exit, in the band, so a leak of either shows
@@ -202,8 +218,14 @@ public class LeakSweepGameTests {
             ServerPlayer player = sweep.join("lsworld", GameType.CREATIVE, SPOT_BLOCK, true);
             helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset at the spot");
             ServerPlayer sleeper = sweep.join("lssleeper", GameType.CREATIVE, SPOT_BLOCK.offset(-3, 0, 6), true);
-            sweep.expect(TARGET);
-            sweep.expect(EXIT);
+            // In the next chunk east, near enough to see the scene, so each broadcast goes to two offsets
+            ServerPlayer watcher = sweep.join("lswatcher", GameType.CREATIVE, SPOT_BLOCK.offset(10, 0, 0), true);
+            Offset watching = CoordinateOffsets.offset(watcher);
+            helper.assertFalse(watching.equals(OFFSET), "the watcher shares the player's offset");
+            sweep.expect(player, OFFSET.shift(TARGET));
+            sweep.expect(player, OFFSET.shift(EXIT));
+            sweep.expect(watcher, watching.shift(TARGET));
+            sweep.expect(watcher, watching.shift(EXIT));
             sweep.at(0, () -> worldScene(helper, sweep, player, sleeper));
             sweep.start(player);
         });
@@ -218,21 +240,23 @@ public class LeakSweepGameTests {
             ServerPlayer holder = sweep.join("lsholder", GameType.CREATIVE, SPOT_BLOCK.offset(-3, 0, 3), true);
             // Held from the start, so the player is sent it as soon as it sees the holder
             holder.setItemInHand(InteractionHand.MAIN_HAND, compass(TARGET));
-            sweep.expect(TARGET);
+            sweep.expect(player, OFFSET.shift(TARGET));
             sweep.at(0, () -> itemsScene(helper, sweep, player));
             sweep.start(player);
         });
     }
 
-    // Every respawn spot and destination is the spot itself, so each new frame has the same offset and one band does
+    // Each dimension's frame has an offset of its own, and every respawn goes back to the spot
     @GameTest(environment = TRAVEL, maxTicks = 200)
     public void noRealCoordinateAfterRespawnAndTravel(GameTestHelper helper) {
         Sweep sweep = new Sweep(helper);
         sweep.guard(() -> {
             ServerPlayer player = sweep.join("lstravel", GameType.CREATIVE, SPOT_BLOCK, true);
             helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset at the spot");
-            // Where every teleport and respawn puts the client
-            sweep.expect(SPOT_BLOCK);
+            // Where each teleport and respawn puts the client
+            sweep.expect(player, OFFSET.shift(SPOT_BLOCK));
+            sweep.expect(player, NETHER_OFFSET.shift(BlockPos.containing(NETHER_SPOT)));
+            sweep.expect(player, END_OFFSET.shift(BlockPos.containing(END_SPOT)));
             travelScene(helper, sweep, player.getUUID());
             sweep.start(player);
         });
@@ -272,7 +296,7 @@ public class LeakSweepGameTests {
             ItemStack compass = compass(TARGET);
             compass.set(DataComponents.CUSTOM_NAME, Component.literal("Home"));
             killer.setItemInHand(InteractionHand.MAIN_HAND, compass);
-            sweep.expect(TARGET);
+            sweep.expect(victim, OFFSET.shift(TARGET));
             // A few ticks in, so both have seen the killer with the compass in hand
             sweep.at(5, () -> {
                 TestPlayers.markLoaded(victim);
@@ -399,9 +423,9 @@ public class LeakSweepGameTests {
             ServerPlayer back = OffsetTestKit.respawn(helper, player, SPOT_BLOCK, false);
             helper.assertValueEqual(CoordinateOffsets.offset(back), OFFSET, "offset after the respawn");
         });
-        sweep.at(STEP, () -> travel(helper, sweep, id, nether));
-        sweep.at(2 * STEP, () -> travel(helper, sweep, id, overworld));
-        sweep.at(3 * STEP, () -> travel(helper, sweep, id, end));
+        sweep.at(STEP, () -> travel(helper, sweep, id, nether, NETHER_SPOT, NETHER_OFFSET));
+        sweep.at(2 * STEP, () -> travel(helper, sweep, id, overworld, SPOT, OFFSET));
+        sweep.at(3 * STEP, () -> travel(helper, sweep, id, end, END_SPOT, END_OFFSET));
         // The way back from the End, which is a respawn
         sweep.at(4 * STEP, () -> {
             ServerPlayer back = OffsetTestKit.respawn(helper, sweep.current(id), SPOT_BLOCK, true);
@@ -427,14 +451,14 @@ public class LeakSweepGameTests {
         });
     }
 
-    // With the sound a portal plays, sent at a zero the client ignores, which would show in the offset band sent shifted
-    private static void travel(GameTestHelper helper, Sweep sweep, UUID id, ServerLevel to) {
+    // With the sound a portal plays, sent at a zero the client ignores, which would show in a band sent shifted
+    private static void travel(GameTestHelper helper, Sweep sweep, UUID id, ServerLevel to, Vec3 spot, Offset offset) {
         ServerPlayer player = sweep.current(id);
-        OffsetTestKit.withCoordinates(() -> player.teleport(new TeleportTransition(to, SPOT, Vec3.ZERO, 0.0F, 0.0F,
+        OffsetTestKit.withCoordinates(() -> player.teleport(new TeleportTransition(to, spot, Vec3.ZERO, 0.0F, 0.0F,
                 TeleportTransition.PLAY_PORTAL_SOUND)));
         helper.assertTrue(player.level() == to, "the player did not reach " + to.dimension().identifier());
-        helper.assertValueEqual(CoordinateOffsets.offset(player), OFFSET, "offset in " + to.dimension().identifier());
-        loadAround(to);
+        helper.assertValueEqual(CoordinateOffsets.offset(player), offset, "offset in " + to.dimension().identifier());
+        loadAround(to, BlockPos.containing(spot));
     }
 
     private static BlockPos campfireWithCompass(ServerLevel level, Sweep sweep, BlockPos at) {
@@ -450,8 +474,8 @@ public class LeakSweepGameTests {
         level.sendBlockUpdated(pos, state, state, Block.UPDATE_ALL);
     }
 
-    private static void loadAround(ServerLevel level) {
-        ChunkPos at = ChunkPos.containing(SPOT_BLOCK);
+    private static void loadAround(ServerLevel level, BlockPos spot) {
+        ChunkPos at = ChunkPos.containing(spot);
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
                 level.getChunk(at.x() + dx, at.z() + dz);
@@ -517,7 +541,8 @@ public class LeakSweepGameTests {
         private final Map<UUID, ServerPlayer> joined = new LinkedHashMap<>();
         private final List<UUID> scanned = new ArrayList<>();
         private final List<Step> steps = new ArrayList<>();
-        private final List<BlockPos> expected = new ArrayList<>();
+        // The shifted spots each scanned player's own packets must hold, as each player has its own offset
+        private final Map<UUID, List<BlockPos>> expected = new LinkedHashMap<>();
         private final List<Runnable> cleanUps = new ArrayList<>();
         private final List<BlockPos> blocks = new ArrayList<>();
         private final List<Entity> entities = new ArrayList<>();
@@ -548,9 +573,9 @@ public class LeakSweepGameTests {
             steps.add(new Step(tick, action));
         }
 
-        // A real spot the scene shows, which some packet must hold shifted
-        void expect(BlockPos real) {
-            expected.add(real);
+        // A spot the scene shows, as the viewer's client has it, which some packet the viewer was sent must hold
+        void expect(ServerPlayer viewer, BlockPos shifted) {
+            expected.computeIfAbsent(viewer.getUUID(), id -> new ArrayList<>()).add(shifted);
         }
 
         void onCleanUp(Runnable step) {
@@ -577,7 +602,7 @@ public class LeakSweepGameTests {
         }
 
         void start(ServerPlayer main) {
-            loadAround(main.level());
+            loadAround(main.level(), main.blockPosition());
             UUID mainId = main.getUUID();
             int last = steps.stream().mapToInt(Step::at).max().orElse(0);
             int[] tick = {0};
@@ -617,20 +642,30 @@ public class LeakSweepGameTests {
             helper.runBeforeTestEnd(this::cleanUp);
         }
 
+        // Each scanned player's packets in a scan of its own, so a spot it must hold can't be found in another's
         private void finish() {
-            LeakScanner.Scan scan = new LeakScanner.Scan(BANDS, expected.stream().map(real -> OFFSET.shift(real)).toList());
+            List<String> found = new ArrayList<>();
+            List<String> missing = new ArrayList<>();
+            Set<String> unread = new TreeSet<>();
+            List<String> unreadMinecraft = new ArrayList<>();
             for (UUID id : scanned) {
-                for (Packet<?> packet : TestPlayers.sentPackets(joined.get(id))) {
+                ServerPlayer player = joined.get(id);
+                String name = player.nameAndId().name();
+                LeakScanner.Scan scan = new LeakScanner.Scan(BANDS, expected.getOrDefault(id, List.of()));
+                for (Packet<?> packet : TestPlayers.sentPackets(player)) {
                     scan.packet(packet);
                 }
+                scan.findings().forEach(finding -> found.add(name + ": " + finding));
+                scan.missing().forEach(spot -> missing.add(name + ": " + spot.toShortString()));
+                unread.addAll(scan.unread());
+                scan.unreadMinecraft().forEach(part -> unreadMinecraft.add(name + ": " + part));
             }
             cleanUp();
-            List<String> found = scan.findings();
             helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent: "
                     + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
-            helper.assertValueEqual(scan.missing(), List.of(), "shifted spots the scene shows that no packet held");
-            helper.assertValueEqual(scan.unreadMinecraft(), List.of(),
-                    "Minecraft parts the scan couldn't read, of " + scan.unread().size() + " unread in all");
+            helper.assertValueEqual(missing, List.of(), "shifted spots the scene shows that no packet held");
+            helper.assertValueEqual(unreadMinecraft, List.of(), "Minecraft parts the scan couldn't read, of " + unread.size()
+                    + " unread in all");
             helper.succeed();
         }
 
