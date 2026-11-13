@@ -101,8 +101,8 @@ public class CoordinateOffsetCoreGameTests {
         helper.succeed();
     }
 
-    // The rejoin spot is a fixed one near the world's centre, as the test area is so far out that any spot near it
-    // clamps to the same offset
+    // The rejoin spot is a fixed one near the world's centre, as the test area is usually so far out that any spot near
+    // it clamps to the same offset
     @GameTest(environment = CORE)
     public void rejoinStartsANewFrameAndShiftsTheDeathSpot(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "corejoin", GameType.CREATIVE);

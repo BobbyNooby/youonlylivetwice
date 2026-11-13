@@ -59,8 +59,8 @@ final class OffsetTestKit {
         return TestPlayers.sentPackets(player).size();
     }
 
-    // At a fixed spot near the world's centre, as the test area is so far out that any spot near it clamps to the same
-    // offset as every other: a frame anchored here differs from one anchored by the test
+    // At a fixed spot near the world's centre, as the test area is usually so far out that any spot near it clamps to the
+    // same offset as every other: a frame anchored here differs from one anchored by the test
     static ServerPlayer joinNearTheCentre(GameTestHelper helper, String name, GameType mode, BlockPos spot) {
         return withCoordinates(() -> TestPlayers.join(helper.getLevel().getServer(), name, mode, spot));
     }

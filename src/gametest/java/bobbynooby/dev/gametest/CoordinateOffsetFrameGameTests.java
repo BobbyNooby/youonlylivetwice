@@ -39,7 +39,8 @@ import java.util.Set;
 
 // A new frame at every respawn and dimension change. Each test joins a player whose packets it reads, so the class has a
 // batch of its own. Creative, so a leave makes no body. Respawns go to a spot beside the test, so no random one is
-// searched; a player that must start in another frame joins near the world's centre.
+// searched; a player that must start in another frame joins near the world's centre, since frames in the test area
+// usually clamp to one offset.
 public class CoordinateOffsetFrameGameTests {
     private static final String FRAMES = "you-only-live-twice-gametest:coordinate_offset_frames";
     private static final BlockPos RESPAWN = new BlockPos(2, 1, 2);
