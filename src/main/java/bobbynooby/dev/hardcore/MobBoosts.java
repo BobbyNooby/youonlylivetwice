@@ -52,12 +52,14 @@ public final class MobBoosts {
         Relentless.onLoad(mob);
     }
 
-    // New to the world: not loaded from disk, never ticked, and with no verdict of ours yet. A mob loads again each
-    // time its chunk starts ticking, so the tick count tells one already about from one just spawned.
+    // New to the world: not loaded from disk, not just through a portal, never ticked, and with no verdict of ours yet.
+    // A mob loads again each time its chunk starts ticking, so the tick count tells one already about from one just
+    // spawned; a portal makes a fresh copy of a mob that already lived elsewhere.
     private static boolean firstSight(Mob mob) {
         Set<String> tags = mob.entityTags();
-        return mob.tickCount == 0 && mob.spawnReason() != EntitySpawnReason.LOAD && !tags.contains(TOUGH)
-                && !tags.contains(VANILLA) && !tags.contains(BLOOD_MOON_MARK);
+        EntitySpawnReason reason = mob.spawnReason();
+        return mob.tickCount == 0 && reason != EntitySpawnReason.LOAD && reason != EntitySpawnReason.DIMENSION_TRAVEL
+                && !tags.contains(TOUGH) && !tags.contains(VANILLA) && !tags.contains(BLOOD_MOON_MARK);
     }
 
     // The same mobs tougher mobs would touch, whether or not tougher mobs is on; its boost goes on top of that one

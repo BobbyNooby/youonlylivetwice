@@ -92,6 +92,12 @@ public class HardcoreBloodMoonGameTests {
             helper.assertValueEqual(HardcoreMobsGameTests.attribute(zombie, Attributes.MAX_HEALTH).getModifiers().size(), 1,
                     "max health modifiers after another load");
 
+            // A portal makes a copy of a mob that lived before, which is no new spawn
+            Mob travelled = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE,
+                    EntitySpawnReason.DIMENSION_TRAVEL, MOB_AT);
+            helper.assertFalse(travelled.entityTags().contains(MobBoosts.BLOOD_MOON_MARK), "a zombie through a portal is marked");
+            helper.assertValueEqual(travelled.getMaxHealth(), 20.0F, "max health of a zombie through a portal");
+
             BloodMoon.stop(server);
             Mob after = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
             helper.assertFalse(after.entityTags().contains(MobBoosts.BLOOD_MOON_MARK), "a zombie from after the end is marked");
