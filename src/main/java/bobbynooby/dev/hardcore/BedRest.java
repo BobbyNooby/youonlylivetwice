@@ -55,9 +55,9 @@ public final class BedRest {
         return !rule.canSleep(player.level()) && allowsDaytime(rule);
     }
 
-    /** How fast the bed heals this player: 1.0 is the set pace. */
+    /** How fast the bed heals this player: 1.0 is the set pace, slower while protein is low. */
     public static double healingSpeed(ServerPlayer player) {
-        return 1.0;
+        return Nutrients.healingSpeed(player);
     }
 
     /** The players without any napper, for the count that decides whether the night skips. The same list when none naps. */

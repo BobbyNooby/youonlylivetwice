@@ -69,6 +69,7 @@ class ConfigKeysTest {
         assertTrue(leaves.remove("hardcore.weight.items"));
         assertTrue(leaves.remove("hardcore.weight.itemsEach"));
         assertTrue(leaves.remove("hardcore.weight.armourFactors"));
+        assertTrue(leaves.remove("hardcore.nutrients.foods"));
         assertEquals(leaves, new HashSet<>(paths));
         assertEquals(leaves.size(), paths.size(), "a path is listed twice: " + paths);
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());

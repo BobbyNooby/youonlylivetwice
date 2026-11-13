@@ -20,7 +20,7 @@ public final class ConfigKeys {
     private static final Set<String> NUMBER_MAPS = Set.of("hardcore.weight.groups", "hardcore.weight.items",
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
     // The same, one level deeper: each name maps to an object of numbers
-    private static final Set<String> NUMBER_MAP_MAPS = Set.of();
+    private static final Set<String> NUMBER_MAP_MAPS = Set.of("hardcore.nutrients.foods");
     // One typed value can't hold a list or a map, so these are changed in the file
     private static final Set<String> FILE_ONLY = union(Set.of("serverList.hoverLines", "hide.tabHeaderLines"),
             NUMBER_MAPS, NUMBER_MAP_MAPS);

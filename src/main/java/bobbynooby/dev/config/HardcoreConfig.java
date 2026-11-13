@@ -1,5 +1,7 @@
 package bobbynooby.dev.config;
 
+import com.google.gson.annotations.SerializedName;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,6 +16,7 @@ public final class HardcoreConfig {
         public LimpSection limp = new LimpSection();
         public BedRestSection bedRest = new BedRestSection();
         public CurseSection curse = new CurseSection();
+        public NutrientsSection nutrients = new NutrientsSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -101,6 +104,76 @@ public final class HardcoreConfig {
         public boolean countAfk = true;
         public int reviveRefundHearts = 0;
         public boolean unkillRefunds = true;
+    }
+
+    // Levels and shares are 0 to 1; gainPerPoint is spread over a food's groups by their shares
+    public static class NutrientsSection {
+        public boolean enabled = false;
+        public double gainPerPoint = 0.03;
+        public double decayPerPoint = 0.01;
+        public double startLevel = 0.6;
+        public double deficientBelow = 0.25;
+        public PenaltiesSection penalties = new PenaltiesSection();
+        // An item id, or # and an item tag; an id beats a tag
+        public Map<String, Map<String, Double>> foods = foods();
+        public UnknownFood unknownFood = UnknownFood.NONE;
+    }
+
+    public static class PenaltiesSection {
+        public ProteinSection protein = new ProteinSection();
+        public SugarSection sugar = new SugarSection();
+        public VitaminsSection vitamins = new VitaminsSection();
+    }
+
+    // How fast health and broken legs heal while protein is low
+    public static class ProteinSection {
+        public double healingMultiplier = 0.5;
+    }
+
+    public static class SugarSection {
+        public double sprintSlow = 0.10;
+    }
+
+    public static class VitaminsSection {
+        public double miningSlow = 0.15;
+    }
+
+    // What a food the table doesn't list gives: nothing, all to one group, or a third to each
+    public enum UnknownFood {
+        @SerializedName("none") NONE,
+        @SerializedName("protein") PROTEIN,
+        @SerializedName("vitamins") VITAMINS,
+        @SerializedName("sugar") SUGAR,
+        @SerializedName("even") EVEN
+    }
+
+    // Every vanilla food. Cake is eaten from the block, a slice at a time.
+    private static Map<String, Map<String, Double>> foods() {
+        Map<String, Map<String, Double>> foods = new LinkedHashMap<>();
+        for (String cooked : new String[]{"cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+                "cooked_rabbit", "cooked_cod", "cooked_salmon"}) {
+            foods.put("minecraft:" + cooked, numbers("protein", 1.0));
+        }
+        for (String raw : new String[]{"beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
+                "tropical_fish", "pufferfish"}) {
+            foods.put("minecraft:" + raw, numbers("protein", 0.75));
+        }
+        foods.put("minecraft:rotten_flesh", numbers("protein", 0.5));
+        foods.put("minecraft:spider_eye", numbers("protein", 0.5));
+        for (String plant : new String[]{"apple", "carrot", "golden_carrot", "potato", "baked_potato", "beetroot",
+                "beetroot_soup", "mushroom_stew", "suspicious_stew", "melon_slice", "sweet_berries", "glow_berries",
+                "chorus_fruit", "dried_kelp"}) {
+            foods.put("minecraft:" + plant, numbers("vitamins", 1.0));
+        }
+        for (String sweet : new String[]{"bread", "cookie", "honey_bottle", "cake"}) {
+            foods.put("minecraft:" + sweet, numbers("sugar", 1.0));
+        }
+        foods.put("minecraft:rabbit_stew", numbers("protein", 0.5, "vitamins", 0.5));
+        foods.put("minecraft:pumpkin_pie", numbers("sugar", 0.5, "vitamins", 0.5));
+        foods.put("minecraft:golden_apple", numbers("vitamins", 0.6, "protein", 0.2, "sugar", 0.2));
+        foods.put("minecraft:enchanted_golden_apple", numbers("vitamins", 0.6, "protein", 0.2, "sugar", 0.2));
+        foods.put("minecraft:poisonous_potato", numbers());
+        return foods;
     }
 
     // Name, value, name, value..., kept in the order given

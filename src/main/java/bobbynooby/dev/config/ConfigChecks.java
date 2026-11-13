@@ -222,6 +222,7 @@ final class ConfigChecks {
         limp(c.limp, fallback.limp, fellBack);
         bedRest(c.bedRest, fallback.bedRest, fellBack);
         curse(c.curse, fallback.curse, fellBack);
+        nutrients(c.nutrients, fallback.nutrients, fellBack);
         curseAndLimp(c, fallback, fellBack);
     }
 
@@ -333,6 +334,47 @@ final class ConfigChecks {
         }
     }
 
+    private static void nutrients(HardcoreConfig.NutrientsSection nutrients, HardcoreConfig.NutrientsSection fallback,
+                                  BiConsumer<String, String> fellBack) {
+        if (!(nutrients.gainPerPoint >= 0)) {
+            nutrients.gainPerPoint = fallback.gainPerPoint;
+            fellBack.accept("hardcore.nutrients.gainPerPoint", "must be 0 or more");
+        }
+        if (!(nutrients.decayPerPoint >= 0)) {
+            nutrients.decayPerPoint = fallback.decayPerPoint;
+            fellBack.accept("hardcore.nutrients.decayPerPoint", "must be 0 or more");
+        }
+        if (!isShare(nutrients.startLevel)) {
+            nutrients.startLevel = fallback.startLevel;
+            fellBack.accept("hardcore.nutrients.startLevel", "must be 0 to 1");
+        }
+        if (!isShare(nutrients.deficientBelow)) {
+            nutrients.deficientBelow = fallback.deficientBelow;
+            fellBack.accept("hardcore.nutrients.deficientBelow", "must be 0 to 1");
+        }
+        HardcoreConfig.PenaltiesSection penalties = nutrients.penalties;
+        if (!(penalties.protein.healingMultiplier >= 0)) {
+            penalties.protein.healingMultiplier = fallback.penalties.protein.healingMultiplier;
+            fellBack.accept("hardcore.nutrients.penalties.protein.healingMultiplier", "must be 0 or more");
+        }
+        if (!isShare(penalties.sugar.sprintSlow)) {
+            penalties.sugar.sprintSlow = fallback.penalties.sugar.sprintSlow;
+            fellBack.accept("hardcore.nutrients.penalties.sugar.sprintSlow", "must be 0 to 1");
+        }
+        if (!isShare(penalties.vitamins.miningSlow)) {
+            penalties.vitamins.miningSlow = fallback.penalties.vitamins.miningSlow;
+            fellBack.accept("hardcore.nutrients.penalties.vitamins.miningSlow", "must be 0 to 1");
+        }
+        if (!allShares(nutrients.foods)) {
+            nutrients.foods = new LinkedHashMap<>(fallback.foods);
+            fellBack.accept("hardcore.nutrients.foods", "every share must be 0 to 1");
+        }
+        if (nutrients.unknownFood == null) {
+            nutrients.unknownFood = fallback.unknownFood;
+            fellBack.accept("hardcore.nutrients.unknownFood", "unknown value");
+        }
+    }
+
     // The curse must always leave more hearts than the limp needs to stop, or a cursed player could limp for good
     private static void curseAndLimp(HardcoreConfig.HardcoreSection c, HardcoreConfig.HardcoreSection fallback,
                                      BiConsumer<String, String> fellBack) {
@@ -354,6 +396,20 @@ final class ConfigChecks {
     // Written so NaN fails too
     private static boolean isShare(double value) {
         return value >= 0 && value <= 1;
+    }
+
+    private static boolean allShares(Map<String, Map<String, Double>> foods) {
+        for (Map<String, Double> shares : foods.values()) {
+            if (shares == null) {
+                return false;
+            }
+            for (Double share : shares.values()) {
+                if (share == null || !isShare(share)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static boolean noneNegative(Map<String, Double> values) {
