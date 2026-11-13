@@ -238,25 +238,11 @@ public final class Cold {
             return Optional.empty();
         }
         HardcoreConfig.ColdSection cfg = cfg();
-        String text = "Cold   " + word(chill) + " " + percent(chill) + "% · " + reason(surroundings(player, cfg, true), cfg);
+        long percent = ColdMaths.percent(chill);
+        String text = "Cold   " + ColdMaths.word(percent) + " " + percent + "% · " + reason(surroundings(player, cfg, true), cfg);
         return Optional.of(Status.line(text, "Out in the open where it is cold enough to snow, a chill builds, faster when"
                 + " wet and faster still in water. Holding a torch or lantern, standing near a fire, going indoors or"
                 + " leaving the cold warms you, and each piece of leather armour slows the chill. Dying clears it."));
-    }
-
-    private static String word(double chill) {
-        if (chill >= 1.0) {
-            return "frozen";
-        }
-        return chill < 0.5 ? "chilly" : "cold";
-    }
-
-    // Never 0% while there is some chill, nor 100% before it is full
-    private static long percent(double chill) {
-        if (chill >= 1.0) {
-            return 100;
-        }
-        return Math.max(1, Math.min(99, Math.round(chill * 100.0)));
     }
 
     private static String reason(Surroundings here, HardcoreConfig.ColdSection cfg) {

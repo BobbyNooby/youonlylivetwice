@@ -55,4 +55,18 @@ class HardcoreColdTest {
         assertEquals(0.1, ColdMaths.slow(0.5, 0.2), CLOSE);
         assertEquals(0.2, ColdMaths.slow(1.0, 0.2), CLOSE);
     }
+
+    @Test
+    void cold1StatusWordFollowsThePercentShown() {
+        assertEquals(1, ColdMaths.percent(0.001));
+        assertEquals(49, ColdMaths.percent(0.4949));
+        assertEquals("chilly", ColdMaths.word(ColdMaths.percent(0.4949)));
+        // Shown as 50%, so it reads cold, not chilly
+        assertEquals(50, ColdMaths.percent(0.4951));
+        assertEquals("cold", ColdMaths.word(ColdMaths.percent(0.4951)));
+        assertEquals(99, ColdMaths.percent(0.999));
+        assertEquals("cold", ColdMaths.word(ColdMaths.percent(0.999)));
+        assertEquals(100, ColdMaths.percent(1.0));
+        assertEquals("frozen", ColdMaths.word(ColdMaths.percent(1.0)));
+    }
 }

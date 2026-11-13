@@ -38,6 +38,22 @@ public final class ColdMaths {
         return chill * maxSlow;
     }
 
+    /** The chill as the status shows it: never 0% while there is some, nor 100% before it is full. */
+    public static long percent(double chill) {
+        if (chill >= 1.0) {
+            return 100;
+        }
+        return Math.max(1, Math.min(99, Math.round(chill * 100.0)));
+    }
+
+    /** The word for a shown percent, so the two always agree. */
+    public static String word(long percent) {
+        if (percent >= 100) {
+            return "frozen";
+        }
+        return percent < 50 ? "chilly" : "cold";
+    }
+
     // NaN goes to 0, so a broken value can't stick
     private static double clamp(double chill) {
         return chill > 0.0 ? Math.min(chill, 1.0) : 0.0;
