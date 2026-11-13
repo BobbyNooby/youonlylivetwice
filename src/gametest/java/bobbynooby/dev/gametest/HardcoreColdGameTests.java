@@ -36,11 +36,8 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// Cold stays on through each test's environment, which also holds clear weather, so no rain doubles the rate. Biomes
-// are kept per 4×4×4 cell and read with a little blur at the cell edges, so a test's biome reaches a few blocks past
-// its own structure: each test that changes the biome has an environment to itself, or shares one only with tests that
-// want the same biome, and it puts the old biome back when it ends, also when it fails. Test players get no living
-// tick from a client, so the tests that need vanilla's freezing drive it.
+// Biomes are kept per 4×4×4 cell and read with a blur at the cell edges, so a test's biome reaches a few blocks past its
+// structure: each biome layout has an environment of its own. Every environment also holds clear weather.
 public class HardcoreColdGameTests {
     private static final String COLD = "you-only-live-twice-gametest:hardcore_cold";
     private static final String HEAT = "you-only-live-twice-gametest:hardcore_cold_heat";
@@ -69,23 +66,23 @@ public class HardcoreColdGameTests {
     }
 
     private static void measureOpenAndRoofed(GameTestHelper helper) {
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        BlockPos roofed = new BlockPos(5, 0, 5);
-        // A closed stone hut, three blocks a side, with the player inside
-        for (int x = 4; x <= 6; x++) {
-            for (int z = 4; z <= 6; z++) {
-                helper.setBlock(new BlockPos(x, 2, z), Blocks.STONE);
-                if (x != roofed.getX() || z != roofed.getZ()) {
-                    helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
-                    helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
-                }
-            }
-        }
-        ServerPlayer open = join(helper, "OpenSky", new BlockPos(1, 0, 1));
-        ServerPlayer inside = join(helper, "Indoors", roofed);
-        Runnable cleanUp = cleanUp(biome, open, inside);
+        Scene scene = new Scene(helper);
         boolean waiting = false;
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            BlockPos roofed = new BlockPos(5, 0, 5);
+            // A closed stone hut, three blocks a side, with the player inside
+            for (int x = 4; x <= 6; x++) {
+                for (int z = 4; z <= 6; z++) {
+                    helper.setBlock(new BlockPos(x, 2, z), Blocks.STONE);
+                    if (x != roofed.getX() || z != roofed.getZ()) {
+                        helper.setBlock(new BlockPos(x, 0, z), Blocks.STONE);
+                        helper.setBlock(new BlockPos(x, 1, z), Blocks.STONE);
+                    }
+                }
+            }
+            ServerPlayer open = scene.join("OpenSky", new BlockPos(1, 0, 1));
+            ServerPlayer inside = scene.join("Indoors", roofed);
             assertCold(helper, open, true);
             assertCold(helper, inside, true);
             helper.runAfterDelay(100, () -> {
@@ -93,14 +90,14 @@ public class HardcoreColdGameTests {
                     assertChill(helper, open, 0.05, "after 100 ticks under open sky");
                     assertChill(helper, inside, 0.0, "after 100 ticks under a roof");
                 } finally {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
@@ -109,18 +106,18 @@ public class HardcoreColdGameTests {
     // the check.
     @GameTest(environment = HEAT, maxTicks = 70, skyAccess = true)
     public void cold3TorchCampfireAndLeatherWarm(GameTestHelper helper) {
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        helper.setBlock(new BlockPos(0, 0, 7), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true));
-        helper.setBlock(new BlockPos(7, 0, 3), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
-        ServerPlayer torch = join(helper, "TorchBearer", new BlockPos(5, 0, 1));
-        ServerPlayer fire = join(helper, "ByTheFire", new BlockPos(3, 0, 7));
-        ServerPlayer unlit = join(helper, "ByTheAshes", new BlockPos(7, 0, 0));
-        ServerPlayer leather = join(helper, "InLeather", new BlockPos(5, 0, 5));
-        Runnable cleanUp = cleanUp(biome, torch, fire, unlit, leather);
+        Scene scene = new Scene(helper);
         AtomicBoolean done = new AtomicBoolean();
         AtomicBoolean leatherChilled = new AtomicBoolean();
         boolean waiting = false;
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            helper.setBlock(new BlockPos(0, 0, 7), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true));
+            helper.setBlock(new BlockPos(7, 0, 3), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
+            ServerPlayer torch = scene.join("TorchBearer", new BlockPos(5, 0, 1));
+            ServerPlayer fire = scene.join("ByTheFire", new BlockPos(3, 0, 7));
+            ServerPlayer unlit = scene.join("ByTheAshes", new BlockPos(7, 0, 0));
+            ServerPlayer leather = scene.join("InLeather", new BlockPos(5, 0, 5));
             torch.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.TORCH));
             leather.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
             leather.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.LEATHER_CHESTPLATE));
@@ -145,14 +142,14 @@ public class HardcoreColdGameTests {
                     helper.assertFalse(leatherChilled.get(), "a full leather set let the chill rise");
                 } finally {
                     done.set(true);
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
@@ -161,20 +158,20 @@ public class HardcoreColdGameTests {
     // second stands in powder snow with no chill while the test runs vanilla's own tick.
     @GameTest(environment = FROST, maxTicks = 30)
     public void cold4FrozenTicksFollowChill(GameTestHelper helper) {
-        ServerPlayer chilled = join(helper, "Frosty", new BlockPos(1, 0, 1));
-        helper.setBlock(new BlockPos(5, 0, 5), Blocks.STONE);
-        helper.setBlock(new BlockPos(5, 1, 5), Blocks.POWDER_SNOW);
-        helper.setBlock(new BlockPos(5, 2, 5), Blocks.POWDER_SNOW);
-        ServerPlayer sinking = join(helper, "Sinking", new BlockPos(5, 1, 5));
-        Runnable cleanUp = cleanUp(() -> {}, chilled, sinking);
+        Scene scene = new Scene(helper);
         int[] earlier = new int[1];
         boolean waiting = false;
         try {
+            ServerPlayer chilled = scene.join("Frosty", new BlockPos(1, 0, 1));
+            helper.setBlock(new BlockPos(5, 0, 5), Blocks.STONE);
+            helper.setBlock(new BlockPos(5, 1, 5), Blocks.POWDER_SNOW);
+            helper.setBlock(new BlockPos(5, 2, 5), Blocks.POWDER_SNOW);
+            ServerPlayer sinking = scene.join("Sinking", new BlockPos(5, 1, 5));
             setChill(chilled, 0.5);
             setChill(sinking, 0.0);
             helper.onEachTick(() -> {
                 if (!sinking.isRemoved()) {
-                    tickVanilla(sinking, cleanUp);
+                    tickVanilla(sinking, scene.cleanUp);
                 }
             });
             helper.runAfterDelay(2, () -> {
@@ -184,7 +181,7 @@ public class HardcoreColdGameTests {
                     earlier[0] = sinking.getTicksFrozen();
                     helper.assertTrue(earlier[0] > 0, "powder snow left the frozen ticks at 0");
                 } catch (RuntimeException e) {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                     throw e;
                 }
             });
@@ -198,14 +195,14 @@ public class HardcoreColdGameTests {
                     helper.assertTrue(speed != null && speed.getModifier(POWDER_SNOW_SLOW) != null,
                             "vanilla's powder snow slowdown is missing");
                 } finally {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
@@ -214,12 +211,12 @@ public class HardcoreColdGameTests {
     // cold's own takes over, every 2 seconds. Either way it stops at half a heart. Food 10 means no natural regen.
     @GameTest(environment = DAMAGE, maxTicks = 230, skyAccess = true)
     public void cold5NeverKillsWithCanKillOff(GameTestHelper helper) {
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        ServerPlayer bare = join(helper, "Barehanded", new BlockPos(1, 0, 1));
-        ServerPlayer partly = join(helper, "HalfLeather", new BlockPos(5, 0, 5));
-        Runnable cleanUp = cleanUp(biome, bare, partly);
+        Scene scene = new Scene(helper);
         boolean waiting = false;
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            ServerPlayer bare = scene.join("Barehanded", new BlockPos(1, 0, 1));
+            ServerPlayer partly = scene.join("HalfLeather", new BlockPos(5, 0, 5));
             partly.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.LEATHER_HELMET));
             partly.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.LEATHER_BOOTS));
             for (ServerPlayer player : List.of(bare, partly)) {
@@ -229,7 +226,7 @@ public class HardcoreColdGameTests {
             helper.onEachTick(() -> {
                 for (ServerPlayer player : List.of(bare, partly)) {
                     if (!player.isRemoved() && player.isAlive()) {
-                        tickVanilla(player, cleanUp);
+                        tickVanilla(player, scene.cleanUp);
                     }
                 }
             });
@@ -241,53 +238,49 @@ public class HardcoreColdGameTests {
                                 player.getPlainTextName() + " has " + player.getHealth() + " health, not 1.0");
                     }
                 } finally {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
 
-    // canKill on: vanilla's hit takes the half heart left too
+    // canKill on: vanilla's hit takes the half heart left too. The cleanup leaves by uuid, so it finds the respawned
+    // player as well.
     @GameTest(environment = KILL, maxTicks = 230, skyAccess = true)
     public void cold5CanKillOnLetsTheColdKill(GameTestHelper helper) {
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        ServerPlayer player = join(helper, "Frozen", new BlockPos(4, 0, 4));
-        ServerPlayer[] online = {player};
-        Runnable cleanUp = BodyTestKit.once(() -> {
-            biome.run();
-            HardcoreStates.update(player.getUUID(), state -> state.chill = 0.0);
-            leave(online[0]);
-        });
+        Scene scene = new Scene(helper);
         boolean waiting = false;
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            ServerPlayer player = scene.join("Frozen", new BlockPos(4, 0, 4));
             assertCold(helper, player, true);
             freeze(player);
             GraveDeathGameTests.respawnBesideTest(helper, player);
             helper.onEachTick(() -> {
                 if (!player.isRemoved() && player.isAlive()) {
-                    tickVanilla(player, cleanUp);
+                    tickVanilla(player, scene.cleanUp);
                 }
             });
             helper.runAfterDelay(200, () -> {
                 try {
                     helper.assertTrue(player.isDeadOrDying(), "the cold left the player alive with " + player.getHealth()
                             + " health");
-                    online[0] = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
+                    TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
                 } finally {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
@@ -297,8 +290,9 @@ public class HardcoreColdGameTests {
     @GameTest(environment = SPAWN, skyAccess = true)
     public void cold6RandomRespawnSkipsColdSpots(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Runnable biome = setBiome(helper, AREA_FROM, new BlockPos(1, 8, 9), Biomes.SNOWY_PLAINS);
+        Scene scene = new Scene(helper);
         try {
+            scene.snow(AREA_FROM, new BlockPos(1, 8, 9));
             int cold = grassFloor(helper);
             helper.assertTrue(cold > 0 && cold < 64, cold + " of the 64 columns are cold, so the area isn't half and half");
             RandomSpawn.useRandomForTesting(new Random(9));
@@ -310,7 +304,7 @@ public class HardcoreColdGameTests {
             }
         } finally {
             RandomSpawn.useRandomForTesting(null);
-            biome.run();
+            scene.cleanUp.run();
         }
         helper.succeed();
     }
@@ -318,15 +312,15 @@ public class HardcoreColdGameTests {
     @GameTest(environment = KILL, skyAccess = true)
     public void cold7DeathResetsChillAndAllColdStillSpawns(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        ServerPlayer player = join(helper, "Shiverer", new BlockPos(4, 1, 4));
-        ServerPlayer back = null;
+        Scene scene = new Scene(helper);
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            ServerPlayer player = scene.join("Shiverer", new BlockPos(4, 1, 4));
             setChill(player, 0.8);
             GraveDeathGameTests.respawnBesideTest(helper, player);
             player.kill(level);
             helper.assertTrue(player.isDeadOrDying(), "the player did not die");
-            back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
+            ServerPlayer back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
             assertChill(helper, back, 0.0, "after a death and a respawn");
 
             helper.assertValueEqual(grassFloor(helper), 64, "cold columns");
@@ -336,9 +330,7 @@ public class HardcoreColdGameTests {
             helper.assertTrue(Cold.coldSpot(level, spot), "the spot " + spot + " isn't cold, so the fallback wasn't tested");
         } finally {
             RandomSpawn.useRandomForTesting(null);
-            HardcoreStates.update(player.getUUID(), state -> state.chill = 0.0);
-            leave(back != null ? back : player);
-            biome.run();
+            scene.cleanUp.run();
         }
         helper.succeed();
     }
@@ -351,9 +343,9 @@ public class HardcoreColdGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos water = new BlockPos(3, 0, 3);
         BlockPos grass = new BlockPos(4, 0, 3);
-        Runnable biome = () -> {};
+        Scene scene = new Scene(helper);
         try {
-            biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
+            scene.snow(AREA_FROM, AREA_TO);
             helper.setBlock(water, Blocks.WATER);
             helper.setBlock(grass, Blocks.GRASS_BLOCK);
             BlockPos dry = helper.absolutePos(grass.above());
@@ -368,38 +360,43 @@ public class HardcoreColdGameTests {
         } finally {
             RandomSpawn.useRandomForTesting(null);
             helper.setBlock(water, Blocks.AIR);
-            biome.run();
+            scene.cleanUp.run();
         }
         helper.succeed();
     }
 
+    // A stored chill and the snow, with cold off: neither the living tick's mixin, the hub's tick nor the refresh (the
+    // same showChill call) gives frost or a slowdown, and the stored chill stays as it was
     @GameTest(environment = OFF, maxTicks = 60, skyAccess = true)
     public void coldOffIsVanilla(GameTestHelper helper) {
-        Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
-        ServerPlayer player = join(helper, "Unchilled", new BlockPos(4, 0, 4));
-        Runnable cleanUp = cleanUp(biome, player);
+        Scene scene = new Scene(helper);
         boolean waiting = false;
         try {
+            scene.snow(AREA_FROM, AREA_TO);
+            ServerPlayer player = scene.join("Unchilled", new BlockPos(4, 0, 4));
             assertCold(helper, player, true);
+            setChill(player, 0.5);
+            Cold.showChill(player);
             helper.onEachTick(() -> {
                 if (!player.isRemoved()) {
-                    tickVanilla(player, cleanUp);
+                    tickVanilla(player, scene.cleanUp);
                 }
             });
             helper.runAfterDelay(45, () -> {
                 try {
-                    assertChill(helper, player, 0.0, "with cold off");
+                    assertChill(helper, player, 0.5, "with cold off");
                     helper.assertValueEqual(player.getTicksFrozen(), 0, "frozen ticks with cold off");
                     helper.assertValueEqual(Slowdowns.applied(player), 0.0, "slowdown with cold off");
+                    helper.assertValueEqual(Slowdowns.raw(player), 0.0, "slowdown parts with cold off");
                 } finally {
-                    cleanUp.run();
+                    scene.cleanUp.run();
                 }
                 helper.succeed();
             });
             waiting = true;
         } finally {
             if (!waiting) {
-                cleanUp.run();
+                scene.cleanUp.run();
             }
         }
     }
@@ -462,19 +459,40 @@ public class HardcoreColdGameTests {
         }
     }
 
-    // Players leave with no chill stored, then the biome goes back
-    private static Runnable cleanUp(Runnable biome, ServerPlayer... players) {
-        List<ServerPlayer> all = new ArrayList<>(List.of(players));
-        return BodyTestKit.once(() -> {
+    // What a test changed, put back once: its players leave with no chill stored, then the biome goes back. It is
+    // made before anything changes and also runs just before a timeout, so a throw or a hang can't leak the biome.
+    private static final class Scene {
+        private final GameTestHelper helper;
+        private final List<ServerPlayer> players = new ArrayList<>();
+        private Runnable biome = () -> {};
+        final Runnable cleanUp;
+
+        Scene(GameTestHelper helper) {
+            this.helper = helper;
+            this.cleanUp = BodyTestKit.once(this::end);
+            helper.runBeforeTestEnd(cleanUp);
+        }
+
+        void snow(BlockPos relativeFrom, BlockPos relativeTo) {
+            biome = setBiome(helper, relativeFrom, relativeTo, Biomes.SNOWY_PLAINS);
+        }
+
+        ServerPlayer join(String name, BlockPos at) {
+            ServerPlayer player = HardcoreColdGameTests.join(helper, name, at);
+            players.add(player);
+            return player;
+        }
+
+        private void end() {
             try {
-                for (ServerPlayer player : all) {
+                for (ServerPlayer player : players) {
                     HardcoreStates.update(player.getUUID(), state -> state.chill = 0.0);
                     leave(player);
                 }
             } finally {
                 biome.run();
             }
-        });
+        }
     }
 
     // Full chill and half a heart above the floor, on food that neither heals nor starves
