@@ -202,7 +202,8 @@ aren't written to the server log, so admins can't read them there.
 - **Compasses** point north, not at the world spawn (`hide.compassSpawn`).
 - **F3** is reduced for everyone (`hide.debugScreen`). See "Debug privacy" below.
 - **Admin command feedback.** Ops of any level, even below level 2, see the "[name: ...]" lines vanilla commands send
-  admins, and those can name players. `/gamerule send_command_feedback false` stops them.
+  admins, and those can name players. `/gamerule send_command_feedback false` stops them. It also hides every
+  player's own command replies, `/yolt` ones included.
 
 New players spawn at a random spot inside the border, on ground where vanilla would spawn a player.
 
@@ -525,7 +526,7 @@ Notes:
   that long to show there.
 - A player who joins or changes dimension is put back in the `invisible_players` team, so a team an admin puts them
   in doesn't stick. Sharing `invisible_players` doesn't make players allies: pets, sword sweeps and mobs treat them
-  as players in no team.
+  as players in no team, and team options that need allies (friendly fire off, own-team collision) do nothing on it.
 - Teams and scoreboard objectives that admins make are sent to every client. An objective an admin shows in the
   sidebar, below names or in the list reaches non-ops too, and it can show player names. YOLT doesn't hide it.
 - Chat-bridge mods (Discord bridges and the like) don't see proximity chat.
@@ -755,7 +756,8 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
     - A name shows the skin of whichever Mojang account owns that name now. That may be a stranger, and it changes if
       the account is renamed. A name with no account keeps the default skin.
     - A pick is stored as a name, so after a rename it follows the name, not the account.
-    - Refusing a non-op's pick tells them the name is in use on this server. No wording can hide that. A non-op who
+    - Refusing a non-op's pick tells them the name is in use on this server. No wording can hide that. On an
+      offline-mode server this holds for any name a player has joined with, a Mojang account or not. A non-op who
       keeps picking a player's name sees the refusal start the moment that player first joins.
     - Two players who already shared a pick from before this build, or from while `refuseKnownPlayers` was off, both
       keep it.
