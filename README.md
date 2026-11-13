@@ -22,9 +22,9 @@ You need:
 - [Fabric API](https://modrinth.com/mod/fabric-api)
 - Java 25
 
-Get the mod jar from a release, or from the `Artifacts` download on a successful run of the `build` workflow on
-GitHub (the jar in `build/libs` without `-sources` in its name). Put it in the server's `mods` folder, next to Fabric
-API.
+Get the mod jar from the [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest), or from
+the `Artifacts` download on a successful run of the `build` workflow on GitHub (the jar in `build/libs` without
+`-sources` in its name). Put it in the server's `mods` folder, next to Fabric API.
 
 The mod is server-side. It loads in single-player but does nothing there.
 
