@@ -64,6 +64,7 @@ public class BodyMobGameTests {
     // it, so this has a batch of its own rather than player_body's
     private static final String PIGLIN_BODY = "you-only-live-twice-gametest:piglin_body";
     private static final BlockPos BODY_POS = new BlockPos(1, 0, 1);
+    private static final BlockPos BESIDE_BODY = new BlockPos(2, 0, 1);
     private static final BlockPos NEXT_TO_BODY = new BlockPos(3, 0, 1);
     private static final BlockPos FOUR_AWAY = new BlockPos(5, 0, 1);
     private static final BlockPos ABOVE_BODY = new BlockPos(3, 3, 1);
@@ -253,15 +254,39 @@ public class BodyMobGameTests {
         helper.succeed();
     }
 
-    // The dark control for the daylight test: at midnight a spider does go after a body and hit it
+    // The dark control for the daylight test: at midnight a spider does go after a body and hit it. It starts a block
+    // off, inside the 2 blocks where a spider never leaps (26.3 LeapAtTargetGoal), since each leap holds off its next
+    // bite for a second and can land it past the body. The test waits for the hunt first, then for the hit.
     @GameTest(maxTicks = 300, environment = MIDNIGHT)
     public void spiderHuntsBodyAtMidnight(GameTestHelper helper) {
-        hurtsBody(helper, "Night", spawned -> {
-            Mob spider = helper.spawn(EntityTypes.SPIDER, FOUR_AWAY);
+        List<Entity> spawned = new ArrayList<>();
+        UUID owner = null;
+        boolean waiting = false;
+        try {
+            ServerPlayer player = join(helper, "Night");
+            owner = player.getUUID();
+            Mannequin body = leaveBodyWithDefaults(helper, player);
+            Mob spider = helper.spawn(EntityTypes.SPIDER, BESIDE_BODY);
             spawned.add(spider);
-            return spider;
-        }, (spider, body) -> helper.assertTrue(body.getLastHurtByMob() == spider,
-                "the body was last hurt by " + body.getLastHurtByMob() + ", not the spider"));
+            UUID bodyOwner = owner;
+            Runnable finish = BodyTestKit.once(() -> cleanUp(helper, bodyOwner, spawned));
+            helper.runBeforeTestEnd(finish);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(spider.getTarget() == body,
+                            "the spider has not gone for the body: " + whereIs(spider)))
+                    .thenWaitUntil(() -> {
+                        helper.assertTrue(body.getHealth() < body.getMaxHealth(), "the body has not been hurt: " + whereIs(spider));
+                        helper.assertTrue(body.getLastHurtByMob() == spider,
+                                "the body was last hurt by " + body.getLastHurtByMob() + ", not the spider");
+                    })
+                    .thenExecute(finish)
+                    .thenSucceed();
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp(helper, owner, spawned);
+            }
+        }
     }
 
     // A brain mob finds players through its own senses, not goals, so it never gets the body goal, and a player body is
@@ -545,6 +570,11 @@ public class BodyMobGameTests {
                 .toList();
     }
 
+    // What a hunter is after, and where it stands, for a failure message
+    private static String whereIs(Mob mob) {
+        return "it is after " + mob.getTarget() + " and stands at " + mob.position();
+    }
+
     // Succeeds once the body has lost health and hurtBy finds the spawned mob did it. Cleans up then, or just before a
     // timeout.
     private static void hurtsBody(GameTestHelper helper, String name, Function<List<Entity>, Mob> spawnMob,
@@ -560,7 +590,7 @@ public class BodyMobGameTests {
             UUID bodyOwner = owner;
             helper.runBeforeTestEnd(() -> cleanUp(helper, bodyOwner, spawned));
             helper.succeedWhen(() -> {
-                helper.assertTrue(body.getHealth() < body.getMaxHealth(), "the body has not been hurt");
+                helper.assertTrue(body.getHealth() < body.getMaxHealth(), "the body has not been hurt: " + whereIs(mob));
                 hurtBy.accept(mob, body);
                 cleanUp(helper, bodyOwner, spawned);
             });
