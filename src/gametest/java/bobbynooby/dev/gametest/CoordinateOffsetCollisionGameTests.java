@@ -11,6 +11,7 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.vehicle.boat.Boat;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -79,6 +80,10 @@ public class CoordinateOffsetCollisionGameTests {
                         "shape for no entity with the switch on");
                 helper.assertValueEqual(placed.getCollisionShape(level, pos, CollisionContext.of(zombie)).toAabbs(), centred.toAabbs(),
                         "shape for a zombie with the switch on");
+                // What a zombie's path is worked out on
+                PathNavigationRegion region = new PathNavigationRegion(level, pos.offset(-2, -2, -2), pos.offset(2, 2, 2));
+                helper.assertValueEqual(placed.getCollisionShape(region, pos, CollisionContext.of(zombie)).toAabbs(), centred.toAabbs(),
+                        "shape for a zombie's path with the switch on");
                 return null;
             });
             helper.assertValueEqual(placed.getCollisionShape(level, pos, CollisionContext.of(zombie)).toAabbs(), real.toAabbs(),

@@ -32,6 +32,7 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -199,12 +200,13 @@ public final class CoordinateOffsets {
      * A block's collision shape, for a block placed off centre by a hash of its spot, such as bamboo. A player with an
      * offset, and a mount they steer, collide where that player's client puts the block, so the server agrees with the
      * client on where they can go. While the switch is on everything else, mobs, arrows and no entity at all, collides
-     * with the block centred, so nothing the server does shows the real hash. Runs for every block an entity touches, so
-     * the cheap checks come first.
+     * with the block centred, so nothing the server does shows the real hash. A mob's path is worked out on the same
+     * shape as its body moves on. Runs for every block an entity touches, so the cheap checks come first.
      */
     public static VoxelShape collisionFor(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context,
                                           VoxelShape shape) {
-        if (!state.hasOffsetFunction() || shape.isEmpty() || !(level instanceof ServerLevel)) {
+        // Only the server's mob AI builds a path region
+        if (!state.hasOffsetFunction() || shape.isEmpty() || !(level instanceof ServerLevel || level instanceof PathNavigationRegion)) {
             return shape;
         }
         ServerPlayer player = steeringPlayer(context);
