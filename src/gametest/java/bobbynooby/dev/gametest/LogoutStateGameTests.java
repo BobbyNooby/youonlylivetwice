@@ -176,6 +176,8 @@ public class LogoutStateGameTests {
                         helper.assertTrue(stays.startRiding(boat, true, false), "the first player did not get in");
                     }
                     boatTop[0] = boat.getBoundingBox().maxY;
+                    helper.assertTrue(boat.isInWater() && boatTop[0] > helper.absoluteVec(new Vec3(0, 4, 0)).y,
+                            "the boat is not floating on the pool: its top is at " + boatTop[0]);
                     logout.leave(TestPlayers.join(helper, "BoatLeaves", GameType.SURVIVAL, ABOVE_POOL), stays);
                     helper.assertTrue(logout.record().held(), "the body on the water is not held");
                     helper.assertTrue(Math.abs(logout.body.getY() - boatTop[0]) < 1.0E-6,
@@ -261,7 +263,8 @@ public class LogoutStateGameTests {
                 }
             }
         }
-        return helper.spawn(EntityTypes.OAK_BOAT, new BlockPos(3, 3, 3));
+        // Dropped onto the water: a boat that starts under the surface sinks
+        return helper.spawn(EntityTypes.OAK_BOAT, new Vec3(3.5, 4.0, 3.5));
     }
 
     private static void floor(GameTestHelper helper) {

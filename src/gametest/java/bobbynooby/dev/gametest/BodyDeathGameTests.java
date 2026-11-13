@@ -922,13 +922,19 @@ public class BodyDeathGameTests {
         ServerPlayer respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
         AtomicBoolean checked = new AtomicBoolean();
         Later.afterTick(server, () -> checked.set(true));
-        helper.runBeforeTestEnd(() -> TestPlayers.leave(respawned));
+        // Before the timeout as well, since a test that ends early never gets there
+        Runnable leave = BodyTestKit.once(() -> TestPlayers.leave(respawned));
+        helper.runBeforeTestEnd(leave);
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(checked.get(), "the load's check has not run yet"))
                 .thenExecute(() -> {
-                    helper.assertTrue(respawned.entityTags().contains(Bodies.TAG), "the respawn dropped the tag");
-                    helper.assertFalse(respawned.isRemoved(), "the tagged player was removed from the world");
-                    helper.assertTrue(respawned.level().players().contains(respawned), "the tagged player left the level's players");
+                    try {
+                        helper.assertTrue(respawned.entityTags().contains(Bodies.TAG), "the respawn dropped the tag");
+                        helper.assertFalse(respawned.isRemoved(), "the tagged player was removed from the world");
+                        helper.assertTrue(respawned.level().players().contains(respawned), "the tagged player left the level's players");
+                    } finally {
+                        leave.run();
+                    }
                 })
                 .thenSucceed();
     }
