@@ -182,7 +182,8 @@ public class HardcoreNutrientsGameTests {
         }
     }
 
-    // Food 18 heals a point every 80 ticks and a broken leg every 80; with low protein both take 160
+    // Food 18 heals a point every 80 ticks and a broken leg every 80; with low protein both take 160. A test player's
+    // own tick never runs the food data, so the test drives the healer's each tick; the legs heal in the hub's tick.
     @GameTest(environment = NUTRIENTS, maxTicks = 200)
     public void nut4LowProteinSlowsHealing(GameTestHelper helper) {
         ServerPlayer healer = join(helper, "NutHealer");
@@ -199,6 +200,11 @@ public class HardcoreNutrientsGameTests {
                 feed(player, 18, 5.0F);
             }
             healer.setHealth(10.0F);
+            helper.onEachTick(() -> {
+                if (!healer.isRemoved()) {
+                    healer.getFoodData().tick(healer);
+                }
+            });
             Legs.set(mender.getUUID(), true);
             helper.runAfterDelay(100, () -> {
                 try {

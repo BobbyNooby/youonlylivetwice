@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -139,6 +140,10 @@ public final class Nutrients {
     }
 
     private static void eat(ServerPlayer player, int nutrition, Map<String, Double> shares) {
+        // Frozen on Peaceful, where the food bar never drops either
+        if (player.level().getDifficulty() == Difficulty.PEACEFUL) {
+            return;
+        }
         double gain = cfg().gainPerPoint;
         started(player);
         HardcoreStates.update(player.getUUID(), s -> NutrientMaths.eat(s, nutrition, shares, gain));

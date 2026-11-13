@@ -53,15 +53,20 @@ public class HardcoreHungerGameTests {
     public void hunger1OneChangesNothing(GameTestHelper helper) {
         ServerPlayer player = join(helper, "HungerVanilla", GameType.SURVIVAL);
         HardcoreConfig.HungerTaxSection tax = Settings.get().hardcore.hungerTax;
+        HardcoreConfig.WeightSection weight = Settings.get().hardcore.weight;
         double before = tax.multiplier;
+        boolean weightBefore = weight.enabled;
         try {
             tax.multiplier = 1.0;
             exhaustion(player, 0.0F);
             player.causeFoodExhaustion(0.1F);
             assertExhaustion(helper, player, 0.1F, "after an action's 0.1 at ×1");
+            // Weight on, so the report is built rather than "Nothing to report"
+            weight.enabled = true;
             helper.assertFalse(report(player).stream().anyMatch(line -> line.contains("hunger")), "/status: " + report(player));
         } finally {
             tax.multiplier = before;
+            weight.enabled = weightBefore;
             TestPlayers.leave(player);
         }
         helper.succeed();

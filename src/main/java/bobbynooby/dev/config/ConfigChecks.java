@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 /** Range checks on a loaded config. A value that fails is replaced by the fallback's. */
@@ -29,6 +30,7 @@ final class ConfigChecks {
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
     // Each level is one more pass over the contents of the containers inside, so the count stays cheap
     static final int MAX_CONTAINER_DEPTH = 8;
+    private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
 
     private ConfigChecks() {}
 
@@ -371,7 +373,7 @@ final class ConfigChecks {
         }
         if (!allShares(nutrients.foods)) {
             nutrients.foods = new LinkedHashMap<>(fallback.foods);
-            fellBack.accept("hardcore.nutrients.foods", "every share must be 0 to 1");
+            fellBack.accept("hardcore.nutrients.foods", "every share must be 0 to 1 and name protein, vitamins or sugar");
         }
         if (nutrients.unknownFood == null) {
             nutrients.unknownFood = fallback.unknownFood;
@@ -407,8 +409,9 @@ final class ConfigChecks {
             if (shares == null) {
                 return false;
             }
-            for (Double share : shares.values()) {
-                if (share == null || !isShare(share)) {
+            for (Map.Entry<String, Double> share : shares.entrySet()) {
+                // A misspelt group would quietly give nothing
+                if (!FOOD_GROUPS.contains(share.getKey()) || share.getValue() == null || !isShare(share.getValue())) {
                     return false;
                 }
             }
