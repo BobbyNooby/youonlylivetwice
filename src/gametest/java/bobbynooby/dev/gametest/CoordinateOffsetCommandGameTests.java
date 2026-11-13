@@ -88,16 +88,21 @@ public class CoordinateOffsetCommandGameTests {
         ServerPlayer player = OffsetTestKit.join(helper, "cmcolumn", GameType.CREATIVE);
         ServerLevel level = helper.getLevel();
         ChunkPos real = ChunkPos.containing(player.blockPosition().offset(1_000, 0, 1_000));
+        // The chunk at the client's own numbers, which a typed column read as real would force instead
+        ChunkPos asTyped = ChunkPos.containing(CoordinateOffsets.offset(player).shift(real.getMiddleBlockPosition(0)));
         try {
             TestPlayers.op(player);
             Offset offset = CoordinateOffsets.offset(player);
             helper.assertFalse(offset.isZero(), "the player got no offset");
             helper.assertFalse(level.getForceLoadedChunks().contains(real.pack()), "the chunk was forced already");
+            helper.assertFalse(level.getForceLoadedChunks().contains(asTyped.pack()),
+                    "the chunk at the typed numbers was forced already");
             BlockPos client = offset.shift(real.getMiddleBlockPosition(0));
             OffsetTestKit.type(player, "forceload add " + client.getX() + " " + client.getZ());
             helper.assertTrue(level.getForceLoadedChunks().contains(real.pack()), "the typed column did not force the real chunk");
         } finally {
             level.setChunkForced(real.x(), real.z(), false);
+            level.setChunkForced(asTyped.x(), asTyped.z(), false);
             TestPlayers.deop(player);
             TestPlayers.leave(player);
         }
