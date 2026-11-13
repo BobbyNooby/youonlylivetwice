@@ -182,7 +182,6 @@ class ConfigKeysTest {
                 Map.entry("hardcore.curse.heartsPerDeath", Applies.When.NEW_DEATHS),
                 Map.entry("hardcore.curse.heartsPerTotem", Applies.When.NEW_DEATHS),
                 Map.entry("hardcore.tougherMobs.health", Applies.When.MOBS_LOAD),
-                Map.entry("hardcore.tougherMobs.damage", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.tougherMobs.speed", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.tougherMobs.includeSpawners", Applies.When.MOBS_LOAD),
                 Map.entry("hardcore.tougherMobs.includeTrialSpawners", Applies.When.MOBS_LOAD),

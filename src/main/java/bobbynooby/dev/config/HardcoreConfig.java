@@ -217,7 +217,8 @@ public final class HardcoreConfig {
     public static class TougherMobsSection {
         public boolean enabled = false;
         @Applies(Applies.When.MOBS_LOAD) public double health = 1.5;
-        @Applies(Applies.When.MOBS_LOAD) public double damage = 1.25;
+        // Read as each hit lands, so a change applies at once
+        public double damage = 1.25;
         @Applies(Applies.When.MOBS_LOAD) public double speed = 1.1;
         public DamageAppliesTo damageAppliesTo = DamageAppliesTo.PLAYERS;
         @Applies(Applies.When.MOBS_LOAD) public boolean includeSpawners = true;
