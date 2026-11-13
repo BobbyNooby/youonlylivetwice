@@ -63,7 +63,8 @@ public final class BodyLogout {
         // The body was built from this same section, so the record says whether it took the effects
         store.put(new BodyRecord(player.getUUID(), player.nameAndId().name(), body.getUUID(), cfg.type,
                 System.currentTimeMillis(), false, BodySnapshot.of(body), skin, empty, cfg.copyEffects));
-        // Only once the new body stands, so a spawn that fails leaves the old one
+        // After the new body is made, so a spawn that throws leaves the old one. One the world refused still replaces
+        // it: the owner's next login takes over the record's state, so nothing is lost.
         old.ifPresent(record -> retire(server, player, record));
         return Optional.of(body);
     }
