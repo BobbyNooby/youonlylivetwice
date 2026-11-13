@@ -172,7 +172,8 @@ public class GraveProtectionGameTests {
     }
 
     // A hopper pulls from a container or from loose items above it, and a grave head is neither. The hopper under the
-    // chest beside it shows the hoppers did run.
+    // chest beside it shows the hoppers did run. No YOLT code runs here, so this passes with YOLT off: it is a guard
+    // against a change that makes the grave a container.
     @GameTest(maxTicks = 20)
     public void hopperUnderGravePullsNothing(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
