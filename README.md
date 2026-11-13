@@ -288,6 +288,9 @@ is no Nether fast travel.
   and `/yolt config worldBorder.*` stop it and set the size straight away, while the border feature is on.
 - If the config's border values can't be read at startup, YOLT leaves the world's own border as it is until you fix
   the config and run `/yolt reload`.
+- The same happens at startup when the config's border would leave the world spawn, the End's arrival platform, a body
+  or a grave outside, for example after you edit `worldBorder.diameter` while the server is down. The log says what
+  it would leave out. Change the config and run `/yolt reload`, or use `/yolt border` or `endscaling` with `confirm`.
 - Offline players are only checked through their bodies. With `bodies.enabled` off or a timed `bodies.duration`, an
   offline player without a body can end up outside, and the border commands' reply says they weren't checked.
 

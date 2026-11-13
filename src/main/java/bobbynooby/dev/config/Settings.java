@@ -83,7 +83,10 @@ public final class Settings {
         return change;
     }
 
-    /** True while the border values in the config are startup fallbacks, so YOLT leaves the world's own border alone. */
+    /**
+     * True while YOLT leaves the world's own border alone: the config's border values were startup fallbacks, or the
+     * startup check found the config's border would leave someone or something outside.
+     */
     public static boolean borderHeld() {
         return borderHeld;
     }
