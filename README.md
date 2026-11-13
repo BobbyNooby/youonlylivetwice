@@ -23,7 +23,8 @@ You need:
 - Java 25
 
 Get the mod jar from a release, or from the `Artifacts` download on a successful run of the `build` workflow on
-GitHub (the jar is the file in `build/libs`). Put it in the server's `mods` folder, next to Fabric API.
+GitHub (the jar in `build/libs` without `-sources` in its name). Put it in the server's `mods` folder, next to Fabric
+API.
 
 The mod is server-side. It loads in single-player but does nothing there.
 
@@ -105,7 +106,8 @@ inventory was empty, because the head is also the revive token.
 - When the last item is taken the head disappears.
 - If a looter logs out holding a grave item on the cursor, it goes back into the grave.
 - Your ender chest: `graves.enderChestOnDeath` can be `keep` (vanilla, the default), `grave` (the contents also go
-  in the grave) or `wipe` (deleted). More than 54 stacks make a second grave next to the first.
+  in the grave) or `wipe` (deleted). More than 54 stacks make a second grave next to the first. It only applies while
+  `graves.enabled` is on.
 
 Where the grave goes:
 
@@ -174,7 +176,8 @@ everything.
 
 With `chat.allowWhispers` on, non-ops can use `/w <player> <message>`. Ops can always use it. You always see "You
 whisper to X", but X only gets it if they are within `chat.whisperRadius` blocks (0, the default, means the same as
-`chat.radius`), so the sender can't tell who is online or nearby. In `global` mode a whisper has no range.
+`chat.radius`), so the sender can't tell who is online or nearby. In `global` mode a whisper has no range. Whispers
+aren't written to the server log, so admins can't read them there.
 
 ## Hidden information
 
@@ -198,6 +201,8 @@ whisper to X", but X only gets it if they are within `chat.whisperRadius` blocks
   beds and respawn anchors set no respawn point.
 - **Compasses** point north, not at the world spawn (`hide.compassSpawn`).
 - **F3** is reduced for everyone (`hide.debugScreen`). See "Debug privacy" below.
+- **Admin command feedback.** Ops of any level, even below level 2, see the "[name: ...]" lines vanilla commands send
+  admins, and those can name players. `/gamerule send_command_feedback false` stops them.
 
 New players spawn at a random spot inside the border, on ground where vanilla would spawn a player.
 
@@ -282,6 +287,8 @@ is no Nether fast travel.
   and `/yolt config worldBorder.*` stop it and set the size straight away, while the border feature is on.
 - If the config's border values can't be read at startup, YOLT leaves the world's own border as it is until you fix
   the config and run `/yolt reload`.
+- Offline players are only checked through their bodies. With `bodies.enabled` off or a timed `bodies.duration`, an
+  offline player without a body can end up outside, and the border commands' reply says they weren't checked.
 
 ## Admin view
 
@@ -423,6 +430,9 @@ How the file is read:
 - `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can only be changed in the file.
 - `§` colour codes work in the text settings (the client draws them), for example `"§cNo one is coming."`.
 - With no config file at startup (the first start, or a deleted file), YOLT writes the defaults and uses them.
+- The file is rewritten at every start, so comments typed into it aren't kept.
+- If the file can't be written back at startup (a read-only folder, say), what was read still applies, with a warning
+  in the log.
 
 ## Top level
 
@@ -513,6 +523,9 @@ Notes:
 - With `hide.serverPlayerCount` on, the query port reports 0 players and no names. It also shows no names whenever
   `serverList.hoverLines` has lines. Vanilla caches the query port's full answer for 5 seconds, so a change can take
   that long to show there.
+- A player who joins or changes dimension is put back in the `invisible_players` team, so a team an admin puts them
+  in doesn't stick. Sharing `invisible_players` doesn't make players allies: pets, sword sweeps and mobs treat them
+  as players in no team.
 - Teams and scoreboard objectives that admins make are sent to every client. An objective an admin shows in the
   sidebar, below names or in the list reaches non-ops too, and it can show player names. YOLT doesn't hide it.
 - Chat-bridge mods (Discord bridges and the like) don't see proximity chat.
@@ -523,7 +536,7 @@ Notes:
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
 | `hideSleepers` | `true` | The sleeper count reads zero and nobody gets the "players sleeping" line, so nobody can tell who is in bed. | No |
-| `noNightSkip` | `true` | The night never skips. Getting into a bed still resets the phantom timer. | No |
+| `noNightSkip` | `true` | The night never skips, and nobody gets the "players sleeping" line. Getting into a bed still resets the phantom timer. | No |
 | `noBedRespawn` | `true` | Beds and respawn anchors set no respawn point and say nothing. | No |
 
 With `noBedRespawn` on, a death or an End exit takes you to the world spawn, which random spawn turns into a random
@@ -628,8 +641,8 @@ console has no player, so `/yolt adminview` and the own-skin forms of `/yolt ski
 | `/yolt respawncooldown <days>` | Ops, console | Sets `deathLockout.cooldownDays`, for deaths from now on. |
 | `/yolt kill <player>` | Ops, console | Kills a player, online or offline. An offline kill makes a grave and starts the lockout. |
 | `/yolt unkill <player>` | Ops, console | Ends a player's lockout. |
-| `/yolt grave list` | Ops, console | Lists every grave: owner, dimension, position. |
-| `/yolt grave remove <x> <y> <z>` | Ops, console | Drops a grave's items on the ground and deletes the grave. The drops never despawn. If there is nowhere safe nearby to drop them, it refuses and changes nothing. It uses the command's dimension, so from the console run `execute in <dimension> run yolt grave remove ...`. |
+| `/yolt grave list` | Ops, console | Lists every grave: owner, dimension, position. The positions are real, so with `hide.coordinates` on, remove a listed grave with admin view on or from the console. |
+| `/yolt grave remove <x> <y> <z>` | Ops, console | Drops a grave's items on the ground and deletes the grave. The drops never despawn. If there is nowhere safe nearby to drop them, it refuses and changes nothing. It uses the command's dimension, so from the console run `execute in <dimension> run yolt grave remove ...`. The grave's chunk must be loaded, so stand near it or `/forceload` it first. |
 | `/yolt adminview` | Ops (a player) | Turns admin view on or off for you. |
 | `/yolt config <key> [value]` | Ops, console | Shows a config key, or sets it in the file and the running server at once. A border key's value can end in `confirm`. Tab-complete lists the keys. |
 | `/yolt reload` | Ops, console | Re-reads the config file and re-applies it. |
@@ -680,6 +693,13 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
 - **Chat after a reload.** After a `/yolt reload` that turns whispers off or `restrictCommands` on, a command a player
   sends at that same moment can break their signed chat until they rejoin. Vanilla has the same race on `/deop`.
 - **`/trigger` menus** that use chat or book click events don't work for non-ops while `restrictCommands` is on.
+- **Spectators** with a modified client can teleport to any online player, which shows who is online. Give spectator
+  mode only to people you trust.
+- **Raids** show their boss bar to players near the village, and the raid horn reaches anyone within 64 blocks.
+- **`/bossbar`** bars reach whoever an admin adds to them.
+- **Player sounds.** With `view-distance` under 10, a few loud sounds a player causes (a sculk shrieker, a returning
+  trident) reach further than players are shown. Keep `view-distance` at 10 or more.
+- **Lodestone compasses** hold the lodestone's position, so a looted or traded one points at someone's base.
 - **Looting and crashes.** A crash can duplicate or lose what a player took from a grave since they were last saved
   (when they log out, or at a world save). If they had logged out, the grave gets back what they took, and they keep
   it too. If they stayed online and the grave file was saved since (any death saves it), the items are in neither.
@@ -735,7 +755,8 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
     - A name shows the skin of whichever Mojang account owns that name now. That may be a stranger, and it changes if
       the account is renamed. A name with no account keeps the default skin.
     - A pick is stored as a name, so after a rename it follows the name, not the account.
-    - Refusing a non-op's pick tells them the name is in use on this server. No wording can hide that.
+    - Refusing a non-op's pick tells them the name is in use on this server. No wording can hide that. A non-op who
+      keeps picking a player's name sees the refusal start the moment that player first joins.
     - Two players who already shared a pick from before this build, or from while `refuseKnownPlayers` was off, both
       keep it.
     - A stale name-cache entry after a rename can refuse a skin that is actually free. It only ever refuses too much.
