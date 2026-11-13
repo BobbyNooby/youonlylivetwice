@@ -1,5 +1,11 @@
 # Installing
 
+Contents:
+
+- [Recommended server settings](#recommended-server-settings)
+- [Companion mods](#companion-mods)
+- [Updating and backups](#updating-and-backups)
+
 You need:
 
 - Minecraft 26.3

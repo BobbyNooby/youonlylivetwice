@@ -1,5 +1,19 @@
 # Config
 
+Contents:
+
+- [Top level](#top-level)
+- [`worldBorder`](#worldborder)
+- [`deathLockout`](#deathlockout)
+- [`graves`](#graves)
+- [`revive`](#revive)
+- [`chat`](#chat)
+- [`hide`](#hide)
+- [`sleep`](#sleep)
+- [`bodies`](#bodies)
+- [`serverList`](#serverlist)
+- [`skins`](#skins)
+
 The file is `config/you-only-live-twice.json`. Edit it and run `/yolt reload`, or use `/yolt config <key> <value>`,
 which changes one key in the file and in the running server at once. Other `/yolt` commands that change a setting
 save it to the file too.

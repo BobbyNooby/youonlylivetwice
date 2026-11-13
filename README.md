@@ -4,6 +4,8 @@ You Only Live Twice (YOLT) is a server-side Fabric mod for Minecraft 26.3. It ra
 survival world and pushes players to actually talk to each other in the game, ideally over proximity voice chat.
 Players join with a plain vanilla client. No client mod and no resource pack.
 
+**[Read the full documentation](docs/README.md)**: every feature, setting, command and known limit.
+
 ## What it does
 
 - **Death lockout.** Dying kicks you, and you can't rejoin for 7 days.

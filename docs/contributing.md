@@ -1,5 +1,10 @@
 # Contributing
 
+Contents:
+
+- [Testing](#testing)
+- [On every Minecraft update](#on-every-minecraft-update)
+
 ## Testing
 
 Everything builds and tests on GitHub Actions, nothing needs to run locally. A run does the build, the JUnit tests,
