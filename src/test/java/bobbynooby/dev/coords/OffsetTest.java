@@ -32,6 +32,15 @@ class OffsetTest {
         assertEquals(new Offset(-999_984, 999_984), Offset.at(2_000_008.5, -3_000_000.0));
     }
 
+    // The last chunk on each side whose start is the limit itself, and the first one past it, which clamps to the limit
+    @Test
+    void atClampsFromTheFirstChunkPastTheLimit() {
+        assertEquals(new Offset(-999_984, 0), Offset.at(999_999.5, 0.0));
+        assertEquals(new Offset(-999_984, 0), Offset.at(1_000_000.5, 0.0));
+        assertEquals(new Offset(0, 999_984), Offset.at(0.0, -999_984.0));
+        assertEquals(new Offset(0, 999_984), Offset.at(0.0, -999_984.5));
+    }
+
     @Test
     void randomStaysOnTheGridUnderTheLimit() {
         Random random = new Random(1);

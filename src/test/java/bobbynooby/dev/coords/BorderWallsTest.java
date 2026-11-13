@@ -34,6 +34,18 @@ class BorderWallsTest {
         assertFalse(square.plain());
     }
 
+    // A max-world-size well inside the world's edge: the far walls go out past that edge instead, so the client clamps
+    // them there
+    @Test
+    void smallWorldSendsTheFarWallsPastItsOwnEdge() {
+        int small = 10_000;
+        BorderWalls.Square square = BorderWalls.forClient(-5_000, 5_000, -5_000, 5_000, 4_800, 0, NEAR, small, O);
+        assertEquals(904.0, square.maxX(small));
+        assertEquals(-10_000.0, square.minX(small));
+        assertEquals(-10_000.0, square.minZ(small));
+        assertEquals(10_000.0, square.maxZ(small));
+    }
+
     // Outside the border a wall counts as near only within reach too, so a far one gives nothing away
     @Test
     void wallFarOutsideStaysHidden() {
