@@ -32,10 +32,13 @@ import net.minecraft.network.protocol.game.ServerboundJigsawGeneratePacket;
 import net.minecraft.network.protocol.game.ServerboundPickItemFromBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
+import net.minecraft.network.protocol.game.ServerboundSetJigsawBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSetStructureBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSetTestBlockPacket;
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
+import net.minecraft.network.protocol.game.ServerboundTestInstanceBlockActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -58,10 +61,12 @@ import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntityTypes;
 import net.minecraft.world.level.block.entity.CampfireBlockEntity;
 import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.world.level.block.entity.JigsawBlockEntity;
 import net.minecraft.world.level.block.entity.ShelfBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.entity.StructureBlockEntity;
+import net.minecraft.world.level.block.entity.TestInstanceBlockEntity;
 import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.StructureMode;
@@ -412,6 +417,19 @@ public class CoordinateOffsetBlockGameTests {
             ServerboundSetTestBlockPacket test = (ServerboundSetTestBlockPacket) CoordinateOffsets.incoming(connection,
                     new ServerboundSetTestBlockPacket(client, TestBlockMode.LOG, "at 1 2 3"));
             helper.assertValueEqual(test, new ServerboundSetTestBlockPacket(real, TestBlockMode.LOG, "at 1 2 3"), "test block edit");
+            ServerboundSetJigsawBlockPacket jigsaw = (ServerboundSetJigsawBlockPacket) CoordinateOffsets.incoming(connection,
+                    new ServerboundSetJigsawBlockPacket(client, Identifier.withDefaultNamespace("probe"),
+                            Identifier.withDefaultNamespace("target"), Identifier.withDefaultNamespace("pool"), "minecraft:stone",
+                            JigsawBlockEntity.JointType.ALIGNED, 2, 5));
+            helper.assertValueEqual(jigsaw.getPos(), real, "jigsaw block spot");
+            helper.assertValueEqual(jigsaw.getPool(), Identifier.withDefaultNamespace("pool"), "jigsaw pool");
+            helper.assertValueEqual(jigsaw.getPlacementPriority(), 5, "jigsaw placement priority");
+            TestInstanceBlockEntity.Data data = new TestInstanceBlockEntity.Data(Optional.empty(), new Vec3i(4, 5, 6), Rotation.NONE,
+                    false, TestInstanceBlockEntity.Status.CLEARED, Optional.empty());
+            ServerboundTestInstanceBlockActionPacket action = (ServerboundTestInstanceBlockActionPacket) CoordinateOffsets.incoming(
+                    connection, new ServerboundTestInstanceBlockActionPacket(client, ServerboundTestInstanceBlockActionPacket.Action.QUERY, data));
+            helper.assertValueEqual(action, new ServerboundTestInstanceBlockActionPacket(real,
+                    ServerboundTestInstanceBlockActionPacket.Action.QUERY, data), "test instance action");
         } finally {
             TestPlayers.deop(player);
             TestPlayers.leave(player);

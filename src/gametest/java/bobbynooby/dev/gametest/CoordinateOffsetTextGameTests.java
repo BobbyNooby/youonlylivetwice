@@ -56,6 +56,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.Filterable;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -234,6 +235,10 @@ public class CoordinateOffsetTextGameTests {
             Component nested = Component.translatable("chat.type.text", Component.literal("Ann"),
                     Component.literal("look").withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(shown))));
             ChatType.Bound bound = ChatType.bind(ChatType.CHAT, player.registryAccess(), shown);
+            // The hover sits on a sibling, or names a shown entity
+            Component footer = Component.literal("footer ").append(shown);
+            Component entity = Component.literal("Ann").withStyle(style -> style.withHoverEvent(new HoverEvent.ShowEntity(
+                    new HoverEvent.EntityTooltipInfo(EntityTypes.PLAYER, UUID.randomUUID(), Optional.of(shown)))));
             SignedMessageBody.Packed body = new SignedMessageBody.Packed("hello", Instant.now(), 5L, LastSeenMessages.Packed.EMPTY);
             ClientboundSystemChatPacket plain = new ClientboundSystemChatPacket(Component.literal("Nothing shown"), false);
             ServerBossEvent bar = new ServerBossEvent(UUID.randomUUID(), shown, BossEvent.BossBarColor.BLUE,
@@ -254,18 +259,18 @@ public class CoordinateOffsetTextGameTests {
             List<Packet<?>> sent = List.of(
                     new ClientboundSystemChatPacket(nested, false),
                     new ClientboundPlayerCombatKillPacket(7, shown),
-                    new ClientboundDisguisedChatPacket(nested, bound),
+                    new ClientboundDisguisedChatPacket(nested, bound.withTargetName(shown)),
                     new ClientboundPlayerChatPacket(1, player.getUUID(), 0, Optional.empty(), body, Optional.of(nested),
                             FilterMask.PASS_THROUGH, bound),
                     new ClientboundSetTitleTextPacket(shown),
-                    new ClientboundSetSubtitleTextPacket(shown),
+                    new ClientboundSetSubtitleTextPacket(entity),
                     new ClientboundSetActionBarTextPacket(shown),
-                    new ClientboundTabListPacket(shown, Component.literal("footer")),
+                    new ClientboundTabListPacket(shown, footer),
                     ClientboundBossEventPacket.createAddPacket(bar),
                     ClientboundBossEventPacket.createUpdateNamePacket(bar),
                     info,
                     SetPlayerTeamPacketInvoker.create("ctteam", 0, Optional.of(new ClientboundSetPlayerTeamPacket.Parameters(shown,
-                            shown, Component.empty(), Team.Visibility.ALWAYS, Team.CollisionRule.ALWAYS, Optional.empty(), (byte) 0)),
+                            shown, shown, Team.Visibility.ALWAYS, Team.CollisionRule.ALWAYS, Optional.empty(), (byte) 0)),
                             List.of("Ann")),
                     new ClientboundSetObjectivePacket(new Objective(new Scoreboard(), "ctscore", ObjectiveCriteria.DUMMY, shown,
                             ObjectiveCriteria.RenderType.INTEGER, false, new FixedFormat(shown)), 0),
@@ -295,16 +300,17 @@ public class CoordinateOffsetTextGameTests {
             ClientboundDisguisedChatPacket disguised = (ClientboundDisguisedChatPacket) got.get(2);
             helper.assertValueEqual(targets(disguised.message()), client, "disguised chat");
             helper.assertValueEqual(targets(disguised.chatType().name()), client, "disguised chat's sender name");
+            helper.assertValueEqual(targets(disguised.chatType().targetName().orElseThrow()), client, "disguised chat's target name");
             ClientboundPlayerChatPacket chat = (ClientboundPlayerChatPacket) got.get(3);
             helper.assertValueEqual(targets(chat.unsignedContent().orElseThrow()), client, "player chat's unsigned form");
             helper.assertValueEqual(targets(chat.chatType().name()), client, "player chat's sender name");
             helper.assertTrue(chat.body() == body, "the signed body of a player chat was copied");
             helper.assertValueEqual(targets(((ClientboundSetTitleTextPacket) got.get(4)).text()), client, "title");
-            helper.assertValueEqual(targets(((ClientboundSetSubtitleTextPacket) got.get(5)).text()), client, "subtitle");
+            helper.assertValueEqual(targets(((ClientboundSetSubtitleTextPacket) got.get(5)).text()), client, "subtitle's shown entity");
             helper.assertValueEqual(targets(((ClientboundSetActionBarTextPacket) got.get(6)).text()), client, "action bar");
             ClientboundTabListPacket tab = (ClientboundTabListPacket) got.get(7);
             helper.assertValueEqual(targets(tab.header()), client, "tab list header");
-            helper.assertValueEqual(tab.footer().getString(), "footer", "tab list footer");
+            helper.assertValueEqual(targets(tab.footer()), client, "tab list footer's sibling");
             helper.assertValueEqual(bossBarNames((ClientboundBossEventPacket) got.get(8)), client, "boss bar added");
             helper.assertValueEqual(bossBarNames((ClientboundBossEventPacket) got.get(9)), client, "boss bar renamed");
             helper.assertValueEqual(targets(((ClientboundPlayerInfoUpdatePacket) got.get(10)).entries().getFirst().displayName()),
@@ -312,6 +318,7 @@ public class CoordinateOffsetTextGameTests {
             ClientboundSetPlayerTeamPacket team = (ClientboundSetPlayerTeamPacket) got.get(11);
             helper.assertValueEqual(targets(team.getParameters().orElseThrow().displayName()), client, "team name");
             helper.assertValueEqual(targets(team.getParameters().orElseThrow().playerPrefix()), client, "team prefix");
+            helper.assertValueEqual(targets(team.getParameters().orElseThrow().playerSuffix()), client, "team suffix");
             helper.assertValueEqual(team.getTeamAction(), ClientboundSetPlayerTeamPacket.Action.ADD, "team action");
             helper.assertValueEqual(List.copyOf(team.getPlayers()), List.of("Ann"), "team members");
             ClientboundSetObjectivePacket objective = (ClientboundSetObjectivePacket) got.get(12);
@@ -378,6 +385,8 @@ public class CoordinateOffsetTextGameTests {
             }
         } else if (hover instanceof HoverEvent.ShowText shown) {
             collect(shown.value(), found);
+        } else if (hover instanceof HoverEvent.ShowEntity entity) {
+            entity.entity().name.ifPresent(name -> collect(name, found));
         }
         if (text.getContents() instanceof TranslatableContents translatable) {
             for (Object arg : translatable.getArgs()) {

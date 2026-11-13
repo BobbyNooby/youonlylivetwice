@@ -416,6 +416,14 @@ public class CoordinateOffsetFrameGameTests {
             helper.assertTrue(CoordinateOffsets.incoming(connection, accept) == accept, "the accept was not taken as it is");
             ServerboundMovePlayerPacket late = new ServerboundMovePlayerPacket.Pos(at.x + 1, at.y, at.z, false, false);
             helper.assertTrue(CoordinateOffsets.incoming(connection, late) == late, "a move after the accept was not taken as it is");
+
+            // A dimension change starts a frame too, and with admin view still on it has no offset either
+            ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+            helper.assertTrue(nether != null, "no nether to go to");
+            ServerPlayer admin = current;
+            OffsetTestKit.withCoordinates(() -> admin.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(admin.level() == nether, "the admin did not reach the nether");
+            helper.assertValueEqual(CoordinateOffsets.offset(admin), Offset.ZERO, "offset after a dimension change with admin view on");
         } finally {
             AdminView.set(current, false);
             TestPlayers.deop(current);

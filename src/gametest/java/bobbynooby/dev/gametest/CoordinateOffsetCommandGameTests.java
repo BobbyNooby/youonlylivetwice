@@ -11,6 +11,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
@@ -18,11 +19,14 @@ import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
@@ -64,7 +68,37 @@ public class CoordinateOffsetCommandGameTests {
             helper.assertValueEqual(player.position(), landed, "where the typed teleport went");
             OffsetTestKit.type(player, "tp @s ~1 ~ ~");
             helper.assertValueEqual(player.position(), landed.add(1.0, 0.0, 0.0), "where the relative teleport went");
+            // One axis relative and one typed: only the typed one is read in the frame
+            OffsetTestKit.type(player, "tp @s ~ 120 " + (clientZ + 2));
+            helper.assertValueEqual(player.position(), new Vec3(landed.x + 1.0, 120.0, landed.z + 2.0), "where the mixed teleport went");
+            // Local coordinates are steps from the real spot, along where the player faces, which is south
+            OffsetTestKit.type(player, "tp @s ^ ^ ^1");
+            helper.assertTrue(player.position().distanceTo(new Vec3(landed.x + 1.0, 120.0, landed.z + 3.0)) < 0.01,
+                    "where the local teleport went: " + player.position());
         } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A typed column is read in the frame too: forceload takes the real chunk under the client's numbers. Far from the
+    // test, so no chunk the test framework holds is touched.
+    @GameTest(environment = COMMANDS)
+    public void typedColumnReadInTheClientFrame(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmcolumn", GameType.CREATIVE);
+        ServerLevel level = helper.getLevel();
+        ChunkPos real = ChunkPos.containing(player.blockPosition().offset(1_000, 0, 1_000));
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            helper.assertFalse(level.getForceLoadedChunks().contains(real.pack()), "the chunk was forced already");
+            BlockPos client = offset.shift(real.getMiddleBlockPosition(0));
+            OffsetTestKit.type(player, "forceload add " + client.getX() + " " + client.getZ());
+            helper.assertTrue(level.getForceLoadedChunks().contains(real.pack()), "the typed column did not force the real chunk");
+        } finally {
+            level.setChunkForced(real.x(), real.z(), false);
             TestPlayers.deop(player);
             TestPlayers.leave(player);
         }
@@ -237,6 +271,9 @@ public class CoordinateOffsetCommandGameTests {
             BlockPos shown = offset.shift(grave.pos());
             helper.assertValueEqual(graveLines(current, mark), List.of("Your grave is at " + shown.getX() + ", " + shown.getY() + ", "
                     + shown.getZ() + " in the Overworld."), "grave notices after the respawn");
+            // A grave in another dimension has no spot in this frame, so the notice names only that dimension
+            helper.assertTrue(CoordinateOffsets.shownAt(current, GlobalPos.of(Level.NETHER, grave.pos())).isEmpty(),
+                    "a grave in the nether has a spot in the overworld's frame");
         } finally {
             config.deathLockout.enabled = lockoutBefore;
             config.graves.enabled = gravesBefore;

@@ -86,6 +86,15 @@ public class CoordinateOffsetBorderGameTests {
                 helper.assertValueEqual(sent.getNewCenterZ(), 0.0, "centre z");
                 helper.assertValueEqual(List.of(sent.getOldSize(), sent.getNewSize()), List.of(WHOLE, WHOLE), "sizes");
                 helper.assertValueEqual(sent.getLerpTime(), 0L, "lerp time");
+
+                // The same for each of the other walls, moved to 100 blocks off in turn
+                BlockPos spot = helper.absolutePos(SPOT);
+                real.setCenter(spot.getX() - 100 + 2_000, spot.getZ());
+                helper.assertValueEqual(minX(lastBorder(helper, player)), real.getMinX() + offset.x(), "west wall");
+                real.setCenter(spot.getX(), spot.getZ() - 100 + 2_000);
+                helper.assertValueEqual(minZ(lastBorder(helper, player)), real.getMinZ() + offset.z(), "north wall");
+                real.setCenter(spot.getX(), spot.getZ() + 100 - 2_000);
+                helper.assertValueEqual(maxZ(lastBorder(helper, player)), real.getMaxZ() + offset.z(), "south wall");
             } finally {
                 TestPlayers.leave(player);
             }
@@ -173,6 +182,15 @@ public class CoordinateOffsetBorderGameTests {
             helper.assertValueEqual(maxX(sent), (double) SMALL_WORLD + offset.x(), "east wall");
             helper.assertTrue(sent.getNewCenterX() - sent.getNewSize() / 2.0 <= -EDGE, "the west wall is inside the world's edge: "
                     + (sent.getNewCenterX() - sent.getNewSize() / 2.0));
+
+            // A border 64 wide that the edge cuts to 42 has both walls near, yet goes out as walls: shifted plainly, it
+            // would keep its 64 and put the east wall past an edge the client doesn't have
+            ServerPlayer near = player;
+            withBorder(helper, new BlockPos(SMALL_WORLD - 10, 100, 0), 64, () -> {
+                ClientboundInitializeBorderPacket cut = lastBorder(helper, near);
+                helper.assertValueEqual(List.of(cut.getOldSize(), cut.getNewSize()), List.of(42.0, 42.0), "sizes of the cut border");
+                helper.assertValueEqual(maxX(cut), (double) SMALL_WORLD + offset.x(), "east wall of the cut border");
+            });
         } finally {
             border.setAbsoluteMaxSize(edgeBefore);
             if (player != null) {
@@ -533,5 +551,22 @@ public class CoordinateOffsetBorderGameTests {
     // Where the client puts the east wall, which it keeps inside the world's edge
     private static double maxX(ClientboundInitializeBorderPacket packet) {
         return Math.min(packet.getNewCenterX() + packet.getNewSize() / 2.0, packet.getNewAbsoluteMaxSize());
+    }
+
+    private static double minX(ClientboundInitializeBorderPacket packet) {
+        return Math.max(packet.getNewCenterX() - packet.getNewSize() / 2.0, -packet.getNewAbsoluteMaxSize());
+    }
+
+    private static double minZ(ClientboundInitializeBorderPacket packet) {
+        return Math.max(packet.getNewCenterZ() - packet.getNewSize() / 2.0, -packet.getNewAbsoluteMaxSize());
+    }
+
+    private static double maxZ(ClientboundInitializeBorderPacket packet) {
+        return Math.min(packet.getNewCenterZ() + packet.getNewSize() / 2.0, packet.getNewAbsoluteMaxSize());
+    }
+
+    // The last whole border the player was sent, which a change to the real one goes out as
+    private static ClientboundInitializeBorderPacket lastBorder(GameTestHelper helper, ServerPlayer player) {
+        return OffsetTestKit.last(helper, player, 0, ClientboundInitializeBorderPacket.class);
     }
 }
