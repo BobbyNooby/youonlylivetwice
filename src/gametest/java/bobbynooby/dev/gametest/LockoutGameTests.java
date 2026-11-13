@@ -508,8 +508,9 @@ public class LockoutGameTests {
         }
     }
 
-    // A server running behind can handle the client's respawn before the kick runs. The kick must still find the
-    // player, now a new player object, by their id.
+    // A server running behind can handle the client's respawn before the kick runs, so the player object the death
+    // had is gone by then. The kick must still reach the player, so a check that skips a removed player object would
+    // let a dead player stay.
     @GameTest(maxTicks = 20)
     public void kickFindsAPlayerWhoRespawnedFirst(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
