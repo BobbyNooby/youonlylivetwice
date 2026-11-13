@@ -325,10 +325,11 @@ While you're offline the body is you:
   body ended up. The one exception is a body held after a logout on a vehicle (see Riding). They **can't use portals
   yet**; portal travel for bodies is on the list below.
 - **Riding:** a vehicle you ride alone leaves with you, and you come back on it, where the vehicle is. While you're
-  away your body lies on top of where the vehicle was. Over water, lava or in the air it is held in place, so it can't
-  sink, burn or fall. The same goes when you log out of a boat or mount that someone else stays on: the vehicle
-  stays, and you come back where your body is. On dry ground the body drops and moves like any other. Your health, effects and
-  gear still come from the body.
+  away your body lies on top of where the vehicle was, or lower if there is no room. Over water, lava or in the air
+  it is held in place, so it can't sink, burn or fall. A minecart on rails counts as off the ground, so a cart
+  rider's body is held too. The same goes when you log out of a boat or mount that someone else stays on: the
+  vehicle stays, and you come back where your body is. On dry ground the body drops and moves like any other. Your
+  health, effects and gear still come from the body.
 - **Race at login:** if a body dies just as its owner is logging in, the owner is kicked with the lockout message
   and their lockout stands. If it expires just then, they arrive at their logout spot with the body's state. Nothing
   is lost or duplicated.
