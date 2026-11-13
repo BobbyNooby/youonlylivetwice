@@ -30,6 +30,8 @@ final class ConfigChecks {
     static final int MAX_GRAVE_SEARCH_RADIUS = 32;
     // Each level is one more pass over the contents of the containers inside, so the count stays cheap
     static final int MAX_CONTAINER_DEPTH = 8;
+    // An anvil price of 40 or more shows "Too Expensive!"
+    static final int MAX_ANVIL_PRICE = 39;
     private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
 
     private ConfigChecks() {}
@@ -233,6 +235,7 @@ final class ConfigChecks {
             c.mending.durabilityPerXp = fallback.mending.durabilityPerXp;
             fellBack.accept("hardcore.mending.durabilityPerXp", "must be 0 or more");
         }
+        anvil(c.anvil, fallback.anvil, fellBack);
         if (!(c.elytra.glideGravityMultiplier >= 0)) {
             c.elytra.glideGravityMultiplier = fallback.elytra.glideGravityMultiplier;
             fellBack.accept("hardcore.elytra.glideGravityMultiplier", "must be 0 or more");
@@ -242,6 +245,30 @@ final class ConfigChecks {
             fellBack.accept("hardcore.elytra.rocketCutoffSpeed", "must be 0 or more");
         }
         curseAndLimp(c, fallback, fellBack);
+    }
+
+    // A price of 0 could never be taken
+    private static void anvil(HardcoreConfig.AnvilSection anvil, HardcoreConfig.AnvilSection fallback, BiConsumer<String, String> fellBack) {
+        if (!isAnvilPrice(anvil.enchantCost)) {
+            anvil.enchantCost = fallback.enchantCost;
+            fellBack.accept("hardcore.anvil.enchantCost", "must be 1 to " + MAX_ANVIL_PRICE);
+        }
+        if (!isAnvilPrice(anvil.repairCost)) {
+            anvil.repairCost = fallback.repairCost;
+            fellBack.accept("hardcore.anvil.repairCost", "must be 1 to " + MAX_ANVIL_PRICE);
+        }
+        if (!isAnvilPrice(anvil.renameCost)) {
+            anvil.renameCost = fallback.renameCost;
+            fellBack.accept("hardcore.anvil.renameCost", "must be 1 to " + MAX_ANVIL_PRICE);
+        }
+        if (!isShare(anvil.breakChance)) {
+            anvil.breakChance = fallback.breakChance;
+            fellBack.accept("hardcore.anvil.breakChance", "must be 0 to 1");
+        }
+    }
+
+    private static boolean isAnvilPrice(int price) {
+        return price >= 1 && price <= MAX_ANVIL_PRICE;
     }
 
     private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {

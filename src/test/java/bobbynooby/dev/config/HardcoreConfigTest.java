@@ -286,6 +286,11 @@ class HardcoreConfigTest {
         d.put("hardcore.hungerTax.multiplier", "1.0");
         d.put("hardcore.mending.enabled", "false");
         d.put("hardcore.mending.durabilityPerXp", "0.4");
+        d.put("hardcore.anvil.enabled", "false");
+        d.put("hardcore.anvil.enchantCost", "6");
+        d.put("hardcore.anvil.repairCost", "5");
+        d.put("hardcore.anvil.renameCost", "1");
+        d.put("hardcore.anvil.breakChance", "0.12");
         d.put("hardcore.elytra.enabled", "false");
         d.put("hardcore.elytra.glideGravityMultiplier", "0.6");
         d.put("hardcore.elytra.rocketCutoffSpeed", "20.0");
@@ -356,6 +361,7 @@ class HardcoreConfigTest {
                                 "foods": {"minecraft:apple": {"protien": 1.0}}, "unknownFood": "sometimes"},
                   "hungerTax": {"multiplier": -1},
                   "mending": {"durabilityPerXp": -1},
+                  "anvil": {"enchantCost": 0, "repairCost": 40, "renameCost": -1, "breakChance": 2},
                   "elytra": {"glideGravityMultiplier": -1, "rocketCutoffSpeed": -1}
                 }}""");
         assertFellBack(single, List.of(
@@ -405,6 +411,10 @@ class HardcoreConfigTest {
                 "hardcore.nutrients.unknownFood: unknown value",
                 "hardcore.hungerTax.multiplier: must be 0 or more",
                 "hardcore.mending.durabilityPerXp: must be 0 or more",
+                "hardcore.anvil.enchantCost: must be 1 to 39",
+                "hardcore.anvil.repairCost: must be 1 to 39",
+                "hardcore.anvil.renameCost: must be 1 to 39",
+                "hardcore.anvil.breakChance: must be 0 to 1",
                 "hardcore.elytra.glideGravityMultiplier: must be 0 or more",
                 "hardcore.elytra.rocketCutoffSpeed: must be 0 or more"));
 

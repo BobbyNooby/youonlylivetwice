@@ -19,6 +19,7 @@ public final class HardcoreConfig {
         public NutrientsSection nutrients = new NutrientsSection();
         public HungerTaxSection hungerTax = new HungerTaxSection();
         public MendingSection mending = new MendingSection();
+        public AnvilSection anvil = new AnvilSection();
         public ElytraSection elytra = new ElytraSection();
     }
 
@@ -188,6 +189,16 @@ public final class HardcoreConfig {
     public static class MendingSection {
         public boolean enabled = false;
         public double durabilityPerXp = 0.4;
+    }
+
+    // One flat price per anvil use, set by its biggest job, which never grows with repeated use; breakChance is the chance
+    // per use that the anvil wears down a step, vanilla's 12%
+    public static class AnvilSection {
+        public boolean enabled = false;
+        public int enchantCost = 6;
+        public int repairCost = 5;
+        public int renameCost = 1;
+        public double breakChance = 0.12;
     }
 
     // Lighter gravity while gliding means a slower, floatier glide; rockets stop pushing past the cut-off in m/s, 0 for never
