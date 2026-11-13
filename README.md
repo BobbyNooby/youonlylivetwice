@@ -89,7 +89,7 @@ Try again in 1 week.
   the whitelist still come first.
 - Deaths in creative or spectator mode don't count (`deathLockout.countCreativeAndSpectatorDeaths`): no lockout, no
   grave, and the player keeps their items, XP and score. With the switch on they count. A spectator still keeps
-  everything, as in vanilla, so their grave holds only the revive head.
+  everything, as in vanilla, so their grave holds only their grave head.
 - If the death database can't be opened or read, the lockout lets everyone in and logs an error, instead of locking
   everyone out. Don't let another program hold a write lock on the database while the server runs: a login check
   waits at most 250 ms for the lock, then lets the player in and logs an error.
@@ -123,7 +123,7 @@ Where the grave goes:
 - In the End, graves keep out of the spots the game rebuilds by itself: the exit portal, the arrival platform, the
   gateways and the obsidian spikes. A grave that ends up in one is moved out.
 - Graves always go inside the world border.
-- If a grave can't be made at all, your items and the revive head drop where it would have gone, and never despawn.
+- If a grave can't be made at all, your items and your grave head drop where it would have gone, and never despawn.
   With `keepInventory` you keep your items, and only the head drops.
 
 `graves.tellLocation` says whether you are told where your grave is: `never`, `whenMoved` (the default: only when it
@@ -154,15 +154,15 @@ a death. With the lockout on, that is once it is over or you are revived.
 ## Reviving someone
 
 Craft a grave head together with a nether star, a netherite ingot, a gold ingot and an iron ingot, in any slots of a
-crafting table (five items don't fit the inventory's 2x2 grid). The result is a revive head. Right-click with it while
-its owner is locked out and their lockout ends ("<name> can come back now."). One head is used up. If
-the owner isn't locked out you get "<name> is not dead." (or "is not locked out." with the lockout off) and nothing
-is used. A revived player comes back with nothing, at a random spot.
+crafting table (five items don't fit the inventory's 2x2 grid). The result is a paper called "Revive <name>".
+Right-click with it while that player is locked out and their lockout ends ("<name> can come back now."). One paper is
+used up. If the player isn't locked out you get "<name> is not dead." (or "is not locked out." with the lockout off)
+and nothing is used. A revived player comes back with nothing, at a random spot.
 
-A revive head shows a purple name and lore, not an enchantment glint. Vanilla never draws the glint on player heads.
+A revive paper shows a purple name, lore and the enchantment glint.
 
-Grave and revive heads can't get Curse of Vanishing in an anvil, and a head that has it anyway still goes into the
-grave.
+Grave heads can't get Curse of Vanishing in an anvil, and a grave head or revive paper that has it anyway still goes
+into the grave.
 
 The recipe is `data/you-only-live-twice/recipe/revive.json`, so a datapack can replace it with your own.
 
@@ -384,7 +384,7 @@ logs in. Only new logouts use the new setting.
 ## Skins
 
 On an offline-mode server nobody has a skin. With `skins.mode: auto` (the default), a player who joins without one
-gets the skin of the Mojang account with their name: on themselves, their body, and their grave and revive heads. On
+gets the skin of the Mojang account with their name: on themselves, their body, and their grave head. On
 an online-mode server players already have their skin, and YOLT only changes it for players who pick one.
 
 - **Picking a skin.** `/yolt skin set <mojangName>` wears that real Mojang account's skin from your next join on, over
@@ -486,7 +486,7 @@ diameter to the area you want people to spawn in.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `enabled` | `true` | Revive heads work when right-clicked. | No |
+| `enabled` | `true` | Revive papers work when right-clicked. | No |
 
 ## `chat`
 
