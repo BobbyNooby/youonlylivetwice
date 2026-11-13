@@ -93,6 +93,8 @@ import java.util.concurrent.ConcurrentHashMap;
 final class LeakScanner {
     // Objects deep; a list, map, optional or array on the way doesn't count
     private static final int MAX_DEPTH = 12;
+    // How a cut walk is named among the unread parts
+    private static final String CUT = " (cut at depth ";
     // A velocity or a push, not a place
     private static final Set<String> RELATIVE = Set.of("movement", "deltaMovement", "playerKnockback");
     // Libraries whose objects are walked only through the collection interfaces, never by their fields
@@ -155,9 +157,12 @@ final class LeakScanner {
             return unread;
         }
 
-        /** The same, only Minecraft's own classes, where a position the walk can't see would be. */
-        List<String> unreadMinecraft() {
-            return unread.stream().filter(name -> name.startsWith("net.minecraft.")).toList();
+        /**
+         * What of that fails a scan: every part of Minecraft's own classes, where a position the walk can't see would be,
+         * and every walk the depth limit cut short, whatever the class.
+         */
+        List<String> unreadThatFails() {
+            return unread.stream().filter(name -> name.startsWith("net.minecraft.") || name.contains(CUT)).toList();
         }
     }
 
@@ -311,7 +316,7 @@ final class LeakScanner {
             }
             // Cut short, so what lies deeper wasn't read
             if (depth >= MAX_DEPTH) {
-                scan.unread.add(type.getName() + " (cut at depth " + MAX_DEPTH + ")");
+                scan.unread.add(type.getName() + CUT + MAX_DEPTH + ")");
                 return;
             }
             Parts parts = partsOf(type);

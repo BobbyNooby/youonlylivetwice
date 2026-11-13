@@ -204,8 +204,10 @@ public class LeakSweepGameTests {
                 nest = new Nest(nest);
             }
             deep.packet(nest);
-            helper.assertTrue(deep.unread().stream().anyMatch(part -> part.startsWith(Nest.class.getName() + " (cut at depth")),
-                    "a walk cut by the depth limit left nothing unread: " + deep.unread());
+            // Not a Minecraft class, which a cut fails the scan for all the same
+            String cut = Nest.class.getName() + " (cut at depth";
+            helper.assertTrue(deep.unreadThatFails().stream().anyMatch(part -> part.startsWith(cut)),
+                    "a walk cut by the depth limit doesn't fail the scan: " + deep.unread());
         } finally {
             TestPlayers.leave(player);
         }
@@ -654,7 +656,7 @@ public class LeakSweepGameTests {
             List<String> found = new ArrayList<>();
             List<String> missing = new ArrayList<>();
             Set<String> unread = new TreeSet<>();
-            List<String> unreadMinecraft = new ArrayList<>();
+            List<String> unreadThatFails = new ArrayList<>();
             for (UUID id : scanned) {
                 ServerPlayer player = joined.get(id);
                 String name = player.nameAndId().name();
@@ -669,15 +671,15 @@ public class LeakSweepGameTests {
                 scan.findings().forEach(finding -> found.add(name + ": " + finding));
                 scan.missing().forEach(spot -> missing.add(name + ": " + spot.toShortString()));
                 unread.addAll(scan.unread());
-                scan.unreadMinecraft().forEach(part -> unreadMinecraft.add(name + ": " + part));
+                scan.unreadThatFails().forEach(part -> unreadThatFails.add(name + ": " + part));
             }
             cleanUp();
             helper.assertValueEqual(unwritable, List.of(), "packets the game's codec couldn't write and read back");
             helper.assertTrue(found.isEmpty(), found.size() + " real or shifted constant positions sent, by band and packet: "
                     + summary(found) + ". The first ones: " + String.join("; ", found.subList(0, Math.min(found.size(), 25))));
             helper.assertValueEqual(missing, List.of(), "shifted spots the scene shows that no packet held");
-            helper.assertValueEqual(unreadMinecraft, List.of(), "Minecraft parts the scan couldn't read, of " + unread.size()
-                    + " unread in all");
+            helper.assertValueEqual(unreadThatFails, List.of(), "Minecraft parts the scan couldn't read, and walks the depth limit"
+                    + " cut short, of " + unread.size() + " unread in all");
             helper.succeed();
         }
 
