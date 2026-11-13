@@ -695,7 +695,7 @@ Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or
     - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there, and spots
       in other dimensions are never shown in it.
     - Each stretch puts you in chunk 0, 0 at its start, so a stretch that starts in the real chunk at 0, 0 shows real
-      numbers. With `randomSpawn` off, a player with no bed respawns at the world spawn each time, so those stretches
+      numbers, for spots in other dimensions too. With `randomSpawn` off, a player with no bed respawns at the world spawn each time, so those stretches
       all get the same amount, and anyone who knows where the spawn is knows it.
     - With `hide.compassSpawn` off, a player who knows where the world spawn really is (often near 0, 0) can work out
       their amount from where the compass points.
