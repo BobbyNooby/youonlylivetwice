@@ -12,6 +12,7 @@ import java.util.List;
  * true and false, an enum's names (the only values it takes) or offline.
  */
 public record ConfigKey(String path, Field field, Kind kind, List<String> choices, Applies.When when) {
+    // No key is a string today; STRING is kept, with its test, for a later key that is
     public enum Kind { BOOLEAN, INT, DOUBLE, ENUM, STRING, BODY_DURATION }
 
     /** A text the key can't take. The message is a whole sentence for the admin who typed it. */

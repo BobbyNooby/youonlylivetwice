@@ -17,6 +17,7 @@ public @interface Applies {
         NEXT_FRAME(" (applies when a player next joins, respawns or changes dimension)"),
         NEW_BODIES(" (applies to new bodies)"),
         NEW_DEATHS(" (applies to deaths from now on)"),
+        // No key needs it today; kept, with its test, for a later key that does
         RESTART(" (needs a restart)");
 
         private final String note;
