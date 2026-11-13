@@ -54,6 +54,19 @@
 - **Graves from offline kills** with no body loaded (for example `/yolt kill` while the body's chunk is unloaded) show
   the skin YOLT last knew for the player (their pick, or the skin they last joined with), or the default skin with
   `skins.mode: off`.
+- **Hardcore slowdowns** slow walking and running on the ground only. Sprint-jumping mostly skips them, since a jump
+  gets a fixed push from the game. Swimming, ladders, elytra, horses, boats and minecarts ignore them.
+- **Hardcore and modified clients.** Vanilla sends a nearby player's attributes and frozen ticks to clients that can
+  see them, so a modified client can tell that a player it already sees is slowed, cursed or cold. It can't learn who
+  is online or where anyone is.
+- **Mob farms** with spawners are slower with tougher mobs on, since spawner mobs are boosted by default
+  (`hardcore.tougherMobs.includeSpawners`).
+- **Mobs from before tougher mobs.** A mob saved before tougher mobs was first turned on counts as naturally spawned
+  when it next loads, so it is boosted even if it came from a spawn egg or a command back then.
+- **The revive paper texture** needs a required resource pack, which turns away players who decline it. Revive papers
+  outside a player's inventory or open container (item frames, the ground, bundles, shulker boxes, closed chests)
+  keep the model they had until a player has them again, so after the switch is turned off they show the missing
+  texture to players without the pack.
 - **Coordinate offset** and **skins** have their own lists, on the
   [coordinate offset](coordinate-offset.md#known-limits) and [skins](skins.md#known-limits) pages.
 

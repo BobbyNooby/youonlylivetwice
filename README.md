@@ -2,7 +2,8 @@
 
 You Only Live Twice (YOLT) is a server-side Fabric mod for Minecraft 26.3. It raises the stakes of a multiplayer
 survival world and pushes players to actually talk to each other in the game, ideally over proximity voice chat.
-Players join with a plain vanilla client. No client mod and no resource pack.
+Players join with a plain vanilla client. No client mod, and the only resource pack is an optional one for the revive
+paper's texture.
 
 **[Read the full documentation](docs/README.md)**: every feature, setting, command and known limit.
 
@@ -22,6 +23,9 @@ Players join with a plain vanilla client. No client mod and no resource pack.
 - **Skins.** On an offline-mode server, players get the skin of the Mojang account with their name, and can pick
   another with `/yolt skin set`.
 - **Off by default:** a grave compass that points at your latest grave, and fake X and Z coordinates for each player.
+- **Hardcore layer, all off by default.** Carried weight, broken legs, a limp, bed rest, a Curse of the Undead that
+  takes max hearts, nutrients, a hunger tax, a Mending nerf, flat anvil prices, an elytra nerf, tougher and more
+  relentless mobs, blood moons, cold, and a texture for revive papers. Each part has its own switch.
 
 Every feature has a switch in the config.
 
@@ -51,5 +55,6 @@ The [documentation](docs/README.md) covers every feature, setting and command:
 - [Coordinate offset](docs/coordinate-offset.md)
 - [World border and Nether](docs/world-border.md)
 - [Skins](docs/skins.md)
+- [Hardcore layer](docs/hardcore.md)
 - [Known limits](docs/known-limits.md): read these before you host.
 - [Contributing](docs/contributing.md)

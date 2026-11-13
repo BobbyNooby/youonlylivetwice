@@ -71,6 +71,8 @@ YOLT keeps its data in versioned files, so a newer build can upgrade them:
   a Minecraft update doesn't make them unreadable. A file from a newer YOLT or Minecraft is copied to
   `<file>.newer-<time>` before it is saved over. A file, or part of one, that can't be read is copied to
   `<file>.unreadable-<time>`.
+- **Hardcore database** (`database/you-only-live-twice-hardcore.db` in the world folder), made only once the
+  [hardcore layer](hardcore.md) first stores something. One from a newer YOLT is left untouched.
 - **Death database** (`database/you-only-live-twice.db` in the world folder). Its layout is upgraded in place. A
   database from the old 1.21.5 build is moved aside to `you-only-live-twice.db.1.21.5-<time>.bak` at startup, and
   the lockouts in it end. One from a newer YOLT is left untouched, and the lockout then lets everyone in.

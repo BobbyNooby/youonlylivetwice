@@ -1,7 +1,8 @@
 # YOLT documentation
 
-You Only Live Twice (YOLT) is a server-side Fabric mod for Minecraft 26.3. Players join with a plain vanilla client, no
-client mod and no resource pack. These pages explain each feature, its settings and its limits.
+You Only Live Twice (YOLT) is a server-side Fabric mod for Minecraft 26.3. Players join with a plain vanilla client and
+no client mod. The only resource pack is an optional one for the revive paper's texture. These pages explain each
+feature, its settings and its limits.
 
 ## Table of contents
 
@@ -23,7 +24,11 @@ client mod and no resource pack. These pages explain each feature, its settings 
   - [`bodies`](config.md#bodies)
   - [`serverList`](config.md#serverlist)
   - [`skins`](config.md#skins)
-- [Commands and admin view](commands.md): the `/yolt` commands, and what ops can see.
+  - [`hardcore`](config.md#hardcore)
+  - [`resourcePack`](config.md#resourcepack)
+  - [File-only settings](config.md#file-only-settings)
+  - [Load checks](config.md#load-checks)
+- [Commands and admin view](commands.md): the `/yolt` commands, `/status`, and what ops can see.
   - [Admin view](commands.md#admin-view)
 
 ### How it plays
@@ -43,6 +48,27 @@ client mod and no resource pack. These pages explain each feature, its settings 
   - [Random spawn](world-border.md#random-spawn)
 - [Skins](skins.md): skins on offline-mode servers, and picking your own.
   - [Known limits](skins.md#known-limits)
+- [Hardcore layer](hardcore.md): weight, broken legs, the curse, nutrients, tougher mobs, blood moons, cold and more
+  (all off by default).
+  - [Who it applies to](hardcore.md#who-it-applies-to)
+  - [`/status`](hardcore.md#status)
+  - [Slowdowns](hardcore.md#slowdowns)
+  - [Weight](hardcore.md#weight)
+  - [Broken legs](hardcore.md#broken-legs)
+  - [Limp](hardcore.md#limp)
+  - [Bed rest](hardcore.md#bed-rest)
+  - [Curse of the Undead](hardcore.md#curse-of-the-undead)
+  - [Nutrients](hardcore.md#nutrients)
+  - [Hunger tax](hardcore.md#hunger-tax)
+  - [Mending nerf](hardcore.md#mending-nerf)
+  - [Flat anvil prices](hardcore.md#flat-anvil-prices)
+  - [Elytra nerf](hardcore.md#elytra-nerf)
+  - [Tougher mobs](hardcore.md#tougher-mobs)
+  - [Relentless mobs](hardcore.md#relentless-mobs)
+  - [Blood moon](hardcore.md#blood-moon)
+  - [Cold](hardcore.md#cold)
+  - [Revive paper texture](hardcore.md#revive-paper-texture)
+  - [Where it is stored](hardcore.md#where-it-is-stored)
 
 ### Before you host
 
@@ -57,4 +83,4 @@ client mod and no resource pack. These pages explain each feature, its settings 
 - Time slowdown and multi-version support (parked).
 - Getting your ender chest back after a dragon kill (parked, undecided).
 
-Not planned: recipe balancing beyond the one revive recipe, and custom textures or models.
+Not planned: recipe balancing beyond the one revive recipe, and custom textures or models beyond the revive paper's.
