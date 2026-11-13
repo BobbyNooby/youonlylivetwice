@@ -102,10 +102,13 @@ public final class TestPlayers {
     }
 
     // A respawn straight through the player list. Vanilla's own callers put the new player on the connection right
-    // after, and so does this, so the connection never goes on with the one who died.
+    // after and reset its position, and so does this, so the connection never goes on with the one who died. It leaves
+    // the client-load wait after a death on, so the player that comes back can't be hurt and its moves and clicks are
+    // ignored: a test that hurts or drives it respawns through the death screen's button instead.
     public static ServerPlayer respawn(ServerPlayer player, boolean keepAllPlayerData, Entity.RemovalReason reason) {
         ServerPlayer back = player.level().getServer().getPlayerList().respawn(player, keepAllPlayerData, reason);
         back.connection.player = back;
+        back.connection.resetPosition();
         return back;
     }
 
