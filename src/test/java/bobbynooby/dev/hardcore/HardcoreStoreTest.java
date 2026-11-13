@@ -114,4 +114,31 @@ class HardcoreStoreTest {
             HardcoreStates.useFileForTesting(null);
         }
     }
+
+    // A closed store fails every write, as one held by another program would; the stop then retries on a working one
+    @Test
+    void storeRetriesAWriteThatFailedBeforeTheStop() {
+        Path file = dir.resolve("hardcore.db");
+        HardcoreStore broken = HardcoreStore.open(file);
+        broken.close();
+        HardcoreStates.useFileForTesting(null);
+        HardcoreStates.useStoreForTesting(broken);
+        try {
+            HardcoreStates.update(uuid, state -> state.legsBroken = true);
+            HardcoreStates.setWorld("lastBloodMoonDay", 12);
+            // Kept in memory meanwhile
+            assertTrue(HardcoreStates.read(uuid).legsBroken);
+            assertEquals(12, HardcoreStates.world("lastBloodMoonDay").orElseThrow());
+
+            // Handed over: the reset closes it after the last try
+            HardcoreStates.useStoreForTesting(HardcoreStore.open(file));
+            HardcoreStates.useFileForTesting(null);
+            try (HardcoreStore reopened = HardcoreStore.open(file)) {
+                assertTrue(HardcoreState.decode(reopened.player(uuid).orElseThrow()).legsBroken);
+                assertEquals("12", reopened.world("lastBloodMoonDay").orElseThrow());
+            }
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+    }
 }

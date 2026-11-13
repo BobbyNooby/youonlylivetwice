@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -130,7 +131,7 @@ public final class HardcoreStates {
         UNSAVED_WORLD.put(key, value);
     }
 
-    /** Uses this store in place of the world's file; null goes back to the file. */
+    /** Uses this store in place of the world's file; null goes back to the file. It is closed with the next reset or stop. */
     public static synchronized void useStoreForTesting(@Nullable HardcoreStore replacement) {
         store = replacement;
         failed = false;
@@ -151,7 +152,12 @@ public final class HardcoreStates {
         UNSAVED_WORLD.clear();
         file = dbFile;
         if (open != null) {
-            open.close();
+            try {
+                open.close();
+                Yolt.LOGGER.info("Closed hardcore store");
+            } catch (RuntimeException e) {
+                Yolt.LOGGER.error("Could not close the hardcore store", e);
+            }
         }
     }
 
@@ -161,13 +167,30 @@ public final class HardcoreStates {
     }
 
     private static synchronized void flushAll() {
+        retryUnsaved();
         ONLINE.forEach(HardcoreStates::save);
+    }
+
+    // Writes that failed on an open store, such as one held by a backup tool, get another try on each flush and at stop
+    private static void retryUnsaved() {
+        if (UNSAVED_PLAYERS.isEmpty() && UNSAVED_WORLD.isEmpty()) {
+            return;
+        }
+        if (writableStore() == null) {
+            return;
+        }
+        for (UUID uuid : List.copyOf(UNSAVED_PLAYERS.keySet())) {
+            savePlayer(uuid, UNSAVED_PLAYERS.get(uuid));
+        }
+        for (String key : List.copyOf(UNSAVED_WORLD.keySet())) {
+            setWorld(key, UNSAVED_WORLD.get(key));
+        }
     }
 
     private static void save(UUID uuid, Cached online) {
         String now = online.state.encode();
-        if (!now.equals(online.saved)) {
-            savePlayer(uuid, now);
+        // Left unsaved on a failed write, so the next flush tries again
+        if (!now.equals(online.saved) && savePlayer(uuid, now)) {
             online.saved = now;
         }
     }
@@ -200,18 +223,20 @@ public final class HardcoreStates {
         }
     }
 
-    private static void savePlayer(UUID uuid, String data) {
+    // True when the store took it; otherwise it is kept in memory
+    private static boolean savePlayer(UUID uuid, String data) {
         HardcoreStore open = writableStore();
         if (open != null) {
             try {
                 open.savePlayer(uuid, data);
                 UNSAVED_PLAYERS.remove(uuid);
-                return;
+                return true;
             } catch (RuntimeException e) {
                 Yolt.LOGGER.error("Could not save the hardcore state of {}, keeping it in memory", uuid, e);
             }
         }
         UNSAVED_PLAYERS.put(uuid, data);
+        return false;
     }
 
     // A read never makes the file: with none yet, there is nothing stored
