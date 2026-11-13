@@ -25,6 +25,9 @@ import net.minecraft.network.protocol.game.ClientboundInitializeBorderPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket;
+import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
+import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
@@ -384,7 +387,7 @@ final class LeakScanner {
         }
 
         // What needs more than its fields read: an item by its own components, a display's vectors not at all, a teleport
-        // by its absolute axes only, and a border by the walls the client puts it at
+        // by its absolute axes only, a border by the walls the client puts it at, and a raw border change not at all
         private boolean special(Object value, int depth) {
             if (value instanceof ItemStack stack) {
                 if (!stack.isEmpty()) {
@@ -409,6 +412,13 @@ final class LeakScanner {
             if (value instanceof ClientboundInitializeBorderPacket border) {
                 walls(border, border.getOldSize());
                 walls(border, border.getNewSize());
+                return true;
+            }
+            // A client with an offset only ever gets the whole border, from the walls rule: one of these would carry the
+            // real centre or size as they are
+            if (value instanceof ClientboundSetBorderCenterPacket || value instanceof ClientboundSetBorderSizePacket
+                    || value instanceof ClientboundSetBorderLerpSizePacket) {
+                found("raw border change", value.getClass().getSimpleName());
                 return true;
             }
             return false;

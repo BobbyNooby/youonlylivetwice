@@ -134,6 +134,21 @@ public class CoordinateOffsetBorderGameTests {
                         "east wall against the real one");
                 helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundSetBorderSizePacket.class).isEmpty(),
                         "a size change reached the client");
+
+                // A new centre and a moving border go the same way, with the near wall where the real one is
+                for (Runnable change : List.<Runnable>of(() -> real.setCenter(real.getCenterX() - 10.0, real.getCenterZ()),
+                        () -> real.lerpSizeBetween(real.getSize(), real.getSize() - 60.0, 20L * 60L, helper.getLevel().getGameTime()))) {
+                    int changeMark = OffsetTestKit.mark(player);
+                    change.run();
+                    helper.assertTrue(OffsetTestKit.sent(player, changeMark, ClientboundSetBorderCenterPacket.class).isEmpty()
+                            && OffsetTestKit.sent(player, changeMark, ClientboundSetBorderSizePacket.class).isEmpty()
+                            && OffsetTestKit.sent(player, changeMark, ClientboundSetBorderLerpSizePacket.class).isEmpty(),
+                            "a raw border change reached the client");
+                    ClientboundInitializeBorderPacket whole =
+                            OffsetTestKit.last(helper, player, changeMark, ClientboundInitializeBorderPacket.class);
+                    helper.assertValueEqual(maxX(whole), real.getMaxX() + offset.x(), "east wall after the change");
+                    helper.assertValueEqual(whole.getLerpTime(), 0L, "lerp time of the walls");
+                }
             } finally {
                 TestPlayers.leave(player);
             }
