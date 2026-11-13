@@ -4,7 +4,11 @@ import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.gametest.mixin.ServerGamePacketListenerInvoker;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.Hardcore;
+import bobbynooby.dev.hardcore.HardcoreState;
+import bobbynooby.dev.hardcore.HardcoreStates;
+import bobbynooby.dev.hardcore.Legs;
 import bobbynooby.dev.hardcore.Slowdowns;
 import bobbynooby.dev.hardcore.Status;
 import com.mojang.brigadier.ParseResults;
@@ -12,6 +16,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -19,7 +24,14 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -123,6 +135,95 @@ public class HardcoreStatusGameTests {
         helper.succeed();
     }
 
+    // Every line there is, each with something to say. A report that stays the same when the player moves along every
+    // axis holds no position or distance, and unlike a digit scan it can't trip on a number that happens to match one.
+    @GameTest
+    public void status1EveryLineHidesCoordinatesAndPlayers(GameTestHelper helper) {
+        BlockPos firstBed = bed(helper, new BlockPos(1, 1, 1));
+        BlockPos secondBed = bed(helper, new BlockPos(4, 2, 3));
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Secretive", GameType.SURVIVAL, AT);
+        ServerPlayer other = TestPlayers.join(helper, "Neighbour", GameType.SURVIVAL, AT.offset(3, 0, 0));
+        String otherName = other.nameAndId().name();
+        String otherId = other.getStringUUID();
+        UUID id = player.getUUID();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean weightBefore = config.hardcore.weight.enabled;
+        boolean legsBefore = config.hardcore.legs.enabled;
+        boolean limpBefore = config.hardcore.limp.enabled;
+        boolean curseBefore = config.hardcore.curse.enabled;
+        boolean nutrientsBefore = config.hardcore.nutrients.enabled;
+        boolean bedRestBefore = config.hardcore.bedRest.enabled;
+        boolean mendingBefore = config.hardcore.mending.enabled;
+        double hungerBefore = config.hardcore.hungerTax.multiplier;
+        try {
+            config.restrictCommands = true;
+            config.hardcore.weight.enabled = true;
+            config.hardcore.legs.enabled = true;
+            config.hardcore.limp.enabled = true;
+            config.hardcore.curse.enabled = true;
+            config.hardcore.nutrients.enabled = true;
+            config.hardcore.bedRest.enabled = true;
+            config.hardcore.mending.enabled = true;
+            config.hardcore.hungerTax.multiplier = 1.5;
+            player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+            Legs.set(id, true);
+            Curse.set(id, 1);
+            HardcoreStates.update(id, s -> {
+                s.protein = 0.6;
+                s.vitamins = 0.1;
+                s.sugar = 0.4;
+            });
+
+            helper.assertTrue(player.startSleeping(helper.absolutePos(firstBed)), "the player could not lie in the first bed");
+            BlockPos firstPos = player.blockPosition();
+            List<String> first = statusTexts(player);
+            player.stopSleeping();
+            helper.assertTrue(player.startSleeping(helper.absolutePos(secondBed)), "the player could not lie in the second bed");
+            BlockPos secondPos = player.blockPosition();
+            List<String> second = statusTexts(player);
+            helper.assertTrue(firstPos.getX() != secondPos.getX() && firstPos.getY() != secondPos.getY()
+                    && firstPos.getZ() != secondPos.getZ(), "the beds share an axis: " + firstPos + ", " + secondPos);
+
+            for (String start : List.of("Load ", "  heaviest: ", "Legs ", "Total slowdown ", "Curse of the Undead ",
+                    "Nutrients ", "Resting ", "Rules ")) {
+                helper.assertTrue(first.stream().anyMatch(text -> text.startsWith(start)), "the report has no '" + start + "' line: " + first);
+            }
+            helper.assertTrue(first.stream().anyMatch(text -> text.startsWith("Nutrients ") && text.contains("(low: ")),
+                    "the nutrients line shows nothing low: " + first);
+            helper.assertTrue(first.stream().anyMatch(text -> text.startsWith("Rules ") && text.contains("hunger ×1.5")
+                    && text.contains("Mending ")), "the rules line misses hunger or Mending: " + first);
+            helper.assertValueEqual(second, first, "the report after moving from " + firstPos + " to " + secondPos);
+            for (String text : first) {
+                helper.assertFalse(text.contains(otherName) || text.contains(otherId), "'" + text + "' names the other player");
+            }
+        } finally {
+            if (player.isSleeping()) {
+                player.stopSleeping();
+            }
+            config.restrictCommands = restrictBefore;
+            config.hardcore.weight.enabled = weightBefore;
+            config.hardcore.legs.enabled = legsBefore;
+            config.hardcore.limp.enabled = limpBefore;
+            config.hardcore.curse.enabled = curseBefore;
+            config.hardcore.nutrients.enabled = nutrientsBefore;
+            config.hardcore.bedRest.enabled = bedRestBefore;
+            config.hardcore.mending.enabled = mendingBefore;
+            config.hardcore.hungerTax.multiplier = hungerBefore;
+            Legs.set(id, false);
+            Curse.set(id, 0);
+            HardcoreStates.update(id, s -> {
+                s.protein = HardcoreState.UNSET;
+                s.vitamins = HardcoreState.UNSET;
+                s.sugar = HardcoreState.UNSET;
+            });
+            player.getInventory().clearContent();
+            TestPlayers.leave(player);
+            TestPlayers.leave(other);
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void status1NonOpCantNameATarget(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -203,6 +304,29 @@ public class HardcoreStatusGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // A red bed with its foot here, facing south; returns the head
+    private static BlockPos bed(GameTestHelper helper, BlockPos foot) {
+        BlockPos head = foot.relative(Direction.SOUTH);
+        BlockState bed = Blocks.BED.pick(DyeColor.RED).defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
+        helper.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
+        helper.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD));
+        return head;
+    }
+
+    // The /status reply, each line followed by its hover text
+    private static List<String> statusTexts(TestPlayers.Recording player) {
+        int from = player.messages.size();
+        sendCommand(player, "status");
+        List<String> texts = new ArrayList<>();
+        for (Component line : player.messages.subList(from, player.messages.size())) {
+            texts.add(line.getString());
+            if (line.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(Component hover)) {
+                texts.add(hover.getString());
+            }
+        }
+        return texts;
     }
 
     private static Runnable testLine(ServerPlayer player) {
