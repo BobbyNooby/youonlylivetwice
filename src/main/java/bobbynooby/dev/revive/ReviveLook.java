@@ -15,7 +15,8 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Gives revive papers the resource pack's model while resourcePack.reviveTexture is on, and takes it away again when it
- * is off. Set at runtime rather than by the recipe, so a paper never shows the missing texture once the pack is gone.
+ * is off. Set as a paper is crafted and kept up once a second, rather than stamped into the recipe's result, so papers
+ * made with the pack on lose the model again, and don't show the missing texture, once it is off.
  */
 public final class ReviveLook {
     private static final int TICKS_PER_SECOND = 20;

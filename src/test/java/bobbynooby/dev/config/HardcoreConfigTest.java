@@ -392,7 +392,8 @@ class HardcoreConfigTest {
         assertEquals(Applies.When.NOW, key("hardcore.weight.freeLoad").when());
     }
 
-    // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order
+    // Every hardcore and resource pack value takes its default again, maps included, and only the expected warnings come
+    // out, in order
     private static void assertFellBack(ConfigLoader.Result r, List<String> expected) {
         List<String> hardcore = r.warnings().stream()
                 .filter(w -> w.startsWith("hardcore.") || w.startsWith("resourcePack."))
