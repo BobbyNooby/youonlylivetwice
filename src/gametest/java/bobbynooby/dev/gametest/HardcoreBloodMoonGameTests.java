@@ -253,7 +253,8 @@ public class HardcoreBloodMoonGameTests {
                 .thenSucceed();
     }
 
-    // The level's cap and a real player's are doubled; a player body's stays vanilla's
+    // The level's cap and a real player's are doubled; a player body's stays vanilla's. Relies on no other player or
+    // player body standing within 128 blocks of this structure in this tick, since any of them would add room of its own.
     @GameTest(environment = MOON)
     public void blood5NoBiggerCapAroundPlayerBodies(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -319,7 +320,8 @@ public class HardcoreBloodMoonGameTests {
     }
 
     // The same packets for one player alone and for each of two, and the sound only on each one's own connection: a
-    // sound played in the world at either player would reach the other too, who stands next to them
+    // sound played in the world at either player would reach the other too, who stands next to them. Relies on nothing
+    // else sending these players a chat line, title or sound in the ticks it watches.
     @GameTest(environment = WARNING, maxTicks = 200)
     public void info1WarningAndBarAreTheSameForEveryone(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -383,6 +385,7 @@ public class HardcoreBloodMoonGameTests {
         }
     }
 
+    // Relies on nothing else sending this player a chat line or a boss bar between its join and the stop
     @GameTest(environment = MOON)
     public void bloodCommandsStartStopAndReport(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
