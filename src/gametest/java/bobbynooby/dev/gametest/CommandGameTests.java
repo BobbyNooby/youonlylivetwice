@@ -541,6 +541,25 @@ public class CommandGameTests {
         helper.succeed();
     }
 
+    // On an offline-mode server "Steve" and "steve" are two players with two ids. A name typed in the same case as one
+    // of them finds that one, even while vanilla's name cache holds the other, as after the other logged in last.
+    @GameTest
+    public void sameCaseNameWinsOverTheOtherCase(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        SkinStore store = SkinStore.get(server);
+        String upper = uniqueName("Cases");
+        String lower = upper.toLowerCase(Locale.ROOT);
+        UUID upperId = UUID.randomUUID();
+        store.noteJoin(upperId, upper);
+        store.noteJoin(UUID.randomUUID(), lower);
+        server.services().nameToIdCache().add(new NameAndId(upperId, upper));
+        helper.assertValueEqual(run(server, "yolt skin clear " + lower), List.of(lower + " hasn't picked a skin."),
+                "the player found for the name in lower case");
+        helper.assertValueEqual(run(server, "yolt skin clear " + upper), List.of(upper + " hasn't picked a skin."),
+                "the player found for the name as the cache holds it");
+        helper.succeed();
+    }
+
     // A startup load that refuses a value keeps the file it rewrites as a .bak, or beside it with the time added when the
     // .bak holds something else. bytes is null when there was no .bak.
     record SavedBackups(Path bak, byte[] bytes, List<Path> timed) {}

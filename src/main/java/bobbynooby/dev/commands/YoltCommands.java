@@ -13,8 +13,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /** The /yolt admin commands. Every reply and log line works from the console too, which has no player. */
 public final class YoltCommands {
@@ -62,23 +64,33 @@ public final class YoltCommands {
     // which an offline login never has. Online players first, so the exact player is used. Then the ids vanilla's
     // cache holds, the death log, which keeps a locked-out player who can't join, and the id each player last joined
     // with, which a forwarding proxy may have given. A player who never joined has no save to act on, so is not found.
+    // The first one in the same case as typed wins over any before it: an offline-mode server gives "Steve" and "steve"
+    // different ids, and every source but the last ignores case.
     static Optional<NameAndId> lookup(MinecraftServer server, String name) {
-        ServerPlayer online = server.getPlayerList().getPlayerByName(name);
-        if (online != null) {
-            return Optional.of(online.nameAndId());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getGameProfile().name().equals(name)) {
+                return Optional.of(player.nameAndId());
+            }
         }
-        // Only an id that played here: vanilla's own commands can leave an account's online id in an offline server's
-        // cache
-        Optional<NameAndId> cached = SkinOwners.cached(server.services().nameToIdCache(), name)
-                .filter(found -> SkinOwners.playedHere(server, found.id()));
-        if (cached.isPresent()) {
-            return cached;
+        List<Supplier<Optional<NameAndId>>> sources = List.of(
+                () -> Optional.ofNullable(server.getPlayerList().getPlayerByName(name)).map(ServerPlayer::nameAndId),
+                // Only an id that played here: vanilla's own commands can leave an account's online id in an offline
+                // server's cache
+                () -> SkinOwners.cached(server.services().nameToIdCache(), name)
+                        .filter(found -> SkinOwners.playedHere(server, found.id())),
+                () -> DeathLockout.latestByName(name),
+                () -> SkinStore.get(server).joinedUnder(name));
+        NameAndId otherCase = null;
+        for (Supplier<Optional<NameAndId>> source : sources) {
+            Optional<NameAndId> found = source.get();
+            if (found.isPresent() && found.get().name().equals(name)) {
+                return found;
+            }
+            if (otherCase == null && found.isPresent()) {
+                otherCase = found.get();
+            }
         }
-        Optional<NameAndId> died = DeathLockout.latestByName(name);
-        if (died.isPresent()) {
-            return died;
-        }
-        return SkinStore.get(server).joinedUnder(name);
+        return Optional.ofNullable(otherCase);
     }
 
     /** The reply when lookup finds no one. */
