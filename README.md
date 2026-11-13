@@ -153,8 +153,9 @@ a death. With the lockout on, that is once it is over or you are revived.
 
 ## Reviving someone
 
-Craft a grave head together with a nether star in a normal crafting table. The result is a revive head. Right-click
-with it while its owner is locked out and their lockout ends ("<name> can come back now."). One head is used up. If
+Craft a grave head together with a nether star, a netherite ingot, a gold ingot and an iron ingot, in any slots of a
+crafting table (five items don't fit the inventory's 2x2 grid). The result is a revive head. Right-click with it while
+its owner is locked out and their lockout ends ("<name> can come back now."). One head is used up. If
 the owner isn't locked out you get "<name> is not dead." (or "is not locked out." with the lockout off) and nothing
 is used. A revived player comes back with nothing, at a random spot.
 
