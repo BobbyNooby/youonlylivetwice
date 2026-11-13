@@ -4,6 +4,7 @@ import bobbynooby.dev.config.ConfigKey;
 import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.world.LiveSettings;
 import bobbynooby.dev.world.WorldBorders;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -15,8 +16,6 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 import java.util.Optional;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt config: shows one config key, or changes it in the file and the live config at once. */
 final class ConfigCommands {
@@ -87,7 +86,7 @@ final class ConfigCommands {
         }
         // The live config had it already and only the file was behind, so there is nothing to apply
         if (change.oldValue().equals(change.newValue())) {
-            LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
+            Yolt.LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
             YoltCommands.reply(source, name + " is already " + change.newValue() + ", and the config file now says so too.");
             tellBackup(source, change);
             return 1;
@@ -100,7 +99,7 @@ final class ConfigCommands {
         if (border && !Settings.borderHeld()) {
             WorldBorders.apply(server, true);
         }
-        LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
+        Yolt.LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
         YoltCommands.reply(source, name + " changed from " + change.oldValue() + " to " + change.newValue() + key.when().note() + ".");
         tellBackup(source, change);
         if (border && change.config().worldBorder.enabled) {

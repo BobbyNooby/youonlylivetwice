@@ -4,6 +4,7 @@ import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.lockout.DeathLockout;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -16,8 +17,6 @@ import net.minecraft.server.players.NameAndId;
 
 import java.util.Optional;
 import java.util.OptionalLong;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt respawncooldown, kill and unkill. */
 final class LockoutCommands {
@@ -45,7 +44,7 @@ final class LockoutCommands {
             return ConfigCommands.failed(source, change);
         }
         String shown = days == 1 ? "1 day" : days + " days";
-        LOGGER.info("{} set the respawn cooldown to {}", source.getTextName(), shown);
+        Yolt.LOGGER.info("{} set the respawn cooldown to {}", source.getTextName(), shown);
         YoltCommands.reply(source, "Respawn cooldown set to " + shown + "."
                 + " It applies to deaths from now on; use /yolt unkill for the rest.");
         ConfigCommands.tellBackup(source, change);
@@ -67,7 +66,7 @@ final class LockoutCommands {
             // The body death logged it already
             return YoltCommands.fail(source, "Could not kill " + name + "; see the server log.");
         } catch (RuntimeException e) {
-            LOGGER.error("{} could not kill {}", source.getTextName(), name, e);
+            Yolt.LOGGER.error("{} could not kill {}", source.getTextName(), name, e);
             return YoltCommands.fail(source, "Could not kill " + name + "; see the server log.");
         }
         String failure = switch (result) {
@@ -81,12 +80,13 @@ final class LockoutCommands {
         }
         // No death was recorded, and none was meant to be
         if (result == Kills.Result.KILLED_UNCOUNTED) {
-            LOGGER.info("{} killed {}, whose death doesn't count in creative or spectator mode", source.getTextName(),
+            Yolt.LOGGER.info("{} killed {}, whose death doesn't count in creative or spectator mode", source.getTextName(),
                     who.get().name());
             return YoltCommands.done(source, "Killed " + who.get().name()
                     + ". They were in creative or spectator mode, so the death doesn't count.");
         }
-        LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(), result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
+        Yolt.LOGGER.info("{} killed {} ({})", source.getTextName(), who.get().name(),
+                result == Kills.Result.KILLED_ONLINE ? "online" : "offline");
         // The player is dead either way; without the record they are not locked out, so the admin has to know
         if (!DeathLockout.deathRecordedAfter(who.get().id(), who.get().name(), before)) {
             return YoltCommands.fail(source, "Killed " + who.get().name() + ", but the death could not be recorded; see the server log.");
@@ -102,7 +102,7 @@ final class LockoutCommands {
         String found = who.get().name();
         return switch (DeathLockout.revive(who.get().id(), found, reviver(source))) {
             case REVIVED -> {
-                LOGGER.info("{} revived {}", source.getTextName(), found);
+                Yolt.LOGGER.info("{} revived {}", source.getTextName(), found);
                 yield YoltCommands.done(source, "Revived " + found + ".");
             }
             case ALREADY_ENDED -> YoltCommands.fail(source, found + "'s lockout had already ended.");

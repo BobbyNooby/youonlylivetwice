@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.skins.CachedSkin;
 import bobbynooby.dev.skins.SkinOwners;
 import bobbynooby.dev.skins.SkinStore;
@@ -25,8 +26,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /**
  * /yolt skin: a player wears the skin of a real Mojang account from their next join on, over every other skin. A
@@ -155,7 +154,7 @@ public final class SkinCommands {
             // Mojang can't be asked, but the skin saved before for that account still works
             skin = store.skin(mojangName);
             if (skin == null || !skin.exists()) {
-                LOGGER.warn("{} could not look up the Mojang account {}: {}", source.getTextName(), mojangName,
+                Yolt.LOGGER.warn("{} could not look up the Mojang account {}: {}", source.getTextName(), mojangName,
                         String.valueOf(cause(e)));
                 return YoltCommands.fail(source, "Could not reach Mojang to look up " + mojangName
                         + ", so nothing changed. Try again later.");
@@ -176,7 +175,7 @@ public final class SkinCommands {
         // An op's pick is kept apart, since a player who joins takes their own skin back only from players' picks
         store.choose(who.id(), skin.name(), !held);
         saveNow(source, who);
-        LOGGER.info("{} set the skin of {} to the Mojang account {}", source.getTextName(), who.name(), skin.name());
+        Yolt.LOGGER.info("{} set the skin of {} to the Mojang account {}", source.getTextName(), who.name(), skin.name());
         return YoltCommands.done(source, own
                 ? "Your skin is now " + skin.name() + "'s. Rejoin to see it."
                 : who.name() + "'s skin is now " + skin.name() + "'s. It shows once they rejoin.");
@@ -204,7 +203,7 @@ public final class SkinCommands {
             return YoltCommands.fail(source, own ? "You haven't picked a skin." : who.name() + " hasn't picked a skin.");
         }
         saveNow(source, who);
-        LOGGER.info("{} cleared the skin {} picked", source.getTextName(), who.name());
+        Yolt.LOGGER.info("{} cleared the skin {} picked", source.getTextName(), who.name());
         return YoltCommands.done(source, own
                 ? "Your skin is back to the default. Rejoin to see it."
                 : who.name() + "'s skin is back to the default. It shows once they rejoin.");
@@ -239,7 +238,7 @@ public final class SkinCommands {
         try {
             SkinStore.get(source.getServer()).saveNow(source.getServer());
         } catch (RuntimeException e) {
-            LOGGER.error("Could not save {}'s skin pick at once, so it is saved with the world", who.name(), e);
+            Yolt.LOGGER.error("Could not save {}'s skin pick at once, so it is saved with the world", who.name(), e);
         }
     }
 

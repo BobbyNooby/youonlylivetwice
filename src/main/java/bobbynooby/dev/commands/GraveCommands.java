@@ -1,5 +1,6 @@
 package bobbynooby.dev.commands;
 
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
@@ -12,8 +13,6 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.Collection;
 import java.util.Optional;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt grave list and remove. */
 final class GraveCommands {
@@ -57,7 +56,7 @@ final class GraveCommands {
                     "Could not remove " + owner + "'s grave: there is nowhere near it to drop its items safely.");
             case Graves.Removal.Dropped dropped -> {
                 String stacks = dropped.stacks() == 1 ? "1 stack" : dropped.stacks() + " stacks";
-                LOGGER.info("{} removed {}'s grave at {} {} and dropped {}", source.getTextName(), owner,
+                Yolt.LOGGER.info("{} removed {}'s grave at {} {} and dropped {}", source.getTextName(), owner,
                         source.getLevel().dimension().identifier(), pos, stacks);
                 yield YoltCommands.done(source, "Removed " + owner + "'s grave and dropped " + stacks + ".");
             }

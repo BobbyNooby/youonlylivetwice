@@ -7,6 +7,7 @@ import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.world.RandomSpawn;
@@ -36,8 +37,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /** /yolt border, center and endscaling. */
 final class BorderCommands {
@@ -115,7 +114,7 @@ final class BorderCommands {
         Outside outside = newlyStranded(server, border.diameter, border.endScale);
         if (!outside.names().isEmpty()) {
             Settings.holdBorder();
-            LOGGER.warn("Config: the config's border would leave {} outside it, so YOLT left the world border as the world saved it."
+            Yolt.LOGGER.warn("Config: the config's border would leave {} outside it, so YOLT left the world border as the world saved it."
                     + " Change the config, then run /yolt reload, or use /yolt border or endscaling with confirm.", listed(outside.names()));
         }
     }
@@ -242,7 +241,7 @@ final class BorderCommands {
             return ConfigCommands.failed(source, change);
         }
         WorldBorders.apply(source.getServer(), true);
-        LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
+        Yolt.LOGGER.info("{} set the world border diameter to {}", source.getTextName(), diameter);
         YoltCommands.reply(source, "World border diameter set to " + diameter + "." + borderOffNote() + outside.spawnNote()
                 + offlineNote());
         ConfigCommands.tellBackup(source, change);
@@ -275,7 +274,7 @@ final class BorderCommands {
                 level.getWorldBorder().setCenter(x, z);
             }
         });
-        LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
+        Yolt.LOGGER.info("{} set the world border center to {}, {}", source.getTextName(), number(x), number(z));
         return YoltCommands.done(source, "World border center set to " + number(x) + ", " + number(z) + "." + outside.spawnNote()
                 + offlineNote());
     }
@@ -296,7 +295,7 @@ final class BorderCommands {
             return ConfigCommands.failed(source, change);
         }
         WorldBorders.apply(source.getServer(), true);
-        LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
+        Yolt.LOGGER.info("{} set the end world border scaling factor to {}", source.getTextName(), scaling);
         YoltCommands.reply(source, "End world border scaling factor set to " + scaling + "." + borderOffNote() + outside.spawnNote()
                 + offlineNote());
         ConfigCommands.tellBackup(source, change);

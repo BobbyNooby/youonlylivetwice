@@ -1,6 +1,7 @@
 package bobbynooby.dev.world;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.PlayerSpawnFinderInvoker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -16,8 +17,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Random;
-
-import static bobbynooby.dev.core.Yolt.LOGGER;
 
 /**
  * Picks a random spot inside the world border for new and respawning players. The search runs on the server thread,
@@ -82,12 +81,12 @@ public final class RandomSpawn {
                 BlockPos fallback = new BlockPos(column.x(), y, column.z());
                 // An empty column, as on a void map: a spot over the void kills, so vanilla's own spawn is better
                 if (y <= level.getMinY()) {
-                    LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground, so vanilla picks the spawn",
+                    Yolt.LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground, so vanilla picks the spawn",
                             ATTEMPTS);
                     noGroundTick = level.getServer().getTickCount();
                     return null;
                 }
-                LOGGER.warn("No safe random spawn found in {} columns, using {}", ATTEMPTS, fallback.toShortString());
+                Yolt.LOGGER.warn("No safe random spawn found in {} columns, using {}", ATTEMPTS, fallback.toShortString());
                 return fallback;
             }
         }
