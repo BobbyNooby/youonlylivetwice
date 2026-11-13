@@ -393,7 +393,9 @@ On some nights, picked by chance, more mobs come out, and they are tougher, bett
   off, a blood moon still blocks the skip for its night, unless `canSleepThrough` is on.
 - Marked mobs keep their boosts after dawn. Most burn in the sun anyway.
 
-Ops can test it with `/yolt bloodmoon start`, `stop` and `status`.
+Ops can test it with `/yolt bloodmoon start`, `stop` and `status`. A started one that a restart cuts short comes back
+as that day's blood moon: after the restart it runs on to `endTick`, or, if the restart came before dark, the warning
+comes again and then a whole night.
 
 Settings: [`hardcore.bloodMoon`](config.md#hardcorebloodmoon).
 

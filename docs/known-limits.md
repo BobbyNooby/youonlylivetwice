@@ -68,6 +68,17 @@
   outside a player's inventory or open container (item frames, the ground, bundles, shulker boxes, closed chests)
   keep the model they had until a player has them again, so after the switch is turned off they show the missing
   texture to players without the pack.
+- **Before removing YOLT.** The boosts from tougher mobs, the blood moon and relentless mobs are saved on each mob,
+  and the game keeps them once YOLT is gone. First turn off `hardcore.tougherMobs.enabled`,
+  `hardcore.bloodMoon.enabled` and `hardcore.relentlessMobs.enabled`, then visit the places whose mobs you care about:
+  a mob loses its health, speed and follow-range boosts the next time it loads with the feature off. Mobs in chunks
+  that never load again keep theirs. What doesn't come off at all: a zombie that won its door roll keeps breaking
+  doors (only on Hard once YOLT is gone, as in vanilla), a charged creeper stays charged, the gear a blood moon gave
+  stays, and the `yolt.` tags on mobs stay (they do nothing without YOLT). Turn `resourcePack.reviveTexture` off while
+  the players who hold revive papers are online, so their papers lose the pack's model; papers elsewhere keep it and
+  show the missing texture once the pack is gone. Players keep nothing: the curse and the slowdowns are never saved
+  with the player, so lost max hearts come back once YOLT is gone, and frost from the cold thaws in a few seconds. The
+  [hardcore database](hardcore.md#where-it-is-stored) stays in the world folder until you delete it.
 - **Coordinate offset** and **skins** have their own lists, on the
   [coordinate offset](coordinate-offset.md#known-limits) and [skins](skins.md#known-limits) pages.
 
