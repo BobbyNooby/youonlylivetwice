@@ -223,6 +223,10 @@ final class ConfigChecks {
         bedRest(c.bedRest, fallback.bedRest, fellBack);
         curse(c.curse, fallback.curse, fellBack);
         nutrients(c.nutrients, fallback.nutrients, fellBack);
+        if (!(c.hungerTax.multiplier >= 0)) {
+            c.hungerTax.multiplier = fallback.hungerTax.multiplier;
+            fellBack.accept("hardcore.hungerTax.multiplier", "must be 0 or more");
+        }
         curseAndLimp(c, fallback, fellBack);
     }
 

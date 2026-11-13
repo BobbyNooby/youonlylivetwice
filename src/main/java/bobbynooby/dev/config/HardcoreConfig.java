@@ -17,6 +17,7 @@ public final class HardcoreConfig {
         public BedRestSection bedRest = new BedRestSection();
         public CurseSection curse = new CurseSection();
         public NutrientsSection nutrients = new NutrientsSection();
+        public HungerTaxSection hungerTax = new HungerTaxSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -174,6 +175,11 @@ public final class HardcoreConfig {
         foods.put("minecraft:enchanted_golden_apple", numbers("vitamins", 0.6, "protein", 0.2, "sugar", 0.2));
         foods.put("minecraft:poisonous_potato", numbers());
         return foods;
+    }
+
+    // Scales the hunger that actions cost; 1.0 is vanilla, so it has no switch of its own
+    public static class HungerTaxSection {
+        public double multiplier = 1.0;
     }
 
     // Name, value, name, value..., kept in the order given

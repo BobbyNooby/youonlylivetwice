@@ -12,4 +12,8 @@ public interface FoodDataAccessor {
 
     @Accessor("exhaustionLevel")
     void yoltSetExhaustion(float exhaustion);
+
+    // Ticks counted towards the next regen heal
+    @Accessor("tickTimer")
+    void yoltSetTickTimer(int ticks);
 }

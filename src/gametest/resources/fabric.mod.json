@@ -42,6 +42,7 @@
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
 			"bobbynooby.dev.gametest.HardcoreBedGameTests",
 			"bobbynooby.dev.gametest.HardcoreCurseGameTests",
+			"bobbynooby.dev.gametest.HardcoreHungerGameTests",
 			"bobbynooby.dev.gametest.HardcoreLegsGameTests",
 			"bobbynooby.dev.gametest.HardcoreLimpGameTests",
 			"bobbynooby.dev.gametest.HardcoreNutrientsGameTests",
