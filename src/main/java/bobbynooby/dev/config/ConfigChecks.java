@@ -219,6 +219,7 @@ final class ConfigChecks {
         }
 
         legs(c.legs, fallback.legs, fellBack);
+        limp(c.limp, fallback.limp, fellBack);
     }
 
     private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {
@@ -260,6 +261,28 @@ final class ConfigChecks {
         if (!(legs.exhaustionPerPoint >= 0)) {
             legs.exhaustionPerPoint = fallback.exhaustionPerPoint;
             fellBack.accept("hardcore.legs.exhaustionPerPoint", "must be 0 or more");
+        }
+    }
+
+    private static void limp(HardcoreConfig.LimpSection limp, HardcoreConfig.LimpSection fallback, BiConsumer<String, String> fellBack) {
+        if (!(limp.belowHearts > 0)) {
+            limp.belowHearts = fallback.belowHearts;
+            fellBack.accept("hardcore.limp.belowHearts", "must be more than 0");
+        }
+        if (!(limp.recoverAtHearts > 0)) {
+            limp.recoverAtHearts = fallback.recoverAtHearts;
+            fellBack.accept("hardcore.limp.recoverAtHearts", "must be more than 0");
+        }
+        // Both go back, since either one could be the typo
+        if (!(limp.belowHearts < limp.recoverAtHearts)) {
+            limp.belowHearts = fallback.belowHearts;
+            limp.recoverAtHearts = fallback.recoverAtHearts;
+            fellBack.accept("hardcore.limp.belowHearts", "must be less than hardcore.limp.recoverAtHearts");
+            fellBack.accept("hardcore.limp.recoverAtHearts", "must be more than hardcore.limp.belowHearts");
+        }
+        if (!isShare(limp.slow)) {
+            limp.slow = fallback.slow;
+            fellBack.accept("hardcore.limp.slow", "must be 0 to 1");
         }
     }
 

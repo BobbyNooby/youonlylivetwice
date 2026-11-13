@@ -41,6 +41,7 @@
 			"bobbynooby.dev.gametest.GraveProtectionGameTests",
 			"bobbynooby.dev.gametest.GraveStoreGameTests",
 			"bobbynooby.dev.gametest.HardcoreLegsGameTests",
+			"bobbynooby.dev.gametest.HardcoreLimpGameTests",
 			"bobbynooby.dev.gametest.HardcoreSlowGameTests",
 			"bobbynooby.dev.gametest.HardcoreStatusGameTests",
 			"bobbynooby.dev.gametest.HardcoreWeightGameTests",

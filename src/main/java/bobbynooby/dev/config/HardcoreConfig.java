@@ -11,6 +11,7 @@ public final class HardcoreConfig {
         public SlowSection slow = new SlowSection();
         public WeightSection weight = new WeightSection();
         public LegsSection legs = new LegsSection();
+        public LimpSection limp = new LimpSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -67,6 +68,15 @@ public final class HardcoreConfig {
         public boolean regenEffectHeals = true;
         public int healTicksNoRegenRule = 1200;
         public boolean bodiesCanBreakLegs = true;
+    }
+
+    // Hearts, not health points; the gap between the two keeps a slowly healing player from flickering in and out
+    public static class LimpSection {
+        public boolean enabled = false;
+        public double belowHearts = 2.0;
+        public double recoverAtHearts = 3.0;
+        public double slow = 0.2;
+        public boolean countAbsorption = false;
     }
 
     // Name, value, name, value..., kept in the order given

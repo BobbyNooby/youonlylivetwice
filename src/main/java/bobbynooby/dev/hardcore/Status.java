@@ -104,8 +104,10 @@ public final class Status {
         HardcoreConfig.SlowSection slow = Settings.get().hardcore.slow;
         // Capped but not stepped, so the lines above it add up to it
         double total = Math.min(raw, Math.max(slow.cap, 0.0));
-        return Optional.of(line("Total slowdown " + percent(total) + "% (cap " + percent(slow.cap) + "%; potions not included)",
-                "Every slowdown added together, up to the cap. Potions such as Slowness come on top of it."));
+        // The limp has no line of its own, so the total says when it is part of it
+        String hover = "Every slowdown added together, up to the cap. Potions such as Slowness come on top of it."
+                + (Limp.limping(player) ? " It includes a limp from low health." : "");
+        return Optional.of(line("Total slowdown " + percent(total) + "% (cap " + percent(slow.cap) + "%; potions not included)", hover));
     }
 
     private static Optional<Component> rules(ServerPlayer player) {
