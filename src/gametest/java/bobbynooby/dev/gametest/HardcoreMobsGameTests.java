@@ -243,9 +243,11 @@ public class HardcoreMobsGameTests {
         try {
             Zombie zombie = createFree(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, ZOMBIE_AT);
             helper.assertTrue(zombie.canBreakDoors(), "the zombie did not win its door roll at a chance of 1");
-            // Only the villager loses its will, so it stays in its cell; a zombie goes for a villager without seeing it
+            // Only the villager loses its will, so it stays in its cell. The closed door blocks the zombie's sight, and its
+            // target goals only pick what they can see, so it is pointed at the villager by hand.
             Mob villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BEHIND_DOOR);
             spawned.add(villager);
+            zombie.setTarget(villager);
             helper.runBeforeTestEnd(cleanUp);
             helper.startSequence()
                     .thenWaitUntil(() -> helper.assertTrue(helper.getBlockState(DOOR_AT).isAir()
