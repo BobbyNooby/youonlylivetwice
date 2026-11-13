@@ -15,6 +15,8 @@ import java.util.List;
 @Mixin(SleepStatus.class)
 public abstract class SleepStatusMixin {
 
+    // Vanilla reads this count only for the action-bar line, which YOLT cancels whole while sleepers are hidden, so
+    // this only matters to another mod that reads the count
     @Inject(method = "amountSleeping", at = @At("HEAD"), cancellable = true)
     private void getFakeSleeping(CallbackInfoReturnable<Integer> cir) {
         if (Sleep.hidesSleepers()) {
