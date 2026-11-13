@@ -56,7 +56,8 @@ public final class ReviveLook {
     }
 
     // Papers made before the switch changed follow it within a second. A stack is only changed when its model has to
-    // change, so the inventory isn't sent again every second.
+    // change, so the inventory isn't sent again every second. It runs with the switch off too, since that is what takes
+    // the model off papers after the switch goes off, even ones that come back after a restart.
     private static void tick(MinecraftServer server) {
         if (!Settings.active() || server.getTickCount() % TICKS_PER_SECOND != 0) {
             return;
