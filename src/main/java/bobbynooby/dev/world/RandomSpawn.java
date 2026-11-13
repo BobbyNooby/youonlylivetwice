@@ -36,6 +36,9 @@ public final class RandomSpawn {
 
     record Column(int x, int z) {}
 
+    /** Where random spawn picks: whole blocks from each min edge up to each max edge. */
+    public record Area(double minX, double maxX, double minZ, double maxZ) {}
+
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
         return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD;
@@ -53,8 +56,13 @@ public final class RandomSpawn {
     /** A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn always exists. */
     public static BlockPos pick(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
+        return pickIn(level, area(border.getMinX(), border.getMaxX(), border.getMinZ(), border.getMaxZ(),
+                border.getCenterX(), border.getCenterZ(), Settings.get().worldBorder.diameter));
+    }
+
+    private static BlockPos pickIn(ServerLevel level, Area area) {
         for (int attempt = 1; ; attempt++) {
-            Column column = pickColumn(random, border.getCenterX(), border.getCenterZ(), border.getSize(), Settings.get().worldBorder.diameter);
+            Column column = pickColumn(random, area);
             BlockPos spot = spotAt(level, column.x(), column.z());
             if (spot != null) {
                 return spot;
@@ -108,22 +116,28 @@ public final class RandomSpawn {
     }
 
     /**
-     * A random column inside the smaller of the live border and YOLT's diameter, around the live border's centre.
-     * The diameter counts even when YOLT's border isn't applied: a new world picks its spawn before the server starts.
+     * The square YOLT's diameter makes around the live border's centre, cut down to the border's real edges. The
+     * diameter counts even when YOLT's border isn't applied: a new world picks its spawn before the server starts.
+     * The edges count because max-world-size can pull them in from the border's own size.
      */
-    static Column pickColumn(Random random, double centerX, double centerZ, double borderSize, int diameter) {
-        double half = Math.min(borderSize, diameter) / 2;
-        return new Column(pickInside(random, centerX, half), pickInside(random, centerZ, half));
+    static Area area(double minX, double maxX, double minZ, double maxZ, double centerX, double centerZ, int diameter) {
+        double half = diameter / 2.0;
+        return new Area(Math.max(minX, centerX - half), Math.min(maxX, centerX + half),
+                Math.max(minZ, centerZ - half), Math.min(maxZ, centerZ + half));
+    }
+
+    static Column pickColumn(Random random, Area area) {
+        return new Column(pickInside(random, area.minX(), area.maxX()), pickInside(random, area.minZ(), area.maxZ()));
     }
 
     // Only whole blocks inside: from the first block starting at or after the low edge to the last one ending at or
     // before the high edge, so a decimal centre can't put a spawn half a block outside
-    private static int pickInside(Random random, double center, double half) {
-        int low = (int) Math.ceil(center - half);
-        int high = (int) Math.floor(center + half - 1);
-        // A border under a block wide holds no whole block, so the block at the centre is used
+    private static int pickInside(Random random, double lowEdge, double highEdge) {
+        int low = (int) Math.ceil(lowEdge);
+        int high = (int) Math.floor(highEdge - 1);
+        // An area under a block wide holds no whole block, so the block at its middle is used
         if (high < low) {
-            return (int) Math.floor(center);
+            return (int) Math.floor((lowEdge + highEdge) / 2);
         }
         return low + random.nextInt(high - low + 1);
     }
