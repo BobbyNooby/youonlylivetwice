@@ -150,11 +150,9 @@ public final class ConfigLoader {
         try {
             write(file, config);
         } catch (UncheckedIOException e) {
-            // A reload still applies what it read, as a set key whose write fails is reported rather than thrown. The
-            // write goes through a temp file, so the config file is as it was.
-            if (base == null) {
-                throw e;
-            }
+            // What was read still applies, at startup as on a reload, as a set key whose write fails is reported rather
+            // than thrown: a read-only folder must not stop the server. The write goes through a temp file, so the config
+            // file is as it was.
             warnings.add("The config file could not be rewritten (" + e.getCause().getMessage() + "), so it is left as it was.");
             return new Result(config, warnings, false, borderProblem, false, backup);
         }

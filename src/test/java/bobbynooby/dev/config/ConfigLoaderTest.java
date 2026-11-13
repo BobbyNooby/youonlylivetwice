@@ -464,6 +464,26 @@ class ConfigLoaderTest {
         assertFalse(Files.exists(bak));
     }
 
+    // A directory where the temp file goes makes the rewrite fail, as a read-only config folder does. The file was
+    // read, so the start goes on with it and says so.
+    @Test
+    void startupThatCantRewriteTheFileKeepsWhatItRead() throws IOException {
+        Path file = dir.resolve("config.json");
+        String text = "{\"worldBorder\":{\"diameter\":5000}}";
+        Files.writeString(file, text);
+        Path tmp = dir.resolve("config.json.tmp");
+        Files.createDirectory(tmp);
+        Files.writeString(tmp.resolve("keep"), "so the directory can't be deleted");
+
+        ConfigLoader.Result r = assertDoesNotThrow(() -> ConfigLoader.load(file, null, true));
+        assertEquals(5000, r.config().worldBorder.diameter);
+        assertFalse(r.rewritten());
+        assertEquals(1, r.warnings().size());
+        assertTrue(r.warnings().get(0).startsWith("The config file could not be rewritten ("), r.warnings().get(0));
+        assertTrue(r.warnings().get(0).endsWith("), so it is left as it was."), r.warnings().get(0));
+        assertEquals(text, Files.readString(file));
+    }
+
     @Test
     void writeReplacesFileAndLeavesNoTempFile() throws IOException {
         Path file = dir.resolve("config.json");
