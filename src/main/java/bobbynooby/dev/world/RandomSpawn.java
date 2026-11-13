@@ -32,8 +32,12 @@ public final class RandomSpawn {
     // Set while spotAt runs vanilla's column check, which is the method our hook replaces, so the hook lets it through.
     // Spawn searches only run on the server thread.
     private static boolean checkingColumn;
-    // The tick whose search found no ground, so the rest of it is vanilla's. Spawn searches only run on the server thread.
-    private static int noGroundTick = -1;
+    // After a search that found no ground, the rest of it is vanilla's for this many ticks: vanilla tries its candidates
+    // one chunk load at a time, which can run past a tick, and each would otherwise try every column again
+    public static final int NO_GROUND_TICKS = 100;
+    // The server whose search found no ground and the tick its skip ends. Spawn searches only run on the server thread.
+    private static @Nullable MinecraftServer noGroundServer;
+    private static int noGroundUntil;
 
     record Column(int x, int z) {}
 
@@ -43,7 +47,7 @@ public final class RandomSpawn {
     // Only the overworld spawn is randomised, other dimensions keep vanilla spawning
     public static boolean appliesTo(ServerLevel level) {
         return !checkingColumn && Settings.on(c -> c.randomSpawn) && level.dimension() == Level.OVERWORLD
-                && level.getServer().getTickCount() != noGroundTick;
+                && !(level.getServer() == noGroundServer && level.getServer().getTickCount() < noGroundUntil);
     }
 
     /**
@@ -57,8 +61,8 @@ public final class RandomSpawn {
 
     /**
      * A random column that passes spotAt. If none does, the block above the last column's surface, so a spawn exists
-     * wherever there is ground. Null when that column has no ground at all: the search is then vanilla's for the rest
-     * of this tick, which ends it at the world spawn.
+     * wherever there is ground. Null when that column has no ground at all: the search is then vanilla's for the next
+     * NO_GROUND_TICKS ticks, which ends it at the world spawn.
      */
     public static @Nullable BlockPos pick(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
@@ -83,13 +87,19 @@ public final class RandomSpawn {
                 if (y <= level.getMinY()) {
                     Yolt.LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground, so vanilla picks the spawn",
                             ATTEMPTS);
-                    noGroundTick = level.getServer().getTickCount();
+                    noGroundServer = level.getServer();
+                    noGroundUntil = level.getServer().getTickCount() + NO_GROUND_TICKS;
                     return null;
                 }
                 Yolt.LOGGER.warn("No safe random spawn found in {} columns, using {}", ATTEMPTS, fallback.toShortString());
                 return fallback;
             }
         }
+    }
+
+    /** For the tests only: random spawn answers again at once, so a failed test can't leave it off for the next ones. */
+    public static void endNoGroundForTesting() {
+        noGroundServer = null;
     }
 
     /**

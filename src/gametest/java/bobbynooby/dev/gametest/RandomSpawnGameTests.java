@@ -26,8 +26,10 @@ import java.util.Map;
 // barrier ceiling, so the blocks placed here are the top of the column.
 public class RandomSpawnGameTests {
     private static final BlockPos GROUND = new BlockPos(3, 0, 3);
-    // The tick that finds no ground has no random spawn for the rest of it, so that test runs on its own
+    // A search that finds no ground turns random spawn off for a while, so that test runs on its own
     private static final String NO_GROUND = "you-only-live-twice-gametest:random_spawn_no_ground";
+    // How long it stays off, written out for the test's maxTicks
+    static final int NO_GROUND_WAIT = 100;
 
     @GameTest(skyAccess = true)
     public void powderSnowColumnRefused(GameTestHelper helper) {
@@ -130,9 +132,9 @@ public class RandomSpawnGameTests {
 
     // A column dug out from the bottom of the world to the top, as on a void map, is the only one the search may pick.
     // With no ground in it after every try, the search gives no spot, vanilla's own check answers that candidate (no
-    // spot either), and the hook stays out for the rest of the tick, so vanilla's search ends on the world spawn. The
-    // next tick has random spawn again. Each switch goes back in its own tick.
-    @GameTest(environment = NO_GROUND, maxTicks = 20)
+    // spot either), and the hook stays out for a while, so vanilla's search ends on the world spawn even when its
+    // candidates run in later ticks. Random spawn is back once the while is over. Each switch goes back in its own tick.
+    @GameTest(environment = NO_GROUND, maxTicks = RandomSpawnGameTests.NO_GROUND_WAIT + 20)
     public void noGroundLeavesTheSearchToVanilla(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos column = helper.absolutePos(GROUND);
@@ -148,21 +150,34 @@ public class RandomSpawnGameTests {
             helper.assertValueEqual(log, List.of("No safe random spawn found in 50 columns, and the last one has no ground,"
                     + " so vanilla picks the spawn"), "log");
             helper.assertFalse(RandomSpawn.appliesTo(level), "random spawn still answers in the tick that found no ground");
+            helper.assertValueEqual(RandomSpawn.NO_GROUND_TICKS, NO_GROUND_WAIT, "ticks random spawn stays off");
             BlockPos vanilla = PlayerSpawnFinderInvoker.yoltLevelRespawnPos(level, column.getX(), column.getZ());
             helper.assertTrue(vanilla == null, "vanilla's check of the empty column gave the spot " + vanilla);
+        } catch (RuntimeException | Error e) {
+            RandomSpawn.endNoGroundForTesting();
+            throw e;
         } finally {
             Settings.get().randomSpawn = randomBefore;
             VoidGraveGameTests.putBack(level, before);
         }
-        helper.runAfterDelay(1, () -> {
-            boolean randomThen = Settings.get().randomSpawn;
-            try {
-                Settings.get().randomSpawn = true;
-                helper.assertTrue(RandomSpawn.appliesTo(level), "random spawn is still off a tick later");
-            } finally {
-                Settings.get().randomSpawn = randomThen;
-            }
+        helper.runAfterDelay(1, () -> assertRandomSpawn(helper, level, false, "a tick later"));
+        helper.runAfterDelay(NO_GROUND_WAIT + 1, () -> {
+            assertRandomSpawn(helper, level, true, "once the while is over");
             helper.succeed();
         });
+    }
+
+    private static void assertRandomSpawn(GameTestHelper helper, ServerLevel level, boolean on, String when) {
+        boolean randomThen = Settings.get().randomSpawn;
+        try {
+            Settings.get().randomSpawn = true;
+            helper.assertValueEqual(RandomSpawn.appliesTo(level), on, "random spawn answers " + when);
+        } catch (RuntimeException | Error e) {
+            // Failed, so the rest of the while never runs out here: other batches need random spawn
+            RandomSpawn.endNoGroundForTesting();
+            throw e;
+        } finally {
+            Settings.get().randomSpawn = randomThen;
+        }
     }
 }
