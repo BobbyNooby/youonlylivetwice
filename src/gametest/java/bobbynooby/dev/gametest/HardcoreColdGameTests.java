@@ -58,10 +58,17 @@ public class HardcoreColdGameTests {
     private static final Identifier POWDER_SNOW_SLOW = Identifier.withDefaultNamespace("powder_snow");
     private static final double CLOSE = 1e-9;
 
-    // Five once-a-second steps at 0.01 each. The player joins as the test starts, so the hub has ticked them 100 times
-    // when the check runs.
-    @GameTest(environment = COLD, maxTicks = 120, skyAccess = true)
+    // Five once-a-second steps at 0.01 each, counted from when the players join. The environment clears the weather,
+    // but rain left from before fades over up to 80 ticks and would still count as wet, so the test waits it out.
+    @GameTest(environment = COLD, maxTicks = 220, skyAccess = true)
     public void cold2RisesUnderOpenSkyNotUnderARoof(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(level.getRainLevel(1.0F) == 0, "the last rain hasn't faded"))
+                .thenExecute(() -> measureOpenAndRoofed(helper));
+    }
+
+    private static void measureOpenAndRoofed(GameTestHelper helper) {
         Runnable biome = setBiome(helper, AREA_FROM, AREA_TO, Biomes.SNOWY_PLAINS);
         BlockPos roofed = new BlockPos(5, 0, 5);
         // A closed stone hut, three blocks a side, with the player inside
