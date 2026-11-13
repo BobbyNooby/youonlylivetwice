@@ -9,6 +9,7 @@ import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Later;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.lockout.DeathLockout;
@@ -64,6 +65,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static bobbynooby.dev.gametest.BodyTestKit.cleanUp;
 import static bobbynooby.dev.gametest.BodyTestKit.gravesOf;
@@ -908,6 +910,27 @@ public class BodyDeathGameTests {
             cleanUp(helper, owner, before);
         }
         helper.succeed();
+    }
+
+    // A respawn carries the tag over and loads the new player entity, which must not be taken for a body without a
+    // record. The load's check waits for the tick to end, so this waits for a task queued after it.
+    @GameTest(maxTicks = 20)
+    public void taggedPlayerKeptThroughRespawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "TagRespawn");
+        player.addTag(Bodies.TAG);
+        ServerPlayer respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        AtomicBoolean checked = new AtomicBoolean();
+        Later.afterTick(server, () -> checked.set(true));
+        helper.runBeforeTestEnd(() -> TestPlayers.leave(respawned));
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(checked.get(), "the load's check has not run yet"))
+                .thenExecute(() -> {
+                    helper.assertTrue(respawned.entityTags().contains(Bodies.TAG), "the respawn dropped the tag");
+                    helper.assertFalse(respawned.isRemoved(), "the tagged player was removed from the world");
+                    helper.assertTrue(respawned.level().players().contains(respawned), "the tagged player left the level's players");
+                })
+                .thenSucceed();
     }
 
     private static ServerPlayer join(GameTestHelper helper, String name) {

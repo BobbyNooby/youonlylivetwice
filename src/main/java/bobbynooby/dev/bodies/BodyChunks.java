@@ -2,8 +2,10 @@ package bobbynooby.dev.bodies;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Later;
+import bobbynooby.dev.core.StandIn;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.Mannequin;
@@ -35,7 +37,9 @@ public final class BodyChunks {
      * gets back the health its gear allows.
      */
     static void onBodyLoad(Entity entity, ServerLevel level) {
-        if (!Settings.active() || !entity.entityTags().contains(Bodies.TAG)) {
+        // An admin can tag a real player, who loads again at every respawn and join and is never a body
+        if (!Settings.active() || !entity.entityTags().contains(Bodies.TAG)
+                || (entity instanceof ServerPlayer && !StandIn.is(entity))) {
             return;
         }
         MinecraftServer server = level.getServer();
