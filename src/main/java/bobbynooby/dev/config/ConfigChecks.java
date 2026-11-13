@@ -1,5 +1,8 @@
 package bobbynooby.dev.config;
 
+import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -146,6 +149,10 @@ final class ConfigChecks {
         c.hide.tabHeaderLines = capped(c.hide.tabHeaderLines, MAX_TAB_HEADER_LINES, MAX_TAB_HEADER_LINE_LENGTH,
                 "hide.tabHeaderLines", warnings);
         hardcore(c.hardcore, fallback.hardcore, fellBack);
+        if (!isModelId(c.resourcePack.reviveModel)) {
+            c.resourcePack.reviveModel = fallback.resourcePack.reviveModel;
+            fellBack.accept("resourcePack.reviveModel", "must be an id such as you-only-live-twice:revive_paper");
+        }
         return reset;
     }
 
@@ -397,6 +404,15 @@ final class ConfigChecks {
             cold.shiverExhaustionPerSecond = fallback.shiverExhaustionPerSecond;
             fellBack.accept("hardcore.cold.shiverExhaustionPerSecond", "must be 0 or more");
         }
+    }
+
+    // An empty path parses, but names no model a pack could hold
+    private static boolean isModelId(@Nullable String text) {
+        if (text == null) {
+            return false;
+        }
+        Identifier id = Identifier.tryParse(text);
+        return id != null && !id.getPath().isEmpty();
     }
 
     // A price of 0 could never be taken

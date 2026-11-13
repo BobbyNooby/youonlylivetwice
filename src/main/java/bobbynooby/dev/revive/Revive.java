@@ -53,6 +53,7 @@ public final class Revive {
     public static void init() {
         UseItemCallback.EVENT.register(Revive::onUseItem);
         UseBlockCallback.EVENT.register(Revive::onUseBlock);
+        ReviveLook.init();
     }
 
     /** Tells the user what happened. Only a revive that went through uses up one head, and in creative not even that. */

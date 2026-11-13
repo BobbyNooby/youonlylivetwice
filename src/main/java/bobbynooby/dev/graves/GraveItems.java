@@ -1,6 +1,7 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.revive.ReviveLook;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -39,8 +40,8 @@ public final class GraveItems {
 
     /**
      * The revive paper the recipe makes, with every component of the grave head in the grid and the recipe's own on top,
-     * as vanilla's transmute recipe does, so it keeps the owner's profile, and named "Revive <owner>". Any other result
-     * is left as it is.
+     * as vanilla's transmute recipe does, so it keeps the owner's profile, and named "Revive <owner>", with the resource
+     * pack's model while that is on. Any other result is left as it is.
      */
     public static ItemStack reviveHeadFrom(ItemStack made, ItemStackTemplate result, CraftingInput input) {
         if (!isReviveHead(made)) {
@@ -54,9 +55,12 @@ public final class GraveItems {
                 if (profile != null) {
                     profile.name().ifPresent(name -> paper.set(DataComponents.ITEM_NAME, Component.literal("Revive " + name)));
                 }
+                ReviveLook.apply(paper);
                 return paper;
             }
         }
+        // A datapack's recipe may make a marked paper without a grave head; it gets the look all the same
+        ReviveLook.apply(made);
         return made;
     }
 

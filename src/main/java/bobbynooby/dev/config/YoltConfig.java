@@ -24,6 +24,7 @@ public class YoltConfig {
     public ServerListSection serverList = new ServerListSection();
     public SkinsSection skins = new SkinsSection();
     public HardcoreConfig.HardcoreSection hardcore = new HardcoreConfig.HardcoreSection();
+    public HardcoreConfig.ResourcePackSection resourcePack = new HardcoreConfig.ResourcePackSection();
 
     public static class WorldBorderSection {
         public boolean enabled = true;

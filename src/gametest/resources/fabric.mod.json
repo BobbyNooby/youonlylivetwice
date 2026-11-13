@@ -53,6 +53,7 @@
 			"bobbynooby.dev.gametest.HardcoreMendingGameTests",
 			"bobbynooby.dev.gametest.HardcoreMobsGameTests",
 			"bobbynooby.dev.gametest.HardcoreNutrientsGameTests",
+			"bobbynooby.dev.gametest.HardcorePackGameTests",
 			"bobbynooby.dev.gametest.HardcoreSlowGameTests",
 			"bobbynooby.dev.gametest.HardcoreStatusGameTests",
 			"bobbynooby.dev.gametest.HardcoreWeightGameTests",

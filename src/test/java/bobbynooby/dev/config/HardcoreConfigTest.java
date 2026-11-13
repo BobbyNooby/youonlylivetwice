@@ -219,10 +219,6 @@ class HardcoreConfigTest {
         assertTrue(fine.config().hardcore.limp.enabled);
     }
 
-    private static List<ConfigKey> hardcoreKeys() {
-        return ConfigKeys.all().stream().filter(k -> k.path().startsWith("hardcore.")).toList();
-    }
-
     // Every key the table below must hold: the hardcore layer's and the resource pack's
     private static List<ConfigKey> specKeys() {
         return ConfigKeys.all().stream()
@@ -352,6 +348,8 @@ class HardcoreConfigTest {
         d.put("hardcore.cold.damageEverySeconds", "2");
         d.put("hardcore.cold.canKill", "false");
         d.put("hardcore.cold.shiverExhaustionPerSecond", "0.05");
+        d.put("resourcePack.reviveTexture", "false");
+        d.put("resourcePack.reviveModel", "you-only-live-twice:revive_paper");
         return d;
     }
 
@@ -396,10 +394,12 @@ class HardcoreConfigTest {
 
     // Every hardcore value takes its default again, maps included, and only the expected warnings come out, in order
     private static void assertFellBack(ConfigLoader.Result r, List<String> expected) {
-        List<String> hardcore = r.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList();
+        List<String> hardcore = r.warnings().stream()
+                .filter(w -> w.startsWith("hardcore.") || w.startsWith("resourcePack."))
+                .toList();
         assertEquals(expected.stream().map(w -> w + ", using default").toList(), hardcore);
         YoltConfig fresh = new YoltConfig();
-        for (ConfigKey key : hardcoreKeys()) {
+        for (ConfigKey key : specKeys()) {
             assertEquals(key.show(fresh), key.show(r.config()), key.path());
         }
         HardcoreConfig.WeightSection weight = r.config().hardcore.weight;
@@ -444,7 +444,8 @@ class HardcoreConfigTest {
                   "cold": {"chillPerSecond": -1, "warmPerSecond": -1, "shelteredBelowSkyLight": 16, "heatRadius": 9,
                            "leatherPerPiece": 2, "wetMultiplier": -1, "waterMultiplier": -1, "maxSlow": 2,
                            "damageEverySeconds": 0, "shiverExhaustionPerSecond": -1}
-                }}""");
+                },
+                "resourcePack": {"reviveModel": "Revive Paper"}}""");
         assertFellBack(single, List.of(
                 "hardcore.slow.cap: must be 0 to 1",
                 "hardcore.slow.step: must be above 0",
@@ -526,7 +527,8 @@ class HardcoreConfigTest {
                 "hardcore.cold.waterMultiplier: must be 0 or more",
                 "hardcore.cold.maxSlow: must be 0 to 1",
                 "hardcore.cold.damageEverySeconds: must be 1 or more",
-                "hardcore.cold.shiverExhaustionPerSecond: must be 0 or more"));
+                "hardcore.cold.shiverExhaustionPerSecond: must be 0 or more",
+                "resourcePack.reviveModel: must be an id such as you-only-live-twice:revive_paper"));
 
         // Each pair fine on its own but wrong together, so both of its keys go back
         ConfigLoader.Result pairs = loadJson("""

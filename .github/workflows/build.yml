@@ -73,6 +73,11 @@ jobs:
           if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
           # --continue keeps JUnit running after a GameTest failure
           ./gradlew build --continue "${args[@]}"
+      # The optional revive paper texture, zipped next to the jar so it travels with it to the release
+      - name: zip the resource pack
+        run: |
+          version=$(sed -n 's/^mod_version=//p' gradle.properties)
+          (cd pack/revive-paper && zip -r "../../build/libs/you-only-live-twice-revive-pack-$version.zip" .)
       - name: summarise failed tests
         if: always()
         # A fork's pull request gets a read-only token; the summary must never turn a build red
@@ -185,13 +190,14 @@ jobs:
           tag="v$version"
           title="You Only Live Twice $version for Minecraft $minecraft"
           jar="build/libs/you-only-live-twice-$version.jar"
+          pack="build/libs/you-only-live-twice-revive-pack-$version.zip"
           # A draft has no tag yet, so the release list is read rather than the tag: true for a draft, false once published
           draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .draft")
           if [ "$draft" = "false" ]; then
             echo "$tag is published already; raise mod_version in gradle.properties for a new release"
           elif [ "$draft" = "true" ]; then
-            gh release upload "$tag" "$jar" --clobber
+            gh release upload "$tag" "$jar" "$pack" --clobber
             gh release edit "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           else
-            gh release create "$tag" "$jar" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
+            gh release create "$tag" "$jar" "$pack" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           fi

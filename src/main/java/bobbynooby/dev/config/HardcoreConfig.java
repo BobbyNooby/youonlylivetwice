@@ -309,6 +309,13 @@ public final class HardcoreConfig {
         public double shiverExhaustionPerSecond = 0.05;
     }
 
+    // Top-level "resourcePack" in the config, beside hardcore. The pack itself is set in server.properties, not here.
+    public static class ResourcePackSection {
+        // Revive papers show reviveModel, an item model the server's resource pack must hold
+        public boolean reviveTexture = false;
+        public String reviveModel = "you-only-live-twice:revive_paper";
+    }
+
     // Name, value, name, value..., kept in the order given
     private static Map<String, Double> numbers(Object... pairs) {
         Map<String, Double> map = new LinkedHashMap<>();
