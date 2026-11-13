@@ -5,6 +5,7 @@ import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.hardcore.BloodMoon;
+import bobbynooby.dev.hardcore.ColdMaths;
 import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Slowdowns;
@@ -66,14 +67,16 @@ public class HardcoreClientTest implements FabricClientGameTest {
     private static final float SOUTH = 0.0F;
     private static final float NORTH = 180.0F;
     private static final float LEVEL = 0.0F;
-    // A little up, so the darker sky is in the shot
-    private static final float SKYWARD = -20.0F;
     private static final double CLOSE = 0.01;
     // Long enough for fades and lerps to finish: the boss bar's darkening, the field of view, the frost overlay
     private static final int SETTLE_TICKS = 40;
+    // The blood moon's darkening takes about 80 ticks to fade once its bar is gone
+    private static final int UNDARKEN_TICKS = 100;
+    // The pose and the camera apply at once, while vanilla's sleep fade darkens the screen more each tick in bed
+    private static final int ASLEEP_TICKS = 5;
     private static final int LONG_TIMEOUT = 200;
     private static final int RELOAD_TIMEOUT = 1200;
-    private static final int HALF_FROZEN_TICKS = 70;
+    private static final int HALF_FROZEN_TICKS = ColdMaths.frozenTicks(0.5);
     private static final int TOLERANCE_TICKS = 4;
     private static final int LOST_HEARTS = 1;
     private static final float CURSED_MAX_HEALTH = 18.0F;
@@ -177,10 +180,10 @@ public class HardcoreClientTest implements FabricClientGameTest {
         server.runOnServer(s -> HardcoreStates.update(stage.self(), state -> state.chill = chill));
     }
 
-    // The red boss bar, and the sky it darkens
+    // The red boss bar, and the fog and terrain light it darkens, from the same level view as the normal field of view shot
     private static void showBloodMoon(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                       TestDedicatedServerConnection connection, Stage stage) {
-        stand(ctx, server, connection, stage, SOUTH, SKYWARD);
+        stand(ctx, server, connection, stage, SOUTH, LEVEL);
         server.runOnServer(s -> {
             Settings.get().hardcore.bloodMoon.enabled = true;
             BloodMoon.start(s);
@@ -201,8 +204,8 @@ public class HardcoreClientTest implements FabricClientGameTest {
                     }),
                     () -> ClientTests.waitOnClient(ctx, LONG_TIMEOUT, mc -> !mc.gui.hud.getBossOverlay().shouldDarkenScreen(),
                             mc -> "the client still has the blood moon's boss bar"),
-                    // The sky lightens again over a second or so
-                    () -> ctx.waitTicks(SETTLE_TICKS)));
+                    // The darkening fades over about 80 ticks, so it can't colour the shots after this one
+                    () -> ctx.waitTicks(UNDARKEN_TICKS)));
         }
     }
 
@@ -331,7 +334,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
             ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> mc.player.isSleeping(),
                     mc -> "the client did not get into the bed at noon");
             ctx.runOnClient(mc -> mc.options.setCameraType(CameraType.THIRD_PERSON_BACK));
-            ctx.waitTicks(SETTLE_TICKS);
+            ctx.waitTicks(ASLEEP_TICKS);
             if (!ctx.computeOnClient(mc -> mc.player.isSleeping())) {
                 throw new AssertionError("the client was woken up before the shot");
             }
