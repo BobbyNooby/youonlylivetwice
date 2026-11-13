@@ -24,6 +24,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -125,6 +126,46 @@ public class GraveProtectionGameTests {
             level.setBlock(stone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
         }
         helper.succeed();
+    }
+
+    // A refused break leaves the breaker's client with a blank head, since the client took the head for broken and the
+    // block-change ack only puts the block back. The head's own data goes to the breaker after the refusal, at the end
+    // of the tick, once that ack is out (a test player's ack never goes, since its connection doesn't tick).
+    @GameTest(maxTicks = 20)
+    public void refusedBreakerIsSentTheHeadAgain(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ServerPlayer breaker = TestPlayers.join(helper, "Resent", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        boolean waiting = false;
+        try {
+            // The server reads no break from a client that hasn't said its world loaded
+            TestPlayers.markLoaded(breaker);
+            int before = headUpdates(breaker, grave.pos());
+            TestPlayers.receive(breaker, new ServerboundPlayerActionPacket(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
+                    grave.pos(), Direction.UP, 1));
+            assertGraveIntact(helper, grave);
+            helper.assertValueEqual(headUpdates(breaker, grave.pos()), before, "head updates sent inside the refused break");
+            helper.runAfterDelay(2, () -> {
+                try {
+                    helper.assertTrue(headUpdates(breaker, grave.pos()) > before, "the breaker was not sent the head again");
+                } finally {
+                    TestPlayers.leave(breaker);
+                    removeGraves(helper, List.of(grave));
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                TestPlayers.leave(breaker);
+                removeGraves(helper, List.of(grave));
+            }
+        }
+    }
+
+    private static int headUpdates(ServerPlayer player, BlockPos pos) {
+        return (int) TestPlayers.sentPackets(player).stream()
+                .filter(packet -> packet instanceof ClientboundBlockEntityDataPacket data && data.getPos().equals(pos))
+                .count();
     }
 
     // A hopper pulls from a container or from loose items above it, and a grave head is neither. The hopper under the

@@ -8,6 +8,7 @@ import bobbynooby.dev.core.Yolt;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.core.BlockPos;
@@ -24,6 +25,7 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RotationSegment;
 import net.minecraft.world.phys.Vec3;
@@ -45,6 +47,13 @@ public final class Graves {
     // Runs before the death event's default phase, where the lockout records the death
     private static final Identifier SPECTATOR_GRAVE = Yolt.id("spectator_grave");
 
+    // Breakers refused this tick. Their client took the head for broken, which drops its skin, and the tick's
+    // block-change ack brings back only a blank head, so the head's own data follows once the ack has gone out.
+    // Server thread only.
+    private static final List<Refused> REFUSED = new ArrayList<>();
+
+    private record Refused(ServerPlayer player, ServerLevel level, BlockPos pos) {}
+
     private Graves() {}
 
     // Grave event handlers register here. The death hook is a mixin, since no Fabric event runs before the drops,
@@ -52,7 +61,16 @@ public final class Graves {
     public static void init() {
         UseBlockCallback.EVENT.register(GraveBlocks::onUseBlock);
         // Creative players included, so not even an op can break one by hand
-        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) -> !isGrave(level, pos));
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, blockEntity) -> {
+            if (!isGrave(level, pos)) {
+                return true;
+            }
+            if (player instanceof ServerPlayer breaker && level instanceof ServerLevel serverLevel) {
+                REFUSED.add(new Refused(breaker, serverLevel, pos.immutable()));
+            }
+            return false;
+        });
+        ServerTickEvents.END_SERVER_TICK.register(server -> resendRefused());
         ServerChunkEvents.CHUNK_LOAD.register(GraveBlocks::onChunkLoad);
         // A spectator's death never reaches the drops, so its grave comes from the death event. Made before the lockout
         // records the death, as a death's drops are, so the kick can say where it is. A throw would skip that record.
@@ -66,6 +84,21 @@ public final class Graves {
         LastGround.init();
         GraveRecheck.init();
         GraveNotice.init();
+    }
+
+    // At the end of the tick, after the connections have sent their acks
+    private static void resendRefused() {
+        if (REFUSED.isEmpty()) {
+            return;
+        }
+        for (Refused refused : REFUSED) {
+            ServerPlayer player = refused.player();
+            if (!player.isRemoved() && player.level() == refused.level()
+                    && refused.level().getBlockEntity(refused.pos()) instanceof SkullBlockEntity head) {
+                player.connection.send(head.getUpdatePacket());
+            }
+        }
+        REFUSED.clear();
     }
 
     /** True for the head block of a grave. Every protection hook asks this. */
