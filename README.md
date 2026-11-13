@@ -322,9 +322,13 @@ While you're offline the body is you:
   explosions and everything else the difficulty scales.
 - **Totems, armour wear and potion effects** work on the body like they would on you (each has a switch).
 - **Bodies move like players:** gravity, knockback, water and fall damage all apply, and you log back in wherever the
-  body ended up. They **can't use portals yet**; portal travel for bodies is on the list below.
-- **Riding:** if you logged out on a boat or minecart, vanilla puts you back on the vehicle, so you land where the
-  vehicle is, not where the body ended up. Your health, effects and gear still come from the body.
+  body ended up. The one exception is a body held after a logout on a vehicle (see Riding). They **can't use portals
+  yet**; portal travel for bodies is on the list below.
+- **Riding:** a vehicle you ride alone leaves with you, and you come back on it, where the vehicle is. While you're
+  away your body lies on top of where the vehicle was. Over water, lava or in the air it is held in place, so it can't
+  sink, burn or fall. The same goes when you log out of a boat or mount that someone else stays on: the vehicle
+  stays, and you come back where your body is. On dry ground the body drops and moves like any other. Your health, effects and
+  gear still come from the body.
 - **Race at login:** if a body dies just as its owner is logging in, the owner is kicked with the lockout message
   and their lockout stands. If it expires just then, they arrive at their logout spot with the body's state. Nothing
   is lost or duplicated.
