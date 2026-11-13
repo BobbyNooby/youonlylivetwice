@@ -45,6 +45,7 @@
 			"bobbynooby.dev.gametest.HardcoreHungerGameTests",
 			"bobbynooby.dev.gametest.HardcoreLegsGameTests",
 			"bobbynooby.dev.gametest.HardcoreLimpGameTests",
+			"bobbynooby.dev.gametest.HardcoreMendingGameTests",
 			"bobbynooby.dev.gametest.HardcoreNutrientsGameTests",
 			"bobbynooby.dev.gametest.HardcoreSlowGameTests",
 			"bobbynooby.dev.gametest.HardcoreStatusGameTests",

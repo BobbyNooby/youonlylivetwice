@@ -52,6 +52,7 @@
     "HardcoreFallMixin",
     "HardcoreFoodDataMixin",
     "HardcoreJumpMixin",
+    "HardcoreMendingMixin",
     "HardcoreTotemMixin",
     "InitializeBorderPacketAccessor",
     "ItemContainerContentsInvoker",

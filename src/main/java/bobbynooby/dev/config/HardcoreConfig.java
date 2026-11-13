@@ -18,6 +18,7 @@ public final class HardcoreConfig {
         public CurseSection curse = new CurseSection();
         public NutrientsSection nutrients = new NutrientsSection();
         public HungerTaxSection hungerTax = new HungerTaxSection();
+        public MendingSection mending = new MendingSection();
     }
 
     // Shared by every slowdown: they add up, stop at cap and change only in whole steps, so the speed doesn't flicker
@@ -180,6 +181,12 @@ public final class HardcoreConfig {
     // Scales the hunger that actions cost; 1.0 is vanilla, so it has no switch of its own
     public static class HungerTaxSection {
         public double multiplier = 1.0;
+    }
+
+    // Durability that one XP point repairs; vanilla's is 2, and 0 sends every point to the bar
+    public static class MendingSection {
+        public boolean enabled = false;
+        public double durabilityPerXp = 0.4;
     }
 
     // Name, value, name, value..., kept in the order given

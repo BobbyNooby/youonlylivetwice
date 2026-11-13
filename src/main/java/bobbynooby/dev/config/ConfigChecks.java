@@ -229,6 +229,10 @@ final class ConfigChecks {
             c.hungerTax.multiplier = fallback.hungerTax.multiplier;
             fellBack.accept("hardcore.hungerTax.multiplier", "must be 0 or more");
         }
+        if (!(c.mending.durabilityPerXp >= 0)) {
+            c.mending.durabilityPerXp = fallback.mending.durabilityPerXp;
+            fellBack.accept("hardcore.mending.durabilityPerXp", "must be 0 or more");
+        }
         curseAndLimp(c, fallback, fellBack);
     }
 
