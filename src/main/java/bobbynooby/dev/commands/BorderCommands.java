@@ -314,7 +314,7 @@ final class BorderCommands {
 
     // An offline player is only checked through their body, so one without a body may now be outside. With bodies on and
     // staying until their owner is back, every offline survival player has one.
-    private static String offlineNote() {
+    static String offlineNote() {
         YoltConfig config = Settings.get();
         return !config.worldBorder.enabled || config.bodies.enabled && config.bodies.duration.isOffline()
                 ? ""

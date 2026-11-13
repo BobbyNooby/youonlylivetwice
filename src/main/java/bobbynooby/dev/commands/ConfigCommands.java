@@ -105,8 +105,14 @@ final class ConfigCommands {
         if (border && change.config().worldBorder.enabled) {
             if (Settings.borderHeld()) {
                 YoltCommands.reply(source, HELD);
-            } else if (!outside[0].spawnNote().isEmpty()) {
-                YoltCommands.reply(source, outside[0].spawnNote().strip());
+            } else {
+                if (!outside[0].spawnNote().isEmpty()) {
+                    YoltCommands.reply(source, outside[0].spawnNote().strip());
+                }
+                String offline = BorderCommands.offlineNote();
+                if (!offline.isEmpty()) {
+                    YoltCommands.reply(source, offline.strip());
+                }
             }
         }
         return 1;

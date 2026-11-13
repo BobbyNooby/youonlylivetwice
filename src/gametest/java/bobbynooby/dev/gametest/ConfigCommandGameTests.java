@@ -375,7 +375,7 @@ public class ConfigCommandGameTests {
 
     // A timed vanilla /worldborder change is still running, and a border key means "now", as /yolt border does: the border
     // stops at the new size, so the reply is true. confirm, because the test structures sit outside a 5000 block border,
-    // and so may the world spawn, whose note may follow.
+    // and so may the world spawn, whose note may follow, before the note about offline players.
     @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
     public void configBorderKeyEndsAMovingBorder(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
@@ -391,6 +391,9 @@ public class ConfigCommandGameTests {
             List<String> output = run(server, "yolt config worldBorder.diameter 5000 confirm");
             helper.assertTrue(!output.isEmpty() && output.get(0).equals("worldBorder.diameter changed from 10000 to 5000."),
                     "command output: " + output);
+            // The test server keeps bodies off, so offline players without one went unchecked
+            helper.assertValueEqual(output.get(output.size() - 1), "Offline players without a body were not checked.",
+                    "the reply's last line");
             helper.assertValueEqual(overworld.getStatus(), BorderStatus.STATIONARY, "overworld border status");
             helper.assertValueEqual(overworld.getSize(), 5000.0, "overworld border size");
             helper.assertValueEqual(Settings.get().worldBorder.diameter, 5000, "live diameter");
