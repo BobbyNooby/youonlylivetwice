@@ -15,6 +15,9 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
@@ -125,6 +128,44 @@ public class HardcoreWeightGameTests {
             player.getEnderChestInventory().clearContent();
             player.containerMenu.setCarried(ItemStack.EMPTY);
             player.inventoryMenu.getCraftSlots().clearContent();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Items a player moves into a crafting table's grid, or holds on the cursor of a chest's screen, are still carried:
+    // they go back to the inventory when the screen closes. Neither menu has a block behind it, so neither closes itself.
+    @GameTest
+    public void weight6ACraftingTableGridAndAChestCursorCount(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Crafter", GameType.SURVIVAL, AT);
+        HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
+        try {
+            player.getInventory().clearContent();
+            player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new CraftingMenu(id, inventory),
+                    Component.literal("Crafting")));
+            helper.assertTrue(player.containerMenu instanceof CraftingMenu, "the crafting table's screen did not open");
+            CraftingMenu table = (CraftingMenu) player.containerMenu;
+            table.getInputGridSlots().get(4).set(new ItemStack(Items.COBBLESTONE, 64));
+            assertCarries(helper, player, cfg, 3.0, "with cobblestone in a crafting table's grid");
+            cfg.countCursorAndGrid = false;
+            assertCarries(helper, player, cfg, 0.0, "with cobblestone in a crafting table's grid and countCursorAndGrid off");
+            cfg.countCursorAndGrid = true;
+            table.getInputGridSlots().get(4).set(ItemStack.EMPTY);
+            player.closeContainer();
+
+            player.openMenu(new SimpleMenuProvider((id, inventory, p) -> ChestMenu.threeRows(id, inventory),
+                    Component.literal("Chest")));
+            helper.assertTrue(player.containerMenu instanceof ChestMenu, "the chest's screen did not open");
+            player.containerMenu.setCarried(new ItemStack(Items.COBBLESTONE, 64));
+            assertCarries(helper, player, cfg, 3.0, "with cobblestone on a chest screen's cursor");
+            player.containerMenu.setCarried(ItemStack.EMPTY);
+            assertCarries(helper, player, cfg, 0.0, "with nothing on a chest screen's cursor");
+        } finally {
+            if (player.containerMenu instanceof CraftingMenu table) {
+                table.getInputGridSlots().forEach(slot -> slot.set(ItemStack.EMPTY));
+            }
+            player.containerMenu.setCarried(ItemStack.EMPTY);
+            player.closeContainer();
             TestPlayers.leave(player);
         }
         helper.succeed();
