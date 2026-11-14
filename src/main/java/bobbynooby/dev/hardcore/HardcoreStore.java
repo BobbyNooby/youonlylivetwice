@@ -13,6 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
@@ -27,6 +28,9 @@ public final class HardcoreStore implements AutoCloseable {
     // Same waits as the death store: a backup tool holding the file shouldn't stall the server thread for long on a read
     static final int READ_WAIT_MILLIS = 250;
     static final int WRITE_WAIT_MILLIS = 3000;
+
+    private static final String SAVE_PLAYER = "INSERT OR REPLACE INTO player (uuid, data) VALUES (?, ?)";
+    private static final String SAVE_WORLD = "INSERT OR REPLACE INTO world (key, value) VALUES (?, ?)";
 
     private final Connection connection;
 
@@ -122,7 +126,7 @@ public final class HardcoreStore implements AutoCloseable {
     }
 
     public synchronized void savePlayer(UUID uuid, String data) {
-        write("INSERT OR REPLACE INTO player (uuid, data) VALUES (?, ?)", uuid.toString(), data,
+        write(SAVE_PLAYER, uuid.toString(), data,
                 "Could not save the hardcore state of " + uuid);
     }
 
@@ -131,8 +135,45 @@ public final class HardcoreStore implements AutoCloseable {
     }
 
     public synchronized void saveWorld(String key, String value) {
-        write("INSERT OR REPLACE INTO world (key, value) VALUES (?, ?)", key, value,
+        write(SAVE_WORLD, key, value,
                 "Could not save the hardcore world value " + key);
+    }
+
+    /**
+     * Saves every row in one transaction: the first write that fails rolls back the ones before it and stops the rest, so
+     * a locked file costs one wait, not one per row.
+     */
+    public synchronized void saveAll(Map<UUID, String> players, Map<String, String> world) {
+        try {
+            connection.unwrap(SQLiteConnection.class).setBusyTimeout(WRITE_WAIT_MILLIS);
+            connection.setAutoCommit(false);
+            try (PreparedStatement player = connection.prepareStatement(SAVE_PLAYER);
+                 PreparedStatement worldValue = connection.prepareStatement(SAVE_WORLD)) {
+                for (Map.Entry<UUID, String> row : players.entrySet()) {
+                    player.setString(1, row.getKey().toString());
+                    player.setString(2, row.getValue());
+                    player.executeUpdate();
+                }
+                for (Map.Entry<String, String> row : world.entrySet()) {
+                    worldValue.setString(1, row.getKey());
+                    worldValue.setString(2, row.getValue());
+                    worldValue.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException e) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollingBack) {
+                    e.addSuppressed(rollingBack);
+                }
+                throw e;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not save " + players.size() + " hardcore states and " + world.size()
+                    + " world values", e);
+        }
     }
 
     private Optional<String> read(String sql, String key, String failure) {

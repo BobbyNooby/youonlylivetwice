@@ -13,7 +13,7 @@ import org.jspecify.annotations.Nullable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -96,9 +96,14 @@ public final class HardcoreStates {
     }
 
     static synchronized void flush(ServerPlayer player) {
-        Cached online = ONLINE.get(player.getUUID());
+        flush(player.getUUID());
+    }
+
+    /** Writes an online player's state now if it changed, rather than at their leave or the next flush. */
+    static synchronized void flush(UUID uuid) {
+        Cached online = ONLINE.get(uuid);
         if (online != null) {
-            save(player.getUUID(), online);
+            save(uuid, online);
         }
     }
 
@@ -168,30 +173,45 @@ public final class HardcoreStates {
         ONLINE.remove(player.getUUID());
     }
 
-    private static synchronized void flushAll() {
-        retryUnsaved();
-        ONLINE.forEach(HardcoreStates::save);
-    }
-
-    // Writes that failed on an open store, such as one held by a backup tool, get another try on each flush and at stop
-    private static void retryUnsaved() {
-        if (UNSAVED_PLAYERS.isEmpty() && UNSAVED_WORLD.isEmpty()) {
+    /**
+     * Writes every changed online state, and the writes that failed before, such as on a file a backup tool held, in one
+     * transaction. A failure stops at the first write and keeps everything for the next flush, so a locked file costs the
+     * server thread one wait, not one per player.
+     */
+    static synchronized void flushAll() {
+        // Online states over older failed writes of the same player, since they are newer
+        Map<UUID, String> players = new LinkedHashMap<>(UNSAVED_PLAYERS);
+        ONLINE.forEach((uuid, online) -> {
+            String now = online.state.encode();
+            if (!now.equals(online.saved)) {
+                players.put(uuid, now);
+            }
+        });
+        Map<String, String> world = new LinkedHashMap<>();
+        UNSAVED_WORLD.forEach((key, value) -> world.put(key, Long.toString(value)));
+        if (players.isEmpty() && world.isEmpty()) {
             return;
         }
-        if (writableStore() == null) {
+        HardcoreStore open = writableStore();
+        if (open == null) {
             return;
         }
-        for (UUID uuid : List.copyOf(UNSAVED_PLAYERS.keySet())) {
-            String data = UNSAVED_PLAYERS.get(uuid);
+        try {
+            open.saveAll(players, world);
+        } catch (RuntimeException e) {
+            Yolt.LOGGER.error("Could not save {} hardcore states and {} world values, keeping them for the next save",
+                    players.size(), world.size(), e);
+            return;
+        }
+        players.forEach((uuid, data) -> {
+            UNSAVED_PLAYERS.remove(uuid);
             Cached online = ONLINE.get(uuid);
             // The store now holds this, so a live state that has since gone back to the old saved one still gets written
-            if (savePlayer(uuid, data) && online != null) {
+            if (online != null) {
                 online.saved = data;
             }
-        }
-        for (String key : List.copyOf(UNSAVED_WORLD.keySet())) {
-            setWorld(key, UNSAVED_WORLD.get(key));
-        }
+        });
+        world.keySet().forEach(UNSAVED_WORLD::remove);
     }
 
     private static void save(UUID uuid, Cached online) {

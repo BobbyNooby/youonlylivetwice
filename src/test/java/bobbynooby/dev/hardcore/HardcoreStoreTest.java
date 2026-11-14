@@ -141,4 +141,48 @@ class HardcoreStoreTest {
             HardcoreStates.useFileForTesting(null);
         }
     }
+
+    // One transaction: a row the file refuses rolls back the rows before it, and every state waits for the next flush
+    @Test
+    void flushStopsAtAFailedWriteAndKeepsEveryState() throws SQLException {
+        Path file = dir.resolve("hardcore.db");
+        String url = "jdbc:sqlite:" + file.toAbsolutePath();
+        UUID refused = UUID.randomUUID();
+        HardcoreStore broken = HardcoreStore.open(file);
+        broken.close();
+        HardcoreStates.useFileForTesting(null);
+        HardcoreStates.useStoreForTesting(broken);
+        try {
+            HardcoreStates.update(uuid, state -> state.legsBroken = true);
+            HardcoreStates.update(refused, state -> state.chill = 0.5);
+            HardcoreStates.setWorld("lastBloodMoonDay", 12);
+            try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement()) {
+                statement.execute("CREATE TRIGGER refuse BEFORE INSERT ON player WHEN NEW.uuid = '" + refused
+                        + "' BEGIN SELECT RAISE(ABORT, 'refused'); END");
+            }
+            HardcoreStates.useStoreForTesting(HardcoreStore.open(file));
+
+            HardcoreStates.flushAll();
+            try (HardcoreStore reading = HardcoreStore.open(file)) {
+                assertTrue(reading.player(uuid).isEmpty(), "a row before the failed one was kept");
+                assertTrue(reading.player(refused).isEmpty());
+                assertTrue(reading.world("lastBloodMoonDay").isEmpty(), "a world value was kept");
+            }
+            assertTrue(HardcoreStates.read(uuid).legsBroken);
+            assertEquals(0.5, HardcoreStates.read(refused).chill);
+            assertEquals(12, HardcoreStates.world("lastBloodMoonDay").orElseThrow());
+
+            try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement()) {
+                statement.execute("DROP TRIGGER refuse");
+            }
+            HardcoreStates.flushAll();
+            try (HardcoreStore reading = HardcoreStore.open(file)) {
+                assertTrue(HardcoreState.decode(reading.player(uuid).orElseThrow()).legsBroken);
+                assertEquals(0.5, HardcoreState.decode(reading.player(refused).orElseThrow()).chill);
+                assertEquals("12", reading.world("lastBloodMoonDay").orElseThrow());
+            }
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+    }
 }
