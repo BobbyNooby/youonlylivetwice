@@ -57,6 +57,14 @@ public class HardcoreWeightGameTests {
         assertWeighs(helper, cfg, new ItemStack(Items.ELYTRA), 0.5);
         assertWeighs(helper, cfg, new ItemStack(Items.MACE), 1.0);
         assertWeighs(helper, cfg, new ItemStack(Items.ANVIL), 1.5);
+        assertWeighs(helper, cfg, new ItemStack(Items.CHIPPED_ANVIL), 1.5);
+        assertWeighs(helper, cfg, new ItemStack(Items.HEAVY_CORE), 1.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.TRIDENT), 0.25);
+        // Animal armour weighs its material's chestplate: 8 × 0.2 and 4 × 0.1
+        assertWeighs(helper, cfg, new ItemStack(Items.NETHERITE_HORSE_ARMOR), 1.6);
+        assertWeighs(helper, cfg, new ItemStack(Items.COPPER_NAUTILUS_ARMOR), 0.4);
+        assertWeighs(helper, cfg, new ItemStack(Items.END_STONE, 64), 3.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.SULFUR, 64), 3.0);
         assertWeighs(helper, cfg, new ItemStack(Items.COBBLESTONE, 64), 3.0);
         assertWeighs(helper, cfg, new ItemStack(Items.PAPER, 64), 0.25);
         assertWeighs(helper, cfg, new ItemStack(Items.DIRT, 64), 1.0);

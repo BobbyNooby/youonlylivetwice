@@ -43,8 +43,9 @@ class HardcoreConfigTest {
     private static final List<String> GROUP_ORDER = List.of(
             "c:ores", "c:raw_materials", "c:ingots", "c:stones", "c:cobblestones", "c:obsidians",
             "minecraft:stone_bricks", "minecraft:logs",
-            "c:storage_blocks/iron", "c:storage_blocks/gold", "c:storage_blocks/copper", "c:storage_blocks/netherite",
-            "c:storage_blocks/raw_iron", "c:storage_blocks/raw_gold", "c:storage_blocks/raw_copper", "c:storage_blocks",
+            "c:storage_blocks/iron", "c:storage_blocks/gold", "c:storage_blocks/copper", "minecraft:copper",
+            "c:storage_blocks/netherite", "c:storage_blocks/raw_iron", "c:storage_blocks/raw_gold",
+            "c:storage_blocks/raw_copper", "c:storage_blocks",
             "c:feathers", "c:strings");
 
     // Paper first, then the stone-like blocks no group tag reaches
@@ -53,7 +54,25 @@ class HardcoreConfigTest {
             "minecraft:chiseled_deepslate", "minecraft:bricks", "minecraft:smooth_stone", "minecraft:polished_andesite",
             "minecraft:polished_diorite", "minecraft:polished_granite", "minecraft:polished_tuff", "minecraft:tuff_bricks",
             "minecraft:blackstone", "minecraft:polished_blackstone", "minecraft:polished_blackstone_bricks",
-            "minecraft:end_stone_bricks", "minecraft:mud_bricks");
+            "minecraft:end_stone_bricks", "minecraft:mud_bricks", "minecraft:cracked_deepslate_bricks",
+            "minecraft:cracked_deepslate_tiles", "minecraft:cracked_polished_blackstone_bricks",
+            "minecraft:chiseled_polished_blackstone", "minecraft:chiseled_tuff", "minecraft:chiseled_tuff_bricks",
+            "minecraft:gilded_blackstone", "minecraft:end_stone", "minecraft:cinnabar", "minecraft:polished_cinnabar",
+            "minecraft:cinnabar_bricks", "minecraft:chiseled_cinnabar", "minecraft:sulfur", "minecraft:potent_sulfur",
+            "minecraft:polished_sulfur", "minecraft:sulfur_bricks", "minecraft:chiseled_sulfur");
+
+    // In order: per-item weights, anvils whatever their wear, and animal armour at its material's chestplate
+    private static final List<Map.Entry<String, Double>> EACH = List.of(
+            Map.entry("minecraft:elytra", 0.5), Map.entry("minecraft:mace", 1.0),
+            Map.entry("minecraft:heavy_core", 1.0), Map.entry("minecraft:trident", 0.25),
+            Map.entry("minecraft:anvil", 1.5), Map.entry("minecraft:chipped_anvil", 1.5),
+            Map.entry("minecraft:damaged_anvil", 1.5),
+            Map.entry("minecraft:leather_horse_armor", 0.15), Map.entry("minecraft:copper_horse_armor", 0.4),
+            Map.entry("minecraft:iron_horse_armor", 0.6), Map.entry("minecraft:golden_horse_armor", 0.5),
+            Map.entry("minecraft:diamond_horse_armor", 1.2), Map.entry("minecraft:netherite_horse_armor", 1.6),
+            Map.entry("minecraft:copper_nautilus_armor", 0.4), Map.entry("minecraft:iron_nautilus_armor", 0.6),
+            Map.entry("minecraft:golden_nautilus_armor", 0.5), Map.entry("minecraft:diamond_nautilus_armor", 1.2),
+            Map.entry("minecraft:netherite_nautilus_armor", 1.6));
 
     private static final List<String> MAPS = List.of("hardcore.weight.groups", "hardcore.weight.items",
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
@@ -77,6 +96,7 @@ class HardcoreConfigTest {
         assertEquals(3.0, weight.groups.get("minecraft:logs"));
         assertEquals(27.0, weight.groups.get("c:storage_blocks/iron"));
         assertEquals(27.0, weight.groups.get("c:storage_blocks/raw_copper"));
+        assertEquals(27.0, weight.groups.get("minecraft:copper"));
         assertEquals(9.0, weight.groups.get("c:storage_blocks"));
         assertEquals(0.25, weight.groups.get("c:strings"));
         assertEquals(ITEM_ORDER, new ArrayList<>(weight.items.keySet()));
@@ -84,7 +104,7 @@ class HardcoreConfigTest {
         for (String stone : ITEM_ORDER.subList(1, ITEM_ORDER.size())) {
             assertEquals(3.0, weight.items.get(stone), stone);
         }
-        assertEquals(Map.of("minecraft:elytra", 0.5, "minecraft:mace", 1.0, "minecraft:anvil", 1.5), weight.itemsEach);
+        assertEquals(EACH, new ArrayList<>(weight.itemsEach.entrySet()));
         assertEquals(List.of("leather", "copper", "chainmail", "gold", "iron", "turtle_scute", "diamond", "netherite"),
                 new ArrayList<>(weight.armourFactors.keySet()));
         assertEquals(Map.of("leather", 0.05, "copper", 0.1, "chainmail", 0.1, "gold", 0.1, "iron", 0.1,

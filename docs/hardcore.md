@@ -116,17 +116,20 @@ Everything you carry weighs something. The heavier your load, the slower you wal
 
 What weighs what, from first match to last:
 
-1. `itemsEach`: a weight per single item. Elytra 0.5, mace 1.0, anvil 1.5 (about the iron it is made of).
+1. `itemsEach`: a weight per single item. Elytra 0.5, mace 1.0, heavy core 1.0, trident 0.25, and an anvil 1.5
+   however worn (about the iron it is made of). Horse and nautilus armour weigh their material's chestplate: leather
+   0.15, copper 0.4, gold 0.5, iron 0.6, diamond 1.2, netherite 1.6.
 2. `items`: a stack weight per item id. Paper 0.25, and 3.0 for stone-like blocks no tag below reaches, such as
-   deepslate bricks and tiles, bricks, smooth stone, polished stones, tuff bricks, blackstone and end stone bricks.
+   deepslate bricks and tiles, bricks, smooth stone, polished, cracked and chiseled stones, tuff bricks, blackstone,
+   end stone and its bricks, and the cinnabar and sulfur families.
 3. Armour (worn or carried): its armour points times its material's factor (`armourFactors`). An iron chestplate
-   (6 points, factor 0.1) weighs 0.6, a full iron set 1.5 and a full netherite set 4.0. Horse and wolf armour aren't
-   armour for this.
+   (6 points, factor 0.1) weighs 0.6, a full iron set 1.5 and a full netherite set 4.0. Wolf armour isn't armour for
+   this, so it weighs 0.1 like other things that stack to 1.
 4. Swords, axes, pickaxes, shovels, hoes and spears: 0.25 each (`toolWeight`).
 5. `groups`: a stack weight per item tag, the first tag in the list that matches. Ores, raw metals, ingots, stone,
-   cobblestone, obsidian, stone bricks and logs weigh 3.0 a stack. Iron, gold, copper, netherite and raw metal blocks
-   weigh 27.0, other storage blocks 9.0, so crafting ingots into blocks doesn't make them lighter. Feathers and string
-   weigh 0.25.
+   cobblestone, obsidian, stone bricks and logs weigh 3.0 a stack. Iron, gold, copper (weathered and waxed too),
+   netherite and raw metal blocks weigh 27.0, other storage blocks 9.0, so crafting ingots into blocks doesn't make
+   them lighter. Feathers and string weigh 0.25.
 6. Anything else that stacks to 1 (potions, buckets, beds, totems, shields, a shulker box itself): 0.1 each
    (`unstackableWeight`).
 7. Anything else: 1.0 a stack (`defaultWeight`).

@@ -55,13 +55,12 @@ public final class HardcoreConfig {
                 "c:cobblestones", 3.0, "c:obsidians", 3.0, "minecraft:stone_bricks", 3.0,
                 "minecraft:logs", 3.0,
                 "c:storage_blocks/iron", 27.0, "c:storage_blocks/gold", 27.0,
-                "c:storage_blocks/copper", 27.0, "c:storage_blocks/netherite", 27.0,
+                "c:storage_blocks/copper", 27.0, "minecraft:copper", 27.0, "c:storage_blocks/netherite", 27.0,
                 "c:storage_blocks/raw_iron", 27.0, "c:storage_blocks/raw_gold", 27.0,
                 "c:storage_blocks/raw_copper", 27.0, "c:storage_blocks", 9.0,
                 "c:feathers", 0.25, "c:strings", 0.25);
         public Map<String, Double> items = weightItems();
-        // An anvil weighs about what its iron does
-        public Map<String, Double> itemsEach = numbers("minecraft:elytra", 0.5, "minecraft:mace", 1.0, "minecraft:anvil", 1.5);
+        public Map<String, Double> itemsEach = weightEach();
         public Map<String, Double> armourFactors = numbers(
                 "leather", 0.05, "copper", 0.1, "chainmail", 0.1, "gold", 0.1,
                 "iron", 0.1, "turtle_scute", 0.1, "diamond", 0.15, "netherite", 0.2);
@@ -348,10 +347,29 @@ public final class HardcoreConfig {
         for (String stone : new String[]{"deepslate_bricks", "deepslate_tiles", "polished_deepslate", "chiseled_deepslate",
                 "bricks", "smooth_stone", "polished_andesite", "polished_diorite", "polished_granite", "polished_tuff",
                 "tuff_bricks", "blackstone", "polished_blackstone", "polished_blackstone_bricks", "end_stone_bricks",
-                "mud_bricks"}) {
+                "mud_bricks", "cracked_deepslate_bricks", "cracked_deepslate_tiles",
+                "cracked_polished_blackstone_bricks", "chiseled_polished_blackstone", "chiseled_tuff",
+                "chiseled_tuff_bricks", "gilded_blackstone", "end_stone", "cinnabar", "polished_cinnabar",
+                "cinnabar_bricks", "chiseled_cinnabar", "sulfur", "potent_sulfur", "polished_sulfur", "sulfur_bricks",
+                "chiseled_sulfur"}) {
             items.put("minecraft:" + stone, 3.0);
         }
         return items;
+    }
+
+    // Weights per single item. An anvil, however worn, weighs about what its iron does, and the heavy core what the
+    // mace it makes does. Horse and nautilus armour weigh their material's chestplate; wolf armour stays an ordinary
+    // item.
+    private static Map<String, Double> weightEach() {
+        return numbers("minecraft:elytra", 0.5, "minecraft:mace", 1.0, "minecraft:heavy_core", 1.0,
+                "minecraft:trident", 0.25,
+                "minecraft:anvil", 1.5, "minecraft:chipped_anvil", 1.5, "minecraft:damaged_anvil", 1.5,
+                "minecraft:leather_horse_armor", 0.15, "minecraft:copper_horse_armor", 0.4,
+                "minecraft:iron_horse_armor", 0.6, "minecraft:golden_horse_armor", 0.5,
+                "minecraft:diamond_horse_armor", 1.2, "minecraft:netherite_horse_armor", 1.6,
+                "minecraft:copper_nautilus_armor", 0.4, "minecraft:iron_nautilus_armor", 0.6,
+                "minecraft:golden_nautilus_armor", 0.5, "minecraft:diamond_nautilus_armor", 1.2,
+                "minecraft:netherite_nautilus_armor", 1.6);
     }
 
     // Name, value, name, value..., kept in the order given
