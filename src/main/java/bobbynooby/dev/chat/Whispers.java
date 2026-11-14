@@ -7,20 +7,25 @@ import bobbynooby.dev.mixin.CommandNodeAccessor;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.CommandNode;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.MessageArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
 /**
  * Our /w, /msg and /tell, one whisper that only reaches a player close enough to hear it, or anyone in global chat mode.
+ * Sources that aren't players keep vanilla's /msg.
  */
 public final class Whispers {
     static final String TURNED_OFF = "Whispers are turned off.";
@@ -42,25 +47,48 @@ public final class Whispers {
         return NAMES.contains(commandRoot);
     }
 
-    // The server checks a signed /w against its own tree, so the server's /w has to be the one non-ops get
+    // The server checks a signed /w against its own tree, so the server's /w has to be the one non-ops get. Only players
+    // whisper: the console, command blocks and functions keep vanilla's message, selectors and all.
     private static void replaceVanillaWhisper(CommandDispatcher<CommandSourceStack> dispatcher) {
+        CommandNode<CommandSourceStack> vanillaMsg = dispatcher.getRoot().getChild("msg");
+        CommandNode<CommandSourceStack> vanillaMessage = vanillaMsg == null || vanillaMsg.getChild("targets") == null
+                ? null : vanillaMsg.getChild("targets").getChild("message");
         CommandNodeAccessor root = (CommandNodeAccessor) dispatcher.getRoot();
         for (String name : NAMES) {
             root.yoltChildren().remove(name);
             root.yoltLiterals().remove(name);
         }
         for (String name : NAMES) {
-            dispatcher.register(command(name));
+            dispatcher.register(serverCommand(name, vanillaMessage));
         }
     }
 
     // No suggestions on target, so tab-complete can't list who is online.
     // message must be a message argument: the client only signs those.
     static LiteralArgumentBuilder<CommandSourceStack> command(String name) {
-        return Commands.literal(name)
-                .then(Commands.argument("target", StringArgumentType.word())
-                        .then(Commands.argument("message", MessageArgument.message())
-                                .executes(Whispers::run)));
+        return Commands.literal(name).then(whisper());
+    }
+
+    private static RequiredArgumentBuilder<CommandSourceStack, String> whisper() {
+        return Commands.argument("target", StringArgumentType.word())
+                .then(Commands.argument("message", MessageArgument.message())
+                        .executes(Whispers::run));
+    }
+
+    // Two branches that never meet: a player gets the whisper (and is sent only that branch), anything else gets
+    // vanilla's targets with vanilla's own message node, which runs vanilla's /msg as it was
+    private static LiteralArgumentBuilder<CommandSourceStack> serverCommand(String name,
+                                                                          @Nullable CommandNode<CommandSourceStack> vanillaMessage) {
+        LiteralArgumentBuilder<CommandSourceStack> command = Commands.literal(name).then(whisper().requires(CommandSourceStack::isPlayer));
+        if (vanillaMessage != null) {
+            command.then(Commands.argument("targets", EntityArgument.players())
+                    .requires(source -> !source.isPlayer())
+                    // Suggestions don't check requires, so a player asking about this branch is told no names
+                    .suggests((context, builder) -> context.getSource().isPlayer()
+                            ? builder.buildFuture() : EntityArgument.players().listSuggestions(context, builder))
+                    .then(vanillaMessage));
+        }
+        return command;
     }
 
     private static int run(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {

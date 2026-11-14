@@ -44,8 +44,9 @@ each part and how to set up the pack.
 
 - **Whispers are logged.** Each whisper writes one line to the server log: who sent it, to which name, the text and
   whether it was heard. Players see nothing new.
-- **One whisper for everyone.** `/msg` and `/tell` are now the same ranged whisper as `/w`, for ops too, so no one can
-  reach a player out of earshot. `/teammsg` stays vanilla. The console uses `/tellraw`.
+- **One whisper for every player.** `/msg` and `/tell` are now the same ranged whisper as `/w` for players, ops too,
+  so no player can reach another out of earshot. The console, command blocks and datapack functions keep vanilla's
+  `/msg`, `/tell` and `/w`, selectors and all. `/teammsg` stays vanilla.
 - **Nether portals at 1:1 link only nearby.** A Nether portal looks for an Overworld portal within 16 blocks of its
   exit, not 128, so it can't lead to someone else's base. A pair that linked further apart makes a new portal once.
 - **The flat anvil clears the counter.** Every item that comes out of an anvil while the flat price is on has

@@ -13,8 +13,11 @@ import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ArgumentSignatures;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.MessageArgument;
+import net.minecraft.commands.functions.CommandFunction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
@@ -23,8 +26,12 @@ import net.minecraft.network.chat.MessageSignature;
 import net.minecraft.network.chat.SignableCommand;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommandSuggestionsProvider;
@@ -52,31 +59,36 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
-    // /w, /msg and /tell are the same whisper, so the tree has all three
+    // /w, /msg and /tell are the same whisper, so the tree has all three. Read as a player, since the server's
+    // whisper branch is a player's only.
     @GameTest
     public void treeHasWhisperWhenOn(GameTestHelper helper) {
         RootCommandNode<CommandSourceStack> root = CommandRestriction.nonOpTree(true, false);
         helper.assertValueEqual(childNames(root), List.of("help", "w", "msg", "tell"), "non-op commands");
+        ServerPlayer player = TestPlayers.join(helper, "wtree", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            for (String name : WHISPERS) {
+                CommandNode<CommandSourceStack> target = root.getChild(name).getChild("target");
+                helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getCustomSuggestions() == null,
+                        name + " target has a suggestions provider");
+                helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType word
+                        && word.getType() == StringArgumentType.StringType.SINGLE_WORD, name + " target is not a single word");
 
-        for (String name : WHISPERS) {
-            CommandNode<CommandSourceStack> target = root.getChild(name).getChild("target");
-            helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getCustomSuggestions() == null,
-                    name + " target has a suggestions provider");
-            helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType word
-                    && word.getType() == StringArgumentType.StringType.SINGLE_WORD, name + " target is not a single word");
+                CommandNode<CommandSourceStack> message = target.getChild("message");
+                helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
+                        name + " message is not a message argument");
+                helper.assertTrue(message.getCommand() != null, name + " <target> <message> is not executable");
 
-            CommandNode<CommandSourceStack> message = target.getChild("message");
-            helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
-                    name + " message is not a message argument");
-            helper.assertTrue(message.getCommand() != null, name + " <target> <message> is not executable");
-
-            // The client signs what this tree marks as signable, the server checks what its own dispatcher marks
-            CommandSourceStack source = helper.getLevel().getServer().createCommandSourceStack();
-            String command = name + " Somebody hi there";
-            List<String> client = signable(new CommandDispatcher<>(root), command, source);
-            List<String> server = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
-            helper.assertValueEqual(client, List.of("message=hi there"), "signed arguments in the non-op tree for " + name);
-            helper.assertValueEqual(server, client, "signed arguments, server vs non-op tree for " + name);
+                // The client signs what this tree marks as signable, the server checks what its own dispatcher marks
+                CommandSourceStack source = player.createCommandSourceStack();
+                String command = name + " Somebody hi there";
+                List<String> client = signable(new CommandDispatcher<>(root), command, source);
+                List<String> server = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
+                helper.assertValueEqual(client, List.of("message=hi there"), "signed arguments in the non-op tree for " + name);
+                helper.assertValueEqual(server, client, "signed arguments, server vs non-op tree for " + name);
+            }
+        } finally {
+            TestPlayers.leave(player);
         }
         helper.succeed();
     }
@@ -95,17 +107,127 @@ public class WhisperGameTests {
             CommandNode<CommandSourceStack> message = target.getChild("message");
             helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
                     "server /" + name + " message is not a message argument");
+            // Vanilla's own branch, kept for the console, command blocks and functions
+            CommandNode<CommandSourceStack> targets = node.getChild("targets");
+            helper.assertTrue(targets instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof EntityArgument,
+                    "server /" + name + " has no vanilla targets branch");
+            helper.assertTrue(targets.getChild("message") != null && targets.getChild("message").getCommand() != null,
+                    "server /" + name + " targets <message> is not executable");
         }
         helper.assertTrue(dispatcher.getRoot().getChild("teammsg") != null, "vanilla /teammsg is gone");
 
         // Vanilla's /w refused these names after the client had signed them, which broke the sender's chat
-        CommandSourceStack source = server.createCommandSourceStack();
-        CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true, false));
-        for (String name : WHISPERS) {
-            for (String command : List.of(name + "  hi", name + " NameLongerThan16Chars hi")) {
-                helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
-                helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");
+        ServerPlayer player = TestPlayers.join(helper, "wsign", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            CommandSourceStack source = player.createCommandSourceStack();
+            CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true, false));
+            for (String name : WHISPERS) {
+                for (String command : List.of(name + "  hi", name + " NameLongerThan16Chars hi")) {
+                    helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
+                    helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");
+                }
             }
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Only players whisper. The console still sends vanilla's /msg, which reaches a player however far away, and isn't a
+    // whisper, so it writes no whisper line to the log.
+    @GameTest
+    public void consoleMsgReachesAPlayerAnywhere(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        TestPlayers.Recording far = TestPlayers.joinRecording(helper, "wconsole", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            String name = far.nameAndId().name();
+            for (String whisper : WHISPERS) {
+                String text = "from the console " + CommandGameTests.uniqueName(whisper);
+                int from = TestPlayers.sentPackets(far).size();
+                List<String> log = OfflineGameTests.yoltLog(() -> server.getCommands().performPrefixedCommand(
+                        server.createCommandSourceStack(), whisper + " " + name + " " + text));
+                List<Packet<?>> packets = TestPlayers.sentPackets(far);
+                helper.assertTrue(packets.subList(from, packets.size()).stream().anyMatch(packet ->
+                                packet instanceof ClientboundDisguisedChatPacket chat && chat.message().getString().contains(text)),
+                        "the far player did not get the console's /" + whisper);
+                helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(), List.of(),
+                        "whisper log lines for the console's /" + whisper);
+            }
+        } finally {
+            TestPlayers.leave(far);
+        }
+        helper.succeed();
+    }
+
+    // A datapack function is read as no player, so a line with a selector still parses and the function loads
+    @GameTest
+    public void nonPlayerSourcesTakeSelectors(GameTestHelper helper) {
+        CommandDispatcher<CommandSourceStack> dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
+        CommandSourceStack console = helper.getLevel().getServer().createCommandSourceStack();
+        for (String whisper : WHISPERS) {
+            String command = whisper + " @a hi";
+            helper.assertTrue(Commands.getParseException(dispatcher.parse(command, console)) == null,
+                    "the console could not parse '" + command + "'");
+        }
+        try {
+            CommandFunction.fromLines(Identifier.fromNamespaceAndPath("you-only-live-twice-gametest", "tell_everyone"), dispatcher,
+                    Commands.createCompilationContext(LevelBasedPermissionSet.GAMEMASTER),
+                    List.of("tell @a hi", "msg @p hi", "w @s hi"));
+        } catch (IllegalArgumentException e) {
+            helper.fail("a function with /tell, /msg and /w selectors did not load: " + e.getMessage());
+        }
+        helper.succeed();
+    }
+
+    // A player, op or not, gets only the ranged whisper: no selectors, nothing past the range, and no vanilla branch in
+    // the tree it is sent
+    @GameTest
+    public void playerOpHasNoSelectorsAndStaysRanged(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        int radiusBefore = config.chat.radius;
+        int whisperRadiusBefore = config.chat.whisperRadius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            config.chat.radius = 48;
+            config.chat.whisperRadius = 0;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wselop", BlockPos.ZERO);
+            op = sender;
+            TestPlayers.op(op);
+            TestPlayers.Recording far = joinRecording(helper, joined, "wselfar", BlockPos.ZERO);
+            far.teleportTo(sender.getX() + 100, sender.getY(), sender.getZ());
+            String farName = far.nameAndId().name();
+            server.getCommands().sendCommands(sender);
+            RootCommandNode<CommandSourceStack> tree = CommandRestrictionGameTests.lastTree(helper, sender);
+            CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+            for (String whisper : WHISPERS) {
+                CommandNode<CommandSourceStack> sent = tree.getChild(whisper);
+                helper.assertTrue(sent != null && sent.getChild("target") != null && sent.getChild("targets") == null,
+                        "the op's tree for /" + whisper + " is not the whisper alone");
+                String command = whisper + " @a hi";
+                helper.assertTrue(Commands.getParseException(dispatcher.parse(command, sender.createCommandSourceStack())) != null,
+                        "a player parsed '" + command + "'");
+
+                sender.messages.clear();
+                far.messages.clear();
+                int from = TestPlayers.sentPackets(far).size();
+                run(sender, whisper + " " + farName + " hi");
+                helper.assertValueEqual(texts(sender), List.of("You whisper to " + farName + ": hi"), "the op's reply to /" + whisper);
+                helper.assertValueEqual(texts(far), List.of(), "the far player's messages from /" + whisper);
+                List<Packet<?>> packets = TestPlayers.sentPackets(far);
+                helper.assertFalse(packets.subList(from, packets.size()).stream().anyMatch(packet ->
+                        packet instanceof ClientboundDisguisedChatPacket || packet instanceof ClientboundPlayerChatPacket),
+                        "the far player got a chat line from /" + whisper);
+            }
+        } finally {
+            config.chat.radius = radiusBefore;
+            config.chat.whisperRadius = whisperRadiusBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
         }
         helper.succeed();
     }

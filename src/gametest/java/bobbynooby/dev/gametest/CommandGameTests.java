@@ -416,7 +416,8 @@ public class CommandGameTests {
     }
 
     // What a client is sent: every path of /yolt, our /w, /msg and /tell and the non-op trees, with each argument's parser,
-    // the lowest permission level that may use the node, and whether it runs. Logged so a CI run shows it.
+    // the lowest permission level that may use the node, and whether it runs. Logged so a CI run shows it. The levels are
+    // read with no player, so a whisper's player-only <target> shows "no level" and vanilla's <targets> shows level 0.
     @GameTest
     public void commandTreesKeepTheirShape(GameTestHelper helper) {
         CommandDispatcher<CommandSourceStack> dispatcher = helper.getLevel().getServer().getCommands().getDispatcher();
@@ -485,14 +486,20 @@ public class CommandGameTests {
                 yolt skin clear | literal | level 0 | runs
                 yolt skin clear <player> | brigadier:string {"type":"phrase"} | level 2 | runs
                 w | literal | level 0
-                w <target> | brigadier:string {"type":"word"} | level 0
+                w <target> | brigadier:string {"type":"word"} | no level
                 w <target> <message> | minecraft:message | level 0 | runs
+                w <targets> | minecraft:entity {"amount":"multiple","type":"players"} | own suggestions | level 0
+                w <targets> <message> | minecraft:message | level 0 | runs
                 msg | literal | level 0
-                msg <target> | brigadier:string {"type":"word"} | level 0
+                msg <target> | brigadier:string {"type":"word"} | no level
                 msg <target> <message> | minecraft:message | level 0 | runs
+                msg <targets> | minecraft:entity {"amount":"multiple","type":"players"} | own suggestions | level 0
+                msg <targets> <message> | minecraft:message | level 0 | runs
                 tell | literal | level 0
-                tell <target> | brigadier:string {"type":"word"} | level 0
+                tell <target> | brigadier:string {"type":"word"} | no level
                 tell <target> <message> | minecraft:message | level 0 | runs
+                tell <targets> | minecraft:entity {"amount":"multiple","type":"players"} | own suggestions | level 0
+                tell <targets> <message> | minecraft:message | level 0 | runs
                 non-op tree, whispers and skin choice off:
                 help | literal | level 0 | runs
                 non-op tree, whispers and skin choice on:
