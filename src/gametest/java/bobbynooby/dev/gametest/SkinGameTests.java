@@ -71,6 +71,8 @@ import java.util.function.LongSupplier;
 // player, and vanilla refuses a login to a full server. Every test puts back what it changes in the same tick.
 public class SkinGameTests {
     private static final FakeSkinLookup MOJANG = FakeSkinLookup.INSTANCE;
+    // skins.refreshHours 0, in a batch of its own
+    private static final String REFRESH_ZERO = "you-only-live-twice-gametest:skins_refresh_zero";
     private static final UUID NOTCH_ID = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
 
     // The skin goes into the profile the player is made from, so the player has it, and so does the body they leave
@@ -257,6 +259,46 @@ public class SkinGameTests {
             MOJANG.forget(name);
         }
         helper.succeedWhen(() -> assertEqual(helper, store.skin(name), late, "the answer saved for the name"));
+    }
+
+    // A saved skin is trusted for skins.refreshHours, and at 0 never: a join with a skin saved this very moment still
+    // asks Mojang, and gets the new one. At 24 the same join takes the saved one. A batch of its own, with no other
+    // player online for the logins, and with no other test's saved answers for the 0 to drop.
+    @GameTest(environment = REFRESH_ZERO)
+    public void refreshHoursZeroAsksMojangAtEveryJoin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Refresh");
+        MOJANG.answer(name);
+        SkinTextures saved = new SkinTextures("saved textures of " + name, "saved signature of " + name);
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        try {
+            helper.assertValueEqual(skins.refreshHours, 0, "refreshHours");
+            skins.refreshHours = 24;
+            try {
+                SkinStore.get(server).putSkin(CachedSkin.found(name, saved, System.currentTimeMillis()));
+                try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+                    login.tick();
+                    Optional<GameProfile> told = login.finished();
+                    helper.assertTrue(told.isPresent(), "the login with refreshHours 24 did not go through");
+                    helper.assertValueEqual(MOJANG.timesAsked(name), 0, "times Mojang was asked with refreshHours 24");
+                    assertEqual(helper, textures(told.get()), saved, "textures with refreshHours 24");
+                }
+            } finally {
+                skins.refreshHours = 0;
+            }
+
+            SkinStore.get(server).putSkin(CachedSkin.found(name, saved, System.currentTimeMillis()));
+            try (TestLogins.Login login = TestLogins.start(server, TestLogins.offline(name))) {
+                login.tick();
+                Optional<GameProfile> told = login.finished();
+                helper.assertTrue(told.isPresent(), "the login with refreshHours 0 did not go through");
+                helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked with refreshHours 0");
+                assertEqual(helper, textures(told.get()), FakeSkinLookup.texturesOf(name), "textures with refreshHours 0");
+            }
+        } finally {
+            MOJANG.forget(name);
+        }
+        helper.succeed();
     }
 
     // Mojang can't be reached about the player's own name, so they join with the stale skin saved before for it
