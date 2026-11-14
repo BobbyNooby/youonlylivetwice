@@ -426,11 +426,14 @@ public class CoordinateOffsetCoreGameTests {
     public void configCommandSwitchesCoordinates(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         byte[] fileBefore = Files.readAllBytes(Settings.path());
+        // It ships on, but the test world keeps it off, so the switch goes whichever way it isn't
+        boolean from = Settings.get().hide.coordinates;
         try {
-            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.coordinates true"), List.of(
-                    "hide.coordinates changed from false to true (applies when a player next joins, respawns or changes dimension)."),
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.coordinates " + !from), List.of(
+                    "hide.coordinates changed from " + from + " to " + !from
+                            + " (applies when a player next joins, respawns or changes dimension)."),
                     "reply");
-            helper.assertTrue(Settings.get().hide.coordinates, "live hide.coordinates is still false");
+            helper.assertValueEqual(Settings.get().hide.coordinates, !from, "live hide.coordinates");
         } finally {
             ConfigCommandGameTests.restore(server, fileBefore);
         }
