@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class WhisperGameTests {
     private static final String SIGNED_WHISPER = "you-only-live-twice-gametest:signed_whisper";
     private static final SharedHold SIGNED_HOLD = new SharedHold();
+    private static final List<String> WHISPERS = List.of("w", "msg", "tell");
 
     // The reply a restricted player's /w gets with whispers off is checked in whisperOffReplyIsSameWhenRestricted
     @GameTest
@@ -51,29 +52,32 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
+    // /w, /msg and /tell are the same whisper, so the tree has all three
     @GameTest
     public void treeHasWhisperWhenOn(GameTestHelper helper) {
         RootCommandNode<CommandSourceStack> root = CommandRestriction.nonOpTree(true, false);
-        helper.assertValueEqual(childNames(root), List.of("help", "w"), "non-op commands");
+        helper.assertValueEqual(childNames(root), List.of("help", "w", "msg", "tell"), "non-op commands");
 
-        CommandNode<CommandSourceStack> target = root.getChild("w").getChild("target");
-        helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getCustomSuggestions() == null,
-                "target has a suggestions provider");
-        helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType word
-                && word.getType() == StringArgumentType.StringType.SINGLE_WORD, "target is not a single word");
+        for (String name : WHISPERS) {
+            CommandNode<CommandSourceStack> target = root.getChild(name).getChild("target");
+            helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getCustomSuggestions() == null,
+                    name + " target has a suggestions provider");
+            helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType word
+                    && word.getType() == StringArgumentType.StringType.SINGLE_WORD, name + " target is not a single word");
 
-        CommandNode<CommandSourceStack> message = target.getChild("message");
-        helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
-                "message is not a message argument");
-        helper.assertTrue(message.getCommand() != null, "w <target> <message> is not executable");
+            CommandNode<CommandSourceStack> message = target.getChild("message");
+            helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
+                    name + " message is not a message argument");
+            helper.assertTrue(message.getCommand() != null, name + " <target> <message> is not executable");
 
-        // The client signs what this tree marks as signable, the server checks what its own dispatcher marks
-        CommandSourceStack source = helper.getLevel().getServer().createCommandSourceStack();
-        String command = "w Somebody hi there";
-        List<String> client = signable(new CommandDispatcher<>(root), command, source);
-        List<String> server = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
-        helper.assertValueEqual(client, List.of("message=hi there"), "signed arguments in the non-op tree");
-        helper.assertValueEqual(server, client, "signed arguments, server vs non-op tree");
+            // The client signs what this tree marks as signable, the server checks what its own dispatcher marks
+            CommandSourceStack source = helper.getLevel().getServer().createCommandSourceStack();
+            String command = name + " Somebody hi there";
+            List<String> client = signable(new CommandDispatcher<>(root), command, source);
+            List<String> server = signable(helper.getLevel().getServer().getCommands().getDispatcher(), command, source);
+            helper.assertValueEqual(client, List.of("message=hi there"), "signed arguments in the non-op tree for " + name);
+            helper.assertValueEqual(server, client, "signed arguments, server vs non-op tree for " + name);
+        }
         helper.succeed();
     }
 
@@ -81,23 +85,27 @@ public class WhisperGameTests {
     public void serverWhisperNodeIsOurs(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
-        CommandNode<CommandSourceStack> w = dispatcher.getRoot().getChild("w");
-        helper.assertTrue(w != null && w.getRedirect() == null, "server /w is missing or still redirects to /msg");
-        CommandNode<CommandSourceStack> target = w.getChild("target");
-        helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType,
-                "server /w target is not a string argument");
-        CommandNode<CommandSourceStack> message = target.getChild("message");
-        helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
-                "server /w message is not a message argument");
-        helper.assertTrue(dispatcher.getRoot().getChild("msg") != null && dispatcher.getRoot().getChild("tell") != null,
-                "vanilla /msg or /tell is gone");
+        // Vanilla's /msg, and /w and /tell that redirect to it, are all ours, so no op skips the range with one of them
+        for (String name : WHISPERS) {
+            CommandNode<CommandSourceStack> node = dispatcher.getRoot().getChild(name);
+            helper.assertTrue(node != null && node.getRedirect() == null, "server /" + name + " is missing or still redirects");
+            CommandNode<CommandSourceStack> target = node.getChild("target");
+            helper.assertTrue(target instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof StringArgumentType,
+                    "server /" + name + " target is not a string argument");
+            CommandNode<CommandSourceStack> message = target.getChild("message");
+            helper.assertTrue(message instanceof ArgumentCommandNode<?, ?> arg && arg.getType() instanceof MessageArgument,
+                    "server /" + name + " message is not a message argument");
+        }
+        helper.assertTrue(dispatcher.getRoot().getChild("teammsg") != null, "vanilla /teammsg is gone");
 
         // Vanilla's /w refused these names after the client had signed them, which broke the sender's chat
         CommandSourceStack source = server.createCommandSourceStack();
         CommandDispatcher<CommandSourceStack> client = new CommandDispatcher<>(CommandRestriction.nonOpTree(true, false));
-        for (String command : List.of("w  hi", "w NameLongerThan16Chars hi")) {
-            helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
-            helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");
+        for (String name : WHISPERS) {
+            for (String command : List.of(name + "  hi", name + " NameLongerThan16Chars hi")) {
+                helper.assertValueEqual(signable(client, command, source), List.of("message=hi"), "client signs '" + command + "'");
+                helper.assertValueEqual(signable(dispatcher, command, source), List.of("message=hi"), "server expects '" + command + "'");
+            }
         }
         helper.succeed();
     }
@@ -241,6 +249,100 @@ public class WhisperGameTests {
             config.chat.allowWhispers = whispersBefore;
             config.chat.radius = radiusBefore;
             config.chat.whisperRadius = whisperRadiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // An op's /w, /msg and /tell are the one whisper: held to chat.whisperRadius, with the same reply whether or not it
+    // arrived. Whispers are off in the shared world, which a gamemaster op ignores.
+    @GameTest
+    public void opWhispersAreHeldToTheWhisperRadius(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        int radiusBefore = config.chat.radius;
+        int whisperRadiusBefore = config.chat.whisperRadius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            config.chat.radius = 48;
+            config.chat.whisperRadius = 10;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wopsend", BlockPos.ZERO);
+            op = sender;
+            TestPlayers.op(op);
+            TestPlayers.Recording near = joinRecording(helper, joined, "wopnear", new BlockPos(5, 0, 0));
+            TestPlayers.Recording far = joinRecording(helper, joined, "wopfar", BlockPos.ZERO);
+            // 20 blocks: inside the chat radius, outside the whisper radius
+            far.teleportTo(sender.getX() + 20, sender.getY(), sender.getZ());
+            String senderName = sender.nameAndId().name();
+            String nearName = near.nameAndId().name();
+            String farName = far.nameAndId().name();
+
+            for (String name : WHISPERS) {
+                sender.messages.clear();
+                near.messages.clear();
+                far.messages.clear();
+                run(sender, name + " " + nearName + " hi by " + name);
+                run(sender, name + " " + farName + " hi by " + name);
+                helper.assertValueEqual(texts(near), List.of(senderName + " whispers to you: hi by " + name),
+                        "near player's messages from /" + name);
+                helper.assertValueEqual(texts(far), List.of(), "far player's messages from /" + name);
+                helper.assertValueEqual(texts(sender), List.of("You whisper to " + nearName + ": hi by " + name,
+                        "You whisper to " + farName + ": hi by " + name), "sender's messages from /" + name);
+            }
+        } finally {
+            config.chat.radius = radiusBefore;
+            config.chat.whisperRadius = whisperRadiusBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A restricted non-op has /w, /msg and /tell with whispers on and none of them with whispers off, with the same
+    // answer for each
+    @GameTest
+    public void nonOpHasEveryWhisperOnlyWithWhispersOn(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wnonop", BlockPos.ZERO);
+            TestPlayers.Recording near = joinRecording(helper, joined, "wnonopto", new BlockPos(2, 0, 0));
+            String senderName = sender.nameAndId().name();
+            String nearName = near.nameAndId().name();
+
+            config.chat.allowWhispers = true;
+            for (String name : WHISPERS) {
+                sender.messages.clear();
+                near.messages.clear();
+                run(sender, name + " " + nearName + " hi by " + name);
+                helper.assertValueEqual(texts(near), List.of(senderName + " whispers to you: hi by " + name),
+                        "near player's messages from /" + name + " with whispers on");
+                helper.assertValueEqual(texts(sender), List.of("You whisper to " + nearName + ": hi by " + name),
+                        "sender's messages from /" + name + " with whispers on");
+            }
+
+            config.chat.allowWhispers = false;
+            for (String name : WHISPERS) {
+                helper.assertTrue(CommandRestriction.nonOpDispatcher().getRoot().getChild(name) == null,
+                        "the non-op tree has /" + name + " with whispers off");
+                sender.messages.clear();
+                near.messages.clear();
+                // Not in the player's tree, so the client sends it unsigned
+                sender.connection.handleChatCommand(new ServerboundChatCommandPacket(name + " " + nearName + " hi"));
+                helper.assertValueEqual(texts(sender), List.of("Whispers are turned off."), "sender's messages from /" + name + " with whispers off");
+                helper.assertValueEqual(texts(near), List.of(), "near player's messages from /" + name + " with whispers off");
+            }
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
             leaveAll(joined);
         }
         helper.succeed();
@@ -428,7 +530,7 @@ public class WhisperGameTests {
         }
     }
 
-    // A modified client can ask for suggestions on commands its tree doesn't have, like /msg and its online names
+    // A modified client can ask for suggestions on commands its tree doesn't have, like /teleport and its online names
     @GameTest
     public void suggestionsComeFromNonOpTree(GameTestHelper helper) {
         YoltConfig config = Settings.get();
@@ -446,13 +548,14 @@ public class WhisperGameTests {
             op = joinRecording(helper, joined, "wsuggestop", new BlockPos(1, 0, 0));
             TestPlayers.op(op);
 
-            helper.assertValueEqual(suggestions(helper, nonOp, "/msg "), List.of(), "a non-op's suggestions for /msg");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/teleport "), List.of(), "a non-op's suggestions for /teleport");
             helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help"), "a non-op's commands with whispers off");
             config.chat.allowWhispers = true;
-            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "w"), "a non-op's commands with whispers on");
-            // Ops keep vanilla's suggestions, which shows /msg would name online players
-            helper.assertTrue(suggestions(helper, op, "/msg ").contains(nonOp.getGameProfile().name()),
-                    "an op's suggestions for /msg have no online names");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "msg", "tell", "w"),
+                    "a non-op's commands with whispers on");
+            // Ops keep vanilla's suggestions, which shows /teleport would name online players
+            helper.assertTrue(suggestions(helper, op, "/teleport ").contains(nonOp.getGameProfile().name()),
+                    "an op's suggestions for /teleport have no online names");
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;
@@ -496,8 +599,8 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
-    // With a player online a few blocks away, tab-complete after /w offers no names, for a bare /w or the start of that
-    // player's name. The server's own /w, which ops use, offers none either.
+    // With a player online a few blocks away, tab-complete after /w, /msg or /tell offers no names, for a bare command or
+    // the start of that player's name. The server's own, which ops use, offer none either.
     @GameTest
     public void whisperTabCompleteOffersNoNames(GameTestHelper helper) {
         YoltConfig config = Settings.get();
@@ -517,11 +620,14 @@ public class WhisperGameTests {
             String name = near.getGameProfile().name();
 
             // So the answers below come from a tree that has /w in it
-            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "w"), "a non-op's commands");
-            helper.assertValueEqual(suggestions(helper, nonOp, "/w "), List.of(), "a non-op's suggestions for /w");
-            helper.assertValueEqual(suggestions(helper, nonOp, "/w " + name.substring(0, 4)), List.of(),
-                    "a non-op's suggestions for the start of a name");
-            helper.assertValueEqual(suggestions(helper, op, "/w "), List.of(), "an op's suggestions for /w");
+            helper.assertValueEqual(suggestions(helper, nonOp, "/"), List.of("help", "msg", "tell", "w"), "a non-op's commands");
+            for (String whisper : WHISPERS) {
+                helper.assertValueEqual(suggestions(helper, nonOp, "/" + whisper + " "), List.of(),
+                        "a non-op's suggestions for /" + whisper);
+                helper.assertValueEqual(suggestions(helper, nonOp, "/" + whisper + " " + name.substring(0, 4)), List.of(),
+                        "a non-op's suggestions for the start of a name after /" + whisper);
+                helper.assertValueEqual(suggestions(helper, op, "/" + whisper + " "), List.of(), "an op's suggestions for /" + whisper);
+            }
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;

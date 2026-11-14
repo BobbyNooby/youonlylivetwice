@@ -98,9 +98,9 @@ public class CommandRestrictionGameTests {
         helper.succeed();
     }
 
-    // The commands that would tell a non-op who is online, or reach someone out of earshot, sent the way a client sends a
-    // command its tree doesn't have. Restricted, none of them answers or reaches anyone. The same packets unrestricted,
-    // in the same tick, show what each would have done.
+    // The commands that would tell a non-op who is online, or reach someone, sent the way a client sends a command its
+    // tree doesn't have. Restricted with whispers off, none of them reaches anyone, and /msg and /tell only get the
+    // answer /w gets. The same packets unrestricted with whispers on, in the same tick, show what each would have done.
     @GameTest
     public void nonOpGetsNoListMsgTellMeOrTrigger(GameTestHelper helper) {
         Scoreboard scoreboard = helper.getLevel().getServer().getScoreboard();
@@ -110,6 +110,7 @@ public class CommandRestrictionGameTests {
         List<String> commands = List.of("list", "msg " + target + " leak by msg", "tell " + target + " leak by tell",
                 "me leak by me", "trigger yolt_leak set 1");
         boolean before = Settings.get().restrictCommands;
+        boolean whispersBefore = Settings.get().chat.allowWhispers;
         Objective objective = null;
         try {
             objective = scoreboard.addObjective("yolt_leak", ObjectiveCriteria.TRIGGER, Component.literal("yolt_leak"),
@@ -118,14 +119,18 @@ public class CommandRestrictionGameTests {
             score.unlock();
 
             Settings.get().restrictCommands = true;
+            Settings.get().chat.allowWhispers = false;
             int senderFrom = TestPlayers.sentPackets(sender).size();
             int nearFrom = TestPlayers.sentPackets(near).size();
             commands.forEach(command -> sendCommand(sender, command));
-            helper.assertValueEqual(chatLines(sender, senderFrom), List.of(), "what the restricted sender was told");
+            helper.assertValueEqual(chatLines(sender, senderFrom), List.of("Whispers are turned off.", "Whispers are turned off."),
+                    "what the restricted sender was told");
             helper.assertValueEqual(chatLines(near, nearFrom), List.of(), "what the near player got from the restricted sender");
             helper.assertValueEqual(score.get(), 0, "score after the restricted trigger");
 
             Settings.get().restrictCommands = false;
+            // On, so /msg and /tell, now whispers, reach the near player as they did before
+            Settings.get().chat.allowWhispers = true;
             senderFrom = TestPlayers.sentPackets(sender).size();
             nearFrom = TestPlayers.sentPackets(near).size();
             commands.forEach(command -> sendCommand(sender, command));
@@ -139,6 +144,7 @@ public class CommandRestrictionGameTests {
             helper.assertValueEqual(score.get(), 1, "score after the unrestricted trigger");
         } finally {
             Settings.get().restrictCommands = before;
+            Settings.get().chat.allowWhispers = whispersBefore;
             if (objective != null) {
                 scoreboard.removeObjective(objective);
             }

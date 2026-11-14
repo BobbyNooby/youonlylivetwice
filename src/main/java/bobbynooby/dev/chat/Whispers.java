@@ -17,9 +17,15 @@ import net.minecraft.commands.arguments.MessageArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-/** Our /w, which only reaches a player close enough to hear it, or anyone in global chat mode. */
+import java.util.List;
+
+/**
+ * Our /w, /msg and /tell, one whisper that only reaches a player close enough to hear it, or anyone in global chat mode.
+ */
 public final class Whispers {
     static final String TURNED_OFF = "Whispers are turned off.";
+    /** The commands that whisper. Vanilla's /msg and its two redirects are all replaced, so none skips the range. */
+    public static final List<String> NAMES = List.of("w", "msg", "tell");
 
     private Whispers() {}
 
@@ -32,18 +38,26 @@ public final class Whispers {
         });
     }
 
+    static boolean isWhisper(String commandRoot) {
+        return NAMES.contains(commandRoot);
+    }
+
     // The server checks a signed /w against its own tree, so the server's /w has to be the one non-ops get
     private static void replaceVanillaWhisper(CommandDispatcher<CommandSourceStack> dispatcher) {
         CommandNodeAccessor root = (CommandNodeAccessor) dispatcher.getRoot();
-        root.yoltChildren().remove("w");
-        root.yoltLiterals().remove("w");
-        dispatcher.register(command());
+        for (String name : NAMES) {
+            root.yoltChildren().remove(name);
+            root.yoltLiterals().remove(name);
+        }
+        for (String name : NAMES) {
+            dispatcher.register(command(name));
+        }
     }
 
     // No suggestions on target, so tab-complete can't list who is online.
     // message must be a message argument: the client only signs those.
-    static LiteralArgumentBuilder<CommandSourceStack> command() {
-        return Commands.literal("w")
+    static LiteralArgumentBuilder<CommandSourceStack> command(String name) {
+        return Commands.literal(name)
                 .then(Commands.argument("target", StringArgumentType.word())
                         .then(Commands.argument("message", MessageArgument.message())
                                 .executes(Whispers::run)));

@@ -40,6 +40,8 @@ each part and how to set up the pack.
 
 - **Whispers are logged.** Each whisper writes one line to the server log: who sent it, to which name, the text and
   whether it was heard. Players see nothing new.
+- **One whisper for everyone.** `/msg` and `/tell` are now the same ranged whisper as `/w`, for ops too, so no one can
+  reach a player out of earshot. `/teammsg` stays vanilla. The console uses `/tellraw`.
 
 ## What it does
 

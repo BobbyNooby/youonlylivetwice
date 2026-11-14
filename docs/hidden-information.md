@@ -1,6 +1,6 @@
 # Hidden information
 
-- **Commands.** Non-ops only get `/help`, which answers with a spooky message, plus `/w` when whispers are on,
+- **Commands.** Non-ops only get `/help`, which answers with a spooky message, plus `/w`, `/msg` and `/tell` when whispers are on,
   `/status` while a hardcore feature is on (by default both are), and `/yolt skin` when players may pick their skin. Ops below level 2 count
   as non-ops. A command on a sign an op wrote still runs when a non-op clicks it.
 - **Tab list.** Empty, with a random flavour header (`hide.tabHeaderLines`).

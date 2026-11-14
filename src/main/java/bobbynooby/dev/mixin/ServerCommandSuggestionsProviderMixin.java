@@ -19,7 +19,7 @@ public abstract class ServerCommandSuggestionsProviderMixin {
     @Final
     private ServerPlayer player;
 
-    // A modified client can ask about commands it was never sent, and /msg would suggest every online name
+    // A modified client can ask about commands it was never sent, and many of those would suggest every online name
     @WrapOperation(method = "tryProcessRequest", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/commands/Commands;getDispatcher()Lcom/mojang/brigadier/CommandDispatcher;"))
     private CommandDispatcher<CommandSourceStack> suggestFromNonOpTree(Commands commands,

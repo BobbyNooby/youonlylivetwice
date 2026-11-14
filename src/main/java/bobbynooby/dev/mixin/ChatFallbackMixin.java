@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerPlayer.class)
 public abstract class ChatFallbackMixin {
-    // Every signed send to one player ends here: chat, /say, /me, /msg, /tell and /teammsg
+    // Every signed send to one player ends here: chat, /say, /me and /teammsg
     @Inject(method = "sendChatMessage(Lnet/minecraft/network/chat/OutgoingChatMessage;ZLnet/minecraft/network/chat/ChatType$Bound;)V",
             at = @At("HEAD"), cancellable = true)
     private void textForUnknownSender(OutgoingChatMessage message, boolean filtered, ChatType.Bound chatType, CallbackInfo ci) {

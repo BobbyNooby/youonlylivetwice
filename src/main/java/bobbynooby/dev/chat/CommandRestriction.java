@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.function.Supplier;
 
 /**
- * Holds non-op players to /help, plus /w when whispers are on, /status while a hardcore feature is on and /yolt skin when
+ * Holds non-op players to /help, plus /w, /msg and /tell when whispers are on, /status while a hardcore feature is on and /yolt skin when
  * players may pick their skin: what they may run, are sent and get suggested.
  */
 public final class CommandRestriction {
@@ -65,7 +65,9 @@ public final class CommandRestriction {
         // help is answered in blocks(), so its body never runs
         root.addChild(Commands.literal("help").executes(c -> 1).build());
         if (allowWhispers) {
-            root.addChild(Whispers.command().build());
+            for (String name : Whispers.NAMES) {
+                root.addChild(Whispers.command(name).build());
+            }
         }
         if (status && statusCommand != null) {
             root.addChild(statusCommand.get().build());
@@ -94,9 +96,9 @@ public final class CommandRestriction {
         ServerPlayer player = source.getPlayer();
         String commandRoot = command.split(" ")[0];
 
-        // /w is our own command (Whispers), so it runs normally and reads the signed message. With whispers off the
-        // player's tree has no /w to run, so the answer /w itself would give comes from here.
-        if (commandRoot.equals("w")) {
+        // /w, /msg and /tell are our own command (Whispers), so they run normally and read the signed message. With
+        // whispers off the player's tree has none of them, so the answer the whisper itself would give comes from here.
+        if (Whispers.isWhisper(commandRoot)) {
             if (Settings.get().chat.allowWhispers) {
                 return false;
             }

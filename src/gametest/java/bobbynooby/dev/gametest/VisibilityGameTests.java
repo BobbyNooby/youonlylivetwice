@@ -23,6 +23,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Crypt;
 import net.minecraft.util.CryptException;
@@ -33,6 +34,7 @@ import net.minecraft.world.entity.player.ProfilePublicKey;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.CreakingHeartBlockEntity;
+import net.minecraft.world.scores.PlayerTeam;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -358,10 +360,13 @@ public class VisibilityGameTests {
         helper.succeed();
     }
 
-    // Vanilla's /msg sends to the target directly, outside ChatDelivery
+    // Vanilla's /teammsg sends to each team member directly, outside ChatDelivery. /msg and /tell are our whisper now,
+    // which sends plain text. The two players get a team of their own, so no other test's player gets the message.
     @GameTest
-    public void opMsgToUnknownRecipientFallsBack(GameTestHelper helper) {
+    public void opTeamMsgToUnknownRecipientFallsBack(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        PlayerTeam team = scoreboard.addPlayerTeam(CommandGameTests.uniqueName("visteam"));
         YoltConfig.HideSection hide = Settings.get().hide;
         boolean distantBefore = hide.distantPlayers;
         List<ServerPlayer> joined = new ArrayList<>();
@@ -374,17 +379,23 @@ public class VisibilityGameTests {
             joined.add(far);
             far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
             helper.assertFalse(PlayerVisibility.known(far).contains(op.getUUID()), "far player knows the op");
-            // A gamemaster op, so restrictCommands lets vanilla /msg run; the test server's plain op is level 0
+            scoreboard.addPlayerToTeam(op.getScoreboardName(), team);
+            scoreboard.addPlayerToTeam(far.getScoreboardName(), team);
+            // A gamemaster op, so restrictCommands lets vanilla /teammsg run; the test server's plain op is level 0
             TestPlayers.op(op);
 
             // A real client signs the message argument; this puts the command on that same signed path
             PlayerChatMessage signed = PlayerChatMessage.unsigned(op.getUUID(), "psst");
             CommandSourceStack source = op.createCommandSourceStack().withSigningContext(
                     new CommandSigningContext.SignedArguments(Map.of("message", signed)), TaskChainer.immediate(Runnable::run));
-            server.getCommands().performPrefixedCommand(source, "msg " + far.getGameProfile().name() + " psst");
+            server.getCommands().performPrefixedCommand(source, "teammsg psst");
 
             String name = op.getDisplayName().getString();
-            helper.assertTrue(far.messages.stream().anyMatch(m -> isChatLine(m, "commands.message.display.incoming", name, "psst")),
+            // A team line names the team first, then the sender and the text
+            helper.assertTrue(far.messages.stream().anyMatch(m -> m.getContents() instanceof TranslatableContents line
+                            && line.getKey().equals("chat.type.team.text") && line.getArgs().length == 3
+                            && line.getArgs()[1] instanceof Component sender && sender.getString().equals(name)
+                            && line.getArgs()[2] instanceof Component content && content.getString().equals("psst")),
                     "far player did not get the message as text");
             helper.assertFalse(chatFrom(far, op), "far player got player chat from an op it doesn't know");
             // The op's own copy takes the normal signed path
@@ -395,6 +406,7 @@ public class VisibilityGameTests {
                 server.getPlayerList().deop(op.nameAndId());
             }
             leaveAll(joined);
+            scoreboard.removePlayerTeam(team);
         }
         helper.succeed();
     }

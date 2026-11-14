@@ -415,7 +415,7 @@ public class CommandGameTests {
         }
     }
 
-    // What a client is sent: every path of /yolt, our /w and the non-op trees, with each argument's parser,
+    // What a client is sent: every path of /yolt, our /w, /msg and /tell and the non-op trees, with each argument's parser,
     // the lowest permission level that may use the node, and whether it runs. Logged so a CI run shows it.
     @GameTest
     public void commandTreesKeepTheirShape(GameTestHelper helper) {
@@ -423,13 +423,15 @@ public class CommandGameTests {
         List<String> lines = new ArrayList<>();
         List<String> ours = new ArrayList<>();
         for (CommandNode<CommandSourceStack> child : dispatcher.getRoot().getChildren()) {
-            if (child.getName().equals("yolt") || child.getName().equals("w")) {
+            if (List.of("yolt", "w", "msg", "tell").contains(child.getName())) {
                 ours.add(child.getName());
             }
         }
         lines.add("root order: " + String.join(", ", ours));
         dump(dispatcher, dispatcher.getRoot().getChild("yolt"), "", lines);
-        dump(dispatcher, dispatcher.getRoot().getChild("w"), "", lines);
+        for (String whisper : List.of("w", "msg", "tell")) {
+            dump(dispatcher, dispatcher.getRoot().getChild(whisper), "", lines);
+        }
         lines.add("non-op tree, whispers and skin choice off:");
         dumpChildren(CommandRestriction.nonOpTree(false, false), lines);
         lines.add("non-op tree, whispers and skin choice on:");
@@ -438,7 +440,7 @@ public class CommandGameTests {
         String tree = String.join("\n", lines);
         Yolt.LOGGER.info("Command trees:\n{}", tree);
         helper.assertValueEqual(tree, """
-                root order: yolt, w
+                root order: yolt, w, msg, tell
                 yolt | literal | level 0
                 yolt border | literal | level 2
                 yolt border <diameter> | brigadier:integer {"min":1,"max":59999968} | level 0 | runs
@@ -485,6 +487,12 @@ public class CommandGameTests {
                 w | literal | level 0
                 w <target> | brigadier:string {"type":"word"} | level 0
                 w <target> <message> | minecraft:message | level 0 | runs
+                msg | literal | level 0
+                msg <target> | brigadier:string {"type":"word"} | level 0
+                msg <target> <message> | minecraft:message | level 0 | runs
+                tell | literal | level 0
+                tell <target> | brigadier:string {"type":"word"} | level 0
+                tell <target> <message> | minecraft:message | level 0 | runs
                 non-op tree, whispers and skin choice off:
                 help | literal | level 0 | runs
                 non-op tree, whispers and skin choice on:
@@ -492,6 +500,12 @@ public class CommandGameTests {
                 w | literal | level 0
                 w <target> | brigadier:string {"type":"word"} | level 0
                 w <target> <message> | minecraft:message | level 0 | runs
+                msg | literal | level 0
+                msg <target> | brigadier:string {"type":"word"} | level 0
+                msg <target> <message> | minecraft:message | level 0 | runs
+                tell | literal | level 0
+                tell <target> | brigadier:string {"type":"word"} | level 0
+                tell <target> <message> | minecraft:message | level 0 | runs
                 yolt | literal | level 0
                 yolt skin | literal | level 0
                 yolt skin set | literal | level 0

@@ -72,7 +72,7 @@ How an upgrade works:
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
 | `configVersion` | `2` | The file's layout version, used for upgrades. Leave it. A value of 0 or below logs a warning and reads as the current version. | – |
-| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w` when whispers are on, `/status` while a hardcore feature is on, which it is by default, and `/yolt skin` when players may pick their skin). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/msg`, `/tell`, `/teammsg`, `/list` and vanilla suggestions show who is online. | No |
+| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w`, `/msg` and `/tell` when whispers are on, `/status` while a hardcore feature is on, which it is by default, and `/yolt skin` when players may pick their skin). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/teammsg`, `/list` and vanilla suggestions show who is online. `/msg` and `/tell` are YOLT's whisper either way. | No |
 | `netherScaleOneToOne` | `true` | Every dimension's coordinate scale is 1, modded dimensions included, so the Nether matches the Overworld and there is no fast travel. | No; it applies at once, and changing it on an existing world breaks portal links |
 | `randomSpawn` | `true` | Players with no spawn point spawn at a random spot inside the border. | No |
 | `immediateRespawn` | `true` | Turns on the `immediate_respawn` game rule at start, on `/yolt reload` and on `/yolt config`. | No |
@@ -122,8 +122,8 @@ diameter to the area you want people to spawn in.
 |---|---|---|---|
 | `mode` | `"proximity"` | `proximity`, `self_only` or `global`. | No |
 | `radius` | `48` | Blocks, for proximity chat, 1 or more. | No |
-| `allowWhispers` | `true` | Non-ops can use `/w`. | No |
-| `whisperRadius` | `0` | Blocks a whisper reaches. 0 means the same as `radius`. No range in `global` mode. | No |
+| `allowWhispers` | `true` | Non-ops can use `/w`, `/msg` and `/tell`, which are all the same whisper. | No |
+| `whisperRadius` | `0` | Blocks a whisper reaches, for ops too. 0 means the same as `radius`. No range in `global` mode. | No |
 
 ## `hide`
 
