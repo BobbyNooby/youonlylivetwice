@@ -38,5 +38,18 @@ public class TestServerSetup implements ModInitializer {
         // Tests take grave heads away on purpose and check what happens next, which the re-check would undo under them.
         // The re-check's own tests turn it on, in batches of their own.
         Settings.get().graves.recheckSeconds = 0;
+        pinOldDefaults();
+    }
+
+    // These switches ship on, but most tests were written for a world with them off: an offset on every join, whispers
+    // and /status in every non-op's command tree, a flat anvil price and YOLT's Mending. So the shared world keeps them
+    // off, and a test that needs one on sets it itself or comes from an environment that does. ShippedDefaultsGameTests
+    // turns them back on to check the defaults themselves.
+    private static void pinOldDefaults() {
+        Settings.get().hide.coordinates = false;
+        Settings.get().chat.allowWhispers = false;
+        Settings.get().skins.lockAfterFirstChoice = false;
+        Settings.get().hardcore.anvil.enabled = false;
+        Settings.get().hardcore.mending.enabled = false;
     }
 }

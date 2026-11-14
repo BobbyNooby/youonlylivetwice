@@ -72,6 +72,7 @@
 			"bobbynooby.dev.gametest.RandomSpawnGameTests",
 			"bobbynooby.dev.gametest.ReviveGameTests",
 			"bobbynooby.dev.gametest.ServerListGameTests",
+			"bobbynooby.dev.gametest.ShippedDefaultsGameTests",
 			"bobbynooby.dev.gametest.SkinGameTests",
 			"bobbynooby.dev.gametest.SleepGameTests",
 			"bobbynooby.dev.gametest.SmokeGameTests",

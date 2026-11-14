@@ -1,0 +1,10 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hide.coordinates": "true",
+    "chat.allowWhispers": "true",
+    "skins.lockAfterFirstChoice": "true",
+    "hardcore.anvil.enabled": "true",
+    "hardcore.mending.enabled": "true"
+  }
+}
