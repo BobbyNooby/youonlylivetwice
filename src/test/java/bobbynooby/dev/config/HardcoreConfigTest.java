@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -175,48 +176,49 @@ class HardcoreConfigTest {
         return ConfigKeys.find(path).orElseThrow(() -> new AssertionError("no key " + path));
     }
 
-    private static void assertRefused(Path file, YoltConfig live, String path, JsonPrimitive value, String problem)
-            throws IOException {
-        ConfigLoader.Change change = ConfigLoader.setKey(file, live, key(path), value);
-        assertEquals(problem, change.problem(), path);
-        assertNull(change.config(), path);
-        assertEquals("{}", Files.readString(file), path + " was written");
-    }
-
-    // Each of the four can make the mix bad from a config that was fine, so each one is refused with the reason
+    // Set from a config that was fine, either switch or either number can make the curse outlast the limp. Each set goes
+    // through, keeps both features on, and the mix gets a notice instead.
     @Test
-    void config1CommandRefusesACurseThatOutlastsTheLimp() throws IOException {
+    void config1CommandAllowsACurseThatOutlastsTheLimp() throws IOException {
         Path file = dir.resolve("config.json");
         Files.writeString(file, "{}");
-        String limpsForGood = "the curse would leave no more hearts than hardcore.limp.recoverAtHearts, so a cursed player"
-                + " could limp for good";
-        String tooMany = "hardcore.curse.maxLostHearts: must leave more than hardcore.limp.recoverAtHearts of the 10 hearts";
 
         // 8 hearts lost is fine while the limp is off
         YoltConfig curseOnly = new YoltConfig();
         curseOnly.hardcore.curse.enabled = true;
         curseOnly.hardcore.curse.maxLostHearts = 8;
-        assertRefused(file, curseOnly, "hardcore.limp.enabled", new JsonPrimitive(true), "hardcore.limp.enabled: " + limpsForGood);
+        assertNull(ConfigChecks.curseOutlastsLimp(curseOnly));
+        assertCrossedAfterSet(file, curseOnly, "hardcore.limp.enabled", new JsonPrimitive(true));
 
         YoltConfig limpOnly = new YoltConfig();
         limpOnly.hardcore.limp.enabled = true;
         limpOnly.hardcore.curse.maxLostHearts = 8;
-        assertRefused(file, limpOnly, "hardcore.curse.enabled", new JsonPrimitive(true), "hardcore.curse.enabled: " + limpsForGood);
+        assertCrossedAfterSet(file, limpOnly, "hardcore.curse.enabled", new JsonPrimitive(true));
 
         YoltConfig both = new YoltConfig();
         both.hardcore.curse.enabled = true;
         both.hardcore.limp.enabled = true;
+        assertNull(ConfigChecks.curseOutlastsLimp(both), "the shipped numbers with both on");
         // 3 hearts left against a recovery line of 3
-        assertRefused(file, both, "hardcore.curse.maxLostHearts", new JsonPrimitive(7), tooMany);
-        // The first warning that names the key is the curse's, which names the recovery line too
-        assertRefused(file, both, "hardcore.limp.recoverAtHearts", new JsonPrimitive(8.0), tooMany);
+        assertCrossedAfterSet(file, both, "hardcore.curse.maxLostHearts", new JsonPrimitive(7));
+        assertCrossedAfterSet(file, both, "hardcore.limp.recoverAtHearts", new JsonPrimitive(8.0));
 
-        // One heart more than the line goes through
+        // One heart more than the line has no notice
         ConfigLoader.Change fine = ConfigLoader.setKey(file, both, key("hardcore.curse.maxLostHearts"), new JsonPrimitive(6));
         assertNull(fine.problem());
         assertEquals(6, fine.config().hardcore.curse.maxLostHearts);
-        assertTrue(fine.config().hardcore.curse.enabled);
-        assertTrue(fine.config().hardcore.limp.enabled);
+        assertNull(ConfigChecks.curseOutlastsLimp(fine.config()));
+    }
+
+    private static void assertCrossedAfterSet(Path file, YoltConfig live, String path, JsonPrimitive value) {
+        ConfigLoader.Change change = ConfigLoader.setKey(file, live, key(path), value);
+        assertNull(change.problem(), path);
+        assertEquals(value.getAsString(), key(path).show(change.config()), path);
+        assertTrue(change.config().hardcore.curse.enabled, path);
+        assertTrue(change.config().hardcore.limp.enabled, path);
+        String notice = ConfigChecks.curseOutlastsLimp(change.config());
+        assertNotNull(notice, path);
+        assertTrue(notice.contains("This is allowed"), notice);
     }
 
     // Every key the table below must hold: the hardcore layer's and the resource pack's
@@ -553,19 +555,19 @@ class HardcoreConfigTest {
                 "hardcore.bloodMoon.startTick: must keep 0 <= warnTick < startTick < endTick <= 23999",
                 "hardcore.bloodMoon.endTick: must keep 0 <= warnTick < startTick < endTick <= 23999"));
 
-        // The curse against the limp, from either side. The numbers go back and both features stay on.
-        List<String> curseAndLimp = List.of(
-                "hardcore.curse.maxLostHearts: must leave more than hardcore.limp.recoverAtHearts of the 10 hearts, using default",
-                "hardcore.limp.recoverAtHearts: must be less than the 10 hearts hardcore.curse.maxLostHearts leaves, using default");
+        // The curse against the limp, from either side: the mix is kept as typed, with both features on, and only gets a
+        // notice
         for (String json : List.of(
                 "{\"hardcore\":{\"curse\":{\"enabled\":true,\"maxLostHearts\":8},\"limp\":{\"enabled\":true}}}",
                 "{\"hardcore\":{\"curse\":{\"enabled\":true},\"limp\":{\"enabled\":true,\"recoverAtHearts\":8}}}")) {
             ConfigLoader.Result r = loadJson(json);
-            assertEquals(curseAndLimp, r.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList(), json);
-            assertEquals(2, r.config().hardcore.curse.maxLostHearts, json);
-            assertEquals(3.0, r.config().hardcore.limp.recoverAtHearts, json);
+            assertEquals(List.of(), r.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList(), json);
+            YoltConfig typed = new Gson().fromJson(json, YoltConfig.class);
+            assertEquals(typed.hardcore.curse.maxLostHearts, r.config().hardcore.curse.maxLostHearts, json);
+            assertEquals(typed.hardcore.limp.recoverAtHearts, r.config().hardcore.limp.recoverAtHearts, json);
             assertTrue(r.config().hardcore.curse.enabled, json);
             assertTrue(r.config().hardcore.limp.enabled, json);
+            assertNotNull(ConfigChecks.curseOutlastsLimp(r.config()), json);
         }
 
         // Right on the edges nothing falls back: the same damage twice, and one heart more than the limp's line
@@ -573,5 +575,6 @@ class HardcoreConfigTest {
                 + "\"curse\":{\"enabled\":true,\"maxLostHearts\":6},\"limp\":{\"enabled\":true}}}");
         assertEquals(List.of(), edges.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList());
         assertEquals(6, edges.config().hardcore.curse.maxLostHearts);
+        assertNull(ConfigChecks.curseOutlastsLimp(edges.config()));
     }
 }

@@ -269,7 +269,6 @@ final class ConfigChecks {
         }
         bloodMoon(c.bloodMoon, fallback.bloodMoon, fellBack);
         cold(c.cold, fallback.cold, fellBack);
-        curseAndLimp(c, fallback, fellBack);
     }
 
     // No health would kill a mob as it loads
@@ -588,40 +587,18 @@ final class ConfigChecks {
         }
     }
 
-    // The curse must always leave more hearts than the limp needs to stop, or a cursed player could limp for good
-    private static void curseAndLimp(HardcoreConfig.HardcoreSection c, HardcoreConfig.HardcoreSection fallback,
-                                     BiConsumer<String, String> fellBack) {
-        if (!limpsForGood(c)) {
-            return;
+    /**
+     * A notice, or null, when the curse can take a player below the hearts the limp needs to stop: such a player limps
+     * until a curse heart comes back. A server may want that as a punishment, so it is allowed and only said.
+     */
+    static @Nullable String curseOutlastsLimp(YoltConfig config) {
+        HardcoreConfig.HardcoreSection c = config.hardcore;
+        if (!c.curse.enabled || !c.limp.enabled || 10 - c.curse.maxLostHearts > c.limp.recoverAtHearts) {
+            return null;
         }
-        // Both go back, since either one could be the typo
-        c.curse.maxLostHearts = fallback.curse.maxLostHearts;
-        c.limp.recoverAtHearts = fallback.limp.recoverAtHearts;
-        fellBack.accept("hardcore.curse.maxLostHearts", "must leave more than hardcore.limp.recoverAtHearts of the 10 hearts");
-        fellBack.accept("hardcore.limp.recoverAtHearts", "must be less than the 10 hearts hardcore.curse.maxLostHearts leaves");
-        // The limp's own pair has to hold with the recovery line it got back
-        if (!(c.limp.belowHearts < c.limp.recoverAtHearts)) {
-            c.limp.belowHearts = fallback.limp.belowHearts;
-            fellBack.accept("hardcore.limp.belowHearts", "must be less than hardcore.limp.recoverAtHearts");
-        }
-        // Numbers that were fine with one of the two off can still clash once it goes on, so the switch that turned it
-        // on goes back too. That is how /yolt config refuses it.
-        if (limpsForGood(c)) {
-            String problem = "the curse would leave no more hearts than hardcore.limp.recoverAtHearts, so a cursed player"
-                    + " could limp for good";
-            if (c.curse.enabled != fallback.curse.enabled) {
-                c.curse.enabled = fallback.curse.enabled;
-                fellBack.accept("hardcore.curse.enabled", problem);
-            }
-            if (c.limp.enabled != fallback.limp.enabled) {
-                c.limp.enabled = fallback.limp.enabled;
-                fellBack.accept("hardcore.limp.enabled", problem);
-            }
-        }
-    }
-
-    private static boolean limpsForGood(HardcoreConfig.HardcoreSection c) {
-        return c.curse.enabled && c.limp.enabled && !(10 - c.curse.maxLostHearts > c.limp.recoverAtHearts);
+        return "with hardcore.curse.maxLostHearts " + c.curse.maxLostHearts + ", a fully cursed player has "
+                + Math.max(0, 10 - c.curse.maxLostHearts) + " hearts, not more than hardcore.limp.recoverAtHearts " + c.limp.recoverAtHearts
+                + ", so they limp until a curse heart comes back. This is allowed; it is only a notice.";
     }
 
     // Written so NaN fails too

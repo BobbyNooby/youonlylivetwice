@@ -39,6 +39,7 @@ public final class Settings {
         for (String warning : result.warnings()) {
             Yolt.LOGGER.warn("Config: {}", warning);
         }
+        noteCurseAndLimp(null, config);
         borderFellBack = result.borderProblem() != null;
         borderHeld = borderFellBack;
         startupBackup = result.backup();
@@ -53,6 +54,7 @@ public final class Settings {
         ConfigLoader.Result result = ConfigLoader.load(path(), config, false);
         if (!result.unparseable()) {
             config = result.config();
+            noteCurseAndLimp(null, config);
         }
         return result;
     }
@@ -74,13 +76,23 @@ public final class Settings {
     public static ConfigLoader.Change set(ConfigKey key, String text, Function<YoltConfig, @Nullable String> veto) {
         ConfigLoader.Change change = ConfigLoader.setText(path(), config, key, text, veto);
         if (change.config() != null) {
+            YoltConfig before = config;
             config = change.config();
+            noteCurseAndLimp(before, config);
         }
         if (change.backup() != null) {
             Yolt.LOGGER.warn("Config: the file could not be read when {} was set, so it is saved as {}{}", key.path(), change.backup(),
                     change.config() != null ? " and rewritten" : ", but " + change.problem());
         }
         return change;
+    }
+
+    // Logged at a load, and after a set only when that set is what made the curse and the limp cross
+    private static void noteCurseAndLimp(@Nullable YoltConfig before, YoltConfig now) {
+        String notice = ConfigChecks.curseOutlastsLimp(now);
+        if (notice != null && (before == null || ConfigChecks.curseOutlastsLimp(before) == null)) {
+            Yolt.LOGGER.info("Config: {}", notice);
+        }
     }
 
     /**
