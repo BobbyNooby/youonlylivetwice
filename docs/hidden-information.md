@@ -6,7 +6,8 @@
   it.
 - **Tab list.** Empty, with a random flavour header (`hide.tabHeaderLines`).
 - **Server list.** 0 players online out of `serverList.shownMaxPlayers` (default 1). Hovering the count shows
-  `serverList.hoverLines` instead of names. The old ping and the query port show the same counts.
+  `serverList.hoverLines` instead of names. The old ping and the query port show the same counts. The MOTD is a
+  flavour line from `serverList.motdLines`, a new one at every refresh. `[]` keeps your own from `server.properties`.
 - **Nametags** are hidden, and death, join, leave and advancement messages are gone.
 - **Nearby players only.** Each player's game is only told about players near them, so names can't leak through chat
   tab-complete or the Social Interactions screen. "Near" is the range at which the game shows another player: the

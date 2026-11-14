@@ -45,8 +45,8 @@ How the file is read:
 - To reset a key, set it to its default. Deleting a key from the file and reloading keeps the value in use, with no
   warning. A restart would give it its default.
 - Unknown keys (most likely a misspelling) are warned about and left out when the file is rewritten.
-- `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can only be changed in the file. So are the
-  hardcore layer's lists and maps, see [file-only settings](#file-only-settings).
+- `serverList.motdLines`, `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can only be changed in
+  the file. So are the hardcore layer's lists and maps, see [file-only settings](#file-only-settings).
 - `§` colour codes work in the text settings (the client draws them), for example `"§cNo one is coming."`.
 - With no config file at startup (the first start, or a deleted file), YOLT writes the defaults and uses them.
 - The file is rewritten at every start, so comments typed into it aren't kept.
@@ -201,16 +201,24 @@ was made with, since it is saved with its chunk.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
+| `motdLines` | The 13 flavour lines of `hide.tabHeaderLines` | The server list shows one of these as the MOTD, a new one at every refresh, never the same one twice in a row. At most 64 lines of 256 characters. `[]` keeps the MOTD from `server.properties`. File only. | No (on `/yolt reload`) |
 | `hoverLines` | `["You scream out for help, but no one answers."]` | One line per entry in the tooltip when you hover the player count in the multiplayer screen, at most 12 lines of 256 characters. File only. | No (on `/yolt reload`) |
 | `shownMaxPlayers` | `1` | The slot count the server list shows while `hide.serverPlayerCount` hides the real one, 0 or more. | No |
 
 Notes:
 
-- The lines replace the player sample whatever `hide.serverPlayerCount` is, so real names never show there. With
+- A `motdLines` line replaces the whole MOTD from `server.properties`, whatever `hide.serverPlayerCount` is. It can
+  hold one `\n` to fill both rows, for example `"§4Nobody is coming.\n§7Nobody ever came."`.
+- A server updating to 1.2.0 gets the flavour MOTD too, since the new key arrives at its default. To keep your own
+  MOTD, set `"motdLines": []` and run `/yolt reload`.
+- The line is picked for each ping, so it changes every time a player refreshes the list. Only the normal server-list
+  ping gets it: clients older than 1.7, the query port (`enable-query`) and the game itself once a player has joined
+  are sent the MOTD from `server.properties`.
+- The hover lines replace the player sample whatever `hide.serverPlayerCount` is, so real names never show there. With
   `[]` the hover shows no names while `hide.serverPlayerCount` is on, and vanilla's names while it is off.
 - Lines past the caps are dropped, with a warning, when the config loads.
 - The ping bars' hover shows the client's own measured ping, and the server can't change that. The version text can't
-  be faked without marking the server incompatible. The MOTD stays in `server.properties`.
+  be faked without marking the server incompatible.
 
 ## `skins`
 

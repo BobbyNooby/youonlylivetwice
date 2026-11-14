@@ -19,6 +19,8 @@
 - **Portals at 1:1.** A Nether portal only links to an Overworld portal within 16 blocks of its exit. A pair of
   portals that linked further apart before this version makes a new Overworld portal the first time someone goes
   through, and links to that one from then on.
+- **The flavour MOTD** (`serverList.motdLines`) is only on the server list's normal ping. Clients older than 1.7, the
+  query port (`enable-query`) and the game itself after a join get the MOTD from `server.properties`.
 - **Shared maps** show other players only to holders who can see them (`hide.mapPlayers`), but a held map still fills
   in terrain for every copy.
 - **Random spawn lag.** Pre-generate the world with Chunky.
