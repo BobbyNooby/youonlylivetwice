@@ -44,6 +44,11 @@ final class SharedGraveContainer extends SimpleContainer {
         store.byId(graveId).ifPresent(grave -> {
             store.put(grave.withItems(Stacks.nonEmptyCopies(getItems())));
         });
+        for (ContainerUser viewer : viewers) {
+            if (viewer instanceof ServerPlayer player) {
+                GraveMenus.changedBy(player.getUUID());
+            }
+        }
     }
 
     /**

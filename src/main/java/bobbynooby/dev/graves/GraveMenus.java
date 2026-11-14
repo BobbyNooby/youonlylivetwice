@@ -1,5 +1,8 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.core.Guard;
+import bobbynooby.dev.core.Later;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -10,21 +13,52 @@ import net.minecraft.world.SimpleMenuProvider;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** Opens grave menus, and keeps the one container all viewers of a grave share. Server thread only. */
 public final class GraveMenus {
     // One container per grave while anyone has it open, keyed by grave id. Only this class writes it.
     private static final Map<UUID, SharedGraveContainer> OPEN = new HashMap<>();
+    // Players who had a grave open while it changed. Looting only marks the grave file to save with the world, so their
+    // logout saves it, or a crash after it could hand the items back while the player's own save keeps them.
+    private static final Set<UUID> CHANGED_BY = new HashSet<>();
+    private static boolean saveQueued;
 
     private GraveMenus() {}
 
     static void init() {
         // A container must never outlive its server and save into the next one started in the same game
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> OPEN.clear());
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            OPEN.clear();
+            CHANGED_BY.clear();
+            saveQueued = false;
+        });
+        ServerPlayerEvents.LEAVE.register(GraveMenus::onLeave);
+    }
+
+    static void changedBy(UUID player) {
+        CHANGED_BY.add(player);
+    }
+
+    // A grave menu still open counts too, since closing it as the player goes can put items back. The save waits for the
+    // end of the tick, so that has happened, and several players leaving at once share it.
+    private static void onLeave(ServerPlayer player) {
+        boolean changed = CHANGED_BY.remove(player.getUUID()) | player.containerMenu instanceof GraveMenu;
+        if (!changed || saveQueued) {
+            return;
+        }
+        saveQueued = true;
+        MinecraftServer server = player.level().getServer();
+        String name = player.nameAndId().name();
+        Later.afterTick(server, () -> {
+            saveQueued = false;
+            Guard.run(() -> GraveStore.get(server).saveNow(server), "Could not save the graves after {} left", name);
+        });
     }
 
     /** Opens the grave's take-only menu. Everyone looking at one grave shares the same items. */
