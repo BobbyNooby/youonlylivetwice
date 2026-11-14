@@ -283,13 +283,14 @@ Every anvil use costs one fixed price, set by the biggest kind of job in it, and
 
 - One use that enchants and renames costs 6, not 7. Combining two worn swords where the right one adds an
   enchantment costs 6, not 11.
-- The price never grows with use. Vanilla's hidden "prior work" counter stops growing while this is on, and adds
-  nothing to the price.
+- The price never grows with use. Vanilla's hidden "prior work" counter adds nothing to the price while this is on,
+  and every item that comes out of an anvil has it at 0, even one that had a counter from before, on either side.
 - A use that wouldn't change the item has no result, and nothing is charged or used up.
 - What stays vanilla: enchanting a whole stack at once stays refused, which enchantments go together and their
   levels, the materials used up, and the name length limit.
 - Anvils still wear down, with a 12% chance per use (`breakChance`).
-- Turning it off later: items keep the counter they had, and vanilla carries on from there.
+- Turning it off later: every item that went through an anvil while it was on prices like a new one, and vanilla
+  carries on from there. Items that never went through one keep their old counter.
 - Creative players keep vanilla's anvil.
 - The `/status` "Rules" line shows "anvil: rename 1, repair 5, enchant 6".
 

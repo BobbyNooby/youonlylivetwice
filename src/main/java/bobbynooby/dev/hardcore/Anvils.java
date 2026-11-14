@@ -23,8 +23,8 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 
 /**
- * Flat anvil prices: each use costs the price of its biggest job, the prior-work counter neither adds to it nor grows,
- * and nothing becomes too expensive. Vanilla still works out the result itself, so what can combine with what, the
+ * Flat anvil prices: each use costs the price of its biggest job, the prior-work counter adds nothing and every result
+ * comes out with it at 0, and nothing becomes too expensive. Vanilla still works out the result itself, so what can combine with what, the
  * materials used up and the name limit stay its own. Creative players keep vanilla's anvil.
  */
 public final class Anvils {
@@ -80,7 +80,7 @@ public final class Anvils {
                 resultSlot.container.setItem(resultSlot.getContainerSlot(), ItemStack.EMPTY);
                 cost.set(0);
             } else {
-                keepPriorWork(left, result);
+                clearPriorWork(result);
                 cost.set(price);
                 onlyRenames = !enchants && !repairs;
             }
@@ -120,15 +120,11 @@ public final class Anvils {
         }
     }
 
-    // The result keeps the left item's own counter, absent if it had none, so the price never grows and vanilla carries
-    // on from where the item was if the feature is switched off
-    private static void keepPriorWork(ItemStack left, ItemStack result) {
-        Integer prior = left.get(DataComponents.REPAIR_COST);
-        if (prior == null) {
-            result.remove(DataComponents.REPAIR_COST);
-        } else {
-            result.set(DataComponents.REPAIR_COST, prior);
-        }
+    // Every result leaves with the counter at 0, whatever either input carried, so an old item comes out clean and
+    // prices like a fresh one if the feature is switched off. Set to 0, the default, not removed: a removed default
+    // component reads as missing.
+    private static void clearPriorWork(ItemStack result) {
+        result.set(DataComponents.REPAIR_COST, 0);
     }
 
     // The client works out vanilla's price on every change and keystroke and shows it until told otherwise, and a sync

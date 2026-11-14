@@ -32,7 +32,6 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 // The switch is set on the live config and put back within the same tick, so no other test ever sees it. Setting an
@@ -50,7 +49,6 @@ public class HardcoreAnvilGameTests {
             anvil.enabled = true;
             AnvilMenu menu = open(player, ContainerLevelAccess.NULL);
             ItemStack pickaxe = new ItemStack(Items.DIAMOND_PICKAXE);
-            Integer priorWork = pickaxe.get(DataComponents.REPAIR_COST);
             for (int use = 1; use <= 2; use++) {
                 pickaxe.setDamageValue(pickaxe.getMaxDamage());
                 menu.getSlot(AnvilMenu.INPUT_SLOT).set(pickaxe);
@@ -64,8 +62,7 @@ public class HardcoreAnvilGameTests {
                         "the damage left after repair " + use);
                 helper.assertTrue(menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).getItem().isEmpty(), "repair " + use + " left diamonds");
                 helper.assertValueEqual(levels - player.experienceLevel, 5, "the levels repair " + use + " took");
-                helper.assertTrue(Objects.equals(pickaxe.get(DataComponents.REPAIR_COST), priorWork),
-                        "the prior work after repair " + use + ": " + pickaxe.get(DataComponents.REPAIR_COST) + ", was " + priorWork);
+                helper.assertValueEqual(pickaxe.get(DataComponents.REPAIR_COST), 0, "the prior work after repair " + use);
             }
             List<String> report = Status.report(player).stream().map(Component::getString).toList();
             helper.assertTrue(report.stream().anyMatch(line -> line.contains("anvil: rename 1, repair 5, enchant 6")),
@@ -77,7 +74,7 @@ public class HardcoreAnvilGameTests {
         helper.succeed();
     }
 
-    // Vanilla would add the 63 to the price and refuse it as too expensive
+    // Vanilla would add the 63 to the price and refuse it as too expensive. The result comes out with the counter at 0.
     @GameTest
     public void anvil2OldPriorWorkIsIgnored(GameTestHelper helper) {
         ServerPlayer player = join(helper, "AnvilPriorWork", GameType.SURVIVAL);
@@ -92,8 +89,48 @@ public class HardcoreAnvilGameTests {
             helper.assertValueEqual(menu.getCost(), 5, "the cost");
             ItemStack taken = take(menu, player);
             helper.assertValueEqual(taken.getDamageValue(), 0, "the damage left");
-            helper.assertValueEqual(taken.get(DataComponents.REPAIR_COST), 63, "the prior work after the repair");
+            helper.assertValueEqual(taken.get(DataComponents.REPAIR_COST), 0, "the prior work after the repair");
             helper.assertValueEqual(player.experienceLevel, LEVELS - 5, "the levels left");
+        } finally {
+            anvil.enabled = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A counter on either side comes out at 0: a pickaxe at 63 with a diamond, a book at 7 on a sword. Once the flat
+    // price is off, the cleaned pickaxe prices like a fresh one: vanilla's 1 for one diamond.
+    @GameTest
+    public void anvil2EitherSidesCounterComesOutAtZero(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "AnvilCounters", GameType.SURVIVAL);
+        HardcoreConfig.AnvilSection anvil = Settings.get().hardcore.anvil;
+        boolean before = anvil.enabled;
+        try {
+            anvil.enabled = true;
+            AnvilMenu menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(wornPickaxe(63));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DIAMOND));
+            ItemStack pickaxe = take(menu, player);
+            helper.assertTrue(pickaxe.is(Items.DIAMOND_PICKAXE), "the repair gave " + pickaxe);
+            helper.assertValueEqual(pickaxe.get(DataComponents.REPAIR_COST), 0, "the pickaxe's counter, 63 before");
+
+            ItemStack book = EnchantmentHelper.createBook(new EnchantmentInstance(enchantment(helper, Enchantments.SHARPNESS), 1));
+            book.set(DataComponents.REPAIR_COST, 7);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(book);
+            helper.assertValueEqual(menu.getCost(), 6, "the cost of the book");
+            ItemStack sword = take(menu, player);
+            helper.assertTrue(sword.is(Items.DIAMOND_SWORD) && !EnchantmentHelper.getEnchantmentsForCrafting(sword).isEmpty(),
+                    "the book gave " + sword);
+            helper.assertValueEqual(sword.get(DataComponents.REPAIR_COST), 0, "the sword's counter, from a book at 7");
+
+            anvil.enabled = false;
+            pickaxe.setDamageValue(100);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(pickaxe);
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DIAMOND));
+            helper.assertValueEqual(menu.getCost(), 1, "the vanilla cost for the cleaned pickaxe");
+            helper.assertValueEqual(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().get(DataComponents.REPAIR_COST), 1,
+                    "the vanilla result's counter");
         } finally {
             anvil.enabled = before;
             TestPlayers.leave(player);
