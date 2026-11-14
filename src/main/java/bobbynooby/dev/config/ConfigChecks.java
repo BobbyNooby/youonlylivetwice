@@ -19,6 +19,9 @@ final class ConfigChecks {
     // ships with. A line is cut where a hover line is.
     static final int MAX_TAB_HEADER_LINES = 64;
     static final int MAX_TAB_HEADER_LINE_LENGTH = 256;
+    // A ping carries one MOTD line, so these are the tab header's limits, with room over the same 13 lines
+    static final int MAX_MOTD_LINES = 64;
+    static final int MAX_MOTD_LINE_LENGTH = 256;
     // A login waits on a skin for at most this long. Vanilla ends a login 600 ticks after it began and a connection 30
     // seconds after the client's last packet, and online-mode checks and other mods' login steps come before the wait,
     // so this leaves two thirds of both for them.
@@ -144,6 +147,8 @@ final class ConfigChecks {
             c.serverList.shownMaxPlayers = fallback.serverList.shownMaxPlayers;
             fellBack.accept("serverList.shownMaxPlayers", "must be 0 or more");
         }
+        c.serverList.motdLines = capped(c.serverList.motdLines, MAX_MOTD_LINES, MAX_MOTD_LINE_LENGTH, "serverList.motdLines",
+                warnings);
         c.serverList.hoverLines = capped(c.serverList.hoverLines, MAX_HOVER_LINES, MAX_HOVER_LINE_LENGTH,
                 "serverList.hoverLines", warnings);
         c.hide.tabHeaderLines = capped(c.hide.tabHeaderLines, MAX_TAB_HEADER_LINES, MAX_TAB_HEADER_LINE_LENGTH,

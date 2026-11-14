@@ -26,6 +26,22 @@ public class YoltConfig {
     public HardcoreConfig.HardcoreSection hardcore = new HardcoreConfig.HardcoreSection();
     public HardcoreConfig.ResourcePackSection resourcePack = new HardcoreConfig.ResourcePackSection();
 
+    // YOLT's flavour lines, shipped as both the tab-list header's and the server list's MOTD lines
+    private static final List<String> FLAVOUR_LINES = List.of(
+            "\u00a79The cold atmosphere of a new land... it fills you with determination.",
+            "\u00a7cYou scream out for help, but no one answers.",
+            "\u00a78You are surrounded by darkness. You cannot see anything.",
+            "\u00a7bThe horizon stretches far ahead, and you wonder what awaits.",
+            "\u00a7aThe map is incomplete. Where will you go next?",
+            "\u00a7eThe path ahead is unclear, but your journey must continue.",
+            "\u00a7dEvery step into the unknown feels like a new discovery.",
+            "\u00a76A new land lies before you. What secrets will it reveal?",
+            "\u00a7cThe world is vast and uncharted. Adventure calls.",
+            "\u00a77Who knows what lies beyond the next ridge?",
+            "\u00a7fWith every sunrise, the unknown becomes a little clearer.",
+            "\u00a72You're not sure what you'll find, but you're ready to explore.",
+            "\u00a73The world is filled with possibilities... and dangers.");
+
     public static class WorldBorderSection {
         public boolean enabled = true;
         public int diameter = 10000;
@@ -80,20 +96,7 @@ public class YoltConfig {
         public boolean tabHeader = true;
         // Each player's tab-list header is one of these, picked at random, under a row of dashes; § colour codes work.
         // A reload gives a player whose line is gone a new one. An empty list shows no header.
-        public List<String> tabHeaderLines = new ArrayList<>(List.of(
-                "\u00a79The cold atmosphere of a new land... it fills you with determination.",
-                "\u00a7cYou scream out for help, but no one answers.",
-                "\u00a78You are surrounded by darkness. You cannot see anything.",
-                "\u00a7bThe horizon stretches far ahead, and you wonder what awaits.",
-                "\u00a7aThe map is incomplete. Where will you go next?",
-                "\u00a7eThe path ahead is unclear, but your journey must continue.",
-                "\u00a7dEvery step into the unknown feels like a new discovery.",
-                "\u00a76A new land lies before you. What secrets will it reveal?",
-                "\u00a7cThe world is vast and uncharted. Adventure calls.",
-                "\u00a77Who knows what lies beyond the next ridge?",
-                "\u00a7fWith every sunrise, the unknown becomes a little clearer.",
-                "\u00a72You're not sure what you'll find, but you're ready to explore.",
-                "\u00a73The world is filled with possibilities... and dangers."));
+        public List<String> tabHeaderLines = new ArrayList<>(FLAVOUR_LINES);
         public boolean distantPlayers = true;
         public boolean locatorBar = true;
         public boolean globalSounds = true;
@@ -134,6 +137,9 @@ public class YoltConfig {
     }
 
     public static class ServerListSection {
+        // Each server-list ping shows one of these as the MOTD in place of server.properties' own, never the same one
+        // twice in a row; § colour codes work, and a \n fills the second row. An empty list keeps the MOTD as it is.
+        public List<String> motdLines = new ArrayList<>(FLAVOUR_LINES);
         // One line per hover entry; § colour codes work. An empty list keeps vanilla's sample
         public List<String> hoverLines = new ArrayList<>(List.of("You scream out for help, but no one answers."));
         // The slot count the server list shows while hide.serverPlayerCount hides the real ones. The online count stays 0.

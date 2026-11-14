@@ -710,6 +710,54 @@ class ConfigLoaderTest {
         assertEquals(List.of(), loadJson("{\"hide\":{\"tabHeaderLines\":[]}}").config().hide.tabHeaderLines);
     }
 
+    // The MOTD ships with the tab header's own lines, colours and all
+    @Test
+    void motdLinesShipAsTheTabHeaderLines() throws IOException {
+        YoltConfig fresh = new YoltConfig();
+        assertEquals(13, fresh.serverList.motdLines.size());
+        assertEquals(fresh.hide.tabHeaderLines, fresh.serverList.motdLines);
+        // Each list is its own, so changing one leaves the other
+        assertNotSame(fresh.hide.tabHeaderLines, fresh.serverList.motdLines);
+
+        ConfigLoader.Result shipped = loadJson("{}");
+        assertEquals(fresh.serverList.motdLines, shipped.config().serverList.motdLines);
+        assertTrue(shipped.warnings().isEmpty(), shipped.warnings().toString());
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"motdLines\":[\"one\",\"\\u00a7ctwo\\nrows\"]}}");
+        assertEquals(List.of("one", "\u00a7ctwo\nrows"), r.config().serverList.motdLines);
+        assertEquals(List.of(), loadJson("{\"serverList\":{\"motdLines\":[]}}").config().serverList.motdLines);
+    }
+
+    // Cut the way the tab header's lines are
+    @Test
+    void motdLinesAreCapped() throws IOException {
+        List<String> typed = new ArrayList<>();
+        for (int i = 0; i < ConfigChecks.MAX_MOTD_LINES + 2; i++) {
+            typed.add(i == 1 ? "x".repeat(300) : "line" + i);
+        }
+        ConfigLoader.Result r = loadJson("{\"serverList\":{\"motdLines\":" + new Gson().toJson(typed) + "}}");
+        List<String> lines = r.config().serverList.motdLines;
+        assertEquals(ConfigChecks.MAX_MOTD_LINES, lines.size());
+        assertEquals("line0", lines.get(0));
+        assertEquals("x".repeat(ConfigChecks.MAX_MOTD_LINE_LENGTH), lines.get(1));
+        assertEquals(List.of("serverList.motdLines: at most 64 lines of 256 characters each, the rest was dropped"),
+                r.warnings().stream().filter(w -> w.startsWith("serverList.motdLines")).toList());
+
+        // Only a line too long, in a list short enough
+        ConfigLoader.Result longLine = loadJson("{\"serverList\":{\"motdLines\":" + new Gson().toJson(List.of("ok", "y".repeat(257))) + "}}");
+        assertEquals(List.of("ok", "y".repeat(ConfigChecks.MAX_MOTD_LINE_LENGTH)), longLine.config().serverList.motdLines);
+        assertEquals(1, longLine.warnings().stream().filter(w -> w.startsWith("serverList.motdLines")).count(),
+                longLine.warnings().toString());
+    }
+
+    @Test
+    void badMotdLinesFallBackToDefault() throws IOException {
+        for (String bad : List.of("\"text\"", "[1, 2]", "[\"ok\", null]")) {
+            ConfigLoader.Result r = loadJson("{\"serverList\":{\"motdLines\":" + bad + "}}");
+            assertEquals(new YoltConfig().serverList.motdLines, r.config().serverList.motdLines, bad);
+            assertTrue(r.warnings().contains("serverList.motdLines: expected a list of strings, using default"), bad);
+        }
+    }
+
     // A cut never leaves half of a character such as an emoji
     @Test
     void hoverLineCutKeepsWholeCharacters() throws IOException {
@@ -1120,7 +1168,7 @@ class ConfigLoaderTest {
         assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak",
                 turnedOn("skins.lockAfterFirstChoice"),
                 turnedOn("chat.allowWhispers"),
-                "the file had no hardcore, resourcePack, so they take their defaults"), r.warnings());
+                "the file had no serverList.motdLines, hardcore, resourcePack, so they take their defaults"), r.warnings());
         // Everything else, hardcore and resourcePack included, is this version's default
         YoltConfig expected = new YoltConfig();
         expected.chat.radius = 32;

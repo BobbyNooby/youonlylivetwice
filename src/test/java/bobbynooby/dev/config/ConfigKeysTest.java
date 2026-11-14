@@ -63,6 +63,7 @@ class ConfigKeysTest {
         leaves(new Gson().toJsonTree(new YoltConfig()).getAsJsonObject(), "", leaves);
         // The version is no setting, and a list can't be typed as one value, so those stay in the file
         assertTrue(leaves.remove("configVersion"));
+        assertTrue(leaves.remove("serverList.motdLines"));
         assertTrue(leaves.remove("serverList.hoverLines"));
         assertTrue(leaves.remove("hide.tabHeaderLines"));
         assertTrue(leaves.remove("hardcore.weight.groups"));
@@ -81,6 +82,8 @@ class ConfigKeysTest {
     // /yolt config can then say to change the list in the file rather than call it unknown
     @Test
     void listsAreFileOnly() {
+        assertTrue(ConfigKeys.fileOnly("serverList.motdLines"));
+        assertTrue(ConfigKeys.find("serverList.motdLines").isEmpty());
         assertTrue(ConfigKeys.fileOnly("serverList.hoverLines"));
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
         assertTrue(ConfigKeys.fileOnly("hide.tabHeaderLines"));
