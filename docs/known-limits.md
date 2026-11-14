@@ -12,9 +12,10 @@
 - **Beds and anchors** set no respawn point with `noBedRespawn` on. `/spawnpoint` still works as in vanilla.
 - **A grave compass in a chest** doesn't spin until someone carries it.
 - **Every death saves the grave file at once**, for crash safety, and so does every logout of a player who looted a
-  grave. With 1,000 graves that takes about 0.1 to 0.2 seconds on the server thread, and the cost grows with the number of graves, because graves never expire. On a big
-  server, remove old graves with `/yolt grave remove`. The grave, body and skin files are written to a temp file
-  first and then swapped in, so a crash in the middle of a save leaves the last whole file.
+  grave. With 1,000 graves that takes about 0.1 to 0.2 seconds on the server thread, and the cost grows with the number
+  of graves, because graves never expire. On a big server, remove old graves with `/yolt grave remove`. The grave, body
+  and skin files are written to a temp file first and then swapped in, so a crash in the middle of a save leaves the
+  last whole file.
 - **Portals at 1:1.** A Nether portal only links to an Overworld portal within 16 blocks of its exit. A pair of
   portals that linked further apart before this version makes a new Overworld portal the first time someone goes
   through, and links to that one from then on.

@@ -8,12 +8,12 @@ Messages from ops and the console (`/say`, `/tellraw`) still reach everyone. Adm
 everything.
 
 With `chat.allowWhispers` on (the default), non-ops can use `/w <player> <message>`. `/msg` and `/tell` are the same
-whisper, with the same rules. Ops can always use them, but they are held to the same range. You always see "You
-whisper to X", but X only gets it if they are within `chat.whisperRadius` blocks (0, the default, means the same as
+whisper, with the same rules. Ops can always use them, but they are held to the same range. You always see "You whisper
+to X", but X only gets it if they are within `chat.whisperRadius` blocks (0, the default, means the same as
 `chat.radius`), so the sender can't tell who is online or nearby. In `global` mode a whisper has no range. `/teammsg`
 stays vanilla, and so do `/msg`, `/tell` and `/w` from the console, command blocks and datapack functions. Every
-player's whisper writes one line to the server log, with the sender, the name as typed, the text and whether it was heard, so
-admins can look into abuse. Players never see that line.
+player's whisper writes one line to the server log, with the sender, the name as typed, the text and whether it was
+heard, so admins can look into abuse. Players never see that line.
 
 Settings: [`chat`](config.md#chat).
 

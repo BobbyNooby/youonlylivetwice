@@ -8,7 +8,8 @@ changes for it. **Only the flat anvil price and the Mending nerf are on by defau
 `/status`, with a Rules line. The rest is off until you turn it on.
 
 - **Weight.** Everything you carry weighs something, and a heavy load slows you down. Armour and tools barely count:
-  your kit and half an inventory of blocks still walk at full speed, and shulker boxes full of stone are half speed.
+  your kit and half an inventory of ordinary blocks still walk at full speed, and shulker boxes full of stone are half
+  speed.
 - **Broken legs.** A long fall breaks your legs and slows you until they heal.
 - **Limp.** Very low health slows you.
 - **Bed rest.** Lying in a bed heals you, day or night.

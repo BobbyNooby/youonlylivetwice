@@ -5,7 +5,8 @@ from death costs a max heart, food matters, mobs are tougher, some nights are bl
 
 **Everything here is off by default, except the flat anvil price and Mending.** Each feature has its own switch
 (`hardcore.<feature>.enabled`, and `hardcore.hungerTax.multiplier` for the hunger tax), and with a feature off YOLT
-changes nothing for it. Turn on only the parts you want, and turn the anvil and Mending off if you want them vanilla. Every setting is in the [`hardcore` part of the config](config.md#hardcore).
+changes nothing for it. Turn on only the parts you want, and turn the anvil and Mending off if you want them vanilla.
+Every setting is in the [`hardcore` part of the config](config.md#hardcore).
 
 Contents:
 
@@ -45,9 +46,10 @@ Contents:
 
 ## `/status`
 
-Every player can type `/status` while at least one hardcore feature is on, which on a default server is always,
-since the anvil and Mending rules ship on (see [Commands](commands.md) for the exact rule). It shows a report on your own body only, and each line has a hover with a plain explanation. Only features that
-are on, and that have something to say, give a line:
+Every player can type `/status` while at least one hardcore feature is on, which on a default server is always, since
+the anvil and Mending rules ship on (see [Commands](commands.md) for the exact rule). It shows a report on your own body
+only, and each line has a hover with a plain explanation. Only features that are on, and that have something to say,
+give a line:
 
 ```
 Your body

@@ -34,10 +34,10 @@ A command that names a player finds them only where this server knows them: onli
 the death log and YOLT's record of joins. It never asks Mojang. Anyone else gets "No player named X has joined this
 server.", so an op can't kill, unkill or pick a skin for a player who has never joined.
 
-`/status` takes no target, so a player only ever sees their own body. While `restrictCommands` is on, a non-op is
-only given it while at least one hardcore feature is on (a switch, or a `hardcore.hungerTax.multiplier` other than
-1.0). The anvil and Mending rules ship on, so a default server gives it to everyone. With `restrictCommands` off, everyone can run it at any time. With nothing to report it says "Nothing to
-report".
+`/status` takes no target, so a player only ever sees their own body. While `restrictCommands` is on, a non-op is only
+given it while at least one hardcore feature is on (a switch, or a `hardcore.hungerTax.multiplier` other than 1.0). The
+anvil and Mending rules ship on, so a default server gives it to everyone. With `restrictCommands` off, everyone can run
+it at any time. With nothing to report it says "Nothing to report".
 
 Players, ops included, lose `/w @a`-style selector targets, and `/msg` and `/tell` with them, because for a player all
 three are the whisper. The console, RCON, command blocks and datapack functions keep vanilla's `/msg`, `/tell` and
