@@ -382,13 +382,19 @@ class HardcoreConfigTest {
         // The foods table, spot-checked
         Map<String, Map<String, Double>> foods = fresh.hardcore.nutrients.foods;
         assertEquals(41, foods.size());
-        assertEquals(Map.of("protein", 1.0), foods.get("minecraft:cooked_beef"));
-        assertEquals(Map.of("protein", 0.75), foods.get("minecraft:beef"));
-        assertEquals(Map.of("protein", 0.5), foods.get("minecraft:rotten_flesh"));
-        assertEquals(Map.of("vitamins", 1.0), foods.get("minecraft:apple"));
-        assertEquals(Map.of("sugar", 1.0), foods.get("minecraft:cake"));
-        assertEquals(Map.of("protein", 0.5, "vitamins", 0.5), foods.get("minecraft:rabbit_stew"));
-        assertEquals(Map.of("sugar", 0.5, "vitamins", 0.5), foods.get("minecraft:pumpkin_pie"));
+        assertEquals(Map.of("protein", 1.0, "vitamins", 0.25), foods.get("minecraft:cooked_beef"));
+        assertEquals(Map.of("protein", 0.5), foods.get("minecraft:beef"));
+        assertEquals(Map.of("protein", 0.75, "vitamins", 0.5), foods.get("minecraft:cooked_cod"));
+        assertEquals(Map.of("protein", 0.25), foods.get("minecraft:rotten_flesh"));
+        assertEquals(Map.of("vitamins", 1.0, "sugar", 0.5), foods.get("minecraft:apple"));
+        assertEquals(Map.of("sugar", 1.0, "vitamins", 0.25), foods.get("minecraft:baked_potato"));
+        assertEquals(Map.of("sugar", 1.0, "protein", 0.5, "vitamins", 0.25), foods.get("minecraft:cake"));
+        assertEquals(Map.of("protein", 0.5, "vitamins", 0.5, "sugar", 0.5), foods.get("minecraft:rabbit_stew"));
+        assertEquals(Map.of("sugar", 1.0, "vitamins", 0.5, "protein", 0.25), foods.get("minecraft:pumpkin_pie"));
+        assertEquals(Map.of("vitamins", 0.5, "protein", 0.25), foods.get("minecraft:mushroom_stew"));
+        assertEquals(Map.of("protein", 1.0, "vitamins", 1.0, "sugar", 1.0), foods.get("minecraft:enchanted_golden_apple"));
+        assertEquals(Map.of(), foods.get("minecraft:spider_eye"));
+        assertEquals(Map.of(), foods.get("minecraft:pufferfish"));
         assertEquals(Map.of(), foods.get("minecraft:poisonous_potato"));
         assertEquals(List.of("minecraft:wither", "minecraft:ender_dragon", "minecraft:elder_guardian", "minecraft:warden"),
                 fresh.hardcore.tougherMobs.exclude);

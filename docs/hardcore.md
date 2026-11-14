@@ -234,9 +234,10 @@ Settings: [`hardcore.curse`](config.md#hardcorecurse).
 Foods carry hidden protein, vitamins and sugar. Eat a mix, or the group you are short on costs you.
 
 - You have three hidden levels, 0 to 100%. You start at 60% in each (`startLevel`), and again after each death.
-- **Eating** fills the food's groups: each point of the food's nutrition adds 3% (`gainPerPoint`), split between its
-  groups. Cooked beef (8 nutrition, all protein) gives 24% protein. Only the hunger a food actually restores counts:
-  eaten at a full bar it gives nothing, and at 19 one point's worth. A slice of cake counts as 2 nutrition.
+- **Eating** fills the food's groups: each point of the food's nutrition adds 3% (`gainPerPoint`) times the food's
+  share for each group. Cooked beef (8 nutrition, protein 1.0, vitamins 0.25) gives 24% protein and 6% vitamins. Only
+  the hunger a food actually restores counts: eaten at a full bar it gives nothing, and at 19 one point's worth. A slice
+  of cake counts as 2 nutrition.
 - **Using food** drains all three: each time your food bar drops by 1, each group loses 1% (`decayPerPoint`).
   Saturation going down doesn't count.
 - So with the default numbers a group holds steady when about a third of the food points you eat carry it.
@@ -247,8 +248,11 @@ Foods carry hidden protein, vitamins and sugar. Eat a mix, or the group you are 
 - The hotbar line tells you once when a group runs low ("You're low on vitamins.") and once when it is back up.
 - Milk doesn't cure it, since these aren't potion effects. On Peaceful the levels don't move, but a group that is
   already low still costs you.
-- Which food is in which group is in the [`foods` table](config.md#file-only-settings). Meat and fish are protein,
-  fruit and vegetables vitamins, bread, cookies, honey and cake sugar, and a few foods are mixed. A food the table
+- Which food is in which group is in the [`foods` table](config.md#file-only-settings). Meat and fish are mostly
+  protein with some vitamins, fruit and vegetables vitamins and sugar, bread and potatoes sugar with a little vitamins,
+  and sweets sugar. Raw meat gives half what cooked meat does, and poisonous foods give nothing. One simple food never
+  covers all three on its own: steak and bread still run low on vitamins after a few days, but add carrots, or eat
+  pumpkin pie with your meat, and nothing runs low. Rabbit stew and golden apples cover all three. A food the table
   doesn't list gives nothing (`unknownFood`).
 - Logout bodies carry no nutrients.
 - `/status` shows each level, and which are low and what that costs.

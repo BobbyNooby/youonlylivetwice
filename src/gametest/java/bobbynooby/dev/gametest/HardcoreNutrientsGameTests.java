@@ -53,9 +53,11 @@ public class HardcoreNutrientsGameTests {
             feed(player, 0, 0.0F);
             eat(helper, player, Items.COOKED_BEEF);
             assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.84, "protein after a cooked beef");
-            assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.6, "vitamins after a cooked beef");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.66, "vitamins after a cooked beef");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).sugar, 0.6, "sugar after a cooked beef");
             eat(helper, player, Items.APPLE);
-            assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.72, "vitamins after an apple");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.78, "vitamins after an apple");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).sugar, 0.66, "sugar after an apple");
             assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.84, "protein after an apple");
         } finally {
             leave(player);
@@ -77,13 +79,14 @@ public class HardcoreNutrientsGameTests {
             eat(helper, player, Items.COOKED_BEEF);
             helper.assertValueEqual(player.getFoodData().getFoodLevel(), 20, "the food bar after a cooked beef at 19");
             assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.63, "protein after a cooked beef at 19");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.6075, "vitamins after a cooked beef at 19");
         } finally {
             leave(player);
         }
         helper.succeed();
     }
 
-    // A slice is 2 nutrition, all sugar
+    // A slice is 2 nutrition: all of it to sugar, half to protein and a quarter to vitamins
     @GameTest(environment = NUTRIENTS)
     public void nut2CakeCounts(GameTestHelper helper) {
         ServerPlayer player = join(helper, "NutCake");
@@ -98,7 +101,8 @@ public class HardcoreNutrientsGameTests {
             helper.assertValueEqual(helper.getBlockState(CAKE_AT).getValue(CakeBlock.BITES), 1, "bites taken from the cake");
             HardcoreState state = HardcoreStates.read(player.getUUID());
             assertLevel(helper, state.sugar, 0.66, "sugar after a slice of cake");
-            assertLevel(helper, state.protein, 0.6, "protein after a slice of cake");
+            assertLevel(helper, state.protein, 0.63, "protein after a slice of cake");
+            assertLevel(helper, state.vitamins, 0.615, "vitamins after a slice of cake");
         } finally {
             leave(player);
         }

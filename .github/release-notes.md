@@ -14,7 +14,8 @@ changes for it. **Only the flat anvil price and the Mending nerf are on by defau
 - **Bed rest.** Lying in a bed heals you, day or night.
 - **Curse of the Undead.** Each return from death, by dying or by a totem, costs a max heart. They come back with play
   time.
-- **Nutrients.** Foods carry protein, vitamins and sugar, and running low on one costs you.
+- **Nutrients.** Foods carry protein, vitamins and sugar, and running low on one costs you. One simple food never
+  covers all three: eat two or three kinds, or rabbit stew.
 - **Hunger tax, Mending nerf, flat anvil prices and an elytra nerf.**
 - **Tougher and relentless mobs.** More health, harder hits, a longer chase, and zombies that break doors.
 - **Blood moons.** Some nights bring more, tougher and better geared mobs that drop more.

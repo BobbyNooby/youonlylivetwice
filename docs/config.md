@@ -493,19 +493,35 @@ match nothing.
 | `hardcore.tougherMobs.overrides` | A mob id and an object naming only the values that differ for it: `health`, `damage`, `speed`. | `minecraft:ghast` `{"health": 2.0}`, `minecraft:phantom` `{"health": 1.0, "damage": 1.0, "speed": 1.0}`, `minecraft:creeper` `{"damage": 1.0}` |
 | `hardcore.relentlessMobs.exclude` | A list of mob ids relentless mobs leaves alone. | `minecraft:warden` |
 
-The default `foods` table (all `minecraft:` ids):
+The default `foods` table (all `minecraft:` ids). Shares don't have to add up to 1. A group holds steady when about a
+third of the food points you eat carry it, so no simple food covers all three on its own, two foods nearly do, and
+three, or a dish with the staple it lacks, do.
 
 | Shares | Foods |
 |---|---|
-| protein 1.0 | `cooked_beef`, `cooked_porkchop`, `cooked_chicken`, `cooked_mutton`, `cooked_rabbit`, `cooked_cod`, `cooked_salmon` |
-| protein 0.75 | `beef`, `porkchop`, `chicken`, `mutton`, `rabbit`, `cod`, `salmon`, `tropical_fish`, `pufferfish` |
-| protein 0.5 | `rotten_flesh`, `spider_eye` |
-| vitamins 1.0 | `apple`, `carrot`, `golden_carrot`, `potato`, `baked_potato`, `beetroot`, `beetroot_soup`, `mushroom_stew`, `suspicious_stew`, `melon_slice`, `sweet_berries`, `glow_berries`, `chorus_fruit`, `dried_kelp` |
-| sugar 1.0 | `bread`, `cookie`, `honey_bottle`, `cake` (eaten a slice at a time, 2 nutrition each) |
-| protein 0.5, vitamins 0.5 | `rabbit_stew` |
-| sugar 0.5, vitamins 0.5 | `pumpkin_pie` |
-| vitamins 0.6, protein 0.2, sugar 0.2 | `golden_apple`, `enchanted_golden_apple` |
-| nothing | `poisonous_potato` |
+| protein 1.0, vitamins 0.25 | `cooked_beef`, `cooked_porkchop`, `cooked_mutton`, `cooked_chicken`, `cooked_rabbit` |
+| protein 0.5 | `beef`, `porkchop`, `mutton`, `chicken`, `rabbit` |
+| protein 0.75, vitamins 0.5 | `cooked_cod` |
+| protein 1.0, vitamins 0.5 | `cooked_salmon` |
+| protein 0.5, vitamins 0.25 | `cod`, `salmon`, `tropical_fish` |
+| vitamins 1.0, sugar 0.5 | `apple`, `carrot`, `beetroot_soup` |
+| vitamins 0.75, sugar 0.5 | `beetroot` |
+| vitamins 0.75, sugar 0.75 | `melon_slice`, `sweet_berries`, `glow_berries` |
+| vitamins 0.5, sugar 0.5 | `dried_kelp` |
+| sugar 1.0, vitamins 0.25 | `bread`, `baked_potato` |
+| sugar 0.5, vitamins 0.25 | `potato` |
+| sugar 1.0 | `cookie`, `honey_bottle` |
+| sugar 1.0, protein 0.5, vitamins 0.25 | `cake` (eaten a slice at a time, 2 nutrition each) |
+| sugar 1.0, vitamins 0.5, protein 0.25 | `pumpkin_pie` |
+| protein 0.5, vitamins 0.5, sugar 0.5 | `rabbit_stew` |
+| vitamins 0.5, protein 0.25 | `mushroom_stew` |
+| vitamins 0.75, protein 0.25, sugar 0.25 | `suspicious_stew` |
+| vitamins 1.0, sugar 1.0 | `golden_carrot` |
+| protein 0.5, vitamins 1.0, sugar 0.5 | `golden_apple` |
+| protein 1.0, vitamins 1.0, sugar 1.0 | `enchanted_golden_apple` |
+| protein 0.25 | `rotten_flesh` |
+| vitamins 0.5, sugar 0.25 | `chorus_fruit` |
+| nothing | `spider_eye`, `pufferfish`, `poisonous_potato` |
 
 ## Load checks
 

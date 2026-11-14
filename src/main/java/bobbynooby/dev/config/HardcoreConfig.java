@@ -121,7 +121,7 @@ public final class HardcoreConfig {
         public boolean unkillRefunds = true;
     }
 
-    // Levels and shares are 0 to 1; gainPerPoint is spread over a food's groups by their shares
+    // Levels and shares are 0 to 1; each group a food names gains gainPerPoint times its share for each point eaten
     public static class NutrientsSection {
         public boolean enabled = false;
         public double gainPerPoint = 0.03;
@@ -162,31 +162,52 @@ public final class HardcoreConfig {
         @SerializedName("even") EVEN
     }
 
-    // Every vanilla food. Cake is eaten from the block, a slice at a time.
+    // Every vanilla food. Cake is eaten from the block, a slice at a time. Shares don't have to add up to 1: a group
+    // holds steady when about a third of the points eaten carry it, so no simple food covers all three on its own,
+    // two foods nearly do, and three, or a dish and a staple, do.
     private static Map<String, Map<String, Double>> foods() {
         Map<String, Map<String, Double>> foods = new LinkedHashMap<>();
-        for (String cooked : new String[]{"cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
-                "cooked_rabbit", "cooked_cod", "cooked_salmon"}) {
-            foods.put("minecraft:" + cooked, numbers("protein", 1.0));
+        for (String cooked : new String[]{"cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
+                "cooked_rabbit"}) {
+            foods.put("minecraft:" + cooked, numbers("protein", 1.0, "vitamins", 0.25));
         }
-        for (String raw : new String[]{"beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
-                "tropical_fish", "pufferfish"}) {
-            foods.put("minecraft:" + raw, numbers("protein", 0.75));
+        for (String raw : new String[]{"beef", "porkchop", "mutton", "chicken", "rabbit"}) {
+            foods.put("minecraft:" + raw, numbers("protein", 0.5));
         }
-        foods.put("minecraft:rotten_flesh", numbers("protein", 0.5));
-        foods.put("minecraft:spider_eye", numbers("protein", 0.5));
-        for (String plant : new String[]{"apple", "carrot", "golden_carrot", "potato", "baked_potato", "beetroot",
-                "beetroot_soup", "mushroom_stew", "suspicious_stew", "melon_slice", "sweet_berries", "glow_berries",
-                "chorus_fruit", "dried_kelp"}) {
-            foods.put("minecraft:" + plant, numbers("vitamins", 1.0));
+        foods.put("minecraft:cooked_cod", numbers("protein", 0.75, "vitamins", 0.5));
+        foods.put("minecraft:cooked_salmon", numbers("protein", 1.0, "vitamins", 0.5));
+        for (String fish : new String[]{"cod", "salmon", "tropical_fish"}) {
+            foods.put("minecraft:" + fish, numbers("protein", 0.5, "vitamins", 0.25));
         }
-        for (String sweet : new String[]{"bread", "cookie", "honey_bottle", "cake"}) {
-            foods.put("minecraft:" + sweet, numbers("sugar", 1.0));
+        foods.put("minecraft:apple", numbers("vitamins", 1.0, "sugar", 0.5));
+        foods.put("minecraft:carrot", numbers("vitamins", 1.0, "sugar", 0.5));
+        foods.put("minecraft:beetroot", numbers("vitamins", 0.75, "sugar", 0.5));
+        for (String sweetFruit : new String[]{"melon_slice", "sweet_berries", "glow_berries"}) {
+            foods.put("minecraft:" + sweetFruit, numbers("vitamins", 0.75, "sugar", 0.75));
         }
-        foods.put("minecraft:rabbit_stew", numbers("protein", 0.5, "vitamins", 0.5));
-        foods.put("minecraft:pumpkin_pie", numbers("sugar", 0.5, "vitamins", 0.5));
-        foods.put("minecraft:golden_apple", numbers("vitamins", 0.6, "protein", 0.2, "sugar", 0.2));
-        foods.put("minecraft:enchanted_golden_apple", numbers("vitamins", 0.6, "protein", 0.2, "sugar", 0.2));
+        foods.put("minecraft:dried_kelp", numbers("vitamins", 0.5, "sugar", 0.5));
+        foods.put("minecraft:bread", numbers("sugar", 1.0, "vitamins", 0.25));
+        foods.put("minecraft:baked_potato", numbers("sugar", 1.0, "vitamins", 0.25));
+        foods.put("minecraft:potato", numbers("sugar", 0.5, "vitamins", 0.25));
+        foods.put("minecraft:cookie", numbers("sugar", 1.0));
+        foods.put("minecraft:honey_bottle", numbers("sugar", 1.0));
+        foods.put("minecraft:cake", numbers("sugar", 1.0, "protein", 0.5, "vitamins", 0.25));
+        foods.put("minecraft:pumpkin_pie", numbers("sugar", 1.0, "vitamins", 0.5, "protein", 0.25));
+        // The one dish that covers all three, for its four ingredients and a bowl
+        foods.put("minecraft:rabbit_stew", numbers("protein", 0.5, "vitamins", 0.5, "sugar", 0.5));
+        // Weak, since a mooshroom makes it for free
+        foods.put("minecraft:mushroom_stew", numbers("vitamins", 0.5, "protein", 0.25));
+        foods.put("minecraft:beetroot_soup", numbers("vitamins", 1.0, "sugar", 0.5));
+        foods.put("minecraft:suspicious_stew", numbers("vitamins", 0.75, "protein", 0.25, "sugar", 0.25));
+        foods.put("minecraft:golden_carrot", numbers("vitamins", 1.0, "sugar", 1.0));
+        foods.put("minecraft:golden_apple", numbers("protein", 0.5, "vitamins", 1.0, "sugar", 0.5));
+        foods.put("minecraft:enchanted_golden_apple", numbers("protein", 1.0, "vitamins", 1.0, "sugar", 1.0));
+        foods.put("minecraft:rotten_flesh", numbers("protein", 0.25));
+        // Teleports you, so modest
+        foods.put("minecraft:chorus_fruit", numbers("vitamins", 0.5, "sugar", 0.25));
+        // Poisonous foods give nothing
+        foods.put("minecraft:spider_eye", numbers());
+        foods.put("minecraft:pufferfish", numbers());
         foods.put("minecraft:poisonous_potato", numbers());
         return foods;
     }
