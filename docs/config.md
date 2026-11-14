@@ -547,9 +547,9 @@ naming the key, and `/yolt config` refuses it. The rest of the file still counts
   - `limp.belowHearts` below `limp.recoverAtHearts`;
   - `bloodMoon.warnTick`, `startTick` and `endTick` keep 0 <= `warnTick` < `startTick` < `endTick` <= 23999 (all
     three go back).
-- **Curse and limp:** with both on, a player the curse has taken down to `limp.recoverAtHearts` or fewer hearts limps
-  until a curse heart comes back. That is allowed, as a harsher punishment. The log only says so, at startup, at
-  `/yolt reload` and after a `/yolt config` that makes the two cross.
+- **Curse and limp:** with both on, the curse may take a player down to `limp.recoverAtHearts` or fewer hearts. Below
+  it, a player who starts to limp limps until a curse heart comes back. That is allowed, as a harsher punishment. The
+  log only says so, at startup, at `/yolt reload` and after a `/yolt config` that makes the two cross.
 - **Maps:** a map with a value below 0 falls back whole. In `foods`, every share must be 0 to 1 and name `protein`,
   `vitamins` or `sugar`. In `overrides`, every value must name `health`, `damage` or `speed` and be 0 or more, with
   `health` above 0. A map that isn't an object of numbers falls back whole too.

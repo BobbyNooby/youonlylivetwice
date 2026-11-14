@@ -180,8 +180,8 @@ With very low health you limp: 20% slower (`slow`) until you heal back up.
 - Absorption (golden) hearts don't count, unless `countAbsorption` is on.
 - A totem leaves you at half a heart, so you limp until you heal to 3 hearts.
 - It has no `/status` line of its own. The "Total slowdown" line's hover says when a limp is part of it.
-- A server can let the curse take you down to `recoverAtHearts` or fewer, as a harsher punishment. Then, once you are
-  low, you limp until a curse heart comes back. The log notes such a mix, but allows it.
+- A server can let the curse take you below `recoverAtHearts`, as a harsher punishment. Then, once you are low, you
+  limp until a curse heart comes back. The log notes such a mix, but allows it.
 
 Settings: [`hardcore.limp`](config.md#hardcorelimp).
 
@@ -483,10 +483,10 @@ Settings: [`resourcePack`](config.md#resourcepack).
 
 ## Where it is stored
 
-Every player's hardcore state (broken legs, the curse, nutrient levels and chill) and the day of the last blood moon
-are kept in one file for the world, `<world>/database/you-only-live-twice-hardcore.db`. It is made only when something
-is first stored, so a server that never turns the layer on never gets one. An online player's state is saved when
-they leave and every 5 minutes. If the file can't be opened, the state lasts until the server stops and an error is
-logged.
+Every player's hardcore state (broken legs, the curse, nutrient levels and chill) and the day of the last blood moon are
+kept in one file for the world, `<world>/database/you-only-live-twice-hardcore.db`. It is made only when something is
+first stored, so a server that never turns the layer on never gets one. An online player's state is saved when they
+leave, every 5 minutes, and at once after a death the curse counts. If the file can't be opened, the state lasts until
+the server stops and an error is logged.
 
 [All pages](README.md)
