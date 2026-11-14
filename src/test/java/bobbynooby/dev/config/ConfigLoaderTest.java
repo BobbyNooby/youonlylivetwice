@@ -853,10 +853,11 @@ class ConfigLoaderTest {
         assertEquals(new ConfigLoader.Change(null, "48", "48", null, null), ConfigLoader.setText(file, live, key("chat.radius"), "48"));
         assertArrayEquals(after, Files.readAllBytes(file));
 
-        // A key the file leaves out is written too
-        ConfigLoader.Change missing = ConfigLoader.setText(file, live, key("chat.allowWhispers"), "false");
+        // A key the file leaves out is written too, at the live value
+        ConfigLoader.Change missing = ConfigLoader.setText(file, live, key("chat.allowWhispers"), "true");
         assertNotNull(missing.config());
-        assertFalse(readJson(file).getAsJsonObject("chat").get("allowWhispers").getAsBoolean());
+        assertEquals("true", missing.oldValue());
+        assertTrue(readJson(file).getAsJsonObject("chat").get("allowWhispers").getAsBoolean());
 
         // The other way round: the file's 20 isn't live yet, so setting 20 changes the live config
         Files.writeString(file, "{\"chat\": {\"radius\": 20}}");

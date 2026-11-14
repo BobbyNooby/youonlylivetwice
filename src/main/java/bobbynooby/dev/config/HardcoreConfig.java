@@ -7,7 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** The hardcore layer's settings, under "hardcore" in the config. Every feature ships off. */
+/**
+ * The hardcore layer's settings, under "hardcore" in the config. Every feature ships off except the flat anvil price and
+ * YOLT's Mending, so a default server has /status for everyone, with its Rules line.
+ */
 public final class HardcoreConfig {
     private HardcoreConfig() {}
 
@@ -108,9 +111,9 @@ public final class HardcoreConfig {
         public boolean enabled = false;
         @Applies(Applies.When.NEW_DEATHS) public int heartsPerDeath = 1;
         @Applies(Applies.When.NEW_DEATHS) public int heartsPerTotem = 1;
-        public int maxLostHearts = 2;
+        public int maxLostHearts = 4;
         public int healHearts = 1;
-        public double healEveryDays = 5.0;
+        public double healEveryDays = 3.0;
         public boolean countAfk = true;
         public int reviveRefundHearts = 0;
         public boolean unkillRefunds = true;
@@ -193,14 +196,14 @@ public final class HardcoreConfig {
 
     // Durability that one XP point repairs; vanilla's is 2, and 0 sends every point to the bar
     public static class MendingSection {
-        public boolean enabled = false;
+        public boolean enabled = true;
         public double durabilityPerXp = 0.4;
     }
 
     // One flat price per anvil use, set by its biggest job, which never grows with repeated use; breakChance is the chance
     // per use that the anvil wears down a step, vanilla's 12%
     public static class AnvilSection {
-        public boolean enabled = false;
+        public boolean enabled = true;
         public int enchantCost = 6;
         public int repairCost = 5;
         public int renameCost = 1;

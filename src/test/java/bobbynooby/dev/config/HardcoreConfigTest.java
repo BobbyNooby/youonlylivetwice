@@ -271,9 +271,9 @@ class HardcoreConfigTest {
         d.put("hardcore.curse.enabled", "false");
         d.put("hardcore.curse.heartsPerDeath", "1");
         d.put("hardcore.curse.heartsPerTotem", "1");
-        d.put("hardcore.curse.maxLostHearts", "2");
+        d.put("hardcore.curse.maxLostHearts", "4");
         d.put("hardcore.curse.healHearts", "1");
-        d.put("hardcore.curse.healEveryDays", "5.0");
+        d.put("hardcore.curse.healEveryDays", "3.0");
         d.put("hardcore.curse.countAfk", "true");
         d.put("hardcore.curse.reviveRefundHearts", "0");
         d.put("hardcore.curse.unkillRefunds", "true");
@@ -287,9 +287,9 @@ class HardcoreConfigTest {
         d.put("hardcore.nutrients.penalties.vitamins.miningSlow", "0.15");
         d.put("hardcore.nutrients.unknownFood", "none");
         d.put("hardcore.hungerTax.multiplier", "1.0");
-        d.put("hardcore.mending.enabled", "false");
+        d.put("hardcore.mending.enabled", "true");
         d.put("hardcore.mending.durabilityPerXp", "0.4");
-        d.put("hardcore.anvil.enabled", "false");
+        d.put("hardcore.anvil.enabled", "true");
         d.put("hardcore.anvil.enchantCost", "6");
         d.put("hardcore.anvil.repairCost", "5");
         d.put("hardcore.anvil.renameCost", "1");

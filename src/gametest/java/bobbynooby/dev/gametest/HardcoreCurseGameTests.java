@@ -256,8 +256,8 @@ public class HardcoreCurseGameTests {
             helper.assertValueEqual(CommandGameTests.run(server, "yolt curse " + name + " clear"),
                     List.of("Cleared " + name + "'s Curse of the Undead."), "the clear's reply");
             assertMaxHealth(helper, player, 20.0F, "after the clear");
-            helper.assertValueEqual(CommandGameTests.run(server, "yolt curse " + name + " set 3"),
-                    List.of("The curse takes at most 2 hearts."), "the reply past the cap");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt curse " + name + " set 5"),
+                    List.of("The curse takes at most 4 hearts."), "the reply past the cap");
             helper.assertValueEqual(HardcoreStates.read(uuid).curseHeartsLost, 0, "hearts lost after the refused set");
         } finally {
             Curse.set(uuid, 0);

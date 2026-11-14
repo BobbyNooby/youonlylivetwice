@@ -67,7 +67,7 @@ public class YoltConfig {
     public static class ChatSection {
         public ChatMode mode = ChatMode.PROXIMITY;
         public int radius = 48;
-        public boolean allowWhispers = false;
+        public boolean allowWhispers = true;
         // How close, in blocks, a whisper's target must be; 0 uses radius. Global chat has no range for either.
         public int whisperRadius = 0;
     }
@@ -108,7 +108,7 @@ public class YoltConfig {
         // keep their own targets. Admin view gives an op the real spawn.
         public boolean compassSpawn = true;
         // Each player's client sees X and Z shifted by an amount of its own, new at every join, respawn and dimension change
-        @Applies(Applies.When.NEXT_FRAME) public boolean coordinates = false;
+        @Applies(Applies.When.NEXT_FRAME) public boolean coordinates = true;
     }
 
     public static class SleepSection {
@@ -150,7 +150,7 @@ public class YoltConfig {
         // skin whose owner joined later goes at its holder's next login.
         public boolean refuseKnownPlayers = true;
         // A non-op picks once; after that only an op changes it, with /yolt skin set <player> <name>
-        public boolean lockAfterFirstChoice = false;
+        public boolean lockAfterFirstChoice = true;
     }
 
     public enum EnderChestMode {
