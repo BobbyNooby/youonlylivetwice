@@ -56,12 +56,14 @@ public class CoordinateOffsetClientTest implements FabricClientGameTest {
         boolean coordinatesWas = config.hide.coordinates;
         boolean debugScreenWas = config.hide.debugScreen;
         boolean randomSpawnWas = config.randomSpawn;
-        // The reduced debug screen would hide the position this test shows, and a random spawn the world spawn it sets
-        config.hide.coordinates = true;
+        // The reduced debug screen would hide the position this test shows, and a random spawn the world spawn it sets.
+        // The offset is turned on once the server is up: the test setup turns it off at every server start.
         config.hide.debugScreen = false;
         config.randomSpawn = false;
         try {
             ClientTests.withServer(ctx, server -> server.runOnServer(s -> {
+                // Read as each frame starts, so on before the join is in time for the join's frame
+                Settings.get().hide.coordinates = true;
                 // The world is new for each test, so its spawn needs no setting back
                 ServerLevel overworld = s.overworld();
                 s.setRespawnData(LevelData.RespawnData.of(Level.OVERWORLD, standingSpot(overworld, SPAWN_X, SPAWN_Z), 0.0F, 0.0F));
