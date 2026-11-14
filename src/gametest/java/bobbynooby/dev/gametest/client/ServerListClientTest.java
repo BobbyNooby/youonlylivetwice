@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -16,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 import java.lang.reflect.Field;
 import java.util.List;
 
-// The multiplayer list's hover over a server's player count, which a player sees before they ever join
+// The multiplayer list's MOTD and its hover over a server's player count, which a player sees before they ever join
 public class ServerListClientTest implements FabricClientGameTest {
     private static final String SERVER_NAME = "YOLT test server";
     // The list's own layout, as ServerSelectionList.OnlineServerEntry draws it: the count sits left of the ping bars
@@ -41,6 +42,9 @@ public class ServerListClientTest implements FabricClientGameTest {
             if (lines.isEmpty()) {
                 throw new AssertionError("no hover lines are set, so the hover would show vanilla's");
             }
+            // The test setup empties the MOTD lines at every server start, so the shipped ones go on once it is up
+            List<String> motdLines = new YoltConfig().serverList.motdLines;
+            server.runOnServer(s -> Settings.get().serverList.motdLines = motdLines);
             String address = "localhost:" + server.computeOnServer(MinecraftServer::getPort);
             // The multiplayer screen reads its list from the file each time it opens
             ctx.runOnClient(mc -> {
@@ -57,6 +61,8 @@ public class ServerListClientTest implements FabricClientGameTest {
                 // The list pings a server the first time it draws it
                 ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> hoverLines(hover, entry(mc, address)) != null,
                         mc -> "the server list never took the hover lines: its ping is " + entry(mc, address).getServerData().state());
+                checkMotd(ctx, address, motdLines);
+                ClientTests.screenshot(ctx, "07-server-list-motd");
                 hoverOverCount(ctx, address);
                 checkHover(ctx, address, lines, hover);
                 ClientTests.screenshot(ctx, "07-server-list-hover");
@@ -64,7 +70,8 @@ public class ServerListClientTest implements FabricClientGameTest {
                 ClientTests.runAll(List.of(
                         // With no world open, no screen means the title screen, where every client test has to end
                         () -> ctx.setScreen(() -> null),
-                        () -> ctx.runOnClient(mc -> removeFromList(mc, address))));
+                        () -> ctx.runOnClient(mc -> removeFromList(mc, address)),
+                        () -> server.runOnServer(s -> Settings.get().serverList.motdLines = List.of())));
             }
         }
     }
@@ -75,6 +82,16 @@ public class ServerListClientTest implements FabricClientGameTest {
             return new Point((count.left() + count.right()) / 2 + 0.5, (count.top() + count.bottom()) / 2 + 0.5);
         });
         ClientTests.moveCursorToGui(ctx, middle.x(), middle.y());
+    }
+
+    // The MOTD the ping brought, as the entry draws it: one of the lines, § codes and all, in place of the server's own
+    private static void checkMotd(ClientGameTestContext ctx, String address, List<String> lines) {
+        ctx.runOnClient(mc -> {
+            String motd = entry(mc, address).getServerData().motd.getString();
+            if (!lines.contains(motd)) {
+                throw new AssertionError("the server list shows the MOTD \"" + motd + "\", not one of the lines " + lines);
+            }
+        });
     }
 
     private static void checkHover(ClientGameTestContext ctx, String address, List<String> lines, Field hover) {
