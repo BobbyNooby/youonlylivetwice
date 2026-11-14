@@ -14,6 +14,8 @@ mod.
 The [config documentation](https://github.com/BobbyNooby/youonlylivetwice/blob/release/docs/config.md#serverlist)
 has the details.
 
+`/status` is easier to read, with colour and shorter lines.
+
 ## What it does
 
 - **Death lockout.** Dying kicks you, and you can't rejoin for 7 days (configurable).

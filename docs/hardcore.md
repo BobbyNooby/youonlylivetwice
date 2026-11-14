@@ -49,22 +49,35 @@ Contents:
 
 Every player can type `/status` while at least one hardcore feature is on, which on a default server is always, since
 the anvil and Mending rules ship on (see [Commands](commands.md) for the exact rule). It shows a report on your own body
-only, and each line has a hover with a plain explanation. Only features that are on, and that have something to say,
-give a line:
+only. Only features that are on, and that have something to say, give a line:
 
 ```
 Your body
-Load 64.6 / 144 (free up to 16) → 19% slower
-  heaviest: Cobblestone ×640 (30.0), Shulker Box (27.1), Oak Log ×128 (6.0)
-Legs   broken → 20% slower · healing 12/30 (uses food once your health is full)
-Total slowdown 46% (cap 50%; potions not included)
-Curse of the Undead  −4 max hearts (the most it takes) · next heart back after 1h 12m more play
-Nutrients  protein 62% · vitamins 18% (low: mining 15% slower) · sugar 40%
-Cold   chilly 35% · warming (torch)
-Resting  healing (bed)
-Rules  hunger ×1.5 · Mending 0.4/XP (vanilla 2) · anvil: rename 1, repair 5, enchant 6
+Load 64.6 / 144 · 19% slower
+  Cobblestone ×640 (30.0)
+  Shulker Box (27.1)
+  Oak Log ×128 (6.0)
+Legs broken · 20% slower · healing 12/30
+Total 46% slower · cap 50%
+Curse −4 max hearts (the most)
+  next heart back in 1h 12m of play
+Nutrients protein 62% · vitamins 18% · sugar 40%
+  low vitamins: mining 15% slower
+Cold chilly 35% · warming (torch)
+Resting healing in bed
+Server rules
+  hunger ×1.5
+  Mending 0.4/XP (vanilla 2)
+  anvil: rename 1, repair 5, enchant 6
 Blood moon tonight
 ```
+
+In the game the report is coloured: the first word of a line is yellow, what costs you is red, what helps is green, the
+cold is aqua, and side notes and the indented detail lines are gray. The words say the same as the colours. Lines are
+kept short, so none wraps in a default chat window; a long item name is cut with "…", keeping its count and weight.
+
+Hover over a line for a plain explanation, such as the free load, what the curse is, or that healing your legs uses
+food only once your health is full. A detail line has the same hover as the line above it.
 
 With nothing to show it says "Nothing to report". It never shows coordinates, heights, biomes, distances or anything
 about other players. One-off events (your legs breaking, the curse taking a heart, a nutrient running low) come as a
@@ -85,7 +98,7 @@ cap.
 - It slows walking and running on the ground. It doesn't slow jumping through the air: a sprint-jump gets a fixed push
   from the game, so sprint-jumping mostly skips the slowdown. Swimming, ladders, elytra, horses, boats and minecarts
   ignore it too.
-- `/status` shows the total, capped, as "Total slowdown 46% (cap 50%; potions not included)".
+- `/status` shows the total, capped, as "Total 46% slower · cap 50%". Its hover says that potions are not included.
 
 **Field of view:** a slowed vanilla client narrows its view a little, the same way it widens it when you sprint. That
 is the cue that you are slow. Players who dislike it can turn down vanilla's "FOV Effects" slider in their own game
@@ -135,11 +148,14 @@ What weighs what, from first match to last:
    (`unstackableWeight`).
 7. Anything else: 1.0 a stack (`defaultWeight`).
 
-`/status` shows your load, your slowdown and your three heaviest kinds of thing:
+`/status` shows your load, your slowdown and your three heaviest kinds of thing, one to a line. The free load is in
+the hover:
 
 ```
-Load 64.6 / 144 (free up to 16) → 19% slower
-  heaviest: Cobblestone ×640 (30.0), Shulker Box (27.1), Oak Log ×128 (6.0)
+Load 64.6 / 144 · 19% slower
+  Cobblestone ×640 (30.0)
+  Shulker Box (27.1)
+  Oak Log ×128 (6.0)
 ```
 
 Settings: [`hardcore.weight`](config.md#hardcoreweight).
@@ -183,7 +199,7 @@ With very low health you limp: 20% slower (`slow`) until you heal back up.
   switching on and off while health creeps back up.
 - Absorption (golden) hearts don't count, unless `countAbsorption` is on.
 - A totem leaves you at half a heart, so you limp until you heal to 3 hearts.
-- It has no `/status` line of its own. The "Total slowdown" line's hover says when a limp is part of it.
+- It has no `/status` line of its own. The "Total" line's hover says when a limp is part of it.
 - A server can let the curse take you below `recoverAtHearts`, as a harsher punishment. Then, once you are low, you
   limp until a curse heart comes back. The log notes such a mix, but allows it.
 
@@ -204,7 +220,7 @@ Lying in a bed heals you at Regeneration's pace and makes broken legs heal faste
 - A daytime nap never skips time: it doesn't count towards skipping the night, even on a server with
   `sleep.noNightSkip` off. A nap still resets the time phantoms count from, as any rest does.
 - There is no potion icon. It heals like Regeneration, but it isn't the effect, so milk has nothing to take away.
-- `/status` shows "Resting  healing (bed)".
+- `/status` shows "Resting healing in bed".
 
 Settings: [`hardcore.bedRest`](config.md#hardcorebedrest).
 
@@ -262,7 +278,7 @@ Foods carry hidden protein, vitamins and sugar. Eat a mix, or the group you are 
   pumpkin pie with your meat, and nothing runs low. Rabbit stew and golden apples cover all three. A food the table
   doesn't list gives nothing (`unknownFood`).
 - Logout bodies carry no nutrients.
-- `/status` shows each level, and which are low and what that costs.
+- `/status` shows each level, the low ones in red, and a line for what each low one costs.
 
 Settings: [`hardcore.nutrients`](config.md#hardcorenutrients).
 
@@ -273,7 +289,7 @@ jumps and shivering. It has no switch: 1.0 (`multiplier`) is vanilla.
 
 - At 2, everything you do drains food twice as fast.
 - Healing is never taxed: health regen, broken legs and bed rest put their cost straight on your food.
-- While it isn't 1, the `/status` "Rules" line shows "hunger ×2".
+- While it isn't 1, the `/status` "Server rules" block shows "hunger ×2".
 
 Settings: [`hardcore.hungerTax`](config.md#hardcorehungertax).
 
@@ -286,7 +302,7 @@ Mending repairs 0.4 durability per XP point (`durabilityPerXp`) instead of vanil
   and XP the gear doesn't need goes to your XP bar.
 - 0 turns Mending off: all XP goes to the bar.
 - The anvil becomes the main way to keep gear going.
-- The `/status` "Rules" line shows "Mending 0.4/XP (vanilla 2)", since the tooltip still just says "Mending".
+- The `/status` "Server rules" block shows "Mending 0.4/XP (vanilla 2)", since the tooltip still just says "Mending".
 
 Settings: [`hardcore.mending`](config.md#hardcoremending).
 
@@ -311,7 +327,7 @@ Every anvil use costs one fixed price, set by the biggest kind of job in it, and
 - Turning it off later: every item that went through an anvil while it was on prices like a new one, and vanilla
   carries on from there. Items that never went through one keep their old counter.
 - Creative players keep vanilla's anvil.
-- The `/status` "Rules" line shows "anvil: rename 1, repair 5, enchant 6".
+- The `/status` "Server rules" block shows "anvil: rename 1, repair 5, enchant 6".
 
 Settings: [`hardcore.anvil`](config.md#hardcoreanvil).
 
@@ -450,7 +466,7 @@ and shiver, and when the chill is full you freeze. Heat and leather stop it.
   try lands somewhere cold (a snowy world, say), it falls back to the normal pick rather than not spawning you.
 - Chill is saved, so a relog keeps it. A death resets it to 0.
 - Logout bodies and graves never get cold.
-- `/status` shows "Cold   chilly 35% · warming (torch)": how cold you are and why it is moving, never where you are.
+- `/status` shows "Cold chilly 35% · warming (torch)": how cold you are and why it is moving, never where you are.
 
 The torches and the heat blocks are the item tag `#you-only-live-twice:held_heat` and the block tag
 `#you-only-live-twice:heat_sources`, so a datapack can change them.

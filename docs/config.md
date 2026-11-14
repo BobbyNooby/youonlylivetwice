@@ -235,7 +235,7 @@ Notes:
 
 The [hardcore layer](hardcore.md). Every feature ships off except the Curse of the Undead, the flat anvil price and
 Mending, and with a feature off YOLT changes nothing for it. Since those are on, non-ops have `/status` by default, with
-its Rules line. The
+its "Server rules" block. The
 hunger tax has no switch: its default multiplier, 1.0, is vanilla. Shares and chances are 0 to 1 (0.2 is 20%).
 
 ### `hardcore.slow`
