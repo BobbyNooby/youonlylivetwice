@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.core.AtomicFiles;
 import bobbynooby.dev.core.Migrations;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -14,10 +15,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +114,7 @@ public final class ConfigLoader {
                 warnings.add("config file is missing, nothing changed");
                 return new Result(base, warnings, false, null, false, null);
             }
-            return new Result(writeDefaults(file), warnings, false, null, true, null);
+            return defaults(file, warnings, false, null, null);
         }
 
         JsonObject user;
@@ -131,9 +130,17 @@ public final class ConfigLoader {
                 warnings.add(problem);
                 return new Result(null, warnings, true, null, false, null);
             }
-            String backup = backup(file, file.getFileName() + ".bak");
+            String backup;
+            try {
+                backup = backup(file, file.getFileName() + ".bak");
+            } catch (UncheckedIOException copying) {
+                // The file is the admin's only copy, so it stays as it is, and the server runs on the defaults
+                warnings.add(problem + ", and it could not be copied (" + copying.getCause().getMessage()
+                        + "), so it is left as it was, using defaults");
+                return new Result(new YoltConfig(), warnings, true, problem, false, null);
+            }
             warnings.add(problem + ", old file saved as " + backup + ", using defaults");
-            return new Result(writeDefaults(file), warnings, true, problem, true, backup);
+            return defaults(file, warnings, true, problem, backup);
         }
 
         int version = fileVersion(user, warnings, currentVersion);
@@ -393,36 +400,35 @@ public final class ConfigLoader {
         section.add(parts[parts.length - 1], value);
     }
 
-    /** Writes a temp file first and moves it over the config, so a crash mid-write can't leave half a file. */
+    /**
+     * Writes a temp file, forces it to disk and moves it over the config, so neither a crash mid-write nor a power cut
+     * just after it can leave half a file or an empty one.
+     */
     public static void write(Path file, YoltConfig config) {
         writeText(file, GSON.toJson(config));
     }
 
     private static void writeText(Path file, String text) {
         Path target = file.toAbsolutePath();
-        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
             Files.createDirectories(target.getParent());
-            Files.writeString(tmp, text, StandardCharsets.UTF_8);
-            try {
-                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
+            AtomicFiles.write(target, tmp -> Files.writeString(tmp, text, StandardCharsets.UTF_8));
         } catch (IOException e) {
-            try {
-                Files.deleteIfExists(tmp);
-            } catch (IOException suppressed) {
-                e.addSuppressed(suppressed);
-            }
             throw new UncheckedIOException(e);
         }
     }
 
-    private static YoltConfig writeDefaults(Path file) {
+    // The defaults, written to the file when it can be. A folder that can't be written doesn't stop the start.
+    private static Result defaults(Path file, List<String> warnings, boolean unparseable, @Nullable String problem,
+                                   @Nullable String backup) {
         YoltConfig config = new YoltConfig();
-        write(file, config);
-        return config;
+        try {
+            write(file, config);
+        } catch (UncheckedIOException e) {
+            warnings.add("The config file could not be written (" + e.getCause().getMessage() + "), so YOLT runs on the defaults.");
+            return new Result(config, warnings, unparseable, problem, false, backup);
+        }
+        return new Result(config, warnings, unparseable, problem, true, backup);
     }
 
     /**

@@ -1223,6 +1223,32 @@ class ConfigLoaderTest {
         }
     }
 
+    // A first start, or a start with a file that can't be read, in a folder it can't write runs on the defaults
+    @Test
+    void startupInAReadOnlyFolderWithNoFileDoesNotThrow() throws IOException {
+        Path file = dir.resolve("config.json");
+        inReadOnlyDir(() -> {
+            ConfigLoader.Result r = assertDoesNotThrow(() -> ConfigLoader.load(file, null, true));
+            assertEquals(new Gson().toJsonTree(new YoltConfig()), new Gson().toJsonTree(r.config()));
+            assertFalse(r.rewritten());
+            assertTrue(r.warnings().stream().anyMatch(w -> w.startsWith("The config file could not be written (")), r.warnings().toString());
+        });
+        assertFalse(Files.exists(file));
+
+        Files.writeString(file, "{not json");
+        inReadOnlyDir(() -> {
+            ConfigLoader.Result r = assertDoesNotThrow(() -> ConfigLoader.load(file, null, true));
+            assertTrue(r.unparseable());
+            assertNotNull(r.borderProblem());
+            assertEquals(new Gson().toJsonTree(new YoltConfig()), new Gson().toJsonTree(r.config()));
+            assertFalse(r.rewritten());
+            assertNull(r.backup());
+            assertTrue(r.warnings().stream().anyMatch(w -> w.contains("could not be copied (")), r.warnings().toString());
+        });
+        assertEquals("{not json", Files.readString(file));
+        assertFalse(Files.exists(dir.resolve("config.json.bak")));
+    }
+
     // A map in the file replaces the default whole, so an entry a later version adds to the default never reaches it.
     // Whoever adds one has to write a step for it.
     @Test
