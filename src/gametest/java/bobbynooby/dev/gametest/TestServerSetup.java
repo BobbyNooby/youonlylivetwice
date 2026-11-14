@@ -42,7 +42,8 @@ public class TestServerSetup implements ModInitializer {
     }
 
     // These switches ship on, but most tests were written for a world with them off: an offset on every join, whispers
-    // and /status in every non-op's command tree, a flat anvil price and YOLT's Mending. So the shared world keeps them
+    // and /status in every non-op's command tree, a flat anvil price, YOLT's Mending, and a max heart lost at every death
+    // the tests cause. So the shared world keeps them
     // off, and a test that needs one on sets it itself or comes from an environment that does. ShippedDefaultsGameTests
     // turns them back on to check the defaults themselves.
     private static void pinOldDefaults() {
@@ -51,5 +52,6 @@ public class TestServerSetup implements ModInitializer {
         Settings.get().skins.lockAfterFirstChoice = false;
         Settings.get().hardcore.anvil.enabled = false;
         Settings.get().hardcore.mending.enabled = false;
+        Settings.get().hardcore.curse.enabled = false;
     }
 }

@@ -4,7 +4,9 @@ import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.coords.CoordinateOffsets;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.Hardcore;
+import bobbynooby.dev.hardcore.HardcoreStates;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -13,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
@@ -21,7 +24,7 @@ import net.minecraft.world.level.GameType;
 
 import java.util.List;
 
-// The shared test world keeps five switches off that ship on (TestServerSetup.pinOldDefaults). This batch's environment
+// The shared test world keeps six switches off that ship on (TestServerSetup.pinOldDefaults). This batch's environment
 // turns them back on, so these tests see a server as it ships.
 public class ShippedDefaultsGameTests {
     private static final String SHIPPED = "you-only-live-twice-gametest:shipped_defaults";
@@ -101,6 +104,27 @@ public class ShippedDefaultsGameTests {
             helper.assertFalse(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().isEmpty(), "no result for an old item");
             helper.assertValueEqual(menu.getCost(), config.hardcore.anvil.repairCost, "the cost");
         } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A totem is a return from death the curse counts, and it costs the heart at once, with no kick, grave or respawn in
+    // the way, which the lockout and graves, on as shipped, would bring with a real death
+    @GameTest(environment = SHIPPED)
+    public void totemCostsAMaxHeart(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "ShipCurse", GameType.SURVIVAL, AT);
+        // Loaded, so the player can be hurt, which vanilla holds off until a client says the world is in
+        TestPlayers.markLoaded(player);
+        try {
+            player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
+            player.setHealth(2.0F);
+            player.hurtServer(helper.getLevel(), helper.getLevel().damageSources().generic(), 10.0F);
+            helper.assertFalse(player.isDeadOrDying(), "the totem did not save the player");
+            helper.assertValueEqual(HardcoreStates.read(player.getUUID()).curseHeartsLost, 1, "hearts lost to the totem");
+            helper.assertValueEqual(player.getMaxHealth(), 18.0F, "max health after the totem");
+        } finally {
+            Curse.set(player.getUUID(), 0);
             TestPlayers.leave(player);
         }
         helper.succeed();

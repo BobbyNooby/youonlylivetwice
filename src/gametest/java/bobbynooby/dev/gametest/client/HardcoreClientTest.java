@@ -290,6 +290,8 @@ public class HardcoreClientTest implements FabricClientGameTest {
     private static void showCurse(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                   TestDedicatedServerConnection connection, Stage stage) {
         stand(ctx, server, connection, stage, SOUTH, LEVEL);
+        // Put back as it was, not off: the curse ships on, though the test server starts with it pinned off
+        boolean curseWas = server.computeOnServer(s -> Settings.get().hardcore.curse.enabled);
         server.runOnServer(s -> {
             Settings.get().hardcore.curse.enabled = true;
             Curse.set(stage.self(), LOST_HEARTS);
@@ -303,7 +305,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
             ClientTests.runAll(List.of(
                     () -> server.runOnServer(s -> {
                         Curse.set(stage.self(), 0);
-                        Settings.get().hardcore.curse.enabled = false;
+                        Settings.get().hardcore.curse.enabled = curseWas;
                     }),
                     // The curse comes off at the next tick, and the health doesn't refill by itself
                     () -> ClientTests.waitOnServer(server, LONG_TIMEOUT,
