@@ -1,0 +1,8 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.curse.enabled": "true",
+    "hardcore.curse.maxLostHearts": "8",
+    "hardcore.limp.enabled": "true"
+  }
+}

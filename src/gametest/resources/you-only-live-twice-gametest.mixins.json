@@ -5,6 +5,7 @@
   "mixins": [
     "AttackStrengthAccessor",
     "FoodDataAccessor",
+    "LastActionAccessor",
     "ServerGamePacketListenerInvoker"
   ],
   "injectors": {

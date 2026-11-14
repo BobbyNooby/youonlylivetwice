@@ -4,9 +4,15 @@ import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.bodies.PlayerBody;
+import bobbynooby.dev.config.HardcoreConfig;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.gametest.mixin.LastActionAccessor;
 import bobbynooby.dev.hardcore.Curse;
+import bobbynooby.dev.hardcore.HardcoreState;
 import bobbynooby.dev.hardcore.HardcoreStates;
+import bobbynooby.dev.hardcore.HardcoreStore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import com.mojang.authlib.GameProfile;
@@ -17,6 +23,7 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -25,8 +32,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,6 +48,8 @@ public class HardcoreCurseGameTests {
     private static final String CURSE_LOCKOUT = "you-only-live-twice-gametest:hardcore_curse_lockout";
     // A heal after 200 ticks of play
     private static final String CURSE_HEAL = "you-only-live-twice-gametest:hardcore_curse_heal";
+    // The same, with countAfk off
+    private static final String CURSE_AFK = "you-only-live-twice-gametest:hardcore_curse_afk";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     // The hub's tick may come just before or just after a test's own in the same server tick
     private static final int SLACK = 5;
@@ -81,6 +92,39 @@ public class HardcoreCurseGameTests {
                 Curse.set(uuid, 0);
                 leave(server, uuid);
             }
+        }
+        helper.succeed();
+    }
+
+    // A counted death is in the hardcore store's file at once, with no logout: one that took a heart, and one at the cap,
+    // which takes none but leaves nothing for an unkill to give back
+    @GameTest(environment = CURSE)
+    public void curse2ADeathIsInTheStoreAtOnce(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseOnDisk");
+        UUID uuid = player.getUUID();
+        HardcoreConfig.CurseSection cfg = Settings.get().hardcore.curse;
+        int cap = cfg.maxLostHearts;
+        try {
+            helper.assertValueEqual(cfg.heartsPerDeath, 1, "heartsPerDeath");
+            Curse.set(uuid, cap - 1);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            HardcoreState first = onDisk(server, uuid);
+            helper.assertValueEqual(first.curseHeartsLost, cap, "hearts lost in the file after a death that took one");
+            helper.assertValueEqual(first.curseLastDeathAdded, 1, "the latest death's hearts in the file");
+
+            ServerPlayer back = respawnByButton(player);
+            TestPlayers.markLoaded(back);
+            back.kill(back.level());
+            helper.assertTrue(back.isDeadOrDying(), "the player did not die again");
+            HardcoreState second = onDisk(server, uuid);
+            helper.assertValueEqual(second.curseHeartsLost, cap, "hearts lost in the file after a death at the cap");
+            helper.assertValueEqual(second.curseLastDeathAdded, 0, "the latest death's hearts in the file after a death at the cap");
+        } finally {
+            Curse.set(uuid, 0);
+            leave(server, uuid);
         }
         helper.succeed();
     }
@@ -198,6 +242,34 @@ public class HardcoreCurseGameTests {
         helper.succeed();
     }
 
+    // /yolt curse set on a player who is away with a body out changes the stored curse only: the body keeps its hearts.
+    // At the login the player takes the body's full health, and the lower maximum caps it.
+    @GameTest(environment = CURSE)
+    public void curse5ASetWhileAwayMeetsTheBodyAtLogin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseAwayBody");
+        UUID owner = player.getUUID();
+        GameProfile profile = player.getGameProfile();
+        String name = profile.name();
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            assertMaxHealth(helper, body, 20.0F, "on the body at the logout");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt curse " + name + " set 2"),
+                    List.of(name + " has lost 2 max hearts to the Curse of the Undead."), "the set's reply");
+            assertLost(helper, owner, 2, "after the set");
+            assertMaxHealth(helper, body, 20.0F, "on the body after the set");
+
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
+            assertMaxHealth(helper, back, 16.0F, "at the login");
+            helper.assertValueEqual(back.getHealth(), 16.0F, "health at the login, taken from the body's 20");
+        } finally {
+            Curse.set(owner, 0);
+            BodyTestKit.cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     // 2 down at the start; a heal at 200; a totem at 300, with 100 ticks counted, which doesn't start the count over;
     // so the next heal at 400
     @GameTest(environment = CURSE_HEAL, maxTicks = 420)
@@ -230,6 +302,84 @@ public class HardcoreCurseGameTests {
             helper.runAfterDelay(400 + SLACK, () -> {
                 try {
                     assertLost(helper, uuid, 1, "just after 400 ticks");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Only online play counts: what the clock had counted at the logout is what it has 60 ticks later and at the login
+    @GameTest(environment = CURSE_HEAL, maxTicks = 120)
+    public void curse6TheClockStopsWhileOffline(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseAway");
+        UUID uuid = player.getUUID();
+        GameProfile profile = player.getGameProfile();
+        long[] atLogout = new long[1];
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Curse.set(uuid, 0);
+            leave(server, uuid);
+        });
+        boolean waiting = false;
+        try {
+            Curse.set(uuid, 2);
+            helper.runAfterDelay(30, () -> step(cleanUp, () -> {
+                TestPlayers.leave(player);
+                atLogout[0] = HardcoreStates.read(uuid).curseOnlineTicks;
+                helper.assertTrue(Math.abs(atLogout[0] - 30) <= SLACK, atLogout[0] + " ticks counted at the logout, not about 30");
+            }));
+            helper.runAfterDelay(90, () -> {
+                try {
+                    helper.assertValueEqual(HardcoreStates.read(uuid).curseOnlineTicks, atLogout[0], "ticks counted while away");
+                    ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
+                    helper.assertValueEqual(HardcoreStates.of(back).curseOnlineTicks, atLogout[0], "ticks counted at the login");
+                    assertLost(helper, uuid, 2, "at the login");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // With countAfk off, a player who hasn't moved, looked or clicked for ten minutes earns no heal time; one who just
+    // joined still does, and gets the heart back after 200 ticks
+    @GameTest(environment = CURSE_AFK, maxTicks = 240)
+    public void curse6AnIdlePlayerHealsNothingWithCountAfkOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer idle = join(helper, "CurseIdle");
+        ServerPlayer busy = join(helper, "CurseBusy", AT.offset(1, 0, 0));
+        UUID idleId = idle.getUUID();
+        UUID busyId = busy.getUUID();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            for (UUID uuid : List.of(idleId, busyId)) {
+                Curse.set(uuid, 0);
+                leave(server, uuid);
+            }
+        });
+        boolean waiting = false;
+        try {
+            helper.assertFalse(Settings.get().hardcore.curse.countAfk, "the environment left countAfk on");
+            Curse.set(idleId, 1);
+            Curse.set(busyId, 1);
+            ((LastActionAccessor) idle).yoltSetLastActionTime(Util.getMillis() - 600_000L);
+            helper.runAfterDelay(200 + SLACK, () -> {
+                try {
+                    assertLost(helper, idleId, 1, "for the idle player after 200 ticks");
+                    helper.assertValueEqual(HardcoreStates.read(idleId).curseOnlineTicks, 0L, "ticks counted for the idle player");
+                    assertLost(helper, busyId, 0, "for the active player after 200 ticks");
                 } finally {
                     cleanUp.run();
                 }
@@ -308,6 +458,14 @@ public class HardcoreCurseGameTests {
 
     private static void assertMaxHealth(GameTestHelper helper, LivingEntity entity, float expected, String when) {
         helper.assertValueEqual(entity.getMaxHealth(), expected, "max health " + when);
+    }
+
+    // What the hardcore store's file holds for the player, read through a connection of its own
+    private static HardcoreState onDisk(MinecraftServer server, UUID uuid) {
+        Path file = server.getWorldPath(LevelResource.ROOT).resolve("database/" + Yolt.MOD_ID + "-hardcore.db");
+        try (HardcoreStore store = HardcoreStore.open(file)) {
+            return store.player(uuid).map(HardcoreState::decode).orElseGet(HardcoreState::new);
+        }
     }
 
     private static List<String> actionBars(ServerPlayer player) {
