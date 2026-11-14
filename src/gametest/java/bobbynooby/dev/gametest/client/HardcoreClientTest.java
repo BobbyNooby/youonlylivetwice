@@ -7,6 +7,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.hardcore.BloodMoon;
 import bobbynooby.dev.hardcore.ColdMaths;
 import bobbynooby.dev.hardcore.Curse;
+import bobbynooby.dev.hardcore.HardcoreState;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Legs;
 import bobbynooby.dev.hardcore.Slowdowns;
@@ -88,6 +89,10 @@ public class HardcoreClientTest implements FabricClientGameTest {
     private static final double SLOWED = 0.5;
     // Eight stacks of cobblestone weigh 24, over the free load of 16
     private static final int LOAD_STACKS = 8;
+    // Vitamins under the low line and the other two over it, so the report has one cost line
+    private static final double STATUS_PROTEIN = 0.6;
+    private static final double STATUS_VITAMINS = 0.1;
+    private static final double STATUS_SUGAR = 0.4;
     // Vanilla would price a rename of an item with this much prior work at 11; the flat price is the rename cost alone
     private static final int PRIOR_WORK = 10;
     // Enough to pay the flat price, so the price line is green
@@ -398,22 +403,35 @@ public class HardcoreClientTest implements FabricClientGameTest {
         }
     }
 
-    // The /status report in the open chat, for a player with broken legs, a load over the free one and a heart lost to
-    // the curse. The chat is cleared first, so no line from an earlier shot can be taken for part of the report.
+    // The /status report in the open chat, for a player with broken legs, a load over the free one, a heart lost to
+    // the curse, low vitamins and the flat anvil price, so every colour and a detail line of each kind shows. The chat is
+    // cleared first, so no line from an earlier shot can be taken for part of the report.
     private static void showStatus(ClientGameTestContext ctx, TestDedicatedServerContext server,
                                    TestDedicatedServerConnection connection, Stage stage) {
         stand(ctx, server, connection, stage, SOUTH, LEVEL);
         boolean[] was = server.computeOnServer(s -> {
             HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
-            return new boolean[] {hardcore.legs.enabled, hardcore.weight.enabled, hardcore.curse.enabled};
+            return new boolean[] {hardcore.legs.enabled, hardcore.weight.enabled, hardcore.curse.enabled,
+                    hardcore.nutrients.enabled, hardcore.anvil.enabled};
+        });
+        double[] levelsWas = server.computeOnServer(s -> {
+            HardcoreState state = HardcoreStates.read(stage.self());
+            return new double[] {state.protein, state.vitamins, state.sugar};
         });
         server.runOnServer(s -> {
             HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
             hardcore.legs.enabled = true;
             hardcore.weight.enabled = true;
             hardcore.curse.enabled = true;
+            hardcore.nutrients.enabled = true;
+            hardcore.anvil.enabled = true;
             Legs.set(stage.self(), true);
             Curse.set(stage.self(), LOST_HEARTS);
+            HardcoreStates.update(stage.self(), state -> {
+                state.protein = STATUS_PROTEIN;
+                state.vitamins = STATUS_VITAMINS;
+                state.sugar = STATUS_SUGAR;
+            });
             ServerPlayer player = connection.getServerPlayer();
             for (int i = 0; i < LOAD_STACKS; i++) {
                 player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
@@ -430,9 +448,15 @@ public class HardcoreClientTest implements FabricClientGameTest {
             server.runOnServer(s -> s.getCommands().performPrefixedCommand(
                     connection.getServerPlayer().createCommandSourceStack(), "status"));
             ClientTests.waitOnClient(ctx, LONG_TIMEOUT, mc -> ChatStoryClientTest.chatLogHas(mc, mark, "Your body")
-                            && ChatStoryClientTest.chatLogHas(mc, mark, "Load")
-                            && ChatStoryClientTest.chatLogHas(mc, mark, "Legs")
-                            && ChatStoryClientTest.chatLogHas(mc, mark, "Curse of the Undead"),
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Load ")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "  Cobblestone ×")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Legs broken")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Total ")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Curse −1 max heart")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Nutrients protein")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "  low vitamins: ")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Server rules")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "  anvil: "),
                     mc -> "the client's chat has no full status report");
             ctx.waitTicks(SETTLE_TICKS);
             ctx.getInput().pressKey(options -> options.keyChat);
@@ -448,11 +472,18 @@ public class HardcoreClientTest implements FabricClientGameTest {
                     () -> server.runOnServer(s -> {
                         Legs.set(stage.self(), false);
                         Curse.set(stage.self(), 0);
+                        HardcoreStates.update(stage.self(), state -> {
+                            state.protein = levelsWas[0];
+                            state.vitamins = levelsWas[1];
+                            state.sugar = levelsWas[2];
+                        });
                         connection.getServerPlayer().getInventory().clearContent();
                         HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
                         hardcore.legs.enabled = was[0];
                         hardcore.weight.enabled = was[1];
                         hardcore.curse.enabled = was[2];
+                        hardcore.nutrients.enabled = was[3];
+                        hardcore.anvil.enabled = was[4];
                     }),
                     // The curse and the slowdowns come off at the next tick, and the health doesn't refill by itself
                     () -> ClientTests.waitOnServer(server, LONG_TIMEOUT,
