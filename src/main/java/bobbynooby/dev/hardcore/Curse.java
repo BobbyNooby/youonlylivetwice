@@ -68,10 +68,11 @@ public final class Curse {
         HardcoreStates.update(uuid, s -> added[0] = CurseMaths.onReturn(s, cfg.heartsPerDeath, cfg.maxLostHearts, true));
         if (added[0] > 0) {
             TELL_ON_RETURN.merge(uuid, added[0], Integer::sum);
-            // On disk now, so a crash can't hand the heart back. The lockout's kick saves it as well, but not every death
-            // is kicked; when one is, the kick's save finds nothing left to write.
-            HardcoreStates.flush(uuid);
         }
+        // On disk now, so a crash can't hand the heart back. A death at the cap still changes what an unkill gives back.
+        // The lockout's kick saves it as well, but not every death is kicked; when one is, the kick's save finds nothing
+        // left to write, and an unchanged state writes nothing here either.
+        HardcoreStates.flush(uuid);
     }
 
     /** A totem, or anything with death protection, has just saved this entity: a player, or a body for its owner. */
