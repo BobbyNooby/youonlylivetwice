@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.core.Later;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 // Clicks go through menu.clicked, the same entry point as a client's click packet
@@ -288,15 +290,24 @@ public class GraveMenuGameTests {
             helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 3, "diamonds the looter took");
             helper.assertValueEqual(onDiskCount(server, grave, Items.DIAMOND), 3, "diamonds in the grave file straight after the looting");
             TestPlayers.leave(looter);
-            helper.runAfterDelay(5, () -> {
-                try {
-                    helper.assertValueEqual(onDiskCount(server, grave, Items.DIAMOND), 0, "diamonds in the grave file after the logout");
-                    helper.assertValueEqual(onDiskCount(server, grave, Items.EMERALD), 6, "emeralds in the grave file after the logout");
-                } finally {
-                    cleanUp.run();
-                }
-                helper.succeed();
-            });
+            // Queued after the save the leave queued, so it reads the file straight after that save, before another
+            // test's save could write the same record. The server may hold queued tasks for a few ticks, so the test
+            // waits for this one rather than a fixed delay.
+            AtomicReference<int[]> read = new AtomicReference<>();
+            Later.afterTick(server, () -> read.set(new int[] {onDiskCount(server, grave, Items.DIAMOND),
+                    onDiskCount(server, grave, Items.EMERALD)}));
+            helper.runBeforeTestEnd(cleanUp);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(read.get() != null, "the file has not been read after the logout yet"))
+                    .thenExecute(() -> {
+                        try {
+                            helper.assertValueEqual(read.get()[0], 0, "diamonds in the grave file after the logout");
+                            helper.assertValueEqual(read.get()[1], 6, "emeralds in the grave file after the logout");
+                        } finally {
+                            cleanUp.run();
+                        }
+                    })
+                    .thenSucceed();
             waiting = true;
         } finally {
             if (!waiting) {
