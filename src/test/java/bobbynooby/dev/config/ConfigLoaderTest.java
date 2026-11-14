@@ -1126,6 +1126,8 @@ class ConfigLoaderTest {
         expected.chat.radius = 32;
         assertEquals(new Gson().toJsonTree(expected), new Gson().toJsonTree(r.config()));
         assertTrue(r.config().hide.coordinates);
+        // The whole hardcore section arrives at its defaults, so an upgraded 1.0.0 server gets the curse too
+        assertTrue(r.config().hardcore.curse.enabled);
 
         assertArrayEquals(old, Files.readAllBytes(dir.resolve("config.json.v1.bak")));
         assertEquals(ConfigLoader.CURRENT_VERSION, readJson(file).get("configVersion").getAsInt());

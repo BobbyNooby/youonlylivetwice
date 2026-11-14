@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The hardcore layer's settings, under "hardcore" in the config. Every feature ships off except the flat anvil price and
- * YOLT's Mending, so a default server has /status for everyone, with its Rules line.
+ * The hardcore layer's settings, under "hardcore" in the config. Every feature ships off except the Curse of the Undead,
+ * the flat anvil price and YOLT's Mending, so a default server has /status for everyone, with its Rules line.
  */
 public final class HardcoreConfig {
     private HardcoreConfig() {}
@@ -109,7 +109,7 @@ public final class HardcoreConfig {
 
     // Hearts, two health points each; a heal comes after healEveryDays of the player's own online play, 24,000 ticks a day
     public static class CurseSection {
-        public boolean enabled = false;
+        public boolean enabled = true;
         @Applies(Applies.When.NEW_DEATHS) public int heartsPerDeath = 1;
         @Applies(Applies.When.NEW_DEATHS) public int heartsPerTotem = 1;
         public int maxLostHearts = 4;

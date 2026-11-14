@@ -221,7 +221,9 @@ class HardcoreConfigTest {
         assertNull(ConfigChecks.curseOutlastsLimp(curseOnly));
         assertCrossedAfterSet(file, curseOnly, "hardcore.limp.enabled", new JsonPrimitive(true));
 
+        // The curse ships on, so it is turned off here to be the switch that goes on
         YoltConfig limpOnly = new YoltConfig();
+        limpOnly.hardcore.curse.enabled = false;
         limpOnly.hardcore.limp.enabled = true;
         limpOnly.hardcore.curse.maxLostHearts = 8;
         assertCrossedAfterSet(file, limpOnly, "hardcore.curse.enabled", new JsonPrimitive(true));
@@ -301,7 +303,7 @@ class HardcoreConfigTest {
         d.put("hardcore.bedRest.healEveryTicks", "50");
         d.put("hardcore.bedRest.exhaustionPerHeal", "0.0");
         d.put("hardcore.bedRest.legHealSpeed", "2.0");
-        d.put("hardcore.curse.enabled", "false");
+        d.put("hardcore.curse.enabled", "true");
         d.put("hardcore.curse.heartsPerDeath", "1");
         d.put("hardcore.curse.heartsPerTotem", "1");
         d.put("hardcore.curse.maxLostHearts", "4");
