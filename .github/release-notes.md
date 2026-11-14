@@ -36,6 +36,11 @@ each part and how to set up the pack.
 - `hardcore.anvil.enabled` and `hardcore.mending.enabled` are on.
 - `hardcore.curse.maxLostHearts` is 4 and `hardcore.curse.healEveryDays` is 3.0. The curse itself stays off.
 
+## Other changes
+
+- **Whispers are logged.** Each whisper writes one line to the server log: who sent it, to which name, the text and
+  whether it was heard. Players see nothing new.
+
 ## What it does
 
 - **Death lockout.** Dying kicks you, and you can't rejoin for 7 days (configurable).

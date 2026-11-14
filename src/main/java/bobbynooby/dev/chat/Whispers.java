@@ -2,6 +2,7 @@ package bobbynooby.dev.chat;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.CommandNodeAccessor;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -76,10 +77,13 @@ public final class Whispers {
 
         ServerPlayer target = sender.level().getServer().getPlayerList().getPlayerByName(targetName);
         YoltConfig.ChatSection chat = Settings.get().chat;
-        if (target != null && ChatRules.whisperArrives(ChatDelivery.listener(sender), ChatDelivery.listener(target),
-                chat.mode, ChatRules.whisperRange(chat.radius, chat.whisperRadius))) {
+        boolean heard = target != null && ChatRules.whisperArrives(ChatDelivery.listener(sender), ChatDelivery.listener(target),
+                chat.mode, ChatRules.whisperRange(chat.radius, chat.whisperRadius));
+        if (heard) {
             target.sendSystemMessage(whisper(senderName + " whispers to you: " + message));
         }
+        // Only the server log, so admins can look into abuse; no player is told whether it arrived
+        Yolt.LOGGER.info("Whisper from {} to {} ({}): {}", senderName, targetName, heard ? "heard" : "not heard", message);
     }
 
     private static Component whisper(String text) {

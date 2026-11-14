@@ -166,9 +166,10 @@ public class WhisperGameTests {
         helper.succeed();
     }
 
-    // A whisper is private, so its text never reaches the server log, as vanilla's /msg doesn't either
+    // Every whisper leaves one line in the server log, heard or not, so admins can look into abuse. Players see the same
+    // as before: the sender's reply never says whether it arrived.
     @GameTest
-    public void whisperTextStaysOutOfTheLog(GameTestHelper helper) {
+    public void whisperIsWrittenToTheLog(GameTestHelper helper) {
         YoltConfig config = Settings.get();
         boolean restrictBefore = config.restrictCommands;
         boolean whispersBefore = config.chat.allowWhispers;
@@ -178,13 +179,26 @@ public class WhisperGameTests {
             config.chat.allowWhispers = true;
             TestPlayers.Recording sender = joinRecording(helper, joined, "wlogfrom", BlockPos.ZERO);
             TestPlayers.Recording target = joinRecording(helper, joined, "wlogto", new BlockPos(2, 0, 0));
+            String senderName = sender.nameAndId().name();
             String targetName = target.nameAndId().name();
-            String text = "meet me at the secret base " + CommandGameTests.uniqueName("x");
+            String heardText = "meet me at the secret base " + CommandGameTests.uniqueName("x");
+            sender.messages.clear();
             target.messages.clear();
-            List<String> log = OfflineGameTests.yoltLog(() -> run(sender, "w " + targetName + " " + text));
-            helper.assertValueEqual(texts(target), List.of(sender.nameAndId().name() + " whispers to you: " + text),
-                    "the whisper did not arrive");
-            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(), List.of(), "log lines with the whisper");
+            List<String> log = OfflineGameTests.yoltLog(() -> run(sender, "w " + targetName + " " + heardText));
+            helper.assertValueEqual(texts(target), List.of(senderName + " whispers to you: " + heardText), "the whisper did not arrive");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(heardText)).toList(),
+                    List.of("Whisper from " + senderName + " to " + targetName + " (heard): " + heardText), "log lines for a heard whisper");
+
+            String nobody = CommandGameTests.uniqueName("Nobody");
+            String unheardText = "anyone there " + CommandGameTests.uniqueName("x");
+            log = OfflineGameTests.yoltLog(() -> run(sender, "w " + nobody + " " + unheardText));
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(unheardText)).toList(),
+                    List.of("Whisper from " + senderName + " to " + nobody + " (not heard): " + unheardText),
+                    "log lines for an unheard whisper");
+            // The sender's replies are the same for both, and no player is shown the log line
+            helper.assertValueEqual(texts(sender), List.of("You whisper to " + targetName + ": " + heardText,
+                    "You whisper to " + nobody + ": " + unheardText), "sender messages");
+            helper.assertValueEqual(texts(target), List.of(senderName + " whispers to you: " + heardText), "target messages");
         } finally {
             config.restrictCommands = restrictBefore;
             config.chat.allowWhispers = whispersBefore;
