@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:all_of",
+  "definitions": [
+    {
+      "type": "minecraft:game_rules",
+      "rules": {
+        "minecraft:natural_health_regeneration": false
+      }
+    },
+    {
+      "type": "you-only-live-twice-gametest:config",
+      "values": {
+        "hardcore.legs.enabled": "true",
+        "hardcore.legs.healTicksNoRegenRule": "40"
+      }
+    }
+  ]
+}

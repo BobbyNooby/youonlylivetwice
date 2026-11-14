@@ -26,6 +26,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.gamerules.GameRules;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -44,6 +45,8 @@ public class HardcoreLegsGameTests {
     private static final String LEGS_HEAVY = "you-only-live-twice-gametest:hardcore_legs_heavy";
     // A body's fall breaks the owner's legs too, which ships off
     private static final String LEGS_BODIES = "you-only-live-twice-gametest:hardcore_legs_bodies";
+    // A batch of its own, since it turns natural regeneration off for the world, with a short rule-off pace
+    private static final String LEGS_NO_REGEN = "you-only-live-twice-gametest:hardcore_legs_no_regen";
     // A batch of its own: it changes the switch through the config file
     private static final String LEGS_SWITCH = "you-only-live-twice-gametest:hardcore_legs_switch";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
@@ -106,6 +109,137 @@ public class HardcoreLegsGameTests {
             leave(player);
         }
         helper.succeed();
+    }
+
+    // Breaking them again while they heal starts the healing over
+    @GameTest(environment = LEGS)
+    public void legs1BreakingAgainStartsTheHealingOver(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Rebreaker");
+        try {
+            Legs.set(player.getUUID(), true);
+            HardcoreStates.update(player.getUUID(), state -> state.legHealPoints = 12.0);
+            assertPoints(helper, player, 12.0, "before the second fall");
+            player.causeFallDamage(9.0, 1.0F, helper.getLevel().damageSources().fall());
+            assertPoints(helper, player, 0.0, "after the second fall");
+        } finally {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Food 20 with no saturation: a point at 80 ticks, and the timer is 60 into the next at 140, when food drops to 17,
+    // which stops healing. Back at 18 at 200, the next point comes 80 ticks later, at 280, not at 220: the timer started
+    // over, and the point already gained stayed.
+    @GameTest(environment = LEGS, maxTicks = 320)
+    public void legs3FoodUnderEighteenPausesHealingAndKeepsThePoints(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Hungry");
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        });
+        boolean waiting = false;
+        try {
+            Legs.set(player.getUUID(), true);
+            feed(player, 20, 0.0F);
+            helper.runAfterDelay(140, () -> step(cleanUp, () -> {
+                assertPoints(helper, player, 1.0, "after 140 ticks at food 20");
+                feed(player, 17, 0.0F);
+            }));
+            helper.runAfterDelay(200, () -> step(cleanUp, () -> {
+                assertPoints(helper, player, 1.0, "after 60 ticks at food 17");
+                feed(player, 18, 0.0F);
+            }));
+            helper.runAfterDelay(250, () -> step(cleanUp, () -> assertPoints(helper, player, 1.0, "50 ticks after food was back at 18")));
+            helper.runAfterDelay(300, () -> {
+                try {
+                    assertPoints(helper, player, 2.0, "100 ticks after food was back at 18");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The points are stored; the timer belongs to the player object, so a relog 60 ticks into a point starts it over:
+    // no point 20 ticks after coming back, and the next one 80 ticks after
+    @GameTest(environment = LEGS, maxTicks = 170)
+    public void legs3HealPointsOutlastARelog(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Relogger");
+        UUID uuid = player.getUUID();
+        GameProfile profile = player.getGameProfile();
+        ServerPlayer[] back = new ServerPlayer[1];
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Legs.set(uuid, false);
+            leave(player);
+        });
+        boolean waiting = false;
+        try {
+            Legs.set(uuid, true);
+            HardcoreStates.update(uuid, state -> state.legHealPoints = 12.0);
+            feed(player, 20, 0.0F);
+            helper.runAfterDelay(60, () -> step(cleanUp, () -> {
+                assertPoints(helper, player, 12.0, "60 ticks in");
+                TestPlayers.leave(player);
+                back[0] = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
+                TestPlayers.markLoaded(back[0]);
+                feed(back[0], 20, 0.0F);
+                assertPoints(helper, back[0], 12.0, "straight after the relog");
+            }));
+            helper.runAfterDelay(100, () -> step(cleanUp, () -> assertPoints(helper, back[0], 12.0, "40 ticks after the relog")));
+            helper.runAfterDelay(150, () -> {
+                try {
+                    assertPoints(helper, back[0], 13.0, "90 ticks after the relog");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // With natural regeneration off, legs heal at their own fixed pace, here every 40 ticks, with no food and no hunger:
+    // food 5 would heal nothing with the rule on
+    @GameTest(environment = LEGS_NO_REGEN, maxTicks = 80)
+    public void legs3NoRegenRuleHealsWithoutFood(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Unregenerate");
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertFalse(helper.getLevel().getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION),
+                    "the environment left natural regeneration on");
+            Legs.set(player.getUUID(), true);
+            feed(player, 5, 0.0F);
+            helper.runAfterDelay(55, () -> {
+                try {
+                    assertPoints(helper, player, 1.0, "55 ticks in with the rule off");
+                    float spent = ((FoodDataAccessor) player.getFoodData()).yoltExhaustion();
+                    helper.assertTrue(Math.abs(spent) < 1e-5, "the point cost " + spent + " exhaustion with the rule off");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // Food 20 with no saturation heals a point every 80 ticks, so 200 ticks would give two without the health rule.
@@ -369,6 +503,16 @@ public class HardcoreLegsGameTests {
         ServerPlayer online = player.level().getServer().getPlayerList().getPlayer(player.getUUID());
         if (online != null) {
             TestPlayers.leave(online);
+        }
+    }
+
+    // A failed check ends the test at once, so the player isn't left online for the rest of the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
         }
     }
 
