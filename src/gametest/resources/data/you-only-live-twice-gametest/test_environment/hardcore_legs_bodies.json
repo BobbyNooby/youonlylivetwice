@@ -1,0 +1,7 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.legs.enabled": "true",
+    "hardcore.legs.bodiesCanBreakLegs": "true"
+  }
+}

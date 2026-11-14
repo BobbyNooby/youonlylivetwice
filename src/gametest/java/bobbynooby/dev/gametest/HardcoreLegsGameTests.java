@@ -19,7 +19,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -42,6 +42,8 @@ public class HardcoreLegsGameTests {
     private static final String LEGS_DEATH = "you-only-live-twice-gametest:hardcore_legs_death";
     // Weight on as well, and heavy landings
     private static final String LEGS_HEAVY = "you-only-live-twice-gametest:hardcore_legs_heavy";
+    // A body's fall breaks the owner's legs too, which ships off
+    private static final String LEGS_BODIES = "you-only-live-twice-gametest:hardcore_legs_bodies";
     // A batch of its own: it changes the switch through the config file
     private static final String LEGS_SWITCH = "you-only-live-twice-gametest:hardcore_legs_switch";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
@@ -253,26 +255,46 @@ public class HardcoreLegsGameTests {
         }
     }
 
-    // The body is its owner: the fall is written to the owner's stored state, and they come back with it
-    @GameTest(environment = LEGS)
+    // With bodiesCanBreakLegs on, the body is its owner: the fall is written to the owner's stored state, and they come
+    // back with it. Both kinds of body.
+    @GameTest(environment = LEGS_BODIES)
     public void legs6ABodyCanBreakItsLegs(GameTestHelper helper) {
-        ServerPlayer player = join(helper, "Sleeper");
+        bodyFall(helper, "Sleeper", false, true);
+        bodyFall(helper, "SleeperP", true, true);
+        helper.succeed();
+    }
+
+    // By default a body's fall only costs it health: nothing about a logged-out player heals, so legs broken then would
+    // stay broken until they came back
+    @GameTest(environment = LEGS)
+    public void legs6ABodysFallLeavesTheLegsWholeByDefault(GameTestHelper helper) {
+        helper.assertFalse(Settings.get().hardcore.legs.bodiesCanBreakLegs, "bodiesCanBreakLegs is on");
+        bodyFall(helper, "Dozer", false, false);
+        bodyFall(helper, "DozerP", true, false);
+        helper.succeed();
+    }
+
+    // A 6 fall on the player's body, a mannequin or a player-type one, then the owner logs back in
+    private static void bodyFall(GameTestHelper helper, String name, boolean playerBody, boolean breaks) {
+        ServerPlayer player = join(helper, name);
         UUID owner = player.getUUID();
         GameProfile profile = player.getGameProfile();
-        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        YoltConfig.BodiesSection before = playerBody ? BodyTestKit.usePlayerBodies() : BodyTestKit.useDefaultBodies();
+        String kind = playerBody ? "player body" : "mannequin";
         try {
-            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            LivingEntity body = playerBody ? BodyTestKit.leavePlayerBody(helper, player) : BodyTestKit.leaveBody(helper, player);
+            float health = body.getHealth();
             body.hurtServer(helper.getLevel(), helper.getLevel().damageSources().fall(), 6.0F);
-            helper.assertTrue(HardcoreStates.read(owner).legsBroken, "the body's fall left the owner's stored legs whole");
+            helper.assertTrue(body.getHealth() < health, "the " + kind + " took no damage from the fall");
+            helper.assertValueEqual(HardcoreStates.read(owner).legsBroken, breaks, "the owner's stored legs broken after the " + kind + "'s fall");
 
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
-            helper.assertTrue(Legs.broken(back), "the owner came back with whole legs");
-            assertSlow(helper, back, 0.2, "after coming back with broken legs");
+            helper.assertValueEqual(Legs.broken(back), breaks, "the owner's legs broken after coming back from a " + kind);
+            assertSlow(helper, back, breaks ? 0.2 : 0.0, "after coming back from a " + kind);
         } finally {
             Legs.set(owner, false);
             BodyTestKit.cleanUp(helper, owner, before);
         }
-        helper.succeed();
     }
 
     // /yolt config writes the file and swaps the config object; the test puts the file back and reloads it at its end

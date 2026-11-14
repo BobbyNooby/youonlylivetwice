@@ -259,7 +259,7 @@ class HardcoreConfigTest {
         d.put("hardcore.legs.healthFirst", "true");
         d.put("hardcore.legs.regenEffectHeals", "true");
         d.put("hardcore.legs.healTicksNoRegenRule", "1200");
-        d.put("hardcore.legs.bodiesCanBreakLegs", "true");
+        d.put("hardcore.legs.bodiesCanBreakLegs", "false");
         d.put("hardcore.limp.enabled", "false");
         d.put("hardcore.limp.belowHearts", "2.0");
         d.put("hardcore.limp.recoverAtHearts", "3.0");

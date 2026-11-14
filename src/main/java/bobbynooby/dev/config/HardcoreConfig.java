@@ -85,7 +85,7 @@ public final class HardcoreConfig {
         public boolean healthFirst = true;
         public boolean regenEffectHeals = true;
         public int healTicksNoRegenRule = 1200;
-        public boolean bodiesCanBreakLegs = true;
+        public boolean bodiesCanBreakLegs = false;
     }
 
     // Hearts, not health points; the gap between the two keeps a slowly healing player from flickering in and out

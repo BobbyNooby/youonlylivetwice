@@ -35,6 +35,8 @@ each part and how to set up the pack.
 - `skins.lockAfterFirstChoice` is on: a player picks their skin once, then only an op changes it.
 - `hardcore.anvil.enabled` and `hardcore.mending.enabled` are on.
 - `hardcore.curse.maxLostHearts` is 4 and `hardcore.curse.healEveryDays` is 3.0. The curse itself stays off.
+- `hardcore.legs.bodiesCanBreakLegs` is off: a logout body's fall only costs it health. Nothing about a logged-out
+  player heals, so legs broken then would stay broken until they came back.
 
 ## Other changes
 

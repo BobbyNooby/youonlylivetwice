@@ -33,13 +33,13 @@ Contents:
 
 - Players in survival and adventure play by these rules. Creative and spectator players are left out: switching to
   either takes every hardcore slowdown and heart off at once, and they come back on a switch back.
-- Logout bodies are you, so some features reach them. Each section below says how. In short: a body's fall can break
-  your legs, a body has your curse, a body's totem costs you a heart, and mobs hit a body as hard as they hit you. A
-  body carries no weight, no nutrients and no chill, and it never heals its legs.
+- Logout bodies are you, so some features reach them. Each section below says how. In short: a body has your curse,
+  a body's totem costs you a heart, and mobs hit a body as hard as they hit you. A body carries no weight, no
+  nutrients and no chill. Its fall doesn't break your legs unless the server turns that on.
 - A death resets what a new life resets: broken legs clear, chill goes to 0, and nutrients go back to their start
   level (nutrients only after a death in survival or adventure). The curse grows.
-- While you are offline nothing ticks: no curse healing, no nutrient drain, no chill. Only what happens to your body
-  reaches you.
+- While you are logged out nothing about you heals or ticks: no curse healing, no leg healing, no nutrient drain, no
+  chill. A body can only lose health. Only what happens to your body reaches you.
 - Nothing in this layer puts an icon on screen. Vanilla clients see only vanilla things: a slower walk, a shorter heart
   bar, frost on the screen, a boss bar.
 
@@ -158,8 +158,9 @@ does.
 - Bed rest makes them heal twice as fast, and low protein half as fast.
 - Breaking them again while broken starts the healing over. Dying clears them; a totem doesn't. When they heal, the
   hotbar line says "Your legs have healed."
-- **Logout bodies:** a body's fall breaks your legs at the plain 6 damage (`bodiesCanBreakLegs`). A body never heals,
-  so they stay broken until you log back in.
+- **Logout bodies:** a body's fall only costs it health, by default. Nothing heals while you are logged out, so legs
+  broken then would stay broken until you came back. A server that wants it anyway turns on `bodiesCanBreakLegs`: a
+  body's fall then breaks your legs at the plain 6 damage, and they heal once you log back in.
 
 Settings: [`hardcore.legs`](config.md#hardcorelegs).
 

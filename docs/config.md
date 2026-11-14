@@ -279,7 +279,7 @@ Ticks are per heal point, and 0 means no healing.
 | `healthFirst` | `true` | Legs heal only while health is full. | No |
 | `regenEffectHeals` | `true` | Regeneration heals legs at its own pace, with no food used. | No |
 | `healTicksNoRegenRule` | `1200` | Ticks per point, with no food used, while the `natural_health_regeneration` game rule is off. | No |
-| `bodiesCanBreakLegs` | `true` | A logout body's fall breaks its owner's legs. | No |
+| `bodiesCanBreakLegs` | `false` | A logout body's fall breaks its owner's legs. Off, a body's fall only costs it health. | No |
 
 ### `hardcore.limp`
 
