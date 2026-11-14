@@ -15,8 +15,9 @@
   grave. With 1,000 graves that takes about 0.1 to 0.2 seconds on the server thread, and the cost grows with the number of graves, because graves never expire. On a big
   server, remove old graves with `/yolt grave remove`. The grave, body and skin files are written to a temp file
   first and then swapped in, so a crash in the middle of a save leaves the last whole file.
-- **Portals at 1:1.** A Nether portal can link to an existing Overworld portal up to 128 blocks away, instead of making
-  a new one at the same coordinates.
+- **Portals at 1:1.** A Nether portal only links to an Overworld portal within 16 blocks of its exit. A pair of
+  portals that linked further apart before this version makes a new Overworld portal the first time someone goes
+  through, and links to that one from then on.
 - **Shared maps** show other players only to holders who can see them (`hide.mapPlayers`), but a held map still fills
   in terrain for every copy.
 - **Random spawn lag.** Pre-generate the world with Chunky.

@@ -2,7 +2,8 @@
 
 The Overworld and Nether share one border (default 10,000 blocks across). The End border is the same size times
 `worldBorder.endScale` (default 2), up to vanilla's largest border. The Nether runs 1:1 with the Overworld, so there
-is no Nether fast travel.
+is no Nether fast travel. A Nether portal then only links to an Overworld portal within 16 blocks of its exit, not
+vanilla's 128, so it can't lead to someone else's portal far away.
 
 - `/yolt border`, `center`, `endscaling` and `/yolt config worldBorder.*` refuse a change that would leave online
   players, bodies, graves, the End's arrival platform, or the world spawn (when new players start right on it) outside

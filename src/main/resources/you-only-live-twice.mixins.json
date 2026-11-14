@@ -78,6 +78,7 @@
     "NameCacheEntryAccessor",
     "NameTagTeamAlliesMixin",
     "NearestAttackableTargetGoalAccessor",
+    "NetherPortalSearchMixin",
     "NetherScaleMixin",
     "NoBedRespawnAnchorMixin",
     "NoBedRespawnAnchorSoundMixin",

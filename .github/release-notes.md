@@ -42,6 +42,8 @@ each part and how to set up the pack.
   whether it was heard. Players see nothing new.
 - **One whisper for everyone.** `/msg` and `/tell` are now the same ranged whisper as `/w`, for ops too, so no one can
   reach a player out of earshot. `/teammsg` stays vanilla. The console uses `/tellraw`.
+- **Nether portals at 1:1 link only nearby.** A Nether portal looks for an Overworld portal within 16 blocks of its
+  exit, not 128, so it can't lead to someone else's base. A pair that linked further apart makes a new portal once.
 
 ## What it does
 

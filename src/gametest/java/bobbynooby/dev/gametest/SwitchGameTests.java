@@ -5,12 +5,19 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.world.GameRuleSwitches;
 import bobbynooby.dev.world.WorldBorders;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.SleepStatus;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.NetherPortalBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRule;
@@ -18,6 +25,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -75,6 +83,45 @@ public class SwitchGameTests {
             config.netherScaleOneToOne = before;
         }
         helper.succeed();
+    }
+
+    // At 1:1 the Overworld side looks for a portal to link to only 16 blocks around the exit, not vanilla's 128. Two
+    // lone portal blocks well above the test, out of the way of other tests: one 8 blocks from the first search, one
+    // 40 from the second. A new portal block reaches the search a task later, so the checks wait for both. The switch
+    // is set and put back inside the one tick that runs the checks.
+    @GameTest(maxTicks = 40)
+    public void portalSearchIsNarrowAtOneToOne(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = helper.absolutePos(BlockPos.ZERO).above(40);
+        BlockPos far = near.east(60);
+        BlockPos nearSearch = near.east(8);
+        BlockPos farSearch = near.east(100);
+        BlockState portal = Blocks.NETHER_PORTAL.defaultBlockState().setValue(NetherPortalBlock.AXIS, Direction.Axis.X);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            level.setBlock(near, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            level.setBlock(far, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        // No neighbour updates, so the frameless portal blocks stay
+        level.setBlock(near, portal, Block.UPDATE_CLIENTS);
+        level.setBlock(far, portal, Block.UPDATE_CLIENTS);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(level.getPoiManager().existsAtPosition(PoiTypes.NETHER_PORTAL, near)
+                    && level.getPoiManager().existsAtPosition(PoiTypes.NETHER_PORTAL, far), "the portals are not registered yet");
+            YoltConfig config = Settings.get();
+            boolean before = config.netherScaleOneToOne;
+            try {
+                config.netherScaleOneToOne = true;
+                helper.assertValueEqual(findPortal(level, nearSearch), Optional.of(near), "1:1, a portal 8 blocks off");
+                helper.assertFalse(findPortal(level, farSearch).equals(Optional.of(far)), "1:1 found a portal 40 blocks off");
+
+                config.netherScaleOneToOne = false;
+                helper.assertValueEqual(findPortal(level, farSearch), Optional.of(far), "vanilla scale, a portal 40 blocks off");
+            } finally {
+                config.netherScaleOneToOne = before;
+            }
+            cleanUp.run();
+        });
     }
 
     // The test server keeps YOLT's border off, so this turns it on just for the call
@@ -175,6 +222,11 @@ public class SwitchGameTests {
     public void activeOnTestServer(GameTestHelper helper) {
         helper.assertTrue(Settings.active(), "YOLT is not active on the test server");
         helper.succeed();
+    }
+
+    // The search vanilla runs for an exit in the Overworld
+    private static Optional<BlockPos> findPortal(ServerLevel overworld, BlockPos exit) {
+        return overworld.getPortalForcer().findClosestPortalPosition(exit, false, overworld.getWorldBorder());
     }
 
     private static ServerLevel nether(GameTestHelper helper) {
