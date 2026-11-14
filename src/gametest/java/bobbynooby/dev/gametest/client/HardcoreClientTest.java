@@ -8,7 +8,9 @@ import bobbynooby.dev.hardcore.BloodMoon;
 import bobbynooby.dev.hardcore.ColdMaths;
 import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.HardcoreStates;
+import bobbynooby.dev.hardcore.Legs;
 import bobbynooby.dev.hardcore.Slowdowns;
+import bobbynooby.dev.hardcore.Weight;
 import bobbynooby.dev.revive.ReviveLook;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -17,6 +19,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerCon
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.inventory.AnvilScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -60,8 +63,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
-// What a vanilla client shows of the hardcore layer, one screenshot each. Every feature is on only for its own shot, and
-// the state is set straight on the server rather than played out, so the shots come out the same every run.
+// What a vanilla client shows of the hardcore layer, one screenshot each. Each shot turns on the features it shows and
+// puts them back after it, and the state is set straight on the server rather than played out, so the shots come out the
+// same every run.
 public class HardcoreClientTest implements FabricClientGameTest {
     // Fixed views, so the two field of view shots differ only by the slowdown
     private static final float SOUTH = 0.0F;
@@ -82,6 +86,8 @@ public class HardcoreClientTest implements FabricClientGameTest {
     private static final float CURSED_MAX_HEALTH = 18.0F;
     private static final float FULL_HEALTH = 20.0F;
     private static final double SLOWED = 0.5;
+    // Eight stacks of cobblestone weigh 24, over the free load of 16
+    private static final int LOAD_STACKS = 8;
     // Vanilla would price a rename of an item with this much prior work at 11; the flat price is the rename cost alone
     private static final int PRIOR_WORK = 10;
     // Enough to pay the flat price, so the price line is green
@@ -121,6 +127,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
                         () -> showCurse(ctx, server, connection, stage),
                         () -> showBedRest(ctx, server, connection, stage, cameraWas),
                         () -> showSlowedView(ctx, server, connection, stage),
+                        () -> showStatus(ctx, server, connection, stage),
                         // Last, and never failing the run: loading a pack this way is the least sure part
                         () -> showPack(ctx, server, connection, stage)));
             } finally {
@@ -214,6 +221,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
                                   TestDedicatedServerConnection connection, Stage stage) {
         stand(ctx, server, connection, stage, NORTH, LEVEL);
         BlockPos anvil = stage.homeBlock().relative(Direction.NORTH, USE_DISTANCE);
+        boolean anvilWas = server.computeOnServer(s -> Settings.get().hardcore.anvil.enabled);
         int price = server.computeOnServer(s -> {
             Settings.get().hardcore.anvil.enabled = true;
             ServerPlayer player = connection.getServerPlayer();
@@ -273,7 +281,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
                         player.getInventory().clearContent();
                         player.setExperienceLevels(stage.levelsWas());
                         player.level().setBlock(anvil, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-                        Settings.get().hardcore.anvil.enabled = false;
+                        Settings.get().hardcore.anvil.enabled = anvilWas;
                     })));
         }
     }
@@ -385,6 +393,75 @@ public class HardcoreClientTest implements FabricClientGameTest {
                     () -> ClientTests.waitOnServer(server, LONG_TIMEOUT,
                             s -> Slowdowns.applied(connection.getServerPlayer()) == 0.0,
                             s -> "the slowdown is still " + Slowdowns.applied(connection.getServerPlayer()))));
+        }
+    }
+
+    // The /status report in the open chat, for a player with broken legs, a load over the free one and a heart lost to
+    // the curse. The chat is cleared first, so no line from an earlier shot can be taken for part of the report.
+    private static void showStatus(ClientGameTestContext ctx, TestDedicatedServerContext server,
+                                   TestDedicatedServerConnection connection, Stage stage) {
+        stand(ctx, server, connection, stage, SOUTH, LEVEL);
+        boolean[] was = server.computeOnServer(s -> {
+            HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
+            return new boolean[] {hardcore.legs.enabled, hardcore.weight.enabled, hardcore.curse.enabled};
+        });
+        server.runOnServer(s -> {
+            HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
+            hardcore.legs.enabled = true;
+            hardcore.weight.enabled = true;
+            hardcore.curse.enabled = true;
+            Legs.set(stage.self(), true);
+            Curse.set(stage.self(), LOST_HEARTS);
+            ServerPlayer player = connection.getServerPlayer();
+            for (int i = 0; i < LOAD_STACKS; i++) {
+                player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+            }
+        });
+        try {
+            ClientTests.waitOnServer(server, LONG_TIMEOUT,
+                    s -> Weight.load(connection.getServerPlayer()) > Settings.get().hardcore.weight.freeLoad,
+                    s -> "the load is " + Weight.load(connection.getServerPlayer()) + ", not over the free load");
+            ClientTests.waitOnClient(ctx, LONG_TIMEOUT, mc -> mc.player.getMaxHealth() == CURSED_MAX_HEALTH,
+                    mc -> "the client's maximum health is " + mc.player.getMaxHealth() + ", not " + CURSED_MAX_HEALTH);
+            ctx.runOnClient(mc -> mc.gui.hud.getChat().clearMessages(false));
+            int mark = ChatStoryClientTest.chatLogEnd(ctx);
+            server.runOnServer(s -> s.getCommands().performPrefixedCommand(
+                    connection.getServerPlayer().createCommandSourceStack(), "status"));
+            ClientTests.waitOnClient(ctx, LONG_TIMEOUT, mc -> ChatStoryClientTest.chatLogHas(mc, mark, "Your body")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Load")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Legs")
+                            && ChatStoryClientTest.chatLogHas(mc, mark, "Curse of the Undead"),
+                    mc -> "the client's chat has no full status report");
+            ctx.waitTicks(SETTLE_TICKS);
+            ctx.getInput().pressKey(options -> options.keyChat);
+            ctx.waitForScreen(ChatScreen.class);
+            ClientTests.screenshot(ctx, "C-STATUS");
+        } finally {
+            ClientTests.runAll(List.of(
+                    () -> {
+                        if (ctx.computeOnClient(mc -> mc.gui.screen() instanceof ChatScreen)) {
+                            ctx.setScreen(() -> null);
+                        }
+                    },
+                    () -> server.runOnServer(s -> {
+                        Legs.set(stage.self(), false);
+                        Curse.set(stage.self(), 0);
+                        connection.getServerPlayer().getInventory().clearContent();
+                        HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
+                        hardcore.legs.enabled = was[0];
+                        hardcore.weight.enabled = was[1];
+                        hardcore.curse.enabled = was[2];
+                    }),
+                    // The curse and the slowdowns come off at the next tick, and the health doesn't refill by itself
+                    () -> ClientTests.waitOnServer(server, LONG_TIMEOUT,
+                            s -> connection.getServerPlayer().getMaxHealth() == FULL_HEALTH
+                                    && Slowdowns.applied(connection.getServerPlayer()) == 0.0,
+                            s -> "the maximum health is " + connection.getServerPlayer().getMaxHealth() + " and the slowdown "
+                                    + Slowdowns.applied(connection.getServerPlayer()) + " after the report"),
+                    () -> server.runOnServer(s -> connection.getServerPlayer().setHealth(FULL_HEALTH)),
+                    () -> ClientTests.waitOnClient(ctx, LONG_TIMEOUT, mc -> mc.player.getHealth() == FULL_HEALTH,
+                            mc -> "the client's health is " + mc.player.getHealth() + " after the report"),
+                    () -> ctx.runOnClient(mc -> mc.gui.hud.getChat().clearMessages(false))));
         }
     }
 
@@ -549,6 +626,8 @@ public class HardcoreClientTest implements FabricClientGameTest {
         saved.anvil.enabled = live.anvil.enabled;
         saved.curse.enabled = live.curse.enabled;
         saved.bedRest.enabled = live.bedRest.enabled;
+        saved.legs.enabled = live.legs.enabled;
+        saved.weight.enabled = live.weight.enabled;
         return saved;
     }
 
@@ -560,5 +639,7 @@ public class HardcoreClientTest implements FabricClientGameTest {
         live.anvil.enabled = saved.anvil.enabled;
         live.curse.enabled = saved.curse.enabled;
         live.bedRest.enabled = saved.bedRest.enabled;
+        live.legs.enabled = saved.legs.enabled;
+        live.weight.enabled = saved.weight.enabled;
     }
 }
