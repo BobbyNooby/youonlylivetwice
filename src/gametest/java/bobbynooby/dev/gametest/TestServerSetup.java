@@ -9,6 +9,7 @@ import net.minecraft.gametest.framework.GameTestServer;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.time.Duration;
+import java.util.List;
 
 public class TestServerSetup implements ModInitializer {
     @Override
@@ -53,5 +54,9 @@ public class TestServerSetup implements ModInitializer {
         Settings.get().hardcore.anvil.enabled = false;
         Settings.get().hardcore.mending.enabled = false;
         Settings.get().hardcore.curse.enabled = false;
+        // The flavour MOTD would make every ping's answer differ from vanilla's, and the multiplayer screen in client
+        // shots change from run to run. The server list's own tests set the lines they need, and the unit tests check
+        // the list as shipped, since an environment can't hold a list.
+        Settings.get().serverList.motdLines = List.of();
     }
 }
