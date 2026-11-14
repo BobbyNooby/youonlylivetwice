@@ -5,9 +5,12 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.graves.GraveMenu;
+import bobbynooby.dev.graves.GraveMenus;
 import bobbynooby.dev.graves.GravePlacement;
 import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -17,15 +20,18 @@ import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -83,6 +89,50 @@ public class PlacementGameTests {
             helper.assertTrue(level.getFluidState(result).isEmpty(), "grave in the water at " + result);
             helper.assertTrue(level.getFluidState(result.below()).is(FluidTags.WATER), "no water under the grave at " + result);
         } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // A pool four deep, walled in with stone, and a death at its bottom. A spot in water stays where it is, so the grave
+    // goes in the water at the death spot, and it opens like any other.
+    @GameTest(skyAccess = true)
+    public void deathDeepUnderWaterGraveAtTheDeathSpot(GameTestHelper helper) {
+        BlockPos pool = new BlockPos(3, 0, 3);
+        List<BlockPos> placed = new ArrayList<>();
+        List<Grave> made = new ArrayList<>();
+        ServerPlayer looter = null;
+        try {
+            for (int dy = 0; dy <= 3; dy++) {
+                for (Direction side : Direction.Plane.HORIZONTAL) {
+                    place(helper, placed, pool.above(dy).relative(side), Blocks.STONE);
+                }
+                place(helper, placed, pool.above(dy), Blocks.WATER);
+            }
+            ServerLevel level = helper.getLevel();
+            BlockPos death = helper.absolutePos(pool);
+            ResolvableProfile profile = ResolvableProfile.createUnresolved("Diver");
+            made.addAll(Graves.create(level, death, profile, UUID.randomUUID(), "Diver",
+                    List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND))));
+            helper.assertValueEqual(made.size(), 1, "graves made");
+            Grave grave = made.get(0);
+            helper.assertValueEqual(grave.pos(), death, "grave position");
+            helper.assertTrue(GraveBlocks.isOwnHead(level, death, grave), "no head at the death spot");
+            helper.assertTrue(level.getFluidState(death.above()).is(FluidTags.WATER), "no water over the grave");
+
+            looter = TestPlayers.join(helper, "Diver", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            GraveMenus.open(looter, grave);
+            helper.assertTrue(looter.containerMenu instanceof GraveMenu, "the grave under water did not open");
+            looter.containerMenu.clicked(1, 0, ContainerInput.QUICK_MOVE, looter);
+            helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 1, "diamonds taken from the grave under water");
+        } finally {
+            if (looter != null) {
+                TestPlayers.leave(looter);
+            }
+            for (Grave grave : made) {
+                store(helper).remove(grave.id());
+                helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
             clear(helper, placed);
         }
         helper.succeed();

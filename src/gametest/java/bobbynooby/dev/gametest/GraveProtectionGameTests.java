@@ -492,6 +492,110 @@ public class GraveProtectionGameTests {
         }
     }
 
+    // An op's /setblock takes the head while a looter has the grave open. The menu goes by the record, so it stays open
+    // and still gives items; the re-check puts the head back within its interval, here a second.
+    @GameTest(environment = GRAVE_RECHECK, maxTicks = 60)
+    public void headTakenUnderAnOpenMenuComesBack(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ServerPlayer looter = TestPlayers.join(helper, "HeadlessLooter", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> graves.recheckSeconds = seconds;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            TestPlayers.leave(looter);
+            RECHECK_HOLD.release();
+            LiveSettings.applyAll(server);
+            removeGraves(helper, List.of(grave));
+        });
+        boolean waiting = false;
+        try {
+            graves.recheckSeconds = 1;
+            LiveSettings.applyAll(server);
+            GraveMenus.open(looter, grave);
+            AbstractContainerMenu menu = looter.containerMenu;
+            helper.assertTrue(menu instanceof GraveMenu, "the grave did not open");
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.assertTrue(menu.stillValid(looter), "the menu is not valid with the head gone");
+            menu.clicked(1, 0, ContainerInput.QUICK_MOVE, looter);
+            helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 1, "diamonds taken with the head gone");
+            helper.assertTrue(GraveStore.get(server).byId(grave.id()).orElseThrow().items().stream().noneMatch(stack -> stack.is(Items.DIAMOND)),
+                    "the record still lists the diamond");
+            helper.runAfterDelay(30, () -> {
+                try {
+                    helper.assertTrue(looter.containerMenu == menu, "the menu closed while the head was gone");
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // An admin's removal and a looter emptying a grave both take its record in the same call, so the re-check, here every
+    // second, has nothing to put back at either spot
+    @GameTest(environment = GRAVE_RECHECK, maxTicks = 60)
+    public void recheckBringsNoHeadBackAfterRemovalOrEmptying(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        Grave removed = makeGrave(helper, new BlockPos(3, 0, 3));
+        Grave emptied = makeGrave(helper, new BlockPos(1, 0, 3));
+        ServerPlayer looter = TestPlayers.join(helper, "Emptier", GameType.SURVIVAL, new BlockPos(2, 1, 1));
+        AABB around = new AABB(removed.pos()).inflate(3.0);
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> graves.recheckSeconds = seconds;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            TestPlayers.leave(looter);
+            RECHECK_HOLD.release();
+            LiveSettings.applyAll(server);
+            removeGraves(helper, List.of(removed, emptied));
+            level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+        });
+        boolean waiting = false;
+        try {
+            graves.recheckSeconds = 1;
+            LiveSettings.applyAll(server);
+            helper.assertTrue(Graves.removeAndDrop(server, removed) instanceof Graves.Removal.Dropped, "the removal did not go through");
+            GraveMenus.open(looter, emptied);
+            AbstractContainerMenu menu = looter.containerMenu;
+            for (int slot = 0; slot < 2; slot++) {
+                menu.clicked(slot, 0, ContainerInput.QUICK_MOVE, looter);
+            }
+            for (Grave grave : List.of(removed, emptied)) {
+                helper.assertTrue(GraveStore.get(server).byId(grave.id()).isEmpty(), "a record is left at " + grave.pos());
+                helper.assertFalse(level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD), "a head is left at " + grave.pos());
+            }
+            helper.runAfterDelay(30, () -> {
+                try {
+                    for (Grave grave : List.of(removed, emptied)) {
+                        helper.assertFalse(level.getBlockState(grave.pos()).is(Blocks.PLAYER_HEAD), "a head came back at " + grave.pos());
+                        helper.assertTrue(GraveStore.get(server).byId(grave.id()).isEmpty(), "a record came back for " + grave.pos());
+                    }
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     // A grave the re-check can't put back: its spot is taken, and the border, moved far off in this tick, leaves no
     // loaded spot to move it to. The failure is logged once. The grave then waits for its chunk's next load, even once
     // it could be put back; after that load the re-check tries it again, and a second failure of the same kind logs

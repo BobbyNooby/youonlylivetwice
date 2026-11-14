@@ -30,6 +30,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
@@ -39,6 +40,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -195,6 +197,112 @@ public class GraveMenuGameTests {
             cleanUp(helper, grave, player);
         }
         helper.succeed();
+    }
+
+    // Closing the screen the usual way with items left: the head and the record stay, and the stack on the cursor goes
+    // to the looter's inventory, as from any chest
+    @GameTest
+    public void closingWithItemsLeftKeepsTheGraveAndTheCursorStack(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 3), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer player = join(helper, "Closer");
+        try {
+            GraveMenus.open(player, grave);
+            AbstractContainerMenu menu = player.containerMenu;
+            menu.clicked(1, PRIMARY, ContainerInput.PICKUP, player);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND), "the diamonds are not on the cursor");
+            player.closeContainer();
+
+            helper.assertTrue(player.containerMenu == player.inventoryMenu, "the menu is still open");
+            helper.assertTrue(player.containerMenu.getCarried().isEmpty(), "a stack is left on the cursor");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 3, "diamonds in the looter's inventory");
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(countIn(inGrave, Items.DIAMOND), 0, "diamonds in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.EMERALD), 6, "emeralds in the grave");
+            helper.assertTrue(GraveBlocks.isOwnHead(helper.getLevel(), grave.pos(), stored(helper, grave)), "the head is gone");
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "the container is still shared");
+        } finally {
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    // The looter's own tick closes a grave menu once they are more than 8 blocks off, or in another dimension: the grave
+    // keeps what is left, and the stack on each cursor goes to that looter's inventory
+    @GameTest
+    public void menuClosesOnDistanceAndDimensionChange(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 3), new ItemStack(Items.EMERALD, 6),
+                new ItemStack(Items.APPLE, 2));
+        ServerPlayer walker = join(helper, "Walker");
+        ServerPlayer traveller = join(helper, "Traveller");
+        try {
+            GraveMenus.open(walker, grave);
+            GraveMenus.open(traveller, grave);
+            walker.containerMenu.clicked(1, PRIMARY, ContainerInput.PICKUP, walker);
+            traveller.containerMenu.clicked(2, PRIMARY, ContainerInput.PICKUP, traveller);
+            helper.assertTrue(walker.containerMenu.getCarried().is(Items.DIAMOND) && traveller.containerMenu.getCarried().is(Items.EMERALD),
+                    "the cursors don't hold what the test needs");
+
+            BlockPos pos = grave.pos();
+            walker.snapTo(pos.getX() + 12.5, pos.getY(), pos.getZ() + 0.5);
+            traveller.teleportTo(nether, 0.5, 64.0, 0.5, Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(traveller.level() == nether, "the traveller did not reach the nether");
+            for (ServerPlayer player : List.of(walker, traveller)) {
+                player.doTick();
+                helper.assertTrue(player.containerMenu == player.inventoryMenu, player.getPlainTextName() + "'s menu is still open");
+                helper.assertTrue(player.containerMenu.getCarried().isEmpty(), player.getPlainTextName() + " still holds a stack");
+            }
+            helper.assertValueEqual(walker.getInventory().countItem(Items.DIAMOND), 3, "diamonds the walker has");
+            helper.assertValueEqual(traveller.getInventory().countItem(Items.EMERALD), 6, "emeralds the traveller has");
+            List<ItemStack> inGrave = stored(helper, grave).items();
+            helper.assertValueEqual(countIn(inGrave, Items.APPLE), 2, "apples in the grave");
+            helper.assertValueEqual(countIn(inGrave, Items.DIAMOND) + countIn(inGrave, Items.EMERALD), 0, "taken items in the grave");
+            helper.assertTrue(GraveBlocks.isOwnHead(helper.getLevel(), pos, stored(helper, grave)), "the head is gone");
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "the container is still shared");
+        } finally {
+            cleanUp(helper, grave, walker, traveller);
+        }
+        helper.succeed();
+    }
+
+    // Taking from a grave only marks the grave file to be saved with the world. The looter's logout writes it straight
+    // after that tick, so a crash then can't hand the items back while the looter's own save keeps them.
+    @GameTest(maxTicks = 20)
+    public void lootIsInTheGraveFileOnceTheLooterLeaves(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GraveStore store = GraveStore.get(server);
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 3), new ItemStack(Items.EMERALD, 6));
+        ServerPlayer looter = join(helper, "SavedLooter");
+        AABB around = new AABB(looter.blockPosition()).inflate(4.0);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cleanUpLeft(helper, grave, around, looter);
+            store.saveNow(server);
+        });
+        boolean waiting = false;
+        try {
+            store.saveNow(server);
+            helper.assertValueEqual(onDiskCount(server, grave, Items.DIAMOND), 3, "diamonds in the grave file before the looting");
+            GraveMenus.open(looter, grave);
+            looter.containerMenu.clicked(1, PRIMARY, ContainerInput.QUICK_MOVE, looter);
+            helper.assertValueEqual(looter.getInventory().countItem(Items.DIAMOND), 3, "diamonds the looter took");
+            helper.assertValueEqual(onDiskCount(server, grave, Items.DIAMOND), 3, "diamonds in the grave file straight after the looting");
+            TestPlayers.leave(looter);
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertValueEqual(onDiskCount(server, grave, Items.DIAMOND), 0, "diamonds in the grave file after the logout");
+                    helper.assertValueEqual(onDiskCount(server, grave, Items.EMERALD), 6, "emeralds in the grave file after the logout");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // An op fills the grave's spot and the 7 blocks above while two looters have it open, so the re-check moves the
@@ -604,6 +712,15 @@ public class GraveMenuGameTests {
         Inventory inventory = player.getInventory();
         ItemStack carried = player.containerMenu.getCarried();
         return inventory.countItem(item) + (carried.is(item) ? carried.getCount() : 0);
+    }
+
+    // How many of the item the grave file holds for this grave now; -1 when the file doesn't have the grave
+    private static int onDiskCount(MinecraftServer server, Grave grave, Item item) {
+        return GraveStoreGameTests.onDisk(server).stream()
+                .filter(saved -> saved.id().equals(grave.id()))
+                .findFirst()
+                .map(saved -> countIn(saved.items(), item))
+                .orElse(-1);
     }
 
     private static int countIn(List<ItemStack> stacks, Item item) {
