@@ -246,11 +246,11 @@ See [weight](hardcore.md#weight). Weights are stack weights, the weight of a ful
 |---|---|---|---|
 | `enabled` | `false` | What you carry slows you, and heavy jumps cost hunger. | No |
 | `freeLoad` | `16.0` | The load you carry with no slowdown, 0 or more. Below `fullLoad`. | No |
-| `fullLoad` | `56.0` | The load where the slowdown reaches `maxSlow`, 0 or more. | No |
+| `fullLoad` | `144.0` | The load where the slowdown reaches `maxSlow`, 0 or more. | No |
 | `maxSlow` | `0.5` | The slowdown at a full load, 0 to 1. | No |
 | `defaultWeight` | `1.0` | Stack weight of anything nothing else names. | No |
-| `unstackableWeight` | `0.25` | Weight of each other item that stacks to 1 (potions, buckets, beds, totems). | No |
-| `toolWeight` | `0.5` | Weight of each sword, axe, pickaxe, shovel, hoe or spear. | No |
+| `unstackableWeight` | `0.1` | Weight of each other item that stacks to 1 (potions, buckets, beds, totems). | No |
+| `toolWeight` | `0.25` | Weight of each sword, axe, pickaxe, shovel, hoe or spear. | No |
 | `countContainers` | `true` | Shulker boxes and bundles add what is inside them. | No |
 | `containerContents` | `1.0` | The share of a container's contents that counts, 0 to 1. 0.5 counts half. | No |
 | `containerDepth` | `3` | How many containers deep the contents count, 0 to 8. | No |
@@ -485,9 +485,9 @@ match nothing.
 | Key | Entries | Default |
 |---|---|---|
 | `hardcore.weight.groups` | An item tag (without `#`) and a stack weight. An item in several takes the first in the list, so put specific tags first. | `c:ores`, `c:raw_materials`, `c:ingots`, `c:stones`, `c:cobblestones`, `c:obsidians`, `minecraft:stone_bricks`, `minecraft:logs`: 3.0. `c:storage_blocks/iron`, `/gold`, `/copper`, `/netherite`, `/raw_iron`, `/raw_gold`, `/raw_copper`: 27.0. `c:storage_blocks`: 9.0. `c:feathers`, `c:strings`: 0.25. |
-| `hardcore.weight.items` | An item id and a stack weight. Beats armour, tools and groups. | `minecraft:paper` 0.25, `minecraft:anvil` 9.0 |
-| `hardcore.weight.itemsEach` | An item id and a weight for each single item. Beats everything else. | `minecraft:elytra` 1.5, `minecraft:mace` 2.0 |
-| `hardcore.weight.armourFactors` | An armour material and a factor. An armour piece, worn or carried, weighs its armour points times its factor. A material not listed weighs `defaultWeight`. | `leather` 0.15, `copper` 0.25, `chainmail` 0.25, `gold` 0.25, `iron` 0.3, `turtle_scute` 0.3, `diamond` 0.35, `netherite` 0.45 |
+| `hardcore.weight.items` | An item id and a stack weight. Beats armour, tools and groups. | `minecraft:paper` 0.25. 3.0 for stone-like blocks no group reaches: `deepslate_bricks`, `deepslate_tiles`, `polished_deepslate`, `chiseled_deepslate`, `bricks`, `smooth_stone`, `polished_andesite`, `polished_diorite`, `polished_granite`, `polished_tuff`, `tuff_bricks`, `blackstone`, `polished_blackstone`, `polished_blackstone_bricks`, `end_stone_bricks`, `mud_bricks` (all `minecraft:`). |
+| `hardcore.weight.itemsEach` | An item id and a weight for each single item. Beats everything else. | `minecraft:elytra` 0.5, `minecraft:mace` 1.0, `minecraft:anvil` 1.5 |
+| `hardcore.weight.armourFactors` | An armour material and a factor. An armour piece, worn or carried, weighs its armour points times its factor. A material not listed weighs `defaultWeight`. | `leather` 0.05, `copper` 0.1, `chainmail` 0.1, `gold` 0.1, `iron` 0.1, `turtle_scute` 0.1, `diamond` 0.15, `netherite` 0.2 |
 | `hardcore.nutrients.foods` | An item id, or `#` and an item tag, and an object of shares: `{"protein": 0.5, "vitamins": 0.5}`. Groups are `protein`, `vitamins` and `sugar`, shares 0 to 1. An id beats a tag, and the first tag in the list wins. `{}` gives nothing. | Every vanilla food, 41 entries, listed below. |
 | `hardcore.tougherMobs.exclude` | A list of mob ids never boosted. Relentless mobs leaves them alone too. | `minecraft:wither`, `minecraft:ender_dragon`, `minecraft:elder_guardian`, `minecraft:warden` |
 | `hardcore.tougherMobs.overrides` | A mob id and an object naming only the values that differ for it: `health`, `damage`, `speed`. | `minecraft:ghast` `{"health": 2.0}`, `minecraft:phantom` `{"health": 1.0, "damage": 1.0, "speed": 1.0}`, `minecraft:creeper` `{"damage": 1.0}` |

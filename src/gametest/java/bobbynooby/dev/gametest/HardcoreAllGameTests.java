@@ -60,7 +60,7 @@ public class HardcoreAllGameTests {
     private static final int WEIGHED = 12;
     private static final double CLOSE = 1e-9;
 
-    // A full load (18 stacks of cobblestone at 3 and 2 of dirt at 1), broken legs, a limp at 3 health, full chill and
+    // A full load (6 stacks of iron blocks at 27 and 2 of dirt at 1), broken legs, a limp at 3 health, full chill and
     // low sugar while sprinting add up to well over the cap. The chill is set again each tick, since out of the cold
     // it would fall, and the sprint too, since nothing here keeps it.
     @GameTest(environment = ALL, maxTicks = 120)
@@ -86,8 +86,8 @@ public class HardcoreAllGameTests {
         });
         boolean waiting = false;
         try {
-            for (int i = 0; i < 18; i++) {
-                player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+            for (int i = 0; i < 6; i++) {
+                player.getInventory().add(new ItemStack(Items.IRON_BLOCK, 64));
             }
             for (int i = 0; i < 2; i++) {
                 player.getInventory().add(new ItemStack(Items.DIRT, 64));

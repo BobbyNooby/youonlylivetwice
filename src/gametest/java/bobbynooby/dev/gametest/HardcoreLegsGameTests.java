@@ -210,8 +210,8 @@ public class HardcoreLegsGameTests {
         helper.succeed();
     }
 
-    // 27 + 27 + 1 + 1 is a full load, which breaks at 4 with heavy landings and at the plain 6 without. Weight keeps
-    // what it weighed at the join for a few ticks, so the falls wait for it to weigh the load.
+    // 6 × 27 + 2 × 1 is over the full load of 144, which breaks at 4 with heavy landings and at the plain 6 without.
+    // Weight keeps what it weighed at the join for a few ticks, so the falls wait for it to weigh the load.
     @GameTest(environment = LEGS_HEAVY, maxTicks = 30)
     public void legs5HeavyLandings(GameTestHelper helper) {
         ServerPlayer heavy = join(helper, "Lander");
@@ -225,7 +225,7 @@ public class HardcoreLegsGameTests {
         boolean waiting = false;
         try {
             for (ServerPlayer player : List.of(heavy, plain)) {
-                fill(player, Items.IRON_BLOCK, 2);
+                fill(player, Items.IRON_BLOCK, 6);
                 fill(player, Items.DIRT, 2);
             }
             helper.runAfterDelay(WEIGHED, () -> {

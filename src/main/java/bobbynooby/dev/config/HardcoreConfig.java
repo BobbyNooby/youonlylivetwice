@@ -42,12 +42,13 @@ public final class HardcoreConfig {
     public static class WeightSection {
         public boolean enabled = false;
         public double freeLoad = 16.0;
-        public double fullLoad = 56.0;
+        public double fullLoad = 144.0;
         public double maxSlow = 0.5;
         // "default" in the spec, which Java can't name a field
         public double defaultWeight = 1.0;
-        public double unstackableWeight = 0.25;
-        public double toolWeight = 0.5;
+        // Gear is light on purpose: a kit and half an inventory of stacks should still walk at full speed
+        public double unstackableWeight = 0.1;
+        public double toolWeight = 0.25;
         // An item in more than one tag takes the first in this order, so specific tags come before general ones
         public Map<String, Double> groups = numbers(
                 "c:ores", 3.0, "c:raw_materials", 3.0, "c:ingots", 3.0, "c:stones", 3.0,
@@ -58,11 +59,12 @@ public final class HardcoreConfig {
                 "c:storage_blocks/raw_iron", 27.0, "c:storage_blocks/raw_gold", 27.0,
                 "c:storage_blocks/raw_copper", 27.0, "c:storage_blocks", 9.0,
                 "c:feathers", 0.25, "c:strings", 0.25);
-        public Map<String, Double> items = numbers("minecraft:paper", 0.25, "minecraft:anvil", 9.0);
-        public Map<String, Double> itemsEach = numbers("minecraft:elytra", 1.5, "minecraft:mace", 2.0);
+        public Map<String, Double> items = weightItems();
+        // An anvil weighs about what its iron does
+        public Map<String, Double> itemsEach = numbers("minecraft:elytra", 0.5, "minecraft:mace", 1.0, "minecraft:anvil", 1.5);
         public Map<String, Double> armourFactors = numbers(
-                "leather", 0.15, "copper", 0.25, "chainmail", 0.25, "gold", 0.25,
-                "iron", 0.3, "turtle_scute", 0.3, "diamond", 0.35, "netherite", 0.45);
+                "leather", 0.05, "copper", 0.1, "chainmail", 0.1, "gold", 0.1,
+                "iron", 0.1, "turtle_scute", 0.1, "diamond", 0.15, "netherite", 0.2);
         public boolean countContainers = true;
         public double containerContents = 1.0;
         public int containerDepth = 3;
@@ -317,6 +319,18 @@ public final class HardcoreConfig {
         // Revive papers show reviveModel, an item model the server's resource pack must hold
         public boolean reviveTexture = false;
         public String reviveModel = "you-only-live-twice:revive_paper";
+    }
+
+    // Paper, and the stone-like building blocks no group tag reaches, so they weigh like stone
+    private static Map<String, Double> weightItems() {
+        Map<String, Double> items = numbers("minecraft:paper", 0.25);
+        for (String stone : new String[]{"deepslate_bricks", "deepslate_tiles", "polished_deepslate", "chiseled_deepslate",
+                "bricks", "smooth_stone", "polished_andesite", "polished_diorite", "polished_granite", "polished_tuff",
+                "tuff_bricks", "blackstone", "polished_blackstone", "polished_blackstone_bricks", "end_stone_bricks",
+                "mud_bricks"}) {
+            items.put("minecraft:" + stone, 3.0);
+        }
+        return items;
     }
 
     // Name, value, name, value..., kept in the order given

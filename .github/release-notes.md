@@ -7,7 +7,8 @@ A set of optional rules that make survival itself harder. Each part has its own 
 changes for it. **Only the flat anvil price and the Mending nerf are on by default**, so every player now has
 `/status`, with a Rules line. The rest is off until you turn it on.
 
-- **Weight.** Everything you carry weighs something, and a heavy load slows you down.
+- **Weight.** Everything you carry weighs something, and a heavy load slows you down. Armour and tools barely count:
+  your kit and half an inventory of blocks still walk at full speed, and shulker boxes full of stone are half speed.
 - **Broken legs.** A long fall breaks your legs and slows you until they heal.
 - **Limp.** Very low health slows you.
 - **Bed rest.** Lying in a bed heals you, day or night.

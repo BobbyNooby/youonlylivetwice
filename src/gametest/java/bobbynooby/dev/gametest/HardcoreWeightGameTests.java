@@ -49,10 +49,11 @@ public class HardcoreWeightGameTests {
     @GameTest
     public void weight1ToolsUnstackablesElytraAndMace(GameTestHelper helper) {
         HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
-        assertWeighs(helper, cfg, new ItemStack(Items.IRON_SWORD), 0.5);
-        assertWeighs(helper, cfg, new ItemStack(Items.POTION), 0.25);
-        assertWeighs(helper, cfg, new ItemStack(Items.ELYTRA), 1.5);
-        assertWeighs(helper, cfg, new ItemStack(Items.MACE), 2.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.IRON_SWORD), 0.25);
+        assertWeighs(helper, cfg, new ItemStack(Items.POTION), 0.1);
+        assertWeighs(helper, cfg, new ItemStack(Items.ELYTRA), 0.5);
+        assertWeighs(helper, cfg, new ItemStack(Items.MACE), 1.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.ANVIL), 1.5);
         assertWeighs(helper, cfg, new ItemStack(Items.COBBLESTONE, 64), 3.0);
         assertWeighs(helper, cfg, new ItemStack(Items.PAPER, 64), 0.25);
         assertWeighs(helper, cfg, new ItemStack(Items.DIRT, 64), 1.0);
@@ -62,10 +63,11 @@ public class HardcoreWeightGameTests {
     @GameTest
     public void weight2ArmourFromTheRealItems(GameTestHelper helper) {
         HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
-        assertWeighs(helper, cfg, new ItemStack(Items.IRON_CHESTPLATE), 1.8);
-        assertWeighs(helper, cfg, new ItemStack(Items.NETHERITE_BOOTS), 1.35);
-        assertWeighs(helper, cfg, new ItemStack(Items.TURTLE_HELMET), 0.6);
-        assertWeighs(helper, cfg, new ItemStack(Items.LEATHER_LEGGINGS), 0.30);
+        // Armour points times the factor: 6 × 0.1, 3 × 0.2, 2 × 0.1 and 2 × 0.05
+        assertWeighs(helper, cfg, new ItemStack(Items.IRON_CHESTPLATE), 0.6);
+        assertWeighs(helper, cfg, new ItemStack(Items.NETHERITE_BOOTS), 0.6);
+        assertWeighs(helper, cfg, new ItemStack(Items.TURTLE_HELMET), 0.2);
+        assertWeighs(helper, cfg, new ItemStack(Items.LEATHER_LEGGINGS), 0.1);
         helper.succeed();
     }
 
@@ -83,21 +85,21 @@ public class HardcoreWeightGameTests {
     public void weight5ContainersCountToDepthThree(GameTestHelper helper) {
         HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
         ItemStack fullOfStone = shulker(Collections.nCopies(27, new ItemStack(Items.COBBLESTONE, 64)));
-        assertWeighs(helper, cfg, fullOfStone, 0.25 + 27 * 3.0);
+        assertWeighs(helper, cfg, fullOfStone, 0.1 + 27 * 3.0);
 
         // Shulker, shulker, bundle: the bundle's dirt counts. The bundle inside it is a fourth level, so its cobblestone
         // doesn't, though the bundle itself does.
         ItemStack fourth = bundle(List.of(new ItemStack(Items.COBBLESTONE, 32)));
         ItemStack third = bundle(List.of(new ItemStack(Items.DIRT, 16), fourth));
         ItemStack nested = shulker(List.of(shulker(List.of(third))));
-        assertWeighs(helper, cfg, nested, 0.25 + 0.25 + 0.25 + 0.25 + 0.25);
+        assertWeighs(helper, cfg, nested, 0.1 + 0.1 + 0.1 + 0.25 + 0.1);
         HardcoreConfig.WeightSection deeper = new HardcoreConfig.WeightSection();
         deeper.containerDepth = 4;
-        assertWeighs(helper, deeper, nested, 0.25 + 0.25 + 0.25 + 0.25 + 0.25 + 1.5);
+        assertWeighs(helper, deeper, nested, 0.1 + 0.1 + 0.1 + 0.25 + 0.1 + 1.5);
 
         HardcoreConfig.WeightSection gentle = new HardcoreConfig.WeightSection();
         gentle.containerContents = 0.5;
-        assertWeighs(helper, gentle, fullOfStone, 0.25 + 40.5);
+        assertWeighs(helper, gentle, fullOfStone, 0.1 + 40.5);
         helper.succeed();
     }
 
@@ -171,16 +173,17 @@ public class HardcoreWeightGameTests {
         });
         boolean waiting = false;
         try {
-            // 27 + 27 + 1 + 1, 10 × 1 and 12 × 3
-            fill(full, Items.IRON_BLOCK, 2);
+            // 6 × 27 + 2 × 1 is over the full load of 144, 10 × 1 is under the free 16, and 26 × 3 + 2 × 1 is halfway
+            fill(full, Items.IRON_BLOCK, 6);
             fill(full, Items.DIRT, 2);
             fill(light, Items.DIRT, 10);
-            fill(half, Items.COBBLESTONE, 12);
+            fill(half, Items.COBBLESTONE, 26);
+            fill(half, Items.DIRT, 2);
             helper.runAfterDelay(SETTLE, () -> {
                 try {
-                    assertJumpCosts(helper, full, 56.0, 0.05 + 0.2);
+                    assertJumpCosts(helper, full, 164.0, 0.05 + 0.2);
                     assertJumpCosts(helper, light, 10.0, 0.05);
-                    assertJumpCosts(helper, half, 36.0, 0.05 + 0.1);
+                    assertJumpCosts(helper, half, 80.0, 0.05 + 0.1);
                 } finally {
                     cleanUp.run();
                 }
@@ -207,7 +210,8 @@ public class HardcoreWeightGameTests {
             // Both steps are set up here, since one added while the test runs its steps could be skipped
             helper.runAfterDelay(SETTLE, () -> {
                 try {
-                    assertSlow(helper, player, 0.25, "at a load of 36");
+                    // (36 - 16) / (144 - 16) × 0.5 is 0.078, which the shared slowdown's steps make 0.1
+                    assertSlow(helper, player, 0.1, "at a load of 36");
                     player.getInventory().clearContent();
                 } catch (RuntimeException e) {
                     cleanUp.run();
@@ -250,7 +254,7 @@ public class HardcoreWeightGameTests {
             fill(player, Items.COBBLESTONE, 12);
             helper.runAfterDelay(SETTLE, () -> {
                 try {
-                    assertSlow(helper, player, 0.25, "at a load of 36 with the default free load");
+                    assertSlow(helper, player, 0.1, "at a load of 36 with the default free load");
                     helper.assertValueEqual(CommandGameTests.run(server, "yolt config hardcore.weight.freeLoad 20"),
                             List.of("hardcore.weight.freeLoad changed from 16.0 to 20.0."), "the freeLoad reply");
 
@@ -269,10 +273,10 @@ public class HardcoreWeightGameTests {
                     throw e;
                 }
             });
-            // (36 - 20) / (56 - 20) × 0.5 is 0.22, which the shared slowdown's steps make 0.2
+            // (36 - 20) / (144 - 20) × 0.5 is 0.065, which the shared slowdown's steps make 0.05
             helper.runAfterDelay(2 * SETTLE, () -> {
                 try {
-                    assertSlow(helper, player, 0.2, "after freeLoad went to 20");
+                    assertSlow(helper, player, 0.05, "after freeLoad went to 20");
                 } finally {
                     cleanUp.run();
                 }

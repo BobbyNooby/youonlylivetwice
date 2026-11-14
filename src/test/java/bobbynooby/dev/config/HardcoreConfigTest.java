@@ -47,6 +47,14 @@ class HardcoreConfigTest {
             "c:storage_blocks/raw_iron", "c:storage_blocks/raw_gold", "c:storage_blocks/raw_copper", "c:storage_blocks",
             "c:feathers", "c:strings");
 
+    // Paper first, then the stone-like blocks no group tag reaches
+    private static final List<String> ITEM_ORDER = List.of("minecraft:paper",
+            "minecraft:deepslate_bricks", "minecraft:deepslate_tiles", "minecraft:polished_deepslate",
+            "minecraft:chiseled_deepslate", "minecraft:bricks", "minecraft:smooth_stone", "minecraft:polished_andesite",
+            "minecraft:polished_diorite", "minecraft:polished_granite", "minecraft:polished_tuff", "minecraft:tuff_bricks",
+            "minecraft:blackstone", "minecraft:polished_blackstone", "minecraft:polished_blackstone_bricks",
+            "minecraft:end_stone_bricks", "minecraft:mud_bricks");
+
     private static final List<String> MAPS = List.of("hardcore.weight.groups", "hardcore.weight.items",
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
 
@@ -59,11 +67,11 @@ class HardcoreConfigTest {
     private static void assertWeightDefaults(HardcoreConfig.WeightSection weight) {
         assertFalse(weight.enabled);
         assertEquals(16.0, weight.freeLoad);
-        assertEquals(56.0, weight.fullLoad);
+        assertEquals(144.0, weight.fullLoad);
         assertEquals(0.5, weight.maxSlow);
         assertEquals(1.0, weight.defaultWeight);
-        assertEquals(0.25, weight.unstackableWeight);
-        assertEquals(0.5, weight.toolWeight);
+        assertEquals(0.1, weight.unstackableWeight);
+        assertEquals(0.25, weight.toolWeight);
         assertEquals(GROUP_ORDER, new ArrayList<>(weight.groups.keySet()));
         assertEquals(3.0, weight.groups.get("c:ores"));
         assertEquals(3.0, weight.groups.get("minecraft:logs"));
@@ -71,13 +79,16 @@ class HardcoreConfigTest {
         assertEquals(27.0, weight.groups.get("c:storage_blocks/raw_copper"));
         assertEquals(9.0, weight.groups.get("c:storage_blocks"));
         assertEquals(0.25, weight.groups.get("c:strings"));
-        assertEquals(Map.of("minecraft:paper", 0.25, "minecraft:anvil", 9.0), weight.items);
-        assertEquals(List.of("minecraft:paper", "minecraft:anvil"), new ArrayList<>(weight.items.keySet()));
-        assertEquals(Map.of("minecraft:elytra", 1.5, "minecraft:mace", 2.0), weight.itemsEach);
+        assertEquals(ITEM_ORDER, new ArrayList<>(weight.items.keySet()));
+        assertEquals(0.25, weight.items.get("minecraft:paper"));
+        for (String stone : ITEM_ORDER.subList(1, ITEM_ORDER.size())) {
+            assertEquals(3.0, weight.items.get(stone), stone);
+        }
+        assertEquals(Map.of("minecraft:elytra", 0.5, "minecraft:mace", 1.0, "minecraft:anvil", 1.5), weight.itemsEach);
         assertEquals(List.of("leather", "copper", "chainmail", "gold", "iron", "turtle_scute", "diamond", "netherite"),
                 new ArrayList<>(weight.armourFactors.keySet()));
-        assertEquals(0.15, weight.armourFactors.get("leather"));
-        assertEquals(0.45, weight.armourFactors.get("netherite"));
+        assertEquals(Map.of("leather", 0.05, "copper", 0.1, "chainmail", 0.1, "gold", 0.1, "iron", 0.1,
+                "turtle_scute", 0.1, "diamond", 0.15, "netherite", 0.2), weight.armourFactors);
         assertTrue(weight.countContainers);
         assertEquals(1.0, weight.containerContents);
         assertEquals(3, weight.containerDepth);
@@ -132,7 +143,7 @@ class HardcoreConfigTest {
         assertEquals(Map.of("c:ores", 5.0), r.config().hardcore.weight.groups);
         assertEquals(List.of(), r.warnings());
         // The other maps keep their defaults
-        assertEquals(Map.of("minecraft:paper", 0.25, "minecraft:anvil", 9.0), r.config().hardcore.weight.items);
+        assertEquals(new HardcoreConfig.WeightSection().items, r.config().hardcore.weight.items);
     }
 
     @Test
@@ -147,7 +158,7 @@ class HardcoreConfigTest {
 
         // A number where the map goes falls back the same way
         ConfigLoader.Result notAMap = loadJson("{\"hardcore\":{\"weight\":{\"freeLoad\":20,\"items\":3}}}");
-        assertEquals(Map.of("minecraft:paper", 0.25, "minecraft:anvil", 9.0), notAMap.config().hardcore.weight.items);
+        assertEquals(new HardcoreConfig.WeightSection().items, notAMap.config().hardcore.weight.items);
         assertEquals(20.0, notAMap.config().hardcore.weight.freeLoad);
         assertTrue(notAMap.warnings().contains("hardcore.weight.items: expected an object of numbers, using default"),
                 notAMap.warnings().toString());
@@ -159,7 +170,7 @@ class HardcoreConfigTest {
                 + "\"weight\":{\"freeLoad\":60,\"fullLoad\":56,\"containerContents\":-1}}}");
         HardcoreConfig.HardcoreSection hardcore = r.config().hardcore;
         assertEquals(16.0, hardcore.weight.freeLoad);
-        assertEquals(56.0, hardcore.weight.fullLoad);
+        assertEquals(144.0, hardcore.weight.fullLoad);
         assertEquals(0.5, hardcore.slow.cap);
         assertEquals(1.0, hardcore.weight.containerContents);
         List<String> expected = List.of(
@@ -236,11 +247,11 @@ class HardcoreConfigTest {
         d.put("hardcore.slow.step", "0.05");
         d.put("hardcore.weight.enabled", "false");
         d.put("hardcore.weight.freeLoad", "16.0");
-        d.put("hardcore.weight.fullLoad", "56.0");
+        d.put("hardcore.weight.fullLoad", "144.0");
         d.put("hardcore.weight.maxSlow", "0.5");
         d.put("hardcore.weight.defaultWeight", "1.0");
-        d.put("hardcore.weight.unstackableWeight", "0.25");
-        d.put("hardcore.weight.toolWeight", "0.5");
+        d.put("hardcore.weight.unstackableWeight", "0.1");
+        d.put("hardcore.weight.toolWeight", "0.25");
         d.put("hardcore.weight.countContainers", "true");
         d.put("hardcore.weight.containerContents", "1.0");
         d.put("hardcore.weight.containerDepth", "3");

@@ -51,8 +51,8 @@ are on, and that have something to say, give a line:
 
 ```
 Your body
-Load 31.5 / 56 (free up to 16) → 19% slower
-  heaviest: Cobblestone ×192 (9.0), Shulker Box (14.2), Iron Chestplate (1.8)
+Load 64.6 / 144 (free up to 16) → 19% slower
+  heaviest: Cobblestone ×640 (30.0), Shulker Box (27.1), Oak Log ×128 (6.0)
 Legs   broken → 20% slower · healing 12/30 (uses food once your health is full)
 Total slowdown 46% (cap 50%; potions not included)
 Curse of the Undead  −4 max hearts (the most it takes) · next heart back after 1h 12m more play
@@ -100,35 +100,40 @@ Everything you carry weighs something. The heavier your load, the slower you wal
   crafting grid (`countCursorAndGrid`). A shulker box or bundle counts with everything inside it, up to 3 containers
   deep (`containerDepth`), and `containerContents` (1.0) sets how much of what is inside counts. Your ender chest
   doesn't count.
-- Up to a load of 16 (`freeLoad`) you aren't slowed. From 16 to 56 (`fullLoad`) the slowdown rises evenly to 50%
+- Up to a load of 16 (`freeLoad`) you aren't slowed. From 16 to 144 (`fullLoad`) the slowdown rises evenly to 50%
   (`maxSlow`), and it goes no further.
+- Armour and tools barely count. With your kit you walk at full speed carrying about a dozen stacks of ordinary blocks
+  or four of stone. A full inventory of ordinary things is about 10% slower, a full inventory of stone about a third.
 - Over the free load, each jump costs extra hunger: `heavyJumpExhaustion` (0.2) at a full load, less in between, none at
   the free load. It goes through the game's own hunger, so the hunger tax multiplies it.
 - Weight never changes how high you jump, only the hunger a jump costs.
 - When your load first slows you, the hotbar line says "Your load is slowing you down."
-- A full shulker box of stone is a full load by itself, on purpose. Moving bulk is a job for horses, boats and
-  minecarts, which weight never slows.
+- One full shulker box of stone is a quarter slower by itself, and two are a full load, on purpose. Moving bulk is a
+  job for horses, boats and minecarts, which weight never slows.
 - Logout bodies carry no weight.
 
 What weighs what, from first match to last:
 
-1. `itemsEach`: a weight per single item, for things that stack to 1. Elytra 1.5, mace 2.0.
-2. `items`: a stack weight per item id. Paper 0.25, anvil 9.0.
+1. `itemsEach`: a weight per single item. Elytra 0.5, mace 1.0, anvil 1.5 (about the iron it is made of).
+2. `items`: a stack weight per item id. Paper 0.25, and 3.0 for stone-like blocks no tag below reaches, such as
+   deepslate bricks and tiles, bricks, smooth stone, polished stones, tuff bricks, blackstone and end stone bricks.
 3. Armour (worn or carried): its armour points times its material's factor (`armourFactors`). An iron chestplate
-   (6 points, factor 0.3) weighs 1.8. Horse and wolf armour aren't armour for this.
-4. Swords, axes, pickaxes, shovels, hoes and spears: 0.5 each (`toolWeight`).
+   (6 points, factor 0.1) weighs 0.6, a full iron set 1.5 and a full netherite set 4.0. Horse and wolf armour aren't
+   armour for this.
+4. Swords, axes, pickaxes, shovels, hoes and spears: 0.25 each (`toolWeight`).
 5. `groups`: a stack weight per item tag, the first tag in the list that matches. Ores, raw metals, ingots, stone,
    cobblestone, obsidian, stone bricks and logs weigh 3.0 a stack. Iron, gold, copper, netherite and raw metal blocks
    weigh 27.0, other storage blocks 9.0, so crafting ingots into blocks doesn't make them lighter. Feathers and string
    weigh 0.25.
-6. Anything else that stacks to 1 (potions, buckets, beds, totems): 0.25 each (`unstackableWeight`).
+6. Anything else that stacks to 1 (potions, buckets, beds, totems, shields, a shulker box itself): 0.1 each
+   (`unstackableWeight`).
 7. Anything else: 1.0 a stack (`defaultWeight`).
 
 `/status` shows your load, your slowdown and your three heaviest kinds of thing:
 
 ```
-Load 31.5 / 56 (free up to 16) → 19% slower
-  heaviest: Cobblestone ×192 (9.0), Shulker Box (14.2), Iron Chestplate (1.8)
+Load 64.6 / 144 (free up to 16) → 19% slower
+  heaviest: Cobblestone ×640 (30.0), Shulker Box (27.1), Oak Log ×128 (6.0)
 ```
 
 Settings: [`hardcore.weight`](config.md#hardcoreweight).
