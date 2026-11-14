@@ -1,0 +1,97 @@
+{
+  "configVersion": 1,
+  "worldBorder": {
+    "enabled": true,
+    "diameter": 10000,
+    "endScale": 2.0
+  },
+  "deathLockout": {
+    "enabled": true,
+    "cooldownDays": 7,
+    "countCreativeAndSpectatorDeaths": false
+  },
+  "graves": {
+    "enabled": true,
+    "enderChestOnDeath": "keep",
+    "recheckSeconds": 5,
+    "tellLocation": "whenMoved",
+    "tellLocationDistance": 16,
+    "compass": false,
+    "searchRadius": 16,
+    "voidSearchRadius": 16
+  },
+  "revive": {
+    "enabled": true
+  },
+  "chat": {
+    "mode": "proximity",
+    "radius": 32,
+    "allowWhispers": false,
+    "whisperRadius": 0
+  },
+  "hide": {
+    "tabList": true,
+    "nametags": true,
+    "serverPlayerCount": true,
+    "gameMessages": true,
+    "tabHeader": true,
+    "tabHeaderLines": [
+      "§9The cold atmosphere of a new land... it fills you with determination.",
+      "§cYou scream out for help, but no one answers.",
+      "§8You are surrounded by darkness. You cannot see anything.",
+      "§bThe horizon stretches far ahead, and you wonder what awaits.",
+      "§aThe map is incomplete. Where will you go next?",
+      "§eThe path ahead is unclear, but your journey must continue.",
+      "§dEvery step into the unknown feels like a new discovery.",
+      "§6A new land lies before you. What secrets will it reveal?",
+      "§cThe world is vast and uncharted. Adventure calls.",
+      "§7Who knows what lies beyond the next ridge?",
+      "§fWith every sunrise, the unknown becomes a little clearer.",
+      "§2You're not sure what you'll find, but you're ready to explore.",
+      "§3The world is filled with possibilities... and dangers."
+    ],
+    "distantPlayers": true,
+    "locatorBar": true,
+    "globalSounds": true,
+    "mapPlayers": true,
+    "debugScreen": true,
+    "serverBrand": false,
+    "compassSpawn": true,
+    "coordinates": true
+  },
+  "restrictCommands": true,
+  "netherScaleOneToOne": true,
+  "randomSpawn": true,
+  "sleep": {
+    "hideSleepers": true,
+    "noNightSkip": true,
+    "noBedRespawn": true
+  },
+  "immediateRespawn": true,
+  "bodies": {
+    "enabled": true,
+    "type": "mannequin",
+    "duration": "offline",
+    "pose": "prone",
+    "mobsAttack": true,
+    "movable": true,
+    "totems": true,
+    "armourWears": true,
+    "copyEffects": true,
+    "ignoreVanillaKill": true
+  },
+  "serverList": {
+    "hoverLines": [
+      "You scream out for help, but no one answers."
+    ],
+    "shownMaxPlayers": 1
+  },
+  "skins": {
+    "mode": "auto",
+    "lookupTimeoutSeconds": 5,
+    "refreshHours": 24,
+    "allowPlayerChoice": true,
+    "refuseKnownPlayers": true,
+    "lockAfterFirstChoice": false
+  }
+}

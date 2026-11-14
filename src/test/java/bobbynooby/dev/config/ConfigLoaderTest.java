@@ -9,12 +9,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -554,10 +558,10 @@ class ConfigLoaderTest {
     void fileHasConfigVersion() throws IOException {
         Path file = dir.resolve("config.json");
         ConfigLoader.load(file, null, true);
-        assertTrue(Files.readString(file).contains("\"configVersion\": 1"));
+        assertTrue(Files.readString(file).contains("\"configVersion\": " + ConfigLoader.CURRENT_VERSION));
     }
 
-    // There is no real upgrade yet, so a step that renames a key stands in for one
+    // A step of the test's own that renames a key, as a later version's step might
     @Test
     void olderConfigIsBackedUpThenUpgraded() throws IOException {
         Path file = dir.resolve("config.json");
@@ -577,8 +581,8 @@ class ConfigLoaderTest {
         assertFalse(r.config().randomSpawn);
     }
 
-    // Only a damaged file has these, so they read as a missing version, with a warning that names the value: no backup
-    // and no upgrade
+    // Only a damaged file has these, so they read as a missing version does, as the current one, with a warning that
+    // names the value: no backup and no upgrade
     @Test
     void zeroOrNegativeConfigVersionReadsAsMissing() throws IOException {
         Path file = dir.resolve("config.json");
@@ -586,7 +590,8 @@ class ConfigLoaderTest {
             Files.writeString(file, "{\"configVersion\": " + version + ", \"randomSpawn\": false}");
             ConfigLoader.Result r = ConfigLoader.load(file, null, true);
             assertFalse(r.config().randomSpawn);
-            assertEquals(List.of("configVersion: " + version + " is not a version, read as version 1"), r.warnings(),
+            assertEquals(List.of("configVersion: " + version + " is not a version, read as version " + ConfigLoader.CURRENT_VERSION),
+                    r.warnings(),
                     "warnings for " + version);
             JsonObject written = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             assertEquals(ConfigLoader.CURRENT_VERSION, written.get("configVersion").getAsInt(), "written for " + version);
@@ -615,7 +620,7 @@ class ConfigLoaderTest {
     @Test
     void newerConfigVersionLeavesFileAlone() throws IOException {
         Path file = dir.resolve("config.json");
-        String newer = "{\"configVersion\": 2, \"chat\": {\"radius\": 32}, \"fromTheFuture\": true}";
+        String newer = "{\"configVersion\": " + (ConfigLoader.CURRENT_VERSION + 1) + ", \"chat\": {\"radius\": 32}, \"fromTheFuture\": true}";
         Files.writeString(file, newer);
 
         ConfigLoader.Result r = ConfigLoader.load(file, null, true);
@@ -1079,5 +1084,154 @@ class ConfigLoaderTest {
         assertArrayEquals(typed, Files.readAllBytes(copies.get(0)));
         assertEquals(copies.get(0).getFileName().toString(), r.backup());
         assertTrue(Files.isDirectory(dir.resolve("config.json.bak")));
+    }
+
+    // The switches that ship on in this version, against 1.0.0's off
+    @Test
+    void coreSwitchesShipOn() {
+        YoltConfig fresh = new YoltConfig();
+        assertTrue(fresh.hide.coordinates);
+        assertTrue(fresh.chat.allowWhispers);
+        assertTrue(fresh.skins.lockAfterFirstChoice);
+        assertEquals(2, ConfigLoader.CURRENT_VERSION);
+        assertEquals(List.of("hide.coordinates", "skins.lockAfterFirstChoice", "chat.allowWhispers"), ConfigLoader.V1_OFF_NOW_ON);
+    }
+
+    private static byte[] shippedV1File() throws IOException {
+        try (InputStream in = Objects.requireNonNull(ConfigLoaderTest.class.getResourceAsStream("/config-1.0.0.json"),
+                "no config-1.0.0.json in the test resources")) {
+            return in.readAllBytes();
+        }
+    }
+
+    private static String turnedOn(String path) {
+        return path + " was false, the old default, and is now true, the new one. To keep it off, run /yolt config " + path
+                + " false";
+    }
+
+    // The file 1.0.0 wrote, every key at its default but two the owner changed: chat.radius 32 and hide.coordinates on
+    @Test
+    void shippedV1FileUpgradesWithItsValues() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] old = shippedV1File();
+        Files.write(file, old);
+
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true);
+        assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak",
+                turnedOn("skins.lockAfterFirstChoice"),
+                turnedOn("chat.allowWhispers"),
+                "the file had no hardcore, resourcePack, so they take their defaults"), r.warnings());
+        // Everything else, hardcore and resourcePack included, is this version's default
+        YoltConfig expected = new YoltConfig();
+        expected.chat.radius = 32;
+        assertEquals(new Gson().toJsonTree(expected), new Gson().toJsonTree(r.config()));
+        assertTrue(r.config().hide.coordinates);
+
+        assertArrayEquals(old, Files.readAllBytes(dir.resolve("config.json.v1.bak")));
+        assertEquals(ConfigLoader.CURRENT_VERSION, readJson(file).get("configVersion").getAsInt());
+        assertEquals(32, readJson(file).getAsJsonObject("chat").get("radius").getAsInt());
+        assertTrue(r.rewritten());
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of("config.json", "config.json.v1.bak"), files.map(f -> f.getFileName().toString()).sorted().toList());
+        }
+    }
+
+    // Only a JSON false is the old default. true stays, a missing key takes the new default, and a wrong type is the
+    // merge's to warn about, as in any other file.
+    @Test
+    void v1StepFlipsOnlyUntouchedDefaults() throws IOException {
+        Path file = dir.resolve("config.json");
+        for (String path : ConfigLoader.V1_OFF_NOW_ON) {
+            String[] parts = path.split("\\.");
+            ConfigKey key = key(path);
+            for (String typed : List.of("false", "true", "absent", "\"yes\"")) {
+                String section = typed.equals("absent") ? "{}" : "{\"" + parts[1] + "\": " + typed + "}";
+                Files.writeString(file, "{\"configVersion\": 1, \"" + parts[0] + "\": " + section + "}");
+                ConfigLoader.Result r = ConfigLoader.load(file, null, true);
+                String what = path + " " + typed;
+                assertEquals("true", key.show(r.config()), what);
+                assertEquals(typed.equals("false"), r.warnings().contains(turnedOn(path)), what + ": " + r.warnings());
+                assertEquals(typed.equals("\"yes\""), r.warnings().contains(path + ": expected true or false, using default"),
+                        what + ": " + r.warnings());
+                // The step only ever names its own key
+                assertEquals(typed.equals("false") ? 1 : 0, r.warnings().stream().filter(w -> w.contains("To keep it off")).count(),
+                        what + ": " + r.warnings());
+                assertTrue(readJson(file).getAsJsonObject(parts[0]).get(parts[1]).getAsBoolean(), what + " in the file");
+            }
+        }
+    }
+
+    // As 1.0.0 reads this version's file: a newer version, so it is left exactly as it is
+    @Test
+    void olderBuildLeavesAV2FileAlone() throws IOException {
+        Path file = dir.resolve("config.json");
+        String v2 = "{\"configVersion\": 2, \"chat\": {\"radius\": 32}, \"hardcore\": {\"curse\": {\"enabled\": true}}}";
+        Files.writeString(file, v2);
+
+        ConfigLoader.Result r = ConfigLoader.load(file, null, true, 1, List.of());
+        assertEquals(32, r.config().chat.radius);
+        assertFalse(r.rewritten());
+        assertNull(r.backup());
+        assertTrue(r.warnings().contains("config is from a newer version, so it was not rewritten"), r.warnings().toString());
+        assertEquals(v2, Files.readString(file));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList());
+        }
+    }
+
+    // Gson reads an empty or blank file as JSON null, which is no object, and a cut-off file fails to parse
+    @Test
+    void emptyBlankAndTruncatedFilesAreBackedUp() throws IOException {
+        Path file = dir.resolve("config.json");
+        Path bak = dir.resolve("config.json.bak");
+        for (String typed : List.of("", "  \n", "{\"chat\":{\"radius\":")) {
+            Files.writeString(file, typed);
+            ConfigLoader.Result reload = ConfigLoader.load(file, null, false);
+            assertTrue(reload.unparseable(), "reload of '" + typed + "'");
+            assertNull(reload.config(), "reload of '" + typed + "'");
+            assertEquals(typed, Files.readString(file), "reload of '" + typed + "'");
+            assertFalse(Files.exists(bak), "reload of '" + typed + "'");
+
+            ConfigLoader.Result startup = ConfigLoader.load(file, null, true);
+            assertTrue(startup.unparseable(), "startup with '" + typed + "'");
+            assertNotNull(startup.borderProblem(), "startup with '" + typed + "'");
+            assertEquals(typed, Files.readString(bak), "startup with '" + typed + "'");
+            assertEquals(new Gson().toJsonTree(new YoltConfig()), new Gson().toJsonTree(startup.config()), "startup with '" + typed + "'");
+            assertEquals(10000, readJson(file).getAsJsonObject("worldBorder").get("diameter").getAsInt(), "startup with '" + typed + "'");
+            Files.delete(bak);
+        }
+    }
+
+    // A JSON null is the wrong type wherever it stands: that key alone falls back, and the rest of the file still counts
+    @Test
+    void nullValuesFallBackPerKey() throws IOException {
+        ConfigLoader.Result r = assertDoesNotThrow(() -> loadJson("{\"chat\":{\"radius\":null,\"mode\":\"global\"},"
+                + "\"hide\":{\"tabHeaderLines\":null},\"resourcePack\":null,\"hardcore\":{\"weight\":{\"groups\":null}},"
+                + "\"randomSpawn\":false}"));
+        YoltConfig fresh = new YoltConfig();
+        assertEquals(48, r.config().chat.radius);
+        assertEquals(YoltConfig.ChatMode.GLOBAL, r.config().chat.mode);
+        assertEquals(fresh.hide.tabHeaderLines, r.config().hide.tabHeaderLines);
+        assertEquals(fresh.resourcePack.reviveModel, r.config().resourcePack.reviveModel);
+        assertEquals(fresh.hardcore.weight.groups, r.config().hardcore.weight.groups);
+        assertFalse(r.config().randomSpawn);
+        for (String warning : List.of("chat.radius: wrong type, using default",
+                "hide.tabHeaderLines: expected a list of strings, using default",
+                "resourcePack: expected an object, using default",
+                "hardcore.weight.groups: expected an object of numbers, using default")) {
+            assertTrue(r.warnings().contains(warning), "no \"" + warning + "\" in " + r.warnings());
+        }
+    }
+
+    // A map in the file replaces the default whole, so an entry a later version adds to the default never reaches it.
+    // Whoever adds one has to write a step for it.
+    @Test
+    void fileMapOmitsNewDefaultEntries() throws IOException {
+        Map<String, Map<String, Double>> foods = new LinkedHashMap<>(new YoltConfig().hardcore.nutrients.foods);
+        assertNotNull(foods.remove("minecraft:apple"));
+        ConfigLoader.Result r = loadJson("{\"hardcore\":{\"nutrients\":{\"foods\":" + new Gson().toJson(foods) + "}}}");
+        assertFalse(r.config().hardcore.nutrients.foods.containsKey("minecraft:apple"));
+        assertEquals(foods, r.config().hardcore.nutrients.foods);
+        assertEquals(List.of(), r.warnings());
     }
 }

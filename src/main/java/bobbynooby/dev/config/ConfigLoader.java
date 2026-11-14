@@ -48,10 +48,11 @@ public final class ConfigLoader {
     // Vanilla's largest world border
     public static final int MAX_BORDER_DIAMETER = 59_999_968;
 
-    /** The layout this build writes. An older file is upgraded by STEPS; a newer one is read but never rewritten. */
-    public static final int CURRENT_VERSION = 1;
-    // Each step upgrades the file's JSON from its version to the next
-    static final List<Migrations.Step<JsonObject>> STEPS = List.of();
+    /** The layout this build writes. An older file is upgraded by steps; a newer one is read but never rewritten. */
+    public static final int CURRENT_VERSION = 2;
+    // 1.0.0 shipped these off. Its files hold every key, so a false there is most likely the untouched default, and the
+    // upgrade turns it on as this version ships it. A true, a missing key or a wrong type is left to the merge.
+    static final List<String> V1_OFF_NOW_ON = List.of("hide.coordinates", "skins.lockAfterFirstChoice", "chat.allowWhispers");
 
     // Without HTML escaping, so an apostrophe in a text, as in a tab header's "You're", is written as typed and not as
     // an escape code
@@ -60,8 +61,6 @@ public final class ConfigLoader {
     private static final String VERSION_KEY = "configVersion";
     private static final String BORDER_SECTION = "worldBorder";
     private static final String CURRENT_VALUE = "the current value";
-    // Every file YOLT writes has the version, so a file without one is read as the first version
-    private static final int FIRST_VERSION = 1;
 
     private ConfigLoader() {}
 
@@ -71,12 +70,43 @@ public final class ConfigLoader {
      * as it is and nothing is loaded.
      */
     public static Result load(Path file, @Nullable YoltConfig base, boolean writeDefaultsOnError) {
-        return load(file, base, writeDefaultsOnError, CURRENT_VERSION, STEPS);
+        return load(file, base, writeDefaultsOnError, CURRENT_VERSION, ConfigLoader::steps);
     }
 
     // The version and steps are parameters so a test can upgrade with steps of its own
     static Result load(Path file, @Nullable YoltConfig base, boolean writeDefaultsOnError, int currentVersion,
                        List<Migrations.Step<JsonObject>> steps) {
+        return load(file, base, writeDefaultsOnError, currentVersion, notes -> steps);
+    }
+
+    /** Each step upgrades the file's JSON from its version to the next, and says in notes what it changed. */
+    static List<Migrations.Step<JsonObject>> steps(List<String> notes) {
+        return List.of(new Migrations.Step<JsonObject>(1, json -> turnOnUntouched(json, V1_OFF_NOW_ON, notes)));
+    }
+
+    // Only a JSON false is flipped. Each key turned on gets its own note, which says how to turn it off again.
+    static JsonObject turnOnUntouched(JsonObject json, List<String> paths, List<String> notes) {
+        for (String path : paths) {
+            String[] parts = path.split("\\.");
+            JsonElement section = json;
+            for (int i = 0; i < parts.length - 1 && section != null; i++) {
+                section = section.isJsonObject() ? section.getAsJsonObject().get(parts[i]) : null;
+            }
+            if (section == null || !section.isJsonObject()) {
+                continue;
+            }
+            JsonElement value = section.getAsJsonObject().get(parts[parts.length - 1]);
+            if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean() && !value.getAsBoolean()) {
+                section.getAsJsonObject().addProperty(parts[parts.length - 1], true);
+                notes.add(path + " was false, the old default, and is now true, the new one. To keep it off, run /yolt config "
+                        + path + " false");
+            }
+        }
+        return json;
+    }
+
+    private static Result load(Path file, @Nullable YoltConfig base, boolean writeDefaultsOnError, int currentVersion,
+                               Function<List<String>, List<Migrations.Step<JsonObject>>> steps) {
         List<String> warnings = new ArrayList<>();
         if (!Files.exists(file)) {
             if (base != null) {
@@ -106,7 +136,7 @@ public final class ConfigLoader {
             return new Result(writeDefaults(file), warnings, true, problem, true, backup);
         }
 
-        int version = fileVersion(user, warnings);
+        int version = fileVersion(user, warnings, currentVersion);
         String backup = null;
         // Why the copy kept before a startup rewrite couldn't be made, or null. The file is then not rewritten, so what
         // the admin typed is never lost, and what was read still applies.
@@ -121,9 +151,9 @@ public final class ConfigLoader {
                 }
                 copyFailed = e.getCause().getMessage();
             }
-            user = Migrations.run("config", version, currentVersion, steps, user.deepCopy());
             warnings.add("config was v" + version + " and is upgraded to v" + currentVersion
                     + (backup != null ? ", old file saved as " + backup : ""));
+            user = Migrations.run("config", version, currentVersion, steps.apply(warnings), user.deepCopy());
         }
 
         YoltConfig fallback = base != null ? base : new YoltConfig();
@@ -131,8 +161,10 @@ public final class ConfigLoader {
         // The keys the file gave but the config doesn't use (fallbacks and unknown keys), so a startup can tell whether
         // the border values are the file's own
         List<String> refused = new ArrayList<>();
+        // What the file didn't have at all, which the merge takes from the fallback
+        List<String> added = new ArrayList<>();
         int warningsBeforeMerge = warnings.size();
-        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused);
+        JsonObject merged = merge(GSON.toJsonTree(fallback).getAsJsonObject(), user, "", warnings, fallbackName, refused, added);
 
         Read read = read(merged, fallback);
         YoltConfig config = read.config();
@@ -161,6 +193,11 @@ public final class ConfigLoader {
             } catch (UncheckedIOException e) {
                 copyFailed = e.getCause().getMessage();
             }
+        }
+        // After the copy, since nothing typed is lost by it. An upgrade at startup says what the new version brought.
+        if (base == null && version < currentVersion && !added.isEmpty()) {
+            warnings.add("the file had no " + String.join(", ", added) + ", so " + (added.size() == 1 ? "it takes its" : "they take their")
+                    + " defaults");
         }
         if (copyFailed != null) {
             warnings.add("The config file could not be copied before the rewrite (" + copyFailed + "), so it is left as it was.");
@@ -202,17 +239,18 @@ public final class ConfigLoader {
         return border.isEmpty() ? null : "the config has a bad " + String.join(" and ", border);
     }
 
-    // A missing or unusable version reads as the first one. merge warns about one that isn't a whole number that fits in
+    // Every file YOLT writes has the version, so one without it was written by hand, against this version's docs: it reads
+    // as the current version, and so does an unusable one. merge warns about one that isn't a whole number that fits in
     // an int; zero or below can only be a damaged file, so that is warned about here.
-    private static int fileVersion(JsonObject user, List<String> warnings) {
+    private static int fileVersion(JsonObject user, List<String> warnings, int currentVersion) {
         JsonElement value = user.get(VERSION_KEY);
-        if (value == null || primitiveProblem(VERSION_KEY, new JsonPrimitive(FIRST_VERSION), value) != null) {
-            return FIRST_VERSION;
+        if (value == null || primitiveProblem(VERSION_KEY, new JsonPrimitive(currentVersion), value) != null) {
+            return currentVersion;
         }
         int version = value.getAsInt();
-        if (version < FIRST_VERSION) {
-            warnings.add(VERSION_KEY + ": " + value.getAsString() + " is not a version, read as version " + FIRST_VERSION);
-            return FIRST_VERSION;
+        if (version < 1) {
+            warnings.add(VERSION_KEY + ": " + value.getAsString() + " is not a version, read as version " + currentVersion);
+            return currentVersion;
         }
         return version;
     }
@@ -284,7 +322,7 @@ public final class ConfigLoader {
         put(edited, key.path(), value);
 
         List<String> warnings = new ArrayList<>();
-        JsonObject merged = merge(liveJson, edited, "", warnings, CURRENT_VALUE, new ArrayList<>());
+        JsonObject merged = merge(liveJson, edited, "", warnings, CURRENT_VALUE, new ArrayList<>(), new ArrayList<>());
         YoltConfig config;
         try {
             config = GSON.fromJson(merged, YoltConfig.class);
@@ -441,7 +479,7 @@ public final class ConfigLoader {
     }
 
     private static JsonObject merge(JsonObject defaults, JsonObject user, String prefix, List<String> warnings, String fallbackName,
-                                    List<String> refused) {
+                                    List<String> refused, List<String> added) {
         JsonObject result = new JsonObject();
         for (Map.Entry<String, JsonElement> entry : defaults.entrySet()) {
             String key = entry.getKey();
@@ -451,6 +489,7 @@ public final class ConfigLoader {
 
             if (value == null) {
                 result.add(key, def);
+                added.add(path);
             } else if (ConfigKeys.numberMap(path) || ConfigKeys.numberMapOfMaps(path)) {
                 // Read whole, so the file's names are never unknown keys and a name it leaves out is gone
                 boolean nested = ConfigKeys.numberMapOfMaps(path);
@@ -464,7 +503,8 @@ public final class ConfigLoader {
                 }
             } else if (def.isJsonObject()) {
                 if (value.isJsonObject()) {
-                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, refused));
+                    result.add(key, merge(def.getAsJsonObject(), value.getAsJsonObject(), path + ".", warnings, fallbackName, refused,
+                            added));
                 } else {
                     result.add(key, def);
                     refused.add(path);
