@@ -1,7 +1,7 @@
 # Known limits
 
 - **Debug privacy is all or nothing**, and minimap mods or hacked clients still show real coordinates, unless
-  `hide.coordinates` is on.
+  `hide.coordinates` is on, as it is by default.
 - **Admins lose F3 hitboxes and chunk borders** (F3+B, F3+G) unless admin view is on.
 - **Ops are locked out like everyone else.** The console can `/yolt unkill` them.
 - **Offline-mode servers.** A lockout can't hold against a name change, since an offline player's id comes from their
@@ -11,8 +11,8 @@
   so random spawn doesn't run.
 - **Beds and anchors** set no respawn point with `noBedRespawn` on. `/spawnpoint` still works as in vanilla.
 - **A grave compass in a chest** doesn't spin until someone carries it.
-- **Every death saves the grave file at once**, for crash safety. With 1,000 graves that takes about 0.1 to 0.2
-  seconds on the server thread, and the cost grows with the number of graves, because graves never expire. On a big
+- **Every death saves the grave file at once**, for crash safety, and so does every logout of a player who looted a
+  grave. With 1,000 graves that takes about 0.1 to 0.2 seconds on the server thread, and the cost grows with the number of graves, because graves never expire. On a big
   server, remove old graves with `/yolt grave remove`. The grave, body and skin files are written to a temp file
   first and then swapped in, so a crash in the middle of a save leaves the last whole file.
 - **Portals at 1:1.** A Nether portal can link to an existing Overworld portal up to 128 blocks away, instead of making
@@ -40,9 +40,9 @@
   trident) reach further than players are shown. Keep `view-distance` at 10 or more.
 - **Lodestone compasses** hold the lodestone's position, so a looted or traded one points at someone's base.
 - **Looting and crashes.** A crash can duplicate or lose what a player took from a grave since they were last saved
-  (when they log out, or at a world save). If they had logged out, the grave gets back what they took, and they keep
-  it too. If they stayed online and the grave file was saved since (any death saves it), the items are in neither.
-  Vanilla chests behave the same.
+  (when they log out, or at a world save). Their logout saves the grave file too, so a looter who logged out keeps
+  what they took and the grave doesn't get it back. If they stayed online and the grave file was saved since (any
+  death saves it), the items are in neither. Vanilla chests behave the same.
 - **Unreadable items** (from a removed mod, say) stay in a player's save when they die offline, then vanish at their
   next respawn, as in vanilla. The warning in the log holds the raw entry, so an admin can put it back.
 - **Removed mods and bodies.** If a mod is removed and then added back while a player is offline, their body's copy

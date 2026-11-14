@@ -13,7 +13,7 @@ Contents:
 - [`bodies`](#bodies)
 - [`serverList`](#serverlist)
 - [`skins`](#skins)
-- [`hardcore`](#hardcore): the [hardcore layer](hardcore.md), all off by default
+- [`hardcore`](#hardcore): the [hardcore layer](hardcore.md), off by default apart from the flat anvil price and Mending
 - [`resourcePack`](#resourcepack)
 - [File-only settings](#file-only-settings)
 - [Load checks](#load-checks)
@@ -50,14 +50,29 @@ How the file is read:
 - With no config file at startup (the first start, or a deleted file), YOLT writes the defaults and uses them.
 - The file is rewritten at every start, so comments typed into it aren't kept.
 - If the file can't be written back at startup (a read-only folder, say), what was read still applies, with a warning
-  in the log.
+  in the log. With no file, or one that can't be read, in a folder that can't be written, YOLT runs on the defaults and
+  leaves the folder as it is.
+- Every write goes to a temp file first, which is forced to disk and then moved over the config, so a crash or a power
+  cut can't leave half a file.
+
+How an upgrade works:
+
+- `configVersion` says which layout the file has. A file from an older YOLT is copied to
+  `you-only-live-twice.json.v<old version>.bak` before anything is written, then upgraded, and the log says so.
+- A file without `configVersion` was typed by hand, so it is read as the current version.
+- An upgrade logs one line naming the sections and keys the old file didn't have, which take their defaults.
+- A default only changes through an upgrade step that flips a value still at its old default. Upgrading from 1.0.0,
+  `hide.coordinates`, `skins.lockAfterFirstChoice` and `chat.allowWhispers` are turned on only where the file still
+  says `false`, 1.0.0's default, with one log line for each that says how to turn it off again, for example
+  `/yolt config hide.coordinates false`. A `true`, a missing key or a wrong value is left alone.
+- A file from a newer YOLT is read as far as this version can and never rewritten.
 
 ## Top level
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `configVersion` | `1` | The file's layout version, used for migrations. Leave it. A value of 0 or below logs a warning and reads as 1. | – |
-| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w` when whispers are on, `/status` while a hardcore feature is on, and `/yolt skin` when players may pick their skin). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/msg`, `/tell`, `/teammsg`, `/list` and vanilla suggestions show who is online. | No |
+| `configVersion` | `2` | The file's layout version, used for upgrades. Leave it. A value of 0 or below logs a warning and reads as the current version. | – |
+| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w` when whispers are on, `/status` while a hardcore feature is on, which it is by default, and `/yolt skin` when players may pick their skin). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/msg`, `/tell`, `/teammsg`, `/list` and vanilla suggestions show who is online. | No |
 | `netherScaleOneToOne` | `true` | Every dimension's coordinate scale is 1, modded dimensions included, so the Nether matches the Overworld and there is no fast travel. | No; it applies at once, and changing it on an existing world breaks portal links |
 | `randomSpawn` | `true` | Players with no spawn point spawn at a random spot inside the border. | No |
 | `immediateRespawn` | `true` | Turns on the `immediate_respawn` game rule at start, on `/yolt reload` and on `/yolt config`. | No |
@@ -107,7 +122,7 @@ diameter to the area you want people to spawn in.
 |---|---|---|---|
 | `mode` | `"proximity"` | `proximity`, `self_only` or `global`. | No |
 | `radius` | `48` | Blocks, for proximity chat, 1 or more. | No |
-| `allowWhispers` | `false` | Non-ops can use `/w`. | No |
+| `allowWhispers` | `true` | Non-ops can use `/w`. | No |
 | `whisperRadius` | `0` | Blocks a whisper reaches. 0 means the same as `radius`. No range in `global` mode. | No |
 
 ## `hide`
@@ -127,7 +142,7 @@ diameter to the area you want people to spawn in.
 | `debugScreen` | `true` | Reduced F3 for every player. Admin view lifts it. | No |
 | `serverBrand` | `false` | F3 names the server "vanilla" instead of "fabric". | Next join |
 | `compassSpawn` | `true` | A normal compass points north in every dimension, not at the world spawn. Recovery, lodestone and grave compasses keep their own targets. Admin view shows the real spawn. | No |
-| `coordinates` | `false` | Each player sees X and Z shifted by a private amount, new at every join, death respawn and dimension change. Admin view sees real ones. | Next join, respawn or dimension change |
+| `coordinates` | `true` | Each player sees X and Z shifted by a private amount, new at every join, death respawn and dimension change. Admin view sees real ones. | Next join, respawn or dimension change |
 
 Notes:
 
@@ -205,11 +220,12 @@ Notes:
 | `refreshHours` | `24` | How long a skin is kept before Mojang is asked again, 0 or more. 0 asks on every join. | No |
 | `allowPlayerChoice` | `true` | Non-ops can use `/yolt skin set` and `clear` on themselves. Off keeps the picks already made. | No |
 | `refuseKnownPlayers` | `true` | A non-op can't pick the skin of a player who has joined this server, or one another player picked. | No |
-| `lockAfterFirstChoice` | `false` | A non-op picks once; after that only an op changes it. | No |
+| `lockAfterFirstChoice` | `true` | A non-op picks once; after that only an op changes it. | No |
 
 ## `hardcore`
 
-The [hardcore layer](hardcore.md). Every feature ships off, and with a feature off YOLT changes nothing for it. The
+The [hardcore layer](hardcore.md). Every feature ships off except the flat anvil price and Mending, and with a feature
+off YOLT changes nothing for it. Since those two are on, non-ops have `/status` by default, with its Rules line. The
 hunger tax has no switch: its default multiplier, 1.0, is vanilla. Shares and chances are 0 to 1 (0.2 is 20%).
 
 ### `hardcore.slow`
@@ -298,9 +314,9 @@ See [Curse of the Undead](hardcore.md#curse-of-the-undead). In hearts.
 | `enabled` | `false` | Every return from death, by dying or by a totem, takes a max heart. | No |
 | `heartsPerDeath` | `1` | Hearts a death takes, 0 or more. | New deaths |
 | `heartsPerTotem` | `1` | Hearts a totem takes, 0 or more. 0 makes totems free. | New deaths |
-| `maxLostHearts` | `2` | The most hearts the curse takes in all, 0 or more. | No |
+| `maxLostHearts` | `4` | The most hearts the curse takes in all, 0 or more. | No |
 | `healHearts` | `1` | Hearts that come back each time, 0 or more. | No |
-| `healEveryDays` | `5.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play in survival or adventure per heal. Decimals work. Above 0. | No |
+| `healEveryDays` | `3.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play in survival or adventure per heal. Decimals work. Above 0. | No |
 | `countAfk` | `true` | Online time counts while the player stands idle. Off: not after 5 minutes without moving or acting. | No |
 | `reviveRefundHearts` | `0` | Hearts a revive paper gives back, 0 or more. | No |
 | `unkillRefunds` | `true` | `/yolt unkill` gives back what the death it undoes took. | No |
@@ -337,7 +353,7 @@ See [Mending nerf](hardcore.md#mending-nerf).
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `enabled` | `false` | Mending repairs less per XP point. | No |
+| `enabled` | `true` | Mending repairs less per XP point. | No |
 | `durabilityPerXp` | `0.4` | Durability one XP point repairs, 0 or more. Vanilla's is 2. 0 sends all XP to the bar. | No |
 
 ### `hardcore.anvil`
@@ -347,7 +363,7 @@ shows "Too Expensive!".
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `enabled` | `false` | Each anvil use costs one flat price, set by its biggest job. | No |
+| `enabled` | `true` | Each anvil use costs one flat price, set by its biggest job. | No |
 | `enchantCost` | `6` | Price of a use that enchants. | No |
 | `repairCost` | `5` | Price of a use that repairs and doesn't enchant. | No |
 | `renameCost` | `1` | Price of a use that only renames. | No |
@@ -515,9 +531,9 @@ naming the key, and `/yolt config` refuses it. The rest of the file still counts
   - `limp.belowHearts` below `limp.recoverAtHearts`;
   - `bloodMoon.warnTick`, `startTick` and `endTick` keep 0 <= `warnTick` < `startTick` < `endTick` <= 23999 (all
     three go back).
-- **Curse and limp:** with both on, the 10 hearts less `curse.maxLostHearts` must be more than
-  `limp.recoverAtHearts`, or a cursed player could limp for good. `curse.maxLostHearts` and `limp.recoverAtHearts` go
-  back. If the mix still clashes, the switch that was just turned on goes back too, so `/yolt config` refuses it.
+- **Curse and limp:** with both on, a player the curse has taken down to `limp.recoverAtHearts` or fewer hearts limps
+  until a curse heart comes back. That is allowed, as a harsher punishment. The log only says so, at startup, at
+  `/yolt reload` and after a `/yolt config` that makes the two cross.
 - **Maps:** a map with a value below 0 falls back whole. In `foods`, every share must be 0 to 1 and name `protein`,
   `vitamins` or `sugar`. In `overrides`, every value must name `health`, `damage` or `speed` and be 0 or more, with
   `health` above 0. A map that isn't an object of numbers falls back whole too.

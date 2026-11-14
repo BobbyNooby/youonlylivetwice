@@ -26,8 +26,8 @@ console has no player, so `/yolt adminview`, `/status` and the own-skin forms of
 | `/yolt skin clear` | Everyone, when `skins.allowPlayerChoice` is on | Goes back to the default skin. |
 | `/yolt skin set <player> <mojangName>` | Ops, console | Sets another player's skin. |
 | `/yolt skin clear <player>` | Ops, console | Clears another player's pick. |
-| `/w <player> <message>` | Everyone when `chat.allowWhispers` is on; ops always | Whispers to a player within `chat.whisperRadius`. Doesn't tab-complete names. |
-| `/status` | Everyone while a hardcore feature is on; ops always | Shows a report on your own body. See [`/status`](hardcore.md#status). |
+| `/w <player> <message>` | Everyone when `chat.allowWhispers` is on (the default); ops always | Whispers to a player within `chat.whisperRadius`. Doesn't tab-complete names. |
+| `/status` | Everyone while a hardcore feature is on, as the anvil and Mending rules are by default; ops always | Shows a report on your own body. See [`/status`](hardcore.md#status). |
 | `/help` | Everyone | Answers with a spooky message. |
 
 A command that names a player finds them only where this server knows them: online players, the server's name cache,
@@ -36,7 +36,7 @@ server.", so an op can't kill, unkill or pick a skin for a player who has never 
 
 `/status` takes no target, so a player only ever sees their own body. While `restrictCommands` is on, a non-op is
 only given it while at least one hardcore feature is on (a switch, or a `hardcore.hungerTax.multiplier` other than
-1.0). With `restrictCommands` off, everyone can run it at any time. With nothing to report it says "Nothing to
+1.0). The anvil and Mending rules ship on, so a default server gives it to everyone. With `restrictCommands` off, everyone can run it at any time. With nothing to report it says "Nothing to
 report".
 
 Ops lose `/w @a`-style selector targets, because `/w` is replaced. Use `/msg` or `/tell` instead.

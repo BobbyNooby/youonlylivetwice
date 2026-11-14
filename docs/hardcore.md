@@ -3,9 +3,9 @@
 The hardcore layer makes survival itself harder: what you carry slows you down, falls break your legs, every return
 from death costs a max heart, food matters, mobs are tougher, some nights are blood moons and the cold can freeze you.
 
-**Everything here is off by default.** Each feature has its own switch (`hardcore.<feature>.enabled`, and
-`hardcore.hungerTax.multiplier` for the hunger tax), and with a feature off YOLT changes nothing for it. Turn on only
-the parts you want. Every setting is in the [`hardcore` part of the config](config.md#hardcore).
+**Everything here is off by default, except the flat anvil price and Mending.** Each feature has its own switch
+(`hardcore.<feature>.enabled`, and `hardcore.hungerTax.multiplier` for the hunger tax), and with a feature off YOLT
+changes nothing for it. Turn on only the parts you want, and turn the anvil and Mending off if you want them vanilla. Every setting is in the [`hardcore` part of the config](config.md#hardcore).
 
 Contents:
 
@@ -45,8 +45,8 @@ Contents:
 
 ## `/status`
 
-Every player can type `/status` while at least one hardcore feature is on (see [Commands](commands.md) for the exact
-rule). It shows a report on your own body only, and each line has a hover with a plain explanation. Only features that
+Every player can type `/status` while at least one hardcore feature is on, which on a default server is always,
+since the anvil and Mending rules ship on (see [Commands](commands.md) for the exact rule). It shows a report on your own body only, and each line has a hover with a plain explanation. Only features that
 are on, and that have something to say, give a line:
 
 ```
@@ -55,7 +55,7 @@ Load 31.5 / 56 (free up to 16) → 19% slower
   heaviest: Cobblestone ×192 (9.0), Shulker Box (14.2), Iron Chestplate (1.8)
 Legs   broken → 20% slower · healing 12/30 (uses food once your health is full)
 Total slowdown 46% (cap 50%; potions not included)
-Curse of the Undead  −2 max hearts (the most it takes) · next heart back after 1h 12m more play
+Curse of the Undead  −4 max hearts (the most it takes) · next heart back after 1h 12m more play
 Nutrients  protein 62% · vitamins 18% (low: mining 15% slower) · sugar 40%
 Cold   chilly 35% · warming (torch)
 Resting  healing (bed)
@@ -172,8 +172,8 @@ With very low health you limp: 20% slower (`slow`) until you heal back up.
 - Absorption (golden) hearts don't count, unless `countAbsorption` is on.
 - A totem leaves you at half a heart, so you limp until you heal to 3 hearts.
 - It has no `/status` line of its own. The "Total slowdown" line's hover says when a limp is part of it.
-- The curse must always leave you more hearts than `recoverAtHearts`, or a cursed player could limp for good. The
-  config check refuses a mix that breaks this.
+- A server can let the curse take you down to `recoverAtHearts` or fewer, as a harsher punishment. Then, once you are
+  low, you limp until a curse heart comes back. The log notes such a mix, but allows it.
 
 Settings: [`hardcore.limp`](config.md#hardcorelimp).
 
@@ -203,10 +203,10 @@ Every return from death, by dying or by a totem, takes a max heart. The hearts c
 - **Dying:** when you come back (after the lockout, or early with a revive paper), you have 1 fewer heart
   (`heartsPerDeath`). `/yolt unkill` gives it back (see below). The hotbar line tells you when you are back.
 - **A totem** (or anything with death protection) costs 1 max heart at once (`heartsPerTotem`).
-- It takes at most 2 hearts in all (`maxLostHearts`). Past that, more deaths and totems cost nothing extra until a
+- It takes at most 4 hearts in all (`maxLostHearts`). Past that, more deaths and totems cost nothing extra until a
   heart comes back.
-- **Healing:** 1 heart (`healHearts`) comes back after every 5 Minecraft days (`healEveryDays`, decimals allowed) of
-  your own online play in survival or adventure. A day is 24,000 ticks, so that is 100 minutes of play. Only your
+- **Healing:** 1 heart (`healHearts`) comes back after every 3 Minecraft days (`healEveryDays`, decimals allowed) of
+  your own online play in survival or adventure. A day is 24,000 ticks, so that is 60 minutes of play. Only your
   time online counts, never world time. Losing another heart doesn't restart the count.
 - With `countAfk` off, time doesn't count while you haven't moved or acted for 5 minutes.
 - Every counted death counts: dying online, your logout body being killed, and `/yolt kill` while you are offline.

@@ -1,6 +1,6 @@
 # Coordinate offset
 
-`hide.coordinates` (off by default) gives each player fake X and Z numbers. A minimap mod or a hacked client gets the
+`hide.coordinates` (on by default) gives each player fake X and Z numbers. A minimap mod or a hacked client gets the
 fake ones too, though a client built for it can still work some real numbers out (see [Known limits](#known-limits)
 below).
 

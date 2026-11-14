@@ -3,6 +3,7 @@
 Contents:
 
 - [Testing](#testing)
+- [Changing a default](#changing-a-default)
 - [On every Minecraft update](#on-every-minecraft-update)
 
 ## Testing
@@ -13,6 +14,23 @@ GameTests, which save screenshots in the `client-screenshots` artifact, run on p
 and on manual runs with the `client` option. The jar and the revive paper's resource pack zip are in the `Artifacts`
 download. Real skins aren't checked in CI: test players have no skins, and CI never asks Mojang. These tests haven't
 replaced a hands-on session in a real client, which I haven't done yet.
+
+The GameTests share one world, which keeps the switches that ship on but most tests were written without off
+(`TestServerSetup.pinOldDefaults`). `ShippedDefaultsGameTests` checks them as they ship.
+
+## Changing a default
+
+Every server's config file holds every key, so a new default never reaches a server that already has a file. A default
+only changes through a step that flips a value still at its old default:
+
+1. Raise `ConfigLoader.CURRENT_VERSION` by one.
+2. Add a step from the old version that sets the key to its new default only where the file still holds the old one,
+   exactly, and adds a line saying how to go back. `ConfigLoader.turnOnUntouched` does this for switches.
+3. Say so in the release notes.
+
+Maps and lists are read whole, so a new entry in a default map, such as a food in `hardcore.nutrients.foods`, doesn't
+reach a server either. Its step replaces the map only where it still equals the old default map, entry for entry.
+A key that is new in a release needs no step: a file without it takes its default.
 
 ## On every Minecraft update
 

@@ -10,8 +10,8 @@ an online-mode server players already have their skin, and YOLT only changes it 
 - **Other players' skins.** With `skins.refuseKnownPlayers` on (the default), a non-op can't pick the skin of a player
   who has joined this server, or one another player picked. Your own name is always allowed. If you picked someone's
   skin before they first joined, the pick goes at your next login and you are told why. A pick an op made stays.
-- **Picking once.** With `skins.lockAfterFirstChoice` on, a non-op picks once, and after that only an op can change
-  it.
+- **Picking once.** With `skins.lockAfterFirstChoice` on (the default), a non-op picks once, and after that only an op
+  can change it.
 - **Slow Mojang.** A join waits up to `skins.lookupTimeoutSeconds` (default 5, at most 10) for Mojang. Then the player
   joins with the skin saved before, or none. A join is never refused because of skins.
 - **Caching.** Skins are kept for `skins.refreshHours` (default 24; 0 asks Mojang on every join).

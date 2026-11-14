@@ -42,14 +42,14 @@ feature, its settings and its limits.
 - [Chat](chat.md): proximity chat and whispers.
 - [Hidden information](hidden-information.md): the tab list, nametags, commands, the F3 screen and the rest.
   - [Debug privacy](hidden-information.md#debug-privacy)
-- [Coordinate offset](coordinate-offset.md): fake X and Z numbers for each player (off by default).
+- [Coordinate offset](coordinate-offset.md): fake X and Z numbers for each player (on by default).
   - [Known limits](coordinate-offset.md#known-limits)
 - [World border and Nether](world-border.md): the shared border, the 1:1 Nether and random spawn.
   - [Random spawn](world-border.md#random-spawn)
 - [Skins](skins.md): skins on offline-mode servers, and picking your own.
   - [Known limits](skins.md#known-limits)
 - [Hardcore layer](hardcore.md): weight, broken legs, the curse, nutrients, tougher mobs, blood moons, cold and more
-  (all off by default).
+  (off by default, apart from the flat anvil price and Mending).
   - [Who it applies to](hardcore.md#who-it-applies-to)
   - [`/status`](hardcore.md#status)
   - [Slowdowns](hardcore.md#slowdowns)

@@ -22,10 +22,13 @@ paper's texture.
   New players spawn at a random spot inside it.
 - **Skins.** On an offline-mode server, players get the skin of the Mojang account with their name, and can pick
   another with `/yolt skin set`.
-- **Off by default:** a grave compass that points at your latest grave, and fake X and Z coordinates for each player.
-- **Hardcore layer, all off by default.** Carried weight, broken legs, a limp, bed rest, a Curse of the Undead that
-  takes max hearts, nutrients, a hunger tax, a Mending nerf, flat anvil prices, an elytra nerf, tougher and more
-  relentless mobs, blood moons, cold, and a texture for revive papers. Each part is turned on on its own.
+- **Fake coordinates.** Each player sees X and Z shifted by a private amount, new at every join, respawn and dimension
+  change.
+- **Off by default:** a grave compass that points at your latest grave.
+- **Hardcore layer.** Carried weight, broken legs, a limp, bed rest, a Curse of the Undead that takes max hearts,
+  nutrients, a hunger tax, a Mending nerf, flat anvil prices, an elytra nerf, tougher and more relentless mobs, blood
+  moons, cold, and a texture for revive papers. Each part has its own switch. Only the flat anvil price and the
+  Mending nerf are on by default, so every player has `/status`.
 
 Every feature has a switch in the config.
 

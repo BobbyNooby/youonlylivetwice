@@ -3,8 +3,9 @@ mod.
 
 ## What's new: the hardcore layer
 
-A set of optional rules that make survival itself harder. **All of it is off by default**, each part is turned on on
-its own, and with a part off nothing changes for it.
+A set of optional rules that make survival itself harder. Each part has its own switch, and with a part off nothing
+changes for it. **Only the flat anvil price and the Mending nerf are on by default**, so every player now has
+`/status`, with a Rules line. The rest is off until you turn it on.
 
 - **Weight.** Everything you carry weighs something, and a heavy load slows you down.
 - **Broken legs.** A long fall breaks your legs and slows you until they heal.
@@ -18,12 +19,22 @@ its own, and with a part off nothing changes for it.
 - **Blood moons.** Some nights bring more, tougher and better geared mobs that drop more.
 - **Cold.** Out in the snow a chill builds, and torches, fires and leather keep it off.
 - **`/status`** shows each player a report on their own body.
+- **The curse can outlast the limp.** A server may let the curse take a player low enough to limp until a heart comes
+  back; the log only notes it.
 - **Revive paper texture.** Revive papers can get their own look from a resource pack (a placeholder texture for
   now). The pack is `you-only-live-twice-revive-pack-1.1.0.zip` on this release. YOLT doesn't send it: host it and set
   it in `server.properties`.
 
 The [hardcore documentation](https://github.com/BobbyNooby/youonlylivetwice/blob/release/docs/hardcore.md) explains
 each part and how to set up the pack.
+
+## New defaults
+
+- `hide.coordinates` is on: every player sees X and Z shifted by a private amount.
+- `chat.allowWhispers` is on: everyone can `/w` a player in range.
+- `skins.lockAfterFirstChoice` is on: a player picks their skin once, then only an op changes it.
+- `hardcore.anvil.enabled` and `hardcore.mending.enabled` are on.
+- `hardcore.curse.maxLostHearts` is 4 and `hardcore.curse.healEveryDays` is 3.0. The curse itself stays off.
 
 ## What it does
 
@@ -46,8 +57,17 @@ The [documentation](https://github.com/BobbyNooby/youonlylivetwice/blob/release/
 You need Minecraft 26.3, Fabric Loader 0.20.1 or newer, Fabric API 0.165.2+26.3 or newer, and Java 25.
 
 Put the jar in the server's `mods` folder next to Fabric API and start the server once. It writes the config and,
-with the world border on (the default), sets the border to 10,000 blocks across. Updating from 1.0.0 needs nothing
-else: the hardcore settings are added to the config, all off.
+with the world border on (the default), sets the border to 10,000 blocks across.
+
+Updating from 1.0.0 needs nothing else:
+
+- The old config is kept as `you-only-live-twice.json.v1.bak`, and the file goes to `configVersion` 2.
+- `hide.coordinates`, `chat.allowWhispers` and `skins.lockAfterFirstChoice` are turned on only where your file still
+  says `false`, 1.0.0's default. Each one turned on gets a line in the log with the command to turn it off again, such
+  as `/yolt config hide.coordinates false`. One you already set to `true` stays.
+- The hardcore and resource pack settings are added at their defaults, and the log names them.
+- 1.0.0 leaves a 1.1.0 config alone if you go back, since it is from a newer version.
+- A config folder the server can't write no longer stops the start: YOLT runs on the defaults and says so.
 
 ## Good to know
 
