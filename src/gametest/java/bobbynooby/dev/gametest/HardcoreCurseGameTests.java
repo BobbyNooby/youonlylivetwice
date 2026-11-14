@@ -243,7 +243,7 @@ public class HardcoreCurseGameTests {
     }
 
     // /yolt curse set on a player who is away with a body out changes the stored curse only: the body keeps its hearts.
-    // At the login the player takes the body's full health, and the lower maximum caps it.
+    // At the login the player takes the body's full health, and their next living tick caps it at the lower maximum.
     @GameTest(environment = CURSE)
     public void curse5ASetWhileAwayMeetsTheBodyAtLogin(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
@@ -262,7 +262,10 @@ public class HardcoreCurseGameTests {
 
             ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
             assertMaxHealth(helper, back, 16.0F, "at the login");
-            helper.assertValueEqual(back.getHealth(), 16.0F, "health at the login, taken from the body's 20");
+            // Vanilla lowers health to a lowered maximum only in the living tick, which a test player doesn't get by
+            // itself. Not loaded yet, so nothing in that tick can hurt them.
+            back.doTick();
+            helper.assertValueEqual(back.getHealth(), 16.0F, "health after the first tick, from the body's 20");
         } finally {
             Curse.set(owner, 0);
             BodyTestKit.cleanUp(helper, owner, before);
