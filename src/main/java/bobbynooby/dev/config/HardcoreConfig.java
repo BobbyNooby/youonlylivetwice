@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * The hardcore layer's settings, under "hardcore" in the config. Every feature ships off except the Curse of the Undead,
- * the flat anvil price and YOLT's Mending, so a default server has /status for everyone, with its Rules line.
+ * the flat anvil price and YOLT's Mending, so a default server has /status for everyone, with its "Server rules" block.
  */
 public final class HardcoreConfig {
     private HardcoreConfig() {}

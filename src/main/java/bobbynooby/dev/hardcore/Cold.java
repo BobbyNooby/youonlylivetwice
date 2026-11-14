@@ -22,8 +22,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.WeakHashMap;
 
 /**
@@ -235,20 +235,23 @@ public final class Cold {
     }
 
     // Says how cold the player is and why it moves, never where they are
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!counts(player)) {
-            return Optional.empty();
+            return List.of();
         }
         double chill = HardcoreStates.of(player).chill;
         if (!(chill > 0.0)) {
-            return Optional.empty();
+            return List.of();
         }
         HardcoreConfig.ColdSection cfg = cfg();
         long percent = ColdMaths.percent(chill);
-        String text = "Cold   " + ColdMaths.word(percent) + " " + percent + "% · " + reason(surroundings(player, cfg, true), cfg);
-        return Optional.of(Status.line(text, "Out in the open where it is cold enough to snow, a chill builds, faster when"
-                + " wet and faster still in water. Holding a torch or lantern, standing near a fire, going indoors or"
-                + " leaving the cold warms you, and each piece of leather armour slows the chill. Dying clears it."));
+        String reason = reason(surroundings(player, cfg, true), cfg);
+        // Warming helps; getting colder is the cold itself
+        Component why = reason.startsWith("warming") ? Status.good(reason) : Status.cold(reason);
+        return List.of(Status.line("Out in the open where it is cold enough to snow, a chill builds, faster when wet and"
+                        + " faster still in water. Holding a torch or lantern, standing near a fire, going indoors or leaving"
+                        + " the cold warms you, and each piece of leather armour slows the chill. Dying clears it.",
+                Status.label("Cold"), Status.cold(ColdMaths.word(percent) + " " + percent + "%"), Status.separator(), why));
     }
 
     private static String reason(Surroundings here, HardcoreConfig.ColdSection cfg) {

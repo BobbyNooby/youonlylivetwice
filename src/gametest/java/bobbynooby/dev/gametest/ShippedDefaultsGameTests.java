@@ -44,7 +44,7 @@ public class ShippedDefaultsGameTests {
             type(player, "status");
             List<String> lines = texts(player, from);
             helper.assertTrue(!lines.isEmpty() && lines.getFirst().equals("Your body"), "the report: " + lines);
-            helper.assertTrue(lines.stream().anyMatch(line -> line.startsWith("Rules ")), "the report has no Rules line: " + lines);
+            helper.assertTrue(lines.contains("Server rules"), "the report has no Server rules line: " + lines);
         } finally {
             TestPlayers.leave(player);
         }

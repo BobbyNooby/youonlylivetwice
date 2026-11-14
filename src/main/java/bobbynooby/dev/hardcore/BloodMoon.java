@@ -423,13 +423,13 @@ public final class BloodMoon {
         }
     }
 
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!Settings.on(c -> c.hardcore.bloodMoon.enabled) || !tonight() || StandIn.is(player)
                 || player.level().dimension() != Level.OVERWORLD) {
-            return Optional.empty();
+            return List.of();
         }
-        return Optional.of(Status.line("Blood moon tonight",
-                "Mobs that spawn tonight are tougher, better geared and more numerous, and drop more. It ends at dawn."));
+        return List.of(Status.line("Mobs that spawn tonight are tougher, better geared and more numerous, and drop more."
+                + " It ends at dawn.", Status.danger("Blood moon tonight")));
     }
 
     // Only for a mob that would be marked as it loads: gear is rolled before the mob is added to the world

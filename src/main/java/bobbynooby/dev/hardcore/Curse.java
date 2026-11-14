@@ -16,9 +16,10 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.GameType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -244,27 +245,28 @@ public final class Curse {
         return count == 1 ? "1 max heart" : count + " max hearts";
     }
 
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!on() || Hardcore.exempt(player) || StandIn.is(player)) {
-            return Optional.empty();
+            return List.of();
         }
         HardcoreConfig.CurseSection cfg = cfg();
         HardcoreState state = HardcoreStates.of(player);
         int shown = CurseMaths.shown(state, cfg.maxLostHearts);
         if (shown <= 0) {
-            return Optional.empty();
+            return List.of();
         }
-        StringBuilder text = new StringBuilder(NAME + "  −" + hearts(shown));
-        if (shown >= cfg.maxLostHearts) {
-            text.append(" (the most it takes)");
-        }
+        String hover = NAME + ": every return from death, by dying or by a totem, takes a max heart, up to "
+                + hearts(cfg.maxLostHearts) + " in all. They come back one at a time as you play; only your own time"
+                + " online counts.";
+        List<Component> lines = new ArrayList<>();
+        lines.add(shown >= cfg.maxLostHearts
+                ? Status.line(hover, Status.label("Curse"), Status.bad("−" + hearts(shown)), Status.note(" (the most)"))
+                : Status.line(hover, Status.label("Curse"), Status.bad("−" + hearts(shown))));
         if (cfg.healHearts > 0) {
             long left = ticksPerHeal(cfg) - state.curseOnlineTicks;
-            text.append(" · next ").append(cfg.healHearts == 1 ? "heart" : cfg.healHearts + " hearts")
-                    .append(" back after ").append(CurseMaths.playTime(left)).append(" more play");
+            lines.add(Status.detail(hover, "next " + (cfg.healHearts == 1 ? "heart" : cfg.healHearts + " hearts") + " back in "
+                    + CurseMaths.playTime(left) + " of play"));
         }
-        return Optional.of(Status.line(text.toString(), "Every return from death, by dying or by a totem, takes a max"
-                + " heart, up to " + hearts(cfg.maxLostHearts) + " in all. They come back one at a time as you play;"
-                + " only your own time online counts."));
+        return lines;
     }
 }

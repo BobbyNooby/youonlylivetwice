@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.chat.CommandRestriction;
+import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.gametest.mixin.ServerGamePacketListenerInvoker;
@@ -13,6 +14,7 @@ import bobbynooby.dev.hardcore.Slowdowns;
 import bobbynooby.dev.hardcore.Status;
 import com.mojang.brigadier.ParseResults;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -20,6 +22,8 @@ import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -32,9 +36,11 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -106,7 +112,7 @@ public class HardcoreStatusGameTests {
             sendCommand(player, "status");
             List<Component> report = player.messages.subList(from, player.messages.size());
             List<String> lines = report.stream().map(Component::getString).toList();
-            helper.assertTrue(lines.contains("Total slowdown " + percent + "% (cap " + cap + "%; potions not included)"),
+            helper.assertTrue(lines.contains("Total " + percent + "% slower · cap " + cap + "%"),
                     "the report has no total slowdown: " + lines);
             helper.assertTrue(lines.contains(TEST_LINE), "the report has no test line: " + lines);
 
@@ -188,14 +194,11 @@ public class HardcoreStatusGameTests {
             helper.assertTrue(firstPos.getX() != secondPos.getX() && firstPos.getY() != secondPos.getY()
                     && firstPos.getZ() != secondPos.getZ(), "the beds share an axis: " + firstPos + ", " + secondPos);
 
-            for (String start : List.of("Load ", "  heaviest: ", "Legs ", "Total slowdown ", "Curse of the Undead ",
-                    "Nutrients ", "Cold ", "Resting ", "Rules ")) {
+            // Detail lines too, since each is a message of its own with the hover of its main line
+            for (String start : List.of("Load ", "  Cobblestone ×64 ", "Legs ", "Total ", "Curse ", "  next heart back in ",
+                    "Nutrients ", "  low vitamins: ", "Cold ", "Resting ", "Server rules", "  hunger ×1.5", "  Mending ")) {
                 helper.assertTrue(first.stream().anyMatch(text -> text.startsWith(start)), "the report has no '" + start + "' line: " + first);
             }
-            helper.assertTrue(first.stream().anyMatch(text -> text.startsWith("Nutrients ") && text.contains("(low: ")),
-                    "the nutrients line shows nothing low: " + first);
-            helper.assertTrue(first.stream().anyMatch(text -> text.startsWith("Rules ") && text.contains("hunger ×1.5")
-                    && text.contains("Mending ")), "the rules line misses hunger or Mending: " + first);
             helper.assertValueEqual(second, first, "the report after moving from " + firstPos + " to " + secondPos);
             for (String text : first) {
                 helper.assertFalse(text.contains(otherName) || text.contains(otherId), "'" + text + "' names the other player");
@@ -226,6 +229,53 @@ public class HardcoreStatusGameTests {
             TestPlayers.leave(player);
             TestPlayers.leave(other);
         }
+        helper.succeed();
+    }
+
+    // No line wraps in a default chat window, even at its longest: a long item name with a count, the curse at its
+    // most, all three nutrients low, frozen, and every rule on. A name too long to fit is cut, never the count or weight.
+    @GameTest
+    public void status1EveryLineFitsTheChat(GameTestHelper helper) {
+        List<String> lines = fullReport(helper, "Wordy").stream().map(Component::getString).toList();
+        int most = Settings.get().hardcore.curse.maxLostHearts;
+        helper.assertTrue(lines.contains("Curse −" + most + " max hearts (the most)"), "the curse at its most: " + lines);
+        helper.assertTrue(lines.contains("Nutrients protein 24% · vitamins 24% · sugar 24%"), "the nutrients line: " + lines);
+        helper.assertTrue(lines.stream().anyMatch(line -> line.startsWith("  Waxed Weathered") && line.contains(" ×20 (")),
+                "the report has no long item name with its count: " + lines);
+        for (String line : lines) {
+            helper.assertTrue(line.length() <= Status.WIDTH, "'" + line + "' is " + line.length() + " characters");
+        }
+        helper.assertValueEqual(Status.fit("Waxed Weathered Copper Golem Statue", 20), "Waxed Weathered Cop…", "a cut name");
+        helper.assertValueEqual(Status.fit("Cobblestone", 11), "Cobblestone", "a name that fits");
+        helper.succeed();
+    }
+
+    // Read from each part's style as the client puts it together, the line's own style under the part's
+    @GameTest
+    public void status1LinesCarryColoursAndHovers(GameTestHelper helper) {
+        List<Component> report = fullReport(helper, "Colourful");
+        Component header = report.getFirst();
+        helper.assertValueEqual(header.getString(), "Your body", "the first line");
+        helper.assertTrue(coloured(header.getStyle(), ChatFormatting.GOLD) && header.getStyle().isBold(),
+                "the header's style: " + header.getStyle());
+
+        Component legs = startingWith(helper, report, "Legs ");
+        helper.assertTrue(coloured(styleOf(helper, legs, "Legs"), ChatFormatting.YELLOW), "the legs label: " + legs);
+        helper.assertTrue(coloured(styleOf(helper, legs, "broken"), ChatFormatting.RED), "broken legs: " + legs);
+        helper.assertTrue(coloured(styleOf(helper, legs, "healing"), ChatFormatting.GREEN), "the healing: " + legs);
+        helper.assertTrue(coloured(styleOf(helper, legs, " · "), ChatFormatting.GRAY), "the separator: " + legs);
+        helper.assertTrue(coloured(styleOf(helper, startingWith(helper, report, "  low vitamins: "), "low vitamins"),
+                ChatFormatting.RED), "the cost of low vitamins");
+
+        int load = report.indexOf(startingWith(helper, report, "Load "));
+        Component detail = report.get(load + 1);
+        helper.assertTrue(detail.getString().startsWith("  Cobblestone"), "the line under the load: " + detail.getString());
+        Style item = styleOf(helper, detail, "Cobblestone");
+        helper.assertTrue(coloured(item, ChatFormatting.GRAY), "the detail line's style: " + item);
+        String loadHover = hover(styleOf(helper, report.get(load), "Load"));
+        helper.assertTrue(loadHover != null && loadHover.equals(hover(item)), "the detail's hover: " + hover(item));
+        // The hover covers the whole line, not only its first part
+        helper.assertValueEqual(hover(styleOf(helper, report.get(load), "slower")), loadHover, "the hover on the slowdown");
         helper.succeed();
     }
 
@@ -311,6 +361,99 @@ public class HardcoreStatusGameTests {
         helper.succeed();
     }
 
+    // A /status at its fullest: every feature on with something to say, in a bed. Everything is put back before it returns.
+    private static List<Component> fullReport(GameTestHelper helper, String name) {
+        BlockPos bed = bed(helper, new BlockPos(1, 1, 1));
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, name, GameType.SURVIVAL, AT);
+        UUID id = player.getUUID();
+        HardcoreConfig.HardcoreSection hardcore = Settings.get().hardcore;
+        boolean weightBefore = hardcore.weight.enabled;
+        boolean legsBefore = hardcore.legs.enabled;
+        boolean curseBefore = hardcore.curse.enabled;
+        boolean nutrientsBefore = hardcore.nutrients.enabled;
+        boolean bedRestBefore = hardcore.bedRest.enabled;
+        boolean coldBefore = hardcore.cold.enabled;
+        boolean mendingBefore = hardcore.mending.enabled;
+        boolean anvilBefore = hardcore.anvil.enabled;
+        double hungerBefore = hardcore.hungerTax.multiplier;
+        try {
+            hardcore.weight.enabled = true;
+            hardcore.legs.enabled = true;
+            hardcore.curse.enabled = true;
+            hardcore.nutrients.enabled = true;
+            hardcore.bedRest.enabled = true;
+            hardcore.cold.enabled = true;
+            hardcore.mending.enabled = true;
+            hardcore.anvil.enabled = true;
+            hardcore.hungerTax.multiplier = 1.5;
+            helper.assertTrue(0.24 < hardcore.nutrients.deficientBelow, "24% is not low");
+            for (int i = 0; i < 12; i++) {
+                player.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+            }
+            // One at a time, so they end up together whether or not they stack
+            for (int i = 0; i < 20; i++) {
+                player.getInventory().add(new ItemStack(Items.COPPER_GOLEM_STATUE.waxed().weathered()));
+            }
+            Legs.set(id, true);
+            Curse.set(id, hardcore.curse.maxLostHearts);
+            HardcoreStates.update(id, s -> {
+                s.protein = 0.24;
+                s.vitamins = 0.24;
+                s.sugar = 0.24;
+                s.chill = 1.0;
+            });
+            helper.assertTrue(player.startSleeping(helper.absolutePos(bed)), "the player could not lie in the bed");
+            int from = player.messages.size();
+            sendCommand(player, "status");
+            return List.copyOf(player.messages.subList(from, player.messages.size()));
+        } finally {
+            if (player.isSleeping()) {
+                player.stopSleeping();
+            }
+            hardcore.weight.enabled = weightBefore;
+            hardcore.legs.enabled = legsBefore;
+            hardcore.curse.enabled = curseBefore;
+            hardcore.nutrients.enabled = nutrientsBefore;
+            hardcore.bedRest.enabled = bedRestBefore;
+            hardcore.cold.enabled = coldBefore;
+            hardcore.mending.enabled = mendingBefore;
+            hardcore.anvil.enabled = anvilBefore;
+            hardcore.hungerTax.multiplier = hungerBefore;
+            Legs.set(id, false);
+            Curse.set(id, 0);
+            HardcoreStates.update(id, s -> {
+                s.protein = HardcoreState.UNSET;
+                s.vitamins = HardcoreState.UNSET;
+                s.sugar = HardcoreState.UNSET;
+                s.chill = 0.0;
+            });
+            player.getInventory().clearContent();
+            TestPlayers.leave(player);
+        }
+    }
+
+    private static Component startingWith(GameTestHelper helper, List<Component> report, String start) {
+        Optional<Component> line = report.stream().filter(text -> text.getString().startsWith(start)).findFirst();
+        helper.assertTrue(line.isPresent(), "the report has no '" + start + "' line: " + report);
+        return line.get();
+    }
+
+    // The style a part of the line is drawn with: its own, filled in from the line's
+    private static Style styleOf(GameTestHelper helper, Component line, String part) {
+        Optional<Style> style = line.visit((partStyle, text) -> text.contains(part) ? Optional.of(partStyle) : Optional.empty(),
+                Style.EMPTY);
+        helper.assertTrue(style.isPresent(), "'" + line.getString() + "' has no part '" + part + "'");
+        return style.get();
+    }
+
+    private static boolean coloured(Style style, ChatFormatting colour) {
+        return Objects.equals(style.getColor(), TextColor.fromLegacyFormat(colour));
+    }
+
+    private static @Nullable String hover(Style style) {
+        return style.getHoverEvent() instanceof HoverEvent.ShowText(Component text) ? text.getString() : null;
+    }
+
     // A red bed with its foot here, facing south; returns the head
     private static BlockPos bed(GameTestHelper helper, BlockPos foot) {
         BlockPos head = foot.relative(Direction.SOUTH);
@@ -337,8 +480,8 @@ public class HardcoreStatusGameTests {
     private static Runnable testLine(ServerPlayer player) {
         UUID id = player.getUUID();
         return Status.registerForTesting(15, p -> p.getUUID().equals(id)
-                ? Optional.of(Status.line(TEST_LINE, "A line for this test alone."))
-                : Optional.empty());
+                ? List.of(Status.line("A line for this test alone.", Component.literal(TEST_LINE)))
+                : List.of());
     }
 
     private static int notIn(Set<String> taken, int... candidates) {

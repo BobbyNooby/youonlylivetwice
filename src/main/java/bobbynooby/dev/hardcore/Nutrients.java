@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
@@ -293,23 +292,35 @@ public final class Nutrients {
         return cfg().penalties.sugar.sprintSlow;
     }
 
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    // The three levels on one line, then what each low one costs
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!counts(player)) {
-            return Optional.empty();
+            return List.of();
         }
         HardcoreConfig.NutrientsSection cfg = cfg();
         HardcoreState state = started(player);
-        List<String> parts = new ArrayList<>();
+        String hover = "Foods carry hidden protein, vitamins and sugar, and using food drains all three. Below "
+                + percent(cfg.deficientBelow) + "% you are short on one: low protein slows healing, low sugar slows sprinting"
+                + " and low vitamins slow mining. Eat a mix.";
+        List<Component> parts = new ArrayList<>();
+        List<Component> costs = new ArrayList<>();
+        parts.add(Status.label("Nutrients"));
         for (Group group : Group.values()) {
             String part = group.label + " " + percent(group.level(state)) + "%";
-            if (NutrientMaths.low(group.level(state), cfg.deficientBelow)) {
-                part += " (low: " + cost(group, cfg.penalties) + ")";
+            if (parts.size() > 1) {
+                parts.add(Status.separator());
             }
-            parts.add(part);
+            if (NutrientMaths.low(group.level(state), cfg.deficientBelow)) {
+                parts.add(Status.bad(part));
+                costs.add(Status.detail(hover, Status.bad("low " + group.label + ": " + cost(group, cfg.penalties))));
+            } else {
+                parts.add(Status.value(part));
+            }
         }
-        return Optional.of(Status.line("Nutrients  " + String.join(" · ", parts), "Foods carry hidden protein, vitamins"
-                + " and sugar, and using food drains all three. Below " + percent(cfg.deficientBelow) + "% you are short"
-                + " on one: low protein slows healing, low sugar slows sprinting and low vitamins slow mining. Eat a mix."));
+        List<Component> lines = new ArrayList<>();
+        lines.add(Status.line(hover, parts.toArray(Component[]::new)));
+        lines.addAll(costs);
+        return lines;
     }
 
     private static String cost(Group group, HardcoreConfig.PenaltiesSection penalties) {

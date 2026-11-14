@@ -196,16 +196,18 @@ public final class Legs {
         return broken(player) ? Settings.get().hardcore.legs.slow : 0.0;
     }
 
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!on() || Hardcore.exempt(player) || !broken(player)) {
-            return Optional.empty();
+            return List.of();
         }
         HardcoreConfig.LegsSection cfg = Settings.get().hardcore.legs;
         HardcoreState state = HardcoreStates.of(player);
         long percent = Math.round(cfg.slow * 100.0);
-        String text = "Legs   broken → " + percent + "% slower · healing " + (long) state.legHealPoints + "/" + cfg.healPoints
-                + (cfg.healthFirst ? " (uses food once your health is full)" : " (uses food)");
-        return Optional.of(Status.line(text, "A long fall broke your legs. They heal over time while you are well fed,"
-                + " using food the way health regen does, and Regeneration heals them too. Dying clears them."));
+        String hover = "A long fall broke your legs. They heal over time while you are well fed, using food the way health"
+                + " regen does" + (cfg.healthFirst ? ", once your health is full" : "") + ". Regeneration heals them too."
+                + " Dying clears them.";
+        return List.of(Status.line(hover, Status.label("Legs"), Status.bad("broken"), Status.separator(),
+                Status.bad(percent + "% slower"), Status.separator(),
+                Status.good("healing " + (long) state.legHealPoints + "/" + cfg.healPoints)));
     }
 }

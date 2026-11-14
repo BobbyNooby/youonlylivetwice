@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Carried weight: everything a player carries weighs something, and a load over the free amount slows them and makes
@@ -73,8 +72,7 @@ public final class Weight {
 
     static void init() {
         Slowdowns.register("weight", Weight::slowShare);
-        Status.register(STATUS_ORDER, Weight::loadLine);
-        Status.register(STATUS_ORDER, Weight::heaviestLine);
+        Status.register(STATUS_ORDER, Weight::statusLines);
         Hardcore.onTick(Weight::tick);
     }
 
@@ -278,24 +276,31 @@ public final class Weight {
         return TAGS.computeIfAbsent(name, key -> Optional.ofNullable(Identifier.tryParse(key)).map(id -> TagKey.create(Registries.ITEM, id)));
     }
 
-    private static Optional<Component> loadLine(ServerPlayer player) {
+    // The load, then the heaviest things one to a line
+    private static List<Component> statusLines(ServerPlayer player) {
         return carried(player).map(carried -> {
             HardcoreConfig.WeightSection cfg = Settings.get().hardcore.weight;
-            long percent = Math.round(slow(carried.tally().load()) * 100.0);
-            String text = "Load " + brief(carried.tally().load()) + " / " + brief(cfg.fullLoad) + " (free up to " + brief(cfg.freeLoad) + ")"
-                    + (percent > 0 ? " → " + percent + "% slower" : "");
-            return Status.line(text, "Everything you carry weighs something. Over the free load you walk slower, and each jump"
-                    + " costs extra hunger. Your ender chest doesn't count.");
-        });
+            double load = carried.tally().load();
+            long percent = Math.round(slow(load) * 100.0);
+            String hover = "Everything you carry weighs something. Up to " + brief(cfg.freeLoad) + " is free; over it you walk"
+                    + " slower, and each jump costs extra hunger. Your ender chest doesn't count. Under this line are the"
+                    + " heaviest things you carry, with whatever is inside them.";
+            List<Component> lines = new ArrayList<>();
+            lines.add(percent > 0
+                    ? Status.line(hover, Status.label("Load"), Status.value(brief(load) + " / " + brief(cfg.fullLoad)),
+                            Status.separator(), Status.bad(percent + "% slower"))
+                    : Status.line(hover, Status.label("Load"), Status.value(brief(load) + " / " + brief(cfg.fullLoad))));
+            for (Heavy heavy : carried.tally().heaviest()) {
+                lines.add(Status.detail(hover, heavyText(heavy)));
+            }
+            return lines;
+        }).orElse(List.of());
     }
 
-    private static Optional<Component> heaviestLine(ServerPlayer player) {
-        return carried(player).filter(carried -> !carried.tally().heaviest().isEmpty()).map(carried -> {
-            String heaviest = carried.tally().heaviest().stream()
-                    .map(heavy -> heavy.name() + (heavy.count() > 1 ? " ×" + heavy.count() : "") + " (" + oneDecimal(heavy.weight()) + ")")
-                    .collect(Collectors.joining(", "));
-            return Status.line("  heaviest: " + heaviest, "The heaviest things you carry, with whatever is inside them.");
-        });
+    // A long name is cut rather than the count and weight, so the line still fits the chat
+    private static String heavyText(Heavy heavy) {
+        String rest = (heavy.count() > 1 ? " ×" + heavy.count() : "") + " (" + oneDecimal(heavy.weight()) + ")";
+        return Status.fit(heavy.name(), Status.WIDTH - 2 - rest.length()) + rest;
     }
 
     // 31.5, or 56 for a whole number

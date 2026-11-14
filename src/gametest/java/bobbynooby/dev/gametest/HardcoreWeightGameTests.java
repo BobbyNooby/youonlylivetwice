@@ -181,7 +181,7 @@ public class HardcoreWeightGameTests {
         helper.succeed();
     }
 
-    // A grave head and a revive paper both name someone, so the line names each by its kind. Weight is on for this one
+    // A grave head and a revive paper both name someone, so the lines name each by its kind. Weight is on for this one
     // tick only.
     @GameTest
     public void status1HeaviestLineNeverNamesAPlayer(GameTestHelper helper) {
@@ -196,12 +196,18 @@ public class HardcoreWeightGameTests {
             player.getInventory().add(GraveItems.graveHead(someone));
             player.getInventory().add(paper);
             weight.enabled = true;
-            List<String> heaviest = Status.lines(player).stream().map(Component::getString)
-                    .filter(line -> line.startsWith("  heaviest:")).toList();
-            helper.assertTrue(heaviest.size() == 1, "heaviest lines: " + heaviest);
-            String line = heaviest.getFirst();
-            helper.assertTrue(line.contains("Player Head") && line.contains("Paper"), "the heaviest line: " + line);
-            helper.assertFalse(line.contains("Someone"), "the heaviest line names a player: " + line);
+            // The heaviest things are the indented lines right under the load
+            List<String> lines = Status.lines(player).stream().map(Component::getString).toList();
+            List<String> heaviest = new ArrayList<>();
+            int load = lines.indexOf(lines.stream().filter(line -> line.startsWith("Load ")).findFirst().orElse(""));
+            for (int i = load + 1; load >= 0 && i < lines.size() && lines.get(i).startsWith("  "); i++) {
+                heaviest.add(lines.get(i));
+            }
+            helper.assertTrue(heaviest.size() == 2, "heaviest lines: " + heaviest + " in " + lines);
+            helper.assertTrue(heaviest.stream().anyMatch(line -> line.contains("Player Head"))
+                    && heaviest.stream().anyMatch(line -> line.contains("Paper")), "the heaviest lines: " + heaviest);
+            helper.assertFalse(heaviest.stream().anyMatch(line -> line.contains("Someone")),
+                    "a heaviest line names a player: " + heaviest);
         } finally {
             weight.enabled = before;
             player.getInventory().clearContent();

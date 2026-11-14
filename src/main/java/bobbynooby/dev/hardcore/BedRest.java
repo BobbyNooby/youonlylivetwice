@@ -11,7 +11,6 @@ import net.minecraft.world.level.block.AbstractBedBlock;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.WeakHashMap;
 
 /**
@@ -115,11 +114,11 @@ public final class BedRest {
         }
     }
 
-    private static Optional<Component> statusLine(ServerPlayer player) {
+    private static List<Component> statusLine(ServerPlayer player) {
         if (!resting(player)) {
-            return Optional.empty();
+            return List.of();
         }
-        return Optional.of(Status.line("Resting  healing (bed)", "Lying in a bed heals you slowly and makes broken legs heal"
-                + " faster. Getting up or taking damage stops it."));
+        return List.of(Status.line("Lying in a bed heals you slowly and makes broken legs heal faster. Getting up or taking"
+                + " damage stops it.", Status.label("Resting"), Status.good("healing in bed")));
     }
 }
