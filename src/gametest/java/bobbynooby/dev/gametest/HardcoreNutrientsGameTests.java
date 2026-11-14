@@ -44,17 +44,39 @@ public class HardcoreNutrientsGameTests {
     private static final BlockPos CAKE_AT = new BlockPos(2, 1, 1);
     private static final double CLOSE = 1e-9;
 
+    // An empty bar, so the beef's 8 and the apple's 4 all count
     @GameTest(environment = NUTRIENTS)
     public void nut2EatingRaisesTheRightGroups(GameTestHelper helper) {
         ServerPlayer player = join(helper, "NutEater");
         try {
             levels(player, 0.6, 0.6, 0.6);
+            feed(player, 0, 0.0F);
             eat(helper, player, Items.COOKED_BEEF);
             assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.84, "protein after a cooked beef");
             assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.6, "vitamins after a cooked beef");
             eat(helper, player, Items.APPLE);
             assertLevel(helper, HardcoreStates.read(player.getUUID()).vitamins, 0.72, "vitamins after an apple");
             assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.84, "protein after an apple");
+        } finally {
+            leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Only the hunger a food restores counts: a cooked beef at a full bar gives nothing, and at 19 one point's worth
+    @GameTest(environment = NUTRIENTS)
+    public void nut2OnlyTheHungerRestoredCounts(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "NutFull");
+        try {
+            levels(player, 0.6, 0.6, 0.6);
+            feed(player, 20, 5.0F);
+            eat(helper, player, Items.COOKED_BEEF);
+            assertLevels(helper, player, 0.6, "after a cooked beef at a full bar");
+
+            feed(player, 19, 0.0F);
+            eat(helper, player, Items.COOKED_BEEF);
+            helper.assertValueEqual(player.getFoodData().getFoodLevel(), 20, "the food bar after a cooked beef at 19");
+            assertLevel(helper, HardcoreStates.read(player.getUUID()).protein, 0.63, "protein after a cooked beef at 19");
         } finally {
             leave(player);
         }
@@ -92,6 +114,8 @@ public class HardcoreNutrientsGameTests {
         HardcoreConfig.UnknownFood unknownBefore = cfg.unknownFood;
         try {
             levels(player, 0.6, 0.6, 0.6);
+            // Room on the bar for both apples, so all 4 of each counts
+            feed(player, 0, 0.0F);
             Map<String, Map<String, Double>> withoutApple = new LinkedHashMap<>(foodsBefore);
             withoutApple.remove("minecraft:apple");
             cfg.foods = withoutApple;

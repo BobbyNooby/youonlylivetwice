@@ -230,9 +230,11 @@ Foods carry hidden protein, vitamins and sugar. Eat a mix, or the group you are 
 
 - You have three hidden levels, 0 to 100%. You start at 60% in each (`startLevel`), and again after each death.
 - **Eating** fills the food's groups: each point of the food's nutrition adds 3% (`gainPerPoint`), split between its
-  groups. Cooked beef (8 nutrition, all protein) gives 24% protein. A slice of cake counts as 2 nutrition.
+  groups. Cooked beef (8 nutrition, all protein) gives 24% protein. Only the hunger a food actually restores counts:
+  eaten at a full bar it gives nothing, and at 19 one point's worth. A slice of cake counts as 2 nutrition.
 - **Using food** drains all three: each time your food bar drops by 1, each group loses 1% (`decayPerPoint`).
   Saturation going down doesn't count.
+- So with the default numbers a group holds steady when about a third of the food points you eat carry it.
 - **Below 25%** (`deficientBelow`) you are short on that group:
   - low protein: health regen, broken legs and bed rest heal at half speed (`penalties.protein.healingMultiplier`);
   - low sugar: 10% slower while sprinting (`penalties.sugar.sprintSlow`), inside the slowdown cap;

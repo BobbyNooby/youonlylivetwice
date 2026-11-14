@@ -48,6 +48,8 @@ each part and how to set up the pack.
   exit, not 128, so it can't lead to someone else's base. A pair that linked further apart makes a new portal once.
 - **The flat anvil clears the counter.** Every item that comes out of an anvil while the flat price is on has
   vanilla's hidden prior-work counter at 0, so it prices like a new item if the flat price is turned off.
+- **Nutrients count only the hunger a food restores.** Food eaten at a full bar gives no nutrients, and at 19 only one
+  point's worth. A slice of cake still counts as 2.
 
 ## What it does
 

@@ -74,7 +74,10 @@ public final class Nutrients {
         Status.register(STATUS_ORDER, Nutrients::statusLine);
     }
 
-    /** A food item eaten, read before the stack shrinks: its own nutrition, shared out as its entry in the table says. */
+    /**
+     * A food item eaten, read before the stack shrinks and before the bar takes it: the part of its nutrition the bar
+     * has room for, shared out as its entry in the table says.
+     */
     public static void onEat(ServerPlayer player, ItemStack eaten) {
         if (!counts(player)) {
             return;
@@ -83,10 +86,14 @@ public final class Nutrients {
         if (food == null) {
             return;
         }
-        Guard.run(() -> eat(player, food.nutrition(), shares(eaten)), "Could not count what {} ate", player.nameAndId().name());
+        int taken = NutrientMaths.pointsTaken(food.nutrition(), player.getFoodData().getFoodLevel());
+        if (taken == 0) {
+            return;
+        }
+        Guard.run(() -> eat(player, taken, shares(eaten)), "Could not count what {} ate", player.nameAndId().name());
     }
 
-    /** A slice of cake, which is eaten from the block rather than as an item. */
+    /** A slice of cake, which is eaten from the block rather than as an item. Only a hungry player can eat one. */
     public static void onEatCake(ServerPlayer player) {
         if (!counts(player)) {
             return;

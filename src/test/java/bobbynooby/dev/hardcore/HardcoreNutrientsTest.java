@@ -44,6 +44,25 @@ class HardcoreNutrientsTest {
         assertEquals(0.6675, s.protein, CLOSE);
     }
 
+    // Only what fits below a full bar of 20 counts
+    @Test
+    void nut1OnlyThePointsTheBarTakesCount() {
+        assertEquals(8, NutrientMaths.pointsTaken(8, 0));
+        assertEquals(8, NutrientMaths.pointsTaken(8, 12));
+        assertEquals(4, NutrientMaths.pointsTaken(8, 16));
+        assertEquals(1, NutrientMaths.pointsTaken(8, 19));
+        assertEquals(0, NutrientMaths.pointsTaken(8, 20));
+        assertEquals(0, NutrientMaths.pointsTaken(0, 10));
+
+        // Cooked beef at 19: one point's worth of protein, not eight
+        HardcoreState s = at(0.6);
+        NutrientMaths.eat(s, NutrientMaths.pointsTaken(8, 19), Map.of("protein", 1.0), GAIN);
+        assertEquals(0.63, s.protein, CLOSE);
+        s = at(0.6);
+        NutrientMaths.eat(s, NutrientMaths.pointsTaken(8, 20), Map.of("protein", 1.0), GAIN);
+        assertEquals(0.6, s.protein, CLOSE);
+    }
+
     @Test
     void nut1GainStopsAtFull() {
         HardcoreState s = at(0.6);

@@ -8,7 +8,18 @@ public final class NutrientMaths {
     public static final String VITAMINS = "vitamins";
     public static final String SUGAR = "sugar";
 
+    // Vanilla's full food bar
+    static final int FULL_BAR = 20;
+
     private NutrientMaths() {}
+
+    /**
+     * The food points a food actually puts on the bar, read before it is eaten: what fits below full. Food eaten at a full
+     * bar counts for nothing, so gain and drain are both per point the bar really holds.
+     */
+    public static int pointsTaken(int nutrition, int foodLevelBefore) {
+        return Math.max(0, Math.min(nutrition, FULL_BAR - foodLevelBefore));
+    }
 
     /** A food eaten: each group it names gains nutrition × gainPerPoint × its share, up to full. */
     public static void eat(HardcoreState s, int nutrition, Map<String, Double> shares, double gainPerPoint) {

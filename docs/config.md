@@ -328,7 +328,7 @@ See [nutrients](hardcore.md#nutrients). Levels and shares are 0 to 1.
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
 | `enabled` | `false` | Foods carry protein, vitamins and sugar, and a low group costs you. | No |
-| `gainPerPoint` | `0.03` | Level gained per point of a food's nutrition, split by its shares. 0 or more. | No |
+| `gainPerPoint` | `0.03` | Level gained per point of a food's nutrition that the food bar takes (nothing at a full bar), split by its shares. 0 or more. | No |
 | `decayPerPoint` | `0.01` | Level each group loses per point the food bar drops. 0 or more. | No |
 | `startLevel` | `0.6` | Each group's level on first join and after each death, 0 to 1. | No |
 | `deficientBelow` | `0.25` | Below this a group is low, 0 to 1. | No |
