@@ -65,6 +65,8 @@ public class HardcoreWeightGameTests {
         assertWeighs(helper, cfg, new ItemStack(Items.COPPER_NAUTILUS_ARMOR), 0.4);
         assertWeighs(helper, cfg, new ItemStack(Items.END_STONE, 64), 3.0);
         assertWeighs(helper, cfg, new ItemStack(Items.SULFUR, 64), 3.0);
+        // From the vanilla tag minecraft:copper, which takes in the weathered and waxed blocks
+        assertWeighs(helper, cfg, new ItemStack(Items.COPPER_BLOCK.waxed().weathered(), 64), 27.0);
         assertWeighs(helper, cfg, new ItemStack(Items.COBBLESTONE, 64), 3.0);
         assertWeighs(helper, cfg, new ItemStack(Items.PAPER, 64), 0.25);
         assertWeighs(helper, cfg, new ItemStack(Items.DIRT, 64), 1.0);
