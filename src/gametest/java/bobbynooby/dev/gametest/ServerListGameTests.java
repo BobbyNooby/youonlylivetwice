@@ -1,15 +1,27 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
+import com.google.gson.JsonElement;
+import com.mojang.serialization.JsonOps;
+import io.netty.channel.embedded.EmbeddedChannel;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.Connection;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.network.protocol.status.ClientboundStatusResponsePacket;
 import net.minecraft.network.protocol.status.ServerStatus;
+import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerInfo;
 import net.minecraft.server.ServerInterface;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.LegacyQueryHandler;
+import net.minecraft.server.network.ServerStatusPacketListenerImpl;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.rcon.thread.QueryThreadGs4;
 import net.minecraft.world.level.GameType;
@@ -241,6 +253,137 @@ public class ServerListGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // serverList.motdLines: an answer's whole MOTD is one of the lines, whatever the count switch says, and the rest of
+    // the answer is vanilla's with the counts and hover lines as before. Set and restored inside one tick.
+    @GameTest
+    public void statusMotdIsOneOfTheLines(GameTestHelper helper) {
+        ServerStatus status = cachedStatus(helper.getLevel().getServer());
+        List<String> shipped = new YoltConfig().serverList.motdLines;
+        boolean before = Settings.get().hide.serverPlayerCount;
+        List<String> motdBefore = Settings.get().serverList.motdLines;
+        List<String> hoverBefore = Settings.get().serverList.hoverLines;
+        int maxBefore = Settings.get().serverList.shownMaxPlayers;
+        try {
+            Settings.get().serverList.motdLines = shipped;
+            Settings.get().serverList.hoverLines = List.of("Nobody here");
+            Settings.get().serverList.shownMaxPlayers = 7;
+            for (boolean hidden : new boolean[]{true, false}) {
+                Settings.get().hide.serverPlayerCount = hidden;
+                ServerStatus answer = ping(status);
+                String motd = answer.description().getString();
+                helper.assertTrue(shipped.contains(motd), "the MOTD is not one of the lines, count hidden " + hidden + ": " + motd);
+                helper.assertValueEqual(answer.description(), Component.literal(motd), "the MOTD, count hidden " + hidden);
+                helper.assertTrue(answer.players().equals(status.players()), "the answer's players are not vanilla's");
+                helper.assertValueEqual(answer.version(), status.version(), "the answer's version");
+                helper.assertTrue(answer.favicon().equals(status.favicon()), "the answer's icon is not vanilla's");
+                helper.assertValueEqual(answer.enforcesSecureChat(), status.enforcesSecureChat(), "the answer's secure chat");
+                ServerStatus.Players players = answer.players().orElseThrow();
+                helper.assertValueEqual(players.sample().stream().map(NameAndId::name).toList(), List.of("Nobody here"),
+                        "sample names, count hidden " + hidden);
+                if (hidden) {
+                    helper.assertValueEqual(players.max(), 7, "max players with the count hidden");
+                    helper.assertValueEqual(players.online(), 0, "online players with the count hidden");
+                }
+            }
+        } finally {
+            Settings.get().hide.serverPlayerCount = before;
+            Settings.get().serverList.motdLines = motdBefore;
+            Settings.get().serverList.hoverLines = hoverBefore;
+            Settings.get().serverList.shownMaxPlayers = maxBefore;
+        }
+        helper.succeed();
+    }
+
+    // Picked for each answer, not once per status vanilla caches, so pings in a row never repeat a line. One line is
+    // always that line.
+    @GameTest
+    public void statusMotdChangesEveryPing(GameTestHelper helper) {
+        ServerStatus status = cachedStatus(helper.getLevel().getServer());
+        List<String> motdBefore = Settings.get().serverList.motdLines;
+        try {
+            Settings.get().serverList.motdLines = new YoltConfig().serverList.motdLines;
+            String previous = ping(status).description().getString();
+            for (int i = 0; i < 20; i++) {
+                String next = ping(status).description().getString();
+                helper.assertTrue(!next.equals(previous), "two pings in a row got " + next);
+                previous = next;
+            }
+
+            Settings.get().serverList.motdLines = List.of("The only line");
+            for (int i = 0; i < 3; i++) {
+                helper.assertValueEqual(ping(status).description().getString(), "The only line", "the MOTD with one line");
+            }
+        } finally {
+            Settings.get().serverList.motdLines = motdBefore;
+        }
+        helper.succeed();
+    }
+
+    @GameTest
+    public void emptyMotdLinesKeepsTheServerMotd(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerStatus status = cachedStatus(server);
+        List<String> motdBefore = Settings.get().serverList.motdLines;
+        try {
+            Settings.get().serverList.motdLines = List.of();
+            ServerStatus answer = ping(status);
+            helper.assertTrue(answer == status, "the answer is not vanilla's own status");
+            helper.assertValueEqual(answer.description(), Component.nullToEmpty(server.getMotd()),
+                    "the MOTD with no lines, against server.properties' own");
+        } finally {
+            Settings.get().serverList.motdLines = motdBefore;
+        }
+        helper.succeed();
+    }
+
+    // As with the hover lines, the § codes stay in the text the client is sent, and the client draws them as colours
+    @GameTest
+    public void motdLineKeepsItsColourCodes(GameTestHelper helper) {
+        ServerStatus status = cachedStatus(helper.getLevel().getServer());
+        String line = "\u00a7cRed and \u00a7lbold\n\u00a77on the second row";
+        List<String> motdBefore = Settings.get().serverList.motdLines;
+        try {
+            Settings.get().serverList.motdLines = List.of(line);
+            // Through the status packet's own JSON, as the client reads it
+            RegistryOps<JsonElement> ops = RegistryAccess.EMPTY.createSerializationContext(JsonOps.INSTANCE);
+            JsonElement sent = ServerStatus.CODEC.encodeStart(ops, ping(status)).getOrThrow();
+            Component read = ServerStatus.CODEC.parse(ops, sent).getOrThrow().description();
+            helper.assertValueEqual(read.getString(), line, "the MOTD the client reads");
+            helper.assertTrue(read.getStyle().isEmpty() && read.getSiblings().isEmpty(),
+                    "the codes were turned into a style: " + sent);
+        } finally {
+            Settings.get().serverList.motdLines = motdBefore;
+        }
+        helper.succeed();
+    }
+
+    // A ping as vanilla answers one: a listener of its own over the server's cached status. A channel with nothing
+    // behind it keeps what is sent.
+    private static ServerStatus ping(ServerStatus status) {
+        Connection connection = new Connection(PacketFlow.SERVERBOUND);
+        EmbeddedChannel channel = new EmbeddedChannel(connection);
+        try {
+            new ServerStatusPacketListenerImpl(status, connection).handleStatusRequest(ServerboundStatusRequestPacket.INSTANCE);
+            for (Object message : channel.outboundMessages()) {
+                if (message instanceof ClientboundStatusResponsePacket answer) {
+                    return answer.status();
+                }
+            }
+            throw new IllegalStateException("the status request got no answer");
+        } finally {
+            channel.close();
+        }
+    }
+
+    // What vanilla answers pings with, rebuilt every 5 seconds
+    private static ServerStatus cachedStatus(MinecraftServer server) {
+        ServerStatus status = server.getStatus();
+        if (status == null) {
+            throw new IllegalStateException("the server has no status to answer pings with");
+        }
+        return status;
     }
 
     /** A query thread over a stand-in server, with a challenge seeded for the sender; the thread itself needs a socket. */
