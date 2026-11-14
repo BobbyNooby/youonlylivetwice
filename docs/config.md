@@ -13,7 +13,8 @@ Contents:
 - [`bodies`](#bodies)
 - [`serverList`](#serverlist)
 - [`skins`](#skins)
-- [`hardcore`](#hardcore): the [hardcore layer](hardcore.md), off by default apart from the flat anvil price and Mending
+- [`hardcore`](#hardcore): the [hardcore layer](hardcore.md), off by default apart from the curse, the flat anvil price
+  and Mending
 - [`resourcePack`](#resourcepack)
 - [File-only settings](#file-only-settings)
 - [Load checks](#load-checks)
@@ -224,8 +225,9 @@ Notes:
 
 ## `hardcore`
 
-The [hardcore layer](hardcore.md). Every feature ships off except the flat anvil price and Mending, and with a feature
-off YOLT changes nothing for it. Since those two are on, non-ops have `/status` by default, with its Rules line. The
+The [hardcore layer](hardcore.md). Every feature ships off except the Curse of the Undead, the flat anvil price and
+Mending, and with a feature off YOLT changes nothing for it. Since those are on, non-ops have `/status` by default, with
+its Rules line. The
 hunger tax has no switch: its default multiplier, 1.0, is vanilla. Shares and chances are 0 to 1 (0.2 is 20%).
 
 ### `hardcore.slow`
@@ -311,7 +313,7 @@ See [Curse of the Undead](hardcore.md#curse-of-the-undead). In hearts.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `enabled` | `false` | Every return from death, by dying or by a totem, takes a max heart. | No |
+| `enabled` | `true` | Every return from death, by dying or by a totem, takes a max heart. | No |
 | `heartsPerDeath` | `1` | Hearts a death takes, 0 or more. | New deaths |
 | `heartsPerTotem` | `1` | Hearts a totem takes, 0 or more. 0 makes totems free. | New deaths |
 | `maxLostHearts` | `4` | The most hearts the curse takes in all, 0 or more. | No |

@@ -4,8 +4,8 @@ mod.
 ## What's new: the hardcore layer
 
 A set of optional rules that make survival itself harder. Each part has its own switch, and with a part off nothing
-changes for it. **Only the flat anvil price and the Mending nerf are on by default**, so every player now has
-`/status`, with a Rules line. The rest is off until you turn it on.
+changes for it. **Only the Curse of the Undead, the flat anvil price and the Mending nerf are on by default**, so every
+player now has `/status`, with a Rules line. The rest is off until you turn it on.
 
 - **Weight.** Everything you carry weighs something, and a heavy load slows you down. Armour and tools barely count:
   your kit and half an inventory of ordinary blocks still walk at full speed, and shulker boxes full of stone are half
@@ -37,7 +37,9 @@ each part and how to set up the pack.
 - `chat.allowWhispers` is on: everyone can `/w` a player in range.
 - `skins.lockAfterFirstChoice` is on: a player picks their skin once, then only an op changes it.
 - `hardcore.anvil.enabled` and `hardcore.mending.enabled` are on.
-- `hardcore.curse.maxLostHearts` is 4 and `hardcore.curse.healEveryDays` is 3.0. The curse itself stays off.
+- `hardcore.curse.enabled` is on: the Curse of the Undead. Each return from death, by dying or by a totem, costs a
+  max heart, up to 4, and one comes back after every 3 Minecraft days (60 minutes) of play. A server updating from
+  1.0.0 gets it too. To turn it off: `/yolt config hardcore.curse.enabled false`.
 - `hardcore.legs.bodiesCanBreakLegs` is off: a logout body's fall only costs it health. Nothing about a logged-out
   player heals, so legs broken then would stay broken until they came back.
 
@@ -84,7 +86,8 @@ Updating from 1.0.0 needs nothing else:
 - `hide.coordinates`, `chat.allowWhispers` and `skins.lockAfterFirstChoice` are turned on only where your file still
   says `false`, 1.0.0's default. Each one turned on gets a line in the log with the command to turn it off again, such
   as `/yolt config hide.coordinates false`. One you already set to `true` stays.
-- The hardcore and resource pack settings are added at their defaults, and the log names them.
+- The hardcore and resource pack settings are added at their defaults, and the log names them. So the Curse of the
+  Undead, the flat anvil price and the Mending nerf come on too.
 - 1.0.0 leaves a 1.1.0 config alone if you go back, since it is from a newer version.
 - A config folder the server can't write no longer stops the start: YOLT runs on the defaults and says so.
 

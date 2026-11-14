@@ -10,8 +10,9 @@ A revive paper shows a purple name, lore and the enchantment glint. With `resour
 server's resource pack set up, it shows a texture of its own instead of plain paper. See
 [revive paper texture](hardcore.md#revive-paper-texture).
 
-With the hardcore [Curse of the Undead](hardcore.md#curse-of-the-undead) on, a revived player still loses a max heart
-for the death. A revive paper gives hearts back only if `hardcore.curse.reviveRefundHearts` is above 0.
+With the hardcore [Curse of the Undead](hardcore.md#curse-of-the-undead) on, as it is by default, a revived player
+still loses a max heart for the death. A revive paper gives hearts back only if `hardcore.curse.reviveRefundHearts` is
+above 0.
 
 Grave heads can't get Curse of Vanishing in an anvil, and a grave head or revive paper that has it anyway still goes
 into the grave.

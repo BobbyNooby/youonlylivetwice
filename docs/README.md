@@ -49,7 +49,7 @@ feature, its settings and its limits.
 - [Skins](skins.md): skins on offline-mode servers, and picking your own.
   - [Known limits](skins.md#known-limits)
 - [Hardcore layer](hardcore.md): weight, broken legs, the curse, nutrients, tougher mobs, blood moons, cold and more
-  (off by default, apart from the flat anvil price and Mending).
+  (off by default, apart from the curse, the flat anvil price and Mending).
   - [Who it applies to](hardcore.md#who-it-applies-to)
   - [`/status`](hardcore.md#status)
   - [Slowdowns](hardcore.md#slowdowns)

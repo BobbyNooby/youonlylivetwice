@@ -27,10 +27,10 @@ paper's texture.
 - **Off by default:** a grave compass that points at your latest grave.
 - **Hardcore layer.** Extra rules that make survival itself harder. Each part has its own switch, and only the first
   group is on by default. [Hardcore layer](docs/hardcore.md) explains them all.
-  - **On by default:** flat anvil prices and a Mending nerf. With these on, every player has `/status`, a report on
-    their own body.
+  - **On by default:** a Curse of the Undead that takes a max heart at every return from death, flat anvil prices and
+    a Mending nerf. With these on, every player has `/status`, a report on their own body.
   - **Your body:** carried weight, broken legs and a limp slow you down. Bed rest heals you and your legs faster.
-  - **Death and food:** a Curse of the Undead that takes max hearts, nutrients and a hunger tax.
+  - **Food:** nutrients and a hunger tax.
   - **Gear:** an elytra nerf.
   - **The world:** tougher and more relentless mobs, blood moons and cold.
   - **Looks:** a texture for revive papers, from the optional resource pack.

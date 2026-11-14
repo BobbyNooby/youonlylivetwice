@@ -3,9 +3,10 @@
 The hardcore layer makes survival itself harder: what you carry slows you down, falls break your legs, every return
 from death costs a max heart, food matters, mobs are tougher, some nights are blood moons and the cold can freeze you.
 
-**Everything here is off by default, except the flat anvil price and Mending.** Each feature has its own switch
-(`hardcore.<feature>.enabled`, and `hardcore.hungerTax.multiplier` for the hunger tax), and with a feature off YOLT
-changes nothing for it. Turn on only the parts you want, and turn the anvil and Mending off if you want them vanilla.
+**Everything here is off by default, except the Curse of the Undead, the flat anvil price and Mending.** Each feature
+has its own switch (`hardcore.<feature>.enabled`, and `hardcore.hungerTax.multiplier` for the hunger tax), and with a
+feature off YOLT changes nothing for it. Turn on only the parts you want, and turn off any of those three you don't
+want, for example `/yolt config hardcore.curse.enabled false`.
 Every setting is in the [`hardcore` part of the config](config.md#hardcore).
 
 Contents:
@@ -210,6 +211,7 @@ Settings: [`hardcore.bedRest`](config.md#hardcorebedrest).
 ## Curse of the Undead
 
 Every return from death, by dying or by a totem, takes a max heart. The hearts come back one at a time as you play.
+It is on by default; `/yolt config hardcore.curse.enabled false` turns it off.
 
 - **Dying:** when you come back (after the lockout, or early with a revive paper), you have 1 fewer heart
   (`heartsPerDeath`). `/yolt unkill` gives it back (see below). The hotbar line tells you when you are back.

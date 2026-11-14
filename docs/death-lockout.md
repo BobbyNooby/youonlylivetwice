@@ -11,6 +11,8 @@ Try again in 1 week.
 - Each death keeps the cooldown it was recorded with. Changing `cooldownDays` only affects deaths from then on. Use
   `/yolt unkill` to end a lockout early.
 - With a cooldown of 0 there is no wait and no kick.
+- With the [Curse of the Undead](hardcore.md#curse-of-the-undead) on, as it is by default, you come back with one max
+  heart fewer, up to 4. They come back with play time.
 - With the `show_death_messages` game rule off, the text is only "You died.", so it never names a killer.
 - If the body of a player who is offline dies, they are told "Killed while away", with how the body died. That can
   name a killer they never saw.
