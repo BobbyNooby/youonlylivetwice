@@ -15,6 +15,8 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.inventory.AbstractCraftingMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.BundleContents;
@@ -200,6 +202,12 @@ public final class Weight {
             Container grid = player.inventoryMenu.getCraftSlots();
             for (int i = 0; i < grid.getContainerSize(); i++) {
                 stacks.add(grid.getItem(i));
+            }
+            // A crafting table's grid too: what lies there goes back to the player when the screen closes
+            if (player.containerMenu != player.inventoryMenu && player.containerMenu instanceof AbstractCraftingMenu crafting) {
+                for (Slot slot : crafting.getInputGridSlots()) {
+                    stacks.add(slot.getItem());
+                }
             }
         }
         return stacks;

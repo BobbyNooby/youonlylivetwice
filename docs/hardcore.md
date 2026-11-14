@@ -96,10 +96,10 @@ Everything you carry weighs something. The heavier your load, the slower you wal
 
 - Each item has a **stack weight**, the weight of a full stack. One item weighs its share: a stack of cobblestone weighs
   3.0, so one cobblestone weighs 3/64.
-- Your **load** is everything you carry: hotbar, inventory, armour, off-hand, the item on your cursor and your 2x2
-  crafting grid (`countCursorAndGrid`). A shulker box or bundle counts with everything inside it, up to 3 containers
-  deep (`containerDepth`), and `containerContents` (1.0) sets how much of what is inside counts. Your ender chest
-  doesn't count.
+- Your **load** is everything you carry: hotbar, inventory, armour, off-hand, the item on your cursor, your 2x2
+  crafting grid and the grid of a crafting table you have open (`countCursorAndGrid`). A shulker box or bundle counts
+  with everything inside it, up to 3 containers deep (`containerDepth`), and `containerContents` (1.0) sets how much of
+  what is inside counts. Your ender chest doesn't count.
 - Up to a load of 16 (`freeLoad`) you aren't slowed. From 16 to 144 (`fullLoad`) the slowdown rises evenly to 50%
   (`maxSlow`), and it goes no further.
 - Armour and tools barely count. With your kit you walk at full speed carrying about a dozen stacks of ordinary blocks

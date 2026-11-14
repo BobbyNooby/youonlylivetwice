@@ -254,7 +254,7 @@ See [weight](hardcore.md#weight). Weights are stack weights, the weight of a ful
 | `countContainers` | `true` | Shulker boxes and bundles add what is inside them. | No |
 | `containerContents` | `1.0` | The share of a container's contents that counts, 0 to 1. 0.5 counts half. | No |
 | `containerDepth` | `3` | How many containers deep the contents count, 0 to 8. | No |
-| `countCursorAndGrid` | `true` | The item on the cursor and the 2x2 crafting grid count. | No |
+| `countCursorAndGrid` | `true` | The item on the cursor, the 2x2 crafting grid and an open crafting table's grid count. | No |
 | `heavyJumpExhaustion` | `0.2` | Extra hunger (exhaustion) per jump at a full load, scaled down to none at the free load. 0 or more. | No |
 
 `groups`, `items`, `itemsEach` and `armourFactors` are [file only](#file-only-settings).
