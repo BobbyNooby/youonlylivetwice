@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.lockout.Cooldown;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
@@ -71,6 +72,31 @@ public class LockoutGameTests {
         DeathLockout.recordDeath(uuid, "Ghost");
         helper.assertTrue(refusedForLockout(loginRefusal(helper.getLevel().getServer(), new NameAndId(uuid, "Ghost"))),
                 "locked-out player was not refused with the lockout message");
+        helper.succeed();
+    }
+
+    // An offline-mode server knows a player only by the id vanilla makes from the name they type. So a locked-out,
+    // cursed player who comes back under a new name is someone new to YOLT: let in, with no curse. A known limit; this
+    // pins it, so a change to it is a choice.
+    @GameTest(environment = LOGIN_CHECK)
+    public void offlineNewNameGetsRoundTheLockoutAndTheCurse(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GameProfile before = TestLogins.offline(SkinGameTests.uniqueName("Renamed"));
+        GameProfile after = TestLogins.offline(SkinGameTests.uniqueName("Renamer"));
+        DeathLockout.recordDeath(before.id(), before.name());
+        HardcoreStates.update(before.id(), state -> state.curseHeartsLost = 3);
+        try {
+            helper.assertTrue(refusedForLockout(loginRefusal(server, new NameAndId(before.id(), before.name()))),
+                    "the old name is not locked out");
+            helper.assertValueEqual(HardcoreStates.read(before.id()).curseHeartsLost, 3, "hearts the old name has lost");
+            helper.assertFalse(after.id().equals(before.id()), "the new name has the old name's id");
+            helper.assertValueEqual(refusalKey(loginRefusal(server, new NameAndId(after.id(), after.name()))), "(let in)",
+                    "the new name's login");
+            helper.assertValueEqual(HardcoreStates.read(after.id()).curseHeartsLost, 0, "hearts the new name has lost");
+        } finally {
+            DeathLockout.revive(before.id(), "Test", "console");
+            HardcoreStates.update(before.id(), state -> state.curseHeartsLost = 0);
+        }
         helper.succeed();
     }
 
