@@ -39,6 +39,11 @@ given it while at least one hardcore feature is on (a switch, or a `hardcore.hun
 anvil and Mending rules ship on, so a default server gives it to everyone. With `restrictCommands` off, everyone can run
 it at any time. With nothing to report it says "Nothing to report".
 
+`allowedCommands` in the config gives non-ops more commands while `restrictCommands` is on, such as another mod's
+`/vote`. Only the parts their permission level allows reach them. Think before listing one: `/list`, `/teammsg` (and
+`/tm`) or another mod's private message command, such as `/r` or `/pm`, show who is online, which is what the
+restriction hides.
+
 Players, ops included, lose `/w @a`-style selector targets, and `/msg` and `/tell` with them, because for a player all
 three are the whisper. The console, RCON, command blocks and datapack functions keep vanilla's `/msg`, `/tell` and
 `/w`: selectors work and there is no range.

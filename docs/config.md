@@ -45,8 +45,8 @@ How the file is read:
 - To reset a key, set it to its default. Deleting a key from the file and reloading keeps the value in use, with no
   warning. A restart would give it its default.
 - Unknown keys (most likely a misspelling) are warned about and left out when the file is rewritten.
-- `serverList.motdLines`, `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can only be changed in
-  the file. So are the hardcore layer's lists and maps, see [file-only settings](#file-only-settings).
+- `allowedCommands`, `serverList.motdLines`, `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can
+  only be changed in the file. So are the hardcore layer's lists and maps, see [file-only settings](#file-only-settings).
 - `§` colour codes work in the text settings (the client draws them), for example `"§cNo one is coming."`.
 - With no config file at startup (the first start, or a deleted file), YOLT writes the defaults and uses them.
 - The file is rewritten at every start, so comments typed into it aren't kept.
@@ -73,7 +73,8 @@ How an upgrade works:
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
 | `configVersion` | `2` | The file's layout version, used for upgrades. Leave it. A value of 0 or below logs a warning and reads as the current version. | – |
-| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w`, `/msg` and `/tell` when whispers are on, `/status` while a hardcore feature is on, which it is by default, and `/yolt skin` when players may pick their skin). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/teammsg`, `/list` and vanilla suggestions show who is online. `/msg` and `/tell` are YOLT's whisper either way. | No |
+| `restrictCommands` | `true` | Non-ops only get `/help` (plus `/w`, `/msg` and `/tell` when whispers are on, `/status` while a hardcore feature is on, which it is by default, `/yolt skin` when players may pick their skin, and what `allowedCommands` lists). Ops below level 2 count as non-ops. Off means vanilla commands, and then `/teammsg`, `/list` and vanilla suggestions show who is online. `/msg` and `/tell` are YOLT's whisper either way. | No |
+| `allowedCommands` | `[]` | More commands a non-op keeps while `restrictCommands` is on, such as another mod's `"vote"`: each name as typed, without the slash. A listed command is sent to the player's game, tab-completes and runs, but only the parts of it their permission level allows, so listing an op command gives them nothing. At most 64 names of `a-z`, `0-9`, `_`, `.`, `:` and `-`; one bad name sends the whole list back. A name the server has no command for is warned about at startup and on `/yolt reload`, and `help`, `w`, `msg`, `tell`, `status` and `yolt` follow their own settings. Careful: `list`, `teammsg` (and `tm`) or another mod's private message command, such as `r` or `pm`, show who is online, which is what the restriction hides. File only. | No (on `/yolt reload`) |
 | `netherScaleOneToOne` | `true` | Every dimension's coordinate scale is 1, modded dimensions included, so the Nether matches the Overworld and there is no fast travel. A Nether portal then links only to an Overworld portal within 16 blocks of its exit. | No; it applies at once, and changing it on an existing world breaks portal links |
 | `randomSpawn` | `true` | Players with no spawn point spawn at a random spot inside the border. | No |
 | `immediateRespawn` | `true` | Turns on the `immediate_respawn` game rule at start, on `/yolt reload` and on `/yolt config`. | No |

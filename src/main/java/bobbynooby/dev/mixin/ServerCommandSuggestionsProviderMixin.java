@@ -25,7 +25,7 @@ public abstract class ServerCommandSuggestionsProviderMixin {
     private CommandDispatcher<CommandSourceStack> suggestFromNonOpTree(Commands commands,
                                                                       Operation<CommandDispatcher<CommandSourceStack>> original) {
         if (CommandRestriction.restricted(this.player)) {
-            return CommandRestriction.nonOpDispatcher();
+            return CommandRestriction.nonOpDispatcher(this.player);
         }
         return original.call(commands);
     }

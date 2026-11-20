@@ -16,6 +16,8 @@ public class YoltConfig {
     public ChatSection chat = new ChatSection();
     public HideSection hide = new HideSection();
     public boolean restrictCommands = true;
+    // Root commands a non-op keeps while restrictCommands is on, such as another mod's /vote, on top of YOLT's own
+    public List<String> allowedCommands = new ArrayList<>();
     public boolean netherScaleOneToOne = true;
     public boolean randomSpawn = true;
     public SleepSection sleep = new SleepSection();

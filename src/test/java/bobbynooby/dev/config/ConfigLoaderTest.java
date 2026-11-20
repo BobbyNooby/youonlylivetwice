@@ -775,6 +775,44 @@ class ConfigLoaderTest {
         }
     }
 
+    // Ships empty, so a non-op keeps only YOLT's own commands. One bad name sends the whole list back, as a bad value in
+    // a map does: at startup to the default, on a reload to the live list.
+    @Test
+    void allowedCommandsAreCheckedWhole() throws IOException {
+        assertEquals(List.of(), new YoltConfig().allowedCommands);
+        List<String> fine = List.of("vote", "trigger", "some_mod:warp", "a.b-c9");
+        ConfigLoader.Result good = loadJson("{\"allowedCommands\":" + new Gson().toJson(fine) + "}");
+        assertEquals(fine, good.config().allowedCommands);
+        assertEquals(List.of(), good.warnings());
+        List<String> most = new ArrayList<>();
+        for (int i = 0; i < ConfigChecks.MAX_ALLOWED_COMMANDS; i++) {
+            most.add("command" + i);
+        }
+        assertEquals(most, loadJson("{\"allowedCommands\":" + new Gson().toJson(most) + "}").config().allowedCommands);
+
+        List<String> tooMany = new ArrayList<>(most);
+        tooMany.add("onemore");
+        String problem = "allowedCommands: must be at most 64 command names, each one word of a-z, 0-9, _, ., : or - without"
+                + " the slash";
+        for (String bad : List.of("[\"/vote\"]", "[\"vote\", \"Trigger\"]", "[\"two words\"]", "[\"\"]", "[\"vote!\"]",
+                new Gson().toJson(tooMany))) {
+            ConfigLoader.Result r = loadJson("{\"allowedCommands\":" + bad + "}");
+            assertEquals(List.of(), r.config().allowedCommands, bad);
+            assertTrue(r.warnings().contains(problem + ", using default"), bad + ": " + r.warnings());
+        }
+        ConfigLoader.Result notAList = loadJson("{\"allowedCommands\":\"vote\"}");
+        assertEquals(List.of(), notAList.config().allowedCommands);
+        assertTrue(notAList.warnings().contains("allowedCommands: expected a list of strings, using default"), notAList.warnings().toString());
+
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"allowedCommands\":[\"/vote\"]}");
+        YoltConfig live = new YoltConfig();
+        live.allowedCommands = List.of("trigger");
+        ConfigLoader.Result reloaded = ConfigLoader.load(file, live, false);
+        assertEquals(List.of("trigger"), reloaded.config().allowedCommands);
+        assertEquals(List.of(problem + ", using the current value"), reloaded.warnings());
+    }
+
     @Test
     void badTabHeaderLinesFallBackToDefault() throws IOException {
         for (String bad : List.of("\"text\"", "[1, 2]", "[\"ok\", null]")) {
@@ -1168,7 +1206,8 @@ class ConfigLoaderTest {
         assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak",
                 turnedOn("skins.lockAfterFirstChoice"),
                 turnedOn("chat.allowWhispers"),
-                "the file had no serverList.motdLines, hardcore, resourcePack, so they take their defaults"), r.warnings());
+                "the file had no allowedCommands, serverList.motdLines, hardcore, resourcePack, so they take their defaults"),
+                r.warnings());
         // Everything else, hardcore and resourcePack included, is this version's default
         YoltConfig expected = new YoltConfig();
         expected.chat.radius = 32;

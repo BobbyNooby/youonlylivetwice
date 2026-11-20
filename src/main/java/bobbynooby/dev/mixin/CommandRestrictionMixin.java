@@ -20,7 +20,7 @@ public abstract class CommandRestrictionMixin {
     @Final
     private static ClientboundCommandsPacket.NodeInspector<CommandSourceStack> COMMAND_NODE_INSPECTOR;
 
-    // Restrict non-op players to help, plus the whisper commands when whispers are on
+    // Restrict non-op players to their own tree: help, the whisper commands when whispers are on, and the rest it holds
     @Inject(method = "performCommand", at = @At("HEAD"), cancellable = true)
     private void executeCallback(ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
         if (CommandRestriction.blocks(parseResults.getContext().getSource(), command)) {

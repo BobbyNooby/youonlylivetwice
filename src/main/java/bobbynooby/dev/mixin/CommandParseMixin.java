@@ -24,7 +24,7 @@ public abstract class CommandParseMixin {
     private CommandDispatcher<CommandSourceStack> parseWithNonOpTree(Commands commands,
                                                                      Operation<CommandDispatcher<CommandSourceStack>> original) {
         if (CommandRestriction.restricted(this.player)) {
-            return CommandRestriction.nonOpDispatcher();
+            return CommandRestriction.nonOpDispatcher(this.player);
         }
         return original.call(commands);
     }

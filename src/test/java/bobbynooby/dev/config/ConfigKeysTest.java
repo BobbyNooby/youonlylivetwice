@@ -63,6 +63,7 @@ class ConfigKeysTest {
         leaves(new Gson().toJsonTree(new YoltConfig()).getAsJsonObject(), "", leaves);
         // The version is no setting, and a list can't be typed as one value, so those stay in the file
         assertTrue(leaves.remove("configVersion"));
+        assertTrue(leaves.remove("allowedCommands"));
         assertTrue(leaves.remove("serverList.motdLines"));
         assertTrue(leaves.remove("serverList.hoverLines"));
         assertTrue(leaves.remove("hide.tabHeaderLines"));
@@ -88,6 +89,8 @@ class ConfigKeysTest {
         assertTrue(ConfigKeys.find("serverList.hoverLines").isEmpty());
         assertTrue(ConfigKeys.fileOnly("hide.tabHeaderLines"));
         assertTrue(ConfigKeys.find("hide.tabHeaderLines").isEmpty());
+        assertTrue(ConfigKeys.fileOnly("allowedCommands"));
+        assertTrue(ConfigKeys.find("allowedCommands").isEmpty());
         // The version is no setting at all, and a real key or a typo is not file-only
         assertFalse(ConfigKeys.fileOnly("configVersion"));
         assertFalse(ConfigKeys.fileOnly("chat.radius"));

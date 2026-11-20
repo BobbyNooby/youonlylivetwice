@@ -2,6 +2,7 @@ package bobbynooby.dev;
 
 import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.chat.ChatDelivery;
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.chat.Whispers;
 import bobbynooby.dev.commands.YoltCommands;
 import bobbynooby.dev.config.Settings;
@@ -84,5 +85,11 @@ public final class YouOnlyLiveTwice implements ModInitializer {
     public static void onServerStarted(MinecraftServer server) {
         YoltCommands.holdStrandingBorder(server);
         LiveSettings.applyAll(server);
+        // Only now are every mod's commands registered, so only now can a listed name be checked against them
+        if (Settings.active()) {
+            for (String note : CommandRestriction.allowedCommandNotes(server)) {
+                Yolt.LOGGER.warn("Config: {}", note);
+            }
+        }
     }
 }

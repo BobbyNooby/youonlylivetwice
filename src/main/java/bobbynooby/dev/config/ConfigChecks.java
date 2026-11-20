@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 
 /** Range checks on a loaded config. A value that fails is replaced by the fallback's. */
 final class ConfigChecks {
@@ -44,6 +45,10 @@ final class ConfigChecks {
     static final int MAX_SKY_LIGHT = 15;
     // The heat scan covers a cube this far out every second for each player, so it stays small
     static final int MAX_HEAT_RADIUS = 8;
+    // Room for every command a server would hand non-ops, while the tree each command is read against stays small
+    static final int MAX_ALLOWED_COMMANDS = 64;
+    // A command's name as typed after the slash: one word, with a namespace's colon for a mod that registers one
+    private static final Pattern COMMAND_NAME = Pattern.compile("[a-z0-9_.:-]+");
     private static final Set<String> FOOD_GROUPS = Set.of("protein", "vitamins", "sugar");
     private static final Set<String> MOB_VALUES = Set.of("health", "damage", "speed");
 
@@ -78,6 +83,11 @@ final class ConfigChecks {
             c.worldBorder.endScale = maxEndScale;
             warnings.add("worldBorder.endScale: worldBorder.diameter times endScale can't pass " + ConfigLoader.MAX_BORDER_DIAMETER
                     + ", using " + maxEndScale);
+        }
+        if (!commandNames(c.allowedCommands)) {
+            c.allowedCommands = new ArrayList<>(fallback.allowedCommands);
+            fellBack.accept("allowedCommands", "must be at most " + MAX_ALLOWED_COMMANDS
+                    + " command names, each one word of a-z, 0-9, _, ., : or - without the slash");
         }
         if (c.deathLockout.cooldownDays < 0) {
             c.deathLockout.cooldownDays = fallback.deathLockout.cooldownDays;
@@ -604,6 +614,20 @@ final class ConfigChecks {
         return "with hardcore.curse.maxLostHearts " + c.curse.maxLostHearts + ", a fully cursed player has "
                 + Math.max(0, 10 - c.curse.maxLostHearts) + " hearts, not more than hardcore.limp.recoverAtHearts " + c.limp.recoverAtHearts
                 + ", so they limp until a curse heart comes back. This is allowed; it is only a notice.";
+    }
+
+    // Read whole, as the maps are: a name with a slash or a space would match no command, and one bad name is most likely
+    // a sign the rest need a look too
+    private static boolean commandNames(List<String> names) {
+        if (names.size() > MAX_ALLOWED_COMMANDS) {
+            return false;
+        }
+        for (String name : names) {
+            if (name == null || !COMMAND_NAME.matcher(name).matches()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Written so NaN fails too

@@ -1,5 +1,6 @@
 package bobbynooby.dev.commands;
 
+import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -98,6 +99,7 @@ final class AdminCommands {
             }
         }
         LiveSettings.applyAll(server, applyBorder);
+        warnings.addAll(CommandRestriction.allowedCommandNotes(server));
 
         Yolt.LOGGER.info("{} reloaded the config", source.getTextName());
         YoltCommands.reply(source, "Config reloaded.");

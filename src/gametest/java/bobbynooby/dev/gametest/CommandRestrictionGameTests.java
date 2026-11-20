@@ -5,6 +5,7 @@ import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.gametest.mixin.ServerGamePacketListenerInvoker;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -338,6 +339,149 @@ public class CommandRestrictionGameTests {
                 scoreboard.removeObjective(objective);
             }
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // allowedCommands gives a non-op one more root command: it is in the tree they are sent, the server suggests it, and
+    // typed as a client sends it, it runs. One not listed stays out of the tree and does nothing, and so does the listed
+    // one once the list is empty again. trigger is a level 0 command, so only the restriction can keep it from running.
+    @GameTest
+    public void allowedCommandIsSentSuggestedAndRuns(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Scoreboard scoreboard = server.getScoreboard();
+        ServerPlayer player = TestPlayers.join(helper, "Allowed", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        List<String> allowedBefore = config.allowedCommands;
+        Objective objective = null;
+        try {
+            objective = scoreboard.addObjective("yolt_a", ObjectiveCriteria.TRIGGER, Component.literal("yolt_a"),
+                    ObjectiveCriteria.RenderType.INTEGER, false, null);
+            ScoreAccess score = scoreboard.getOrCreatePlayerScore(player, objective);
+            score.unlock();
+            config.restrictCommands = true;
+            config.allowedCommands = List.of("trigger");
+
+            server.getCommands().sendCommands(player);
+            RootCommandNode<CommandSourceStack> tree = lastTree(helper, player);
+            helper.assertTrue(tree.getChild("trigger") != null, "the listed /trigger is not in the non-op's tree");
+            helper.assertTrue(tree.getChild("list") == null, "the unlisted /list is in the non-op's tree");
+            helper.assertTrue(WhisperGameTests.suggestions(helper, player, "/tri").contains("trigger"),
+                    "the server doesn't suggest the listed /trigger");
+            helper.assertValueEqual(WhisperGameTests.suggestions(helper, player, "/lis"), List.of(),
+                    "the server's suggestions for the unlisted /list");
+            sendCommand(player, "trigger yolt_a set 1");
+            helper.assertValueEqual(score.get(), 1, "score after the listed trigger");
+            int from = TestPlayers.sentPackets(player).size();
+            sendCommand(player, "list");
+            helper.assertFalse(chatLines(player, from).stream().anyMatch(line -> line.startsWith("There are ")),
+                    "the unlisted /list answered: " + chatLines(player, from));
+
+            config.allowedCommands = List.of();
+            server.getCommands().sendCommands(player);
+            helper.assertTrue(lastTree(helper, player).getChild("trigger") == null, "/trigger is still in the tree once unlisted");
+            sendCommand(player, "trigger yolt_a set 2");
+            helper.assertValueEqual(score.get(), 1, "score after the trigger once unlisted");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.allowedCommands = allowedBefore;
+            if (objective != null) {
+                scoreboard.removeObjective(objective);
+            }
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // An op keeps vanilla's tree whatever the list says: commands it doesn't name still reach them
+    @GameTest
+    public void allowedCommandsLeaveAnOpAlone(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        TestPlayers.Recording op = TestPlayers.joinRecording(helper, "AllowedOp", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        List<String> allowedBefore = config.allowedCommands;
+        try {
+            config.restrictCommands = true;
+            config.allowedCommands = List.of("trigger");
+            TestPlayers.op(op);
+            helper.assertFalse(CommandRestriction.restricted(op), "the op is restricted");
+            RootCommandNode<CommandSourceStack> tree = lastTree(helper, op);
+            for (String name : List.of("trigger", "list", "gamemode")) {
+                helper.assertTrue(tree.getChild(name) != null, "the op's tree has no /" + name);
+            }
+            int from = TestPlayers.sentPackets(op).size();
+            sendCommand(op, "list");
+            helper.assertTrue(chatLines(op, from).stream().anyMatch(line -> line.startsWith("There are ")),
+                    "the op's /list didn't answer: " + chatLines(op, from));
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.allowedCommands = allowedBefore;
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+        }
+        helper.succeed();
+    }
+
+    // A listed command is copied for the player: a branch they may not use stays out, a redirect to the root reaches
+    // only the non-op tree, as /execute run would, and a name YOLT decides itself or the server lacks adds nothing
+    @GameTest
+    public void allowedCommandReachesOnlyTheNonOpTree(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Relay", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            CommandDispatcher<CommandSourceStack> full = new CommandDispatcher<>();
+            full.register(Commands.literal("secret").executes(c -> 1));
+            full.register(Commands.literal("help").then(Commands.literal("everything").executes(c -> 1)));
+            full.register(Commands.literal("relay")
+                    .then(Commands.literal("run").redirect(full.getRoot()))
+                    .then(Commands.literal("opsonly").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS)).executes(c -> 1)));
+            CommandSourceStack source = player.createCommandSourceStack();
+            RootCommandNode<CommandSourceStack> tree = CommandRestriction.nonOpTree(false, false, false,
+                    List.of("relay", "help", "nosuchcommand"), full, source);
+            CommandDispatcher<CommandSourceStack> nonOp = new CommandDispatcher<>(tree);
+
+            helper.assertValueEqual(childNames(tree), List.of("help", "relay"), "the non-op tree's commands");
+            helper.assertTrue(tree.getChild("relay").getChild("opsonly") == null, "the gamemaster branch was copied");
+            helper.assertTrue(tree.getChild("help").getChild("everything") == null, "the server's /help replaced YOLT's");
+            helper.assertTrue(Commands.getParseException(nonOp.parse("relay run help", source)) == null,
+                    "relay run help didn't reach the non-op tree's /help");
+            helper.assertTrue(Commands.getParseException(nonOp.parse("relay run secret", source)) != null,
+                    "relay run secret reached the server's tree");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A name the server has no command for, and one YOLT decides itself, are said at a reload and the rest applies: the
+    // tree it sends again has the listed command. It writes the config file, so it runs with the other tests that do.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void reloadAppliesAllowedCommandsAndNamesTheOddOnes(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        ServerPlayer player = TestPlayers.join(helper, "ReloadAllowed", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            // The border stays off, as the test server needs
+            Files.writeString(path, "{\"restrictCommands\": true, \"allowedCommands\": [\"trigger\", \"nosuchcommand\", \"msg\"],"
+                    + " \"worldBorder\": {\"enabled\": false}}");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt reload"), List.of("Config reloaded.",
+                    "allowedCommands: the server has no /nosuchcommand command, so listing it does nothing",
+                    "allowedCommands: /msg follows YOLT's own settings, so listing it changes nothing"), "the reload's reply");
+            helper.assertValueEqual(Settings.get().allowedCommands, List.of("trigger", "nosuchcommand", "msg"), "the live list");
+            helper.assertTrue(lastTree(helper, player).getChild("trigger") != null, "the tree resent after the reload has no /trigger");
+            helper.assertTrue(lastTree(helper, player).getChild("msg") == null, "listing /msg put it in the tree with whispers off");
+        } finally {
+            try {
+                Files.writeString(path, fileBefore);
+            } finally {
+                try {
+                    CommandGameTests.restoreConfig(server);
+                } finally {
+                    TestPlayers.leave(player);
+                }
+            }
         }
         helper.succeed();
     }
