@@ -30,6 +30,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -83,6 +84,10 @@ public class GraveProtectionGameTests {
     // The test server keeps the re-check off, since tests leave graves without a head on purpose; this one turns it on
     private static final String GRAVE_RECHECK = "you-only-live-twice-gametest:grave_recheck";
     // Copies of a test in a flake hunt that hold the same switch across ticks
+    // Batches of their own for re-check tests that hold an interval the others don't: off, a reload's, and as shipped
+    private static final String GRAVE_RECHECK_OFF = "you-only-live-twice-gametest:grave_recheck_off";
+    private static final String GRAVE_RECHECK_RELOAD = "you-only-live-twice-gametest:grave_recheck_reload";
+    private static final String GRAVE_RECHECK_SHIPPED = "you-only-live-twice-gametest:grave_recheck_shipped";
     private static final SharedHold RECHECK_HOLD = new SharedHold();
     private static final SharedHold GRAVES_OFF_HOLD = new SharedHold();
 
@@ -897,6 +902,245 @@ public class GraveProtectionGameTests {
             store.remove(grave.id());
         }
         helper.succeed();
+    }
+
+    // A head placed before heads carried their grave's id shows only the grave's owner. It still counts as the grave:
+    // it can't be broken, a click opens the grave, and the re-check sees its own head there and adds no second one.
+    @GameTest
+    public void legacyHeadWithoutGraveIdStillCountsAsTheGrave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        ServerPlayer player = TestPlayers.join(helper, "OldHead", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            setHead(level, grave.pos(), grave.profile());
+            helper.assertTrue(level.getBlockEntity(grave.pos()) instanceof SkullBlockEntity skull
+                    && skull.components().get(DataComponents.CUSTOM_DATA) == null, "the old-style head carries a marker");
+            helper.assertTrue(Graves.isGrave(level, grave.pos()), "the old-style head is not the grave");
+            helper.assertFalse(player.gameMode.destroyBlock(grave.pos()), "the old-style head was broken");
+            assertGraveIntact(helper, grave);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(grave.pos()), Direction.UP, grave.pos(), false);
+            player.gameMode.useItemOn(player, level, ItemStack.EMPTY, InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(player.containerMenu instanceof GraveMenu, "the click did not open the grave");
+            player.closeContainer();
+
+            GraveRecheck.recheck(level, GraveStore.get(level.getServer()), grave);
+            helper.assertValueEqual(GraveStore.get(level.getServer()).byId(grave.id()).map(Grave::pos), Optional.of(grave.pos()),
+                    "the grave's spot after the re-check");
+            int heads = 0;
+            for (BlockPos pos : BlockPos.betweenClosed(grave.pos().offset(-4, -1, -4), grave.pos().offset(4, 10, 4))) {
+                if (level.getBlockState(pos).is(Blocks.PLAYER_HEAD)) {
+                    heads++;
+                }
+            }
+            helper.assertValueEqual(heads, 1, "heads round the grave after the re-check");
+        } finally {
+            TestPlayers.leave(player);
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    // With the re-check at 0 a missing head stays missing however long its chunk stays loaded, and comes back at the
+    // chunk's next load. A batch of its own, which holds the re-check off, so no other test's restore of a shared chunk
+    // brings the head back early.
+    @GameTest(environment = GRAVE_RECHECK_OFF, maxTicks = 140)
+    public void recheckZeroLeavesTheHeadMissingUntilChunkLoad(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        Runnable cleanUp = BodyTestKit.once(() -> removeGraves(helper, List.of(grave)));
+        boolean waiting = false;
+        try {
+            helper.assertValueEqual(Settings.get().graves.recheckSeconds, 0, "the re-check interval");
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.runAfterDelay(120, () -> {
+                try {
+                    helper.assertTrue(level.getBlockState(grave.pos()).isAir(), "the head came back with the re-check off");
+                    // What the chunk's next load runs
+                    GraveBlocks.restoreChunk(level, level.getChunkAt(grave.pos()));
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A reload with a new interval starts the wait again from now: at 30 seconds a pass is far off, and 20 ticks later
+    // a reload to 1 second brings the missing head back within 25 ticks, not 28 seconds later. A batch of its own, since
+    // the interval it holds is not the one the other re-check tests hold.
+    @GameTest(environment = GRAVE_RECHECK_RELOAD, maxTicks = 70)
+    public void reloadRestartsTheRecheckCountdown(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> graves.recheckSeconds = seconds;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            RECHECK_HOLD.release();
+            LiveSettings.applyAll(server);
+            removeGraves(helper, List.of(grave));
+        });
+        boolean waiting = false;
+        try {
+            graves.recheckSeconds = 30;
+            LiveSettings.applyAll(server);
+            helper.runAfterDelay(20, () -> {
+                graves.recheckSeconds = 1;
+                LiveSettings.applyAll(server);
+                level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            });
+            helper.runAfterDelay(45, () -> {
+                try {
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The interval as it ships, 5 seconds: a head taken right after the countdown starts is back once 100 ticks have
+    // gone, and not long before. A batch of its own, since no other re-check test holds this interval.
+    @GameTest(environment = GRAVE_RECHECK_SHIPPED, maxTicks = 130)
+    public void shippedRecheckIntervalPutsHeadBackWithinFiveSeconds(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> graves.recheckSeconds = seconds;
+        });
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            RECHECK_HOLD.release();
+            LiveSettings.applyAll(server);
+            removeGraves(helper, List.of(grave));
+        });
+        boolean waiting = false;
+        try {
+            graves.recheckSeconds = new YoltConfig.GravesSection().recheckSeconds;
+            helper.assertValueEqual(graves.recheckSeconds, 5, "the shipped re-check interval");
+            LiveSettings.applyAll(server);
+            level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            helper.runAfterDelay(98, () -> helper.assertTrue(level.getBlockState(grave.pos()).isAir(),
+                    "the head came back before 99 ticks"));
+            helper.runAfterDelay(101, () -> {
+                try {
+                    assertGraveIntact(helper, grave);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            helper.runBeforeTestEnd(cleanUp);
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The control for explosionLeavesGrave: the same blast takes a plain head a block from the grave, so it was strong
+    // enough to take the grave's
+    @GameTest
+    public void explosionLeavesGraveButTakesPlainHead(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos plain = grave.pos().east();
+        try {
+            setHead(level, plain, ResolvableProfile.createUnresolved("Someone"));
+            Vec3 above = Vec3.atBottomCenterOf(grave.pos().above());
+            level.explode(null, above.x, above.y, above.z, 4.0F, Level.ExplosionInteraction.TNT);
+            helper.assertFalse(level.getBlockState(plain).is(Blocks.PLAYER_HEAD), "the blast left the plain head");
+            assertGraveIntact(helper, grave);
+        } finally {
+            level.setBlock(plain, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.getEntitiesOfClass(ItemEntity.class, new AABB(grave.pos()).inflate(6.0)).forEach(Entity::discard);
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    // The control for bucketCannotReplaceGrave: the same call empties water over a plain head, which gives way to it
+    @GameTest
+    public void bucketReplacesPlainHeadButNotGrave(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos plain = helper.absolutePos(new BlockPos(1, 0, 3));
+        try {
+            setHead(level, plain, ResolvableProfile.createUnresolved("Someone"));
+            helper.assertTrue(((BucketItem) Items.WATER_BUCKET).emptyContents(null, level, plain, null),
+                    "the water bucket did not empty over the plain head");
+            helper.assertTrue(level.getFluidState(plain).is(FluidTags.WATER), "no water where the plain head was");
+            helper.assertFalse(((BucketItem) Items.WATER_BUCKET).emptyContents(null, level, grave.pos(), null),
+                    "the water bucket emptied into the grave");
+            assertGraveIntact(helper, grave);
+        } finally {
+            level.setBlock(plain, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.getEntitiesOfClass(ItemEntity.class, new AABB(plain).inflate(3.0)).forEach(Entity::discard);
+            removeGraves(helper, List.of(grave));
+        }
+        helper.succeed();
+    }
+
+    // A piston pushing a line of blocks that ends in the grave moves none of them; the same line ending in a plain head
+    // moves, and pops the head, so the piston and its power work
+    @GameTest(maxTicks = 20)
+    public void pistonLineEndingInGraveDoesNotMove(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
+        BlockPos plain = new BlockPos(3, 0, 5);
+        List<BlockPos> placed = List.of(new BlockPos(0, 0, 3), new BlockPos(1, 0, 3), new BlockPos(2, 0, 3),
+                new BlockPos(0, 0, 5), new BlockPos(1, 0, 5), new BlockPos(2, 0, 5), plain, new BlockPos(4, 0, 5));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            placed.forEach(pos -> helper.setBlock(pos, Blocks.AIR));
+            level.getEntitiesOfClass(ItemEntity.class, new AABB(helper.absolutePos(plain)).inflate(3.0)).forEach(Entity::discard);
+            removeGraves(helper, List.of(grave));
+        });
+        boolean waiting = false;
+        try {
+            for (int z : List.of(3, 5)) {
+                helper.setBlock(new BlockPos(2, 0, z), Blocks.STONE);
+                helper.setBlock(new BlockPos(1, 0, z), Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+            }
+            setHead(level, helper.absolutePos(plain), ResolvableProfile.createUnresolved("Someone"));
+            for (int z : List.of(3, 5)) {
+                helper.setBlock(new BlockPos(0, 0, z), Blocks.REDSTONE_BLOCK);
+            }
+            // Pistons move in block events at the end of the tick, so the check waits a few ticks
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertBlockPresent(Blocks.STONE, new BlockPos(2, 0, 3));
+                    assertGraveIntact(helper, grave);
+                    helper.assertBlockPresent(Blocks.STONE, plain);
+                    helper.assertFalse(level.getBlockState(helper.absolutePos(plain)).is(Blocks.PLAYER_HEAD), "the plain head stayed");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
     }
 
     // A fresh head block with only an owner, the way /setblock or a placed head item makes one

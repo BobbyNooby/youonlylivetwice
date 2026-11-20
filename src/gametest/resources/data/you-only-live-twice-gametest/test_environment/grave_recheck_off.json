@@ -1,0 +1,6 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "graves.recheckSeconds": "0"
+  }
+}
