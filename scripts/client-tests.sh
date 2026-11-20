@@ -28,4 +28,4 @@ if [ -e /etc/NIXOS ]; then
   export __GLX_VENDOR_LIBRARY_NAME=mesa
 fi
 
-exec sh ./gradlew runProductionClientGameTest "${args[@]}"
+exec ./gradlew runProductionClientGameTest "${args[@]}"

@@ -8,12 +8,27 @@ Contents:
 
 ## Testing
 
-Everything builds and tests on GitHub Actions, nothing needs to run locally. Every run does the build, the JUnit
-tests and the server GameTests. Their results are in the `test-results` artifact, kept for 14 days. The client
-GameTests, which save screenshots in the `client-screenshots` artifact, run on pull requests, on pushes to `release`
-and on manual runs with the `client` option. The jar and the revive paper's resource pack zip are in the `Artifacts`
-download. Real skins aren't checked in CI: test players have no skins, and CI never asks Mojang. These tests haven't
+Everything runs locally, with Java 25:
+
+- `./gradlew build --continue`: the jar, the JUnit tests and the server GameTests, about 5 minutes. Results are in
+  `build/test-results/`.
+- `./gradlew test`: the JUnit tests alone, in seconds.
+- `./gradlew runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
+  the server GameTests. Add `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
+- `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 5 minutes. Screenshots land in
+  `build/run/clientGameTest/screenshots/`. `scripts/client-tests.sh PresenceLeak,ServerList` runs only the tests whose
+  class names start with those. On NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on
+  Mesa, the integrated GPU.
+
+GitHub Actions only runs for a push to `release`, where the tested jar becomes the draft release, and for runs started
+by hand, where the `client` option adds the client tests. A run's results are in the `test-results` artifact, kept for
+14 days, the client screenshots in `client-screenshots`, and the jar and the revive paper's resource pack zip in
+`Artifacts`. Real skins aren't checked: test players have no skins, and the tests never ask Mojang. These tests haven't
 replaced a hands-on session in a real client, which I haven't done yet.
+
+Two client tests record everything the client is sent, from inside its own connection (`PacketRecorder`):
+`PresenceLeakClientTest` searches every byte for the names and UUIDs of players the client mustn't know about, and
+`CoordinateLeakClientTest` puts every packet it decodes through the coordinate leak scanner the server sweep uses.
 
 The GameTests share one world, which keeps the switches that ship on but most tests were written without off
 (`TestServerSetup.pinOldDefaults`). `ShippedDefaultsGameTests` checks them as they ship.
