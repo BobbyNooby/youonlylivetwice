@@ -27,6 +27,7 @@ import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -179,6 +180,55 @@ public class BodyBehaviourGameTests {
         } finally {
             if (minecart != null) {
                 minecart.discard();
+            }
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // Carting a body off is part of the game: its owner wakes wherever the minecart or boat took it
+    @GameTest
+    public void bodyCarriedOffInAMinecartWakesWhereItWasTaken(GameTestHelper helper) {
+        carriedBodyWakesWhereItWasTaken(helper, "Carted", EntityTypes.MINECART);
+    }
+
+    @GameTest
+    public void bodyCarriedOffInABoatWakesWhereItWasTaken(GameTestHelper helper) {
+        carriedBodyWakesWhereItWasTaken(helper, "Boated", EntityTypes.OAK_BOAT);
+    }
+
+    private static void carriedBodyWakesWhereItWasTaken(GameTestHelper helper, String name, EntityType<? extends Entity> type) {
+        ServerPlayer player = join(helper, name, new BlockPos(1, 1, 1));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Entity vehicle = null;
+        ServerPlayer back = null;
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Vec3 loggedOutAt = body.position();
+            vehicle = type.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+            helper.assertTrue(vehicle != null, "no vehicle");
+            vehicle.snapTo(body.getX(), body.getY(), body.getZ(), 0.0F, 0.0F);
+            helper.assertTrue(helper.getLevel().addFreshEntity(vehicle), "the vehicle was not added");
+            // As a minecart or a boat picks up whoever it runs into
+            helper.assertTrue(body.startRiding(vehicle, false, false), "the body did not get in");
+            vehicle.teleportTo(vehicle.getX() + 6.0, vehicle.getY(), vehicle.getZ() + 3.0);
+            helper.assertTrue(body.getVehicle() == vehicle, "the body fell out on the way");
+            Vec3 takenTo = body.position();
+            helper.assertTrue(takenTo.distanceTo(loggedOutAt) > 5.0, "the vehicle took the body nowhere: " + takenTo);
+
+            back = TestPlayers.rejoin(helper, player.getGameProfile(), GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertFalse(back.isDeadOrDying(), "the owner logged in dead");
+            helper.assertTrue(back.position().distanceTo(takenTo) < 0.01,
+                    "the owner woke at " + back.position() + ", not where the body was taken, " + takenTo);
+            helper.assertTrue(body.isRemoved(), "the body is still in the vehicle");
+            helper.assertTrue(store(helper).byOwner(player.getUUID()).isEmpty(), "the body's record is still there");
+        } finally {
+            if (back != null) {
+                Settings.get().bodies.enabled = false;
+                TestPlayers.leave(back);
+            }
+            if (vehicle != null) {
+                vehicle.discard();
             }
             cleanUp(helper, player.getUUID(), before);
         }
