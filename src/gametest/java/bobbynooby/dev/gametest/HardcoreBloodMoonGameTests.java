@@ -348,6 +348,9 @@ public class HardcoreBloodMoonGameTests {
                     .thenExecute(() -> {
                         alone.add(moonPackets(first, marks[0]));
                         marks[0] = TestPlayers.sentPackets(first).size();
+                        // Warned and not yet up: a storm lets players into bed now, and their sleep must not skip it
+                        helper.assertFalse(BloodMoon.active(), "the blood moon is up at its warning");
+                        assertSkipBlockedUnlessSleptThrough(helper, "between the warning and the start");
                         clock[0] = firstDay * DAY + config.startTick;
                     })
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
@@ -436,6 +439,24 @@ public class HardcoreBloodMoonGameTests {
         helper.assertTrue(mob.entityTags().contains(MobBoosts.BLOOD_MOON_MARK), "not marked " + when);
         helper.assertValueEqual(mob.getMaxHealth(), maxHealth, "max health " + when);
         helper.assertValueEqual(mob.getHealth(), maxHealth, "health " + when);
+    }
+
+    // Set and put back within the tick
+    private static void assertSkipBlockedUnlessSleptThrough(GameTestHelper helper, String when) {
+        YoltConfig.SleepSection sleep = Settings.get().sleep;
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        boolean noSkipBefore = sleep.noNightSkip;
+        boolean sleepThroughBefore = config.canSleepThrough;
+        try {
+            sleep.noNightSkip = false;
+            config.canSleepThrough = false;
+            helper.assertTrue(Sleep.blocksNightSkip(), "the night skip is not blocked " + when);
+            config.canSleepThrough = true;
+            helper.assertFalse(Sleep.blocksNightSkip(), "the night skip is blocked " + when + " with canSleepThrough on");
+        } finally {
+            sleep.noNightSkip = noSkipBefore;
+            config.canSleepThrough = sleepThroughBefore;
+        }
     }
 
     private static void assertWarning(GameTestHelper helper, List<String> warning, String who) {

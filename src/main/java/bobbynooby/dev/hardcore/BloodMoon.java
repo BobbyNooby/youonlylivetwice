@@ -110,9 +110,13 @@ public final class BloodMoon {
         return night != null || warned;
     }
 
-    /** True while the blood moon must stop sleepers from skipping the night. */
+    /**
+     * True while the blood moon must stop sleepers from skipping the night: from its warning on, not only once it is up.
+     * In rain or a thunderstorm vanilla lets players into bed before the blood moon's start, and a skip then would
+     * jump the clock past a night that was already announced.
+     */
     public static boolean blocksSkip() {
-        return night != null && Settings.on(c -> c.hardcore.bloodMoon.enabled && !c.hardcore.bloodMoon.canSleepThrough);
+        return tonight() && Settings.on(c -> c.hardcore.bloodMoon.enabled && !c.hardcore.bloodMoon.canSleepThrough);
     }
 
     /** How much of the night is left, 1 to 0, while one is up. */
