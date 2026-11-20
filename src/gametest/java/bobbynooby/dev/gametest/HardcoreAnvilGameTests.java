@@ -17,6 +17,7 @@ import net.minecraft.network.protocol.game.ClientboundContainerSetDataPacket;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ContainerInput;
@@ -375,6 +376,122 @@ public class HardcoreAnvilGameTests {
         } finally {
             anvil.enabled = before;
             anvil.breakChance = chanceBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A plain sword and one carrying seven costly enchantments, with no prior work on either: vanilla prices it past 40
+    // and refuses it, the flat price is 6
+    @GameTest
+    public void anvil2AVanillaPriceOverFortyStillCostsSix(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "AnvilCostly", GameType.SURVIVAL);
+        HardcoreConfig.AnvilSection anvil = Settings.get().hardcore.anvil;
+        boolean before = anvil.enabled;
+        try {
+            ItemStack right = new ItemStack(Items.DIAMOND_SWORD);
+            for (ResourceKey<Enchantment> key : List.of(Enchantments.SHARPNESS, Enchantments.LOOTING, Enchantments.FIRE_ASPECT,
+                    Enchantments.KNOCKBACK, Enchantments.UNBREAKING, Enchantments.MENDING, Enchantments.SWEEPING_EDGE)) {
+                Holder<Enchantment> enchantment = enchantment(helper, key);
+                right.enchant(enchantment, enchantment.value().getMaxLevel());
+            }
+            anvil.enabled = false;
+            AnvilMenu menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(right.copy());
+            helper.assertTrue(menu.getCost() >= 40, "vanilla's price is only " + menu.getCost());
+            helper.assertTrue(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().isEmpty(), "vanilla made a result past 40");
+
+            anvil.enabled = true;
+            menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(right.copy());
+            helper.assertValueEqual(menu.getCost(), 6, "the flat price");
+            ItemStack taken = take(menu, player);
+            helper.assertValueEqual(EnchantmentHelper.getEnchantmentsForCrafting(taken).size(), 7, "enchantments on the result");
+            helper.assertValueEqual(player.experienceLevel, LEVELS - 6, "the levels left");
+        } finally {
+            anvil.enabled = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The three prices are read as each use is priced, and the rules block shows what they are now
+    @GameTest
+    public void anvil4CustomPricesApplyLiveAndShowInStatus(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "AnvilPrices", GameType.SURVIVAL);
+        HardcoreConfig.AnvilSection anvil = Settings.get().hardcore.anvil;
+        boolean before = anvil.enabled;
+        int enchantBefore = anvil.enchantCost;
+        int repairBefore = anvil.repairCost;
+        int renameBefore = anvil.renameCost;
+        try {
+            anvil.enabled = true;
+            anvil.enchantCost = 10;
+            anvil.repairCost = 2;
+            anvil.renameCost = 3;
+            AnvilMenu menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(
+                    EnchantmentHelper.createBook(new EnchantmentInstance(enchantment(helper, Enchantments.SHARPNESS), 1)));
+            helper.assertValueEqual(menu.getCost(), 10, "the price of an enchant");
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(wornPickaxe(0));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(new ItemStack(Items.DIAMOND));
+            helper.assertValueEqual(menu.getCost(), 2, "the price of a repair");
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(ItemStack.EMPTY);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.NAME_TAG));
+            menu.setItemName("Priced");
+            helper.assertValueEqual(menu.getCost(), 3, "the price of a rename");
+            List<String> report = Status.report(player).stream().map(Component::getString).toList();
+            helper.assertTrue(report.contains("  anvil: rename 3, repair 2, enchant 10"), "/status: " + report);
+        } finally {
+            anvil.enabled = before;
+            anvil.enchantCost = enchantBefore;
+            anvil.repairCost = repairBefore;
+            anvil.renameCost = renameBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Each use draws one number from the player's random against the 12% break chance, so with its seed fixed the count
+    // over 1000 uses is what the same seed draws on its own, and that is about 12%
+    @GameTest
+    public void anvilWearsAboutTwelvePercentOfUses(GameTestHelper helper) {
+        BlockPos anvilAt = new BlockPos(2, 1, 1);
+        ServerPlayer player = join(helper, "AnvilWorn", GameType.SURVIVAL);
+        HardcoreConfig.AnvilSection anvil = Settings.get().hardcore.anvil;
+        boolean before = anvil.enabled;
+        int uses = 1000;
+        try {
+            anvil.enabled = true;
+            helper.assertValueEqual(anvil.breakChance, 0.12, "breakChance as it ships");
+            player.giveExperienceLevels(uses);
+            helper.setBlock(anvilAt, Blocks.ANVIL);
+            AnvilMenu menu = open(player, ContainerLevelAccess.create(helper.getLevel(), helper.absolutePos(anvilAt)));
+            player.getRandom().setSeed(42L);
+            int worn = 0;
+            for (int use = 0; use < uses; use++) {
+                helper.setBlock(anvilAt, Blocks.ANVIL);
+                menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.NAME_TAG));
+                menu.setItemName("Use " + use);
+                helper.assertFalse(take(menu, player).isEmpty(), "use " + use + " gave nothing");
+                if (!helper.getBlockState(anvilAt).is(Blocks.ANVIL)) {
+                    worn++;
+                }
+            }
+            RandomSource same = RandomSource.create(42L);
+            int expected = 0;
+            for (int use = 0; use < uses; use++) {
+                if (same.nextFloat() < 0.12F) {
+                    expected++;
+                }
+            }
+            helper.assertValueEqual(worn, expected, "uses that wore the anvil, against the seed's own draws");
+            helper.assertTrue(worn >= 90 && worn <= 150, worn + " of " + uses + " uses wore the anvil");
+        } finally {
+            anvil.enabled = before;
             TestPlayers.leave(player);
         }
         helper.succeed();

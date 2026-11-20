@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.hardcore.Status;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
@@ -104,6 +105,89 @@ public class HardcoreMendingGameTests {
         } finally {
             mending.enabled = before;
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // XP the first item doesn't need goes to the next damaged one, with the part carried over, and only then to the bar:
+    // one point of damage each takes 3 XP and then 2, so 5 of a 10-XP orb reach the bar, whichever is mended first
+    @GameTest
+    public void mend2LeftoverXpMendsTheNextItem(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "MendTwo");
+        HardcoreConfig.MendingSection mending = Settings.get().hardcore.mending;
+        boolean before = mending.enabled;
+        try {
+            mending.enabled = true;
+            ItemStack pickaxe = mendingPickaxe(helper, player, 1);
+            ItemStack helmet = new ItemStack(Items.DIAMOND_HELMET);
+            helmet.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.MENDING), 1);
+            helmet.setDamageValue(1);
+            player.setItemSlot(EquipmentSlot.HEAD, helmet);
+            ItemStack worn = player.getItemBySlot(EquipmentSlot.HEAD);
+            int xp = player.totalExperience;
+            touch(helper, player, 10);
+            helper.assertValueEqual(pickaxe.getDamageValue(), 0, "the pickaxe's damage");
+            helper.assertValueEqual(worn.getDamageValue(), 0, "the helmet's damage");
+            helper.assertValueEqual(player.totalExperience - xp, 5, "the XP that reached the bar");
+        } finally {
+            mending.enabled = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A creative player is outside the rules, so Mending is vanilla's for them: 2 points for 1 XP
+    @GameTest
+    public void mend2CreativeMendsAtVanillaRate(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "MendCreative", GameType.CREATIVE, AT);
+        HardcoreConfig.MendingSection mending = Settings.get().hardcore.mending;
+        boolean before = mending.enabled;
+        try {
+            mending.enabled = true;
+            ItemStack pickaxe = mendingPickaxe(helper, player, 100);
+            touch(helper, player, 1);
+            helper.assertValueEqual(pickaxe.getDamageValue(), 98, "the pickaxe's damage after 1 XP in creative");
+        } finally {
+            mending.enabled = before;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The part of a point carried between pickups lasts only until the player leaves: 1 XP leaves 0.4, and 2 XP after
+    // a relog are 0.8, which repairs nothing, where 1.2 would have repaired a point
+    @GameTest
+    public void mend2TheCarriedPartIsDroppedAtLogout(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "MendRelog");
+        ServerPlayer stayer = join(helper, "MendStayed");
+        GameProfile profile = player.getGameProfile();
+        HardcoreConfig.MendingSection mending = Settings.get().hardcore.mending;
+        boolean before = mending.enabled;
+        ServerPlayer[] back = {null};
+        try {
+            mending.enabled = true;
+            ItemStack stayersPickaxe = mendingPickaxe(helper, stayer, 100);
+            touch(helper, stayer, 1);
+            touch(helper, stayer, 2);
+            helper.assertValueEqual(stayersPickaxe.getDamageValue(), 99, "the damage after 1 XP and then 2 with no relog");
+
+            ItemStack pickaxe = mendingPickaxe(helper, player, 100);
+            touch(helper, player, 1);
+            helper.assertValueEqual(pickaxe.getDamageValue(), 100, "the pickaxe's damage after 1 XP");
+            TestPlayers.leave(player);
+            back[0] = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
+            TestPlayers.markLoaded(back[0]);
+            ItemStack kept = back[0].getItemBySlot(EquipmentSlot.MAINHAND);
+            helper.assertTrue(kept.is(Items.DIAMOND_PICKAXE), "the pickaxe didn't come back with the player: " + kept);
+            touch(helper, back[0], 2);
+            helper.assertValueEqual(kept.getDamageValue(), 100, "the pickaxe's damage after 2 XP after a relog");
+        } finally {
+            mending.enabled = before;
+            ServerPlayer online = helper.getLevel().getServer().getPlayerList().getPlayer(profile.id());
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+            TestPlayers.leave(stayer);
         }
         helper.succeed();
     }
