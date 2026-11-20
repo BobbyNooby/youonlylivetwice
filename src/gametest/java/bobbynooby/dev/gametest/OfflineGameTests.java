@@ -32,6 +32,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
@@ -496,6 +497,67 @@ public class OfflineGameTests {
             ItemStackWithSlot.CODEC.parse(ops, entry).result().ifPresent(read -> items.put(read.slot(), read.stack()));
         }
         return items;
+    }
+
+    // An offline death drops XP the way vanilla's own death does: 7 points a level, and never more than 100. Each player
+    // stands on stone of their own, so their orbs are counted apart, in the same tick as the drop.
+    @GameTest
+    public void offlineKillDropsAtMostOneHundredXp(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        helper.setBlock(new BlockPos(5, 0, 5), Blocks.STONE);
+        ServerPlayer few = TestPlayers.join(helper, "FewLevels", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer many = TestPlayers.join(helper, "ManyLevels", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        List<ServerPlayer> players = List.of(few, many);
+        try {
+            few.giveExperienceLevels(3);
+            many.giveExperienceLevels(30);
+            for (ServerPlayer player : players) {
+                TestPlayers.leave(player);
+                helper.assertValueEqual(Kills.kill(server, player.nameAndId()), Kills.Result.KILLED_OFFLINE,
+                        "kill result for " + player.nameAndId().name());
+            }
+            helper.assertValueEqual(orbsAt(helper, few.blockPosition()).stream().mapToInt(ExperienceOrb::getValue).sum(), 21,
+                    "XP dropped for 3 levels");
+            helper.assertValueEqual(orbsAt(helper, many.blockPosition()).stream().mapToInt(ExperienceOrb::getValue).sum(), 100,
+                    "XP dropped for 30 levels");
+        } finally {
+            for (ServerPlayer player : players) {
+                orbsAt(helper, player.blockPosition()).forEach(Entity::discard);
+                removeGraves(helper, player.getUUID());
+                DeathLockout.revive(player.getUUID(), "Test", "console");
+            }
+        }
+        helper.succeed();
+    }
+
+    // A save whose dimension is gone, as after the datapack that added it went: the death goes to the Overworld instead,
+    // at the save's own coordinates, so the grave is made and the lockout starts
+    @GameTest
+    public void offlineKillInARemovedDimensionUsesTheOverworld(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Displaced", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            TestPlayers.leave(player);
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            saved.putString("Dimension", "yolt:gone");
+            OfflinePlayerData.save(server, who.id(), saved);
+            helper.assertValueEqual(OfflinePlayerData.lastPosition(OfflinePlayerData.load(server, who).orElseThrow()).dimension().identifier()
+                    .toString(), "yolt:gone", "the save's dimension");
+
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            Grave grave = onlyGrave(helper, who.id());
+            helper.assertValueEqual(grave.dimension(), Level.OVERWORLD, "the grave's dimension");
+            helper.assertValueEqual(GraveAsserts.count(grave.items(), Items.DIAMOND), 2, "diamonds in the grave");
+            helper.assertTrue(LockoutGameTests.refusalText(who.id()).startsWith("You died: Killed while away"),
+                    "the kill did not lock the player out");
+        } finally {
+            removeGraves(helper, who.id());
+            DeathLockout.revive(who.id(), "Test", "console");
+        }
+        helper.succeed();
     }
 
     private static Grave onlyGrave(GameTestHelper helper, UUID owner) {
