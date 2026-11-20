@@ -57,6 +57,7 @@
 			"bobbynooby.dev.gametest.HardcoreSlowGameTests",
 			"bobbynooby.dev.gametest.HardcoreStatusGameTests",
 			"bobbynooby.dev.gametest.HardcoreWeightGameTests",
+			"bobbynooby.dev.gametest.HardcoreWeightCacheGameTests",
 			"bobbynooby.dev.gametest.LeakSweepGameTests",
 			"bobbynooby.dev.gametest.LockoutGameTests",
 			"bobbynooby.dev.gametest.LogoutStateGameTests",
