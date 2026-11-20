@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.nbt.NbtAccounter;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
@@ -131,6 +133,26 @@ public class BodyStoreGameTests {
         helper.assertValueEqual(snap.fireTicks(), 0, "fire ticks");
         helper.assertValueEqual(snap.air(), 300, "air");
         helper.assertValueEqual(snap.health(), 14f, "health");
+        helper.succeed();
+    }
+
+    // The player's own save is written at every logout. A body record that waited for the next world save would be
+    // older than it after a crash, and the next login would take over a body from before that save.
+    @GameTest
+    public void logoutPutsTheBodyRecordOnDiskAtOnce(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path file = BodyStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        ServerPlayer player = TestPlayers.join(helper, "OnDiskAtOnce", GameType.SURVIVAL, new BlockPos(1, 2, 1));
+        String name = player.nameAndId().name();
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            BodyTestKit.leaveBody(helper, player);
+            helper.assertTrue(Files.exists(file), "no body file after a logout");
+            helper.assertTrue(NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).toString().contains(name),
+                    "the body file doesn't hold the record of the player who just logged out");
+        } finally {
+            BodyTestKit.cleanUp(helper, player.getUUID(), before);
+        }
         helper.succeed();
     }
 

@@ -104,6 +104,23 @@ public final class BodyStore extends SavedData {
         return fromNewer;
     }
 
+    /**
+     * Writes the body file now, with every other changed entry of the data storage, which 26.3 can't save one by one.
+     * A logout calls it: the player's own save is written at every logout, and a body record left for the next world
+     * save would be older than that save after a crash, so the next login would take over a body from before it. A
+     * failed save is logged, never thrown: the logout goes on, and the next world save tries again.
+     */
+    public void saveNow(MinecraftServer server) {
+        setDirty();
+        try {
+            server.getDataStorage().saveAndJoin();
+        } catch (RuntimeException e) {
+            // The storage counts the store as saved before it writes
+            setDirty();
+            Yolt.LOGGER.error("Could not save the body file at a logout; the next world save tries again", e);
+        }
+    }
+
     public void put(BodyRecord record) {
         bodies.put(record.owner(), record);
         setDirty();

@@ -43,6 +43,7 @@ public final class BodyLogout {
             old.ifPresent(record -> {
                 store.remove(record.owner());
                 retire(server, player, record);
+                store.saveNow(server);
             });
             return Optional.empty();
         }
@@ -70,6 +71,8 @@ public final class BodyLogout {
         // After the new body is made, so a spawn that throws leaves the old one. One the world refused still replaces
         // it: the owner's next login takes over the record's state, so nothing is lost.
         old.ifPresent(record -> retire(server, player, record));
+        // On disk before the logout is over, like the player's own save
+        store.saveNow(server);
         return Optional.of(body);
     }
 
