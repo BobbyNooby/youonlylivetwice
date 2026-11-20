@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -598,6 +599,21 @@ class ConfigLoaderTest {
         });
         assertEquals(old, Files.readString(file));
         assertFalse(Files.exists(dir.resolve("config.json.v1.bak")));
+    }
+
+    // A reload never writes an older file over without its copy, so with no copy it stops there and throws for the
+    // caller to report: the file keeps every byte, and no copy is half made
+    @Test
+    void reloadOfAnOlderFileThatCantBeCopiedThrowsAndLeavesItAlone() throws IOException {
+        Path file = dir.resolve("config.json");
+        String old = "{\"configVersion\": 1, \"chat\": {\"allowWhispers\": false}}";
+        Files.writeString(file, old);
+        YoltConfig live = new YoltConfig();
+        inReadOnlyDir(() -> assertThrows(UncheckedIOException.class, () -> ConfigLoader.load(file, live, false)));
+        assertEquals(old, Files.readString(file));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList());
+        }
     }
 
     @Test
