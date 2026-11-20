@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
@@ -8,10 +9,12 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -28,8 +31,11 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -248,6 +254,203 @@ public class GraveCommandGameTests {
             store.remove(grave.id());
         }
         helper.succeed();
+    }
+
+    // The grave commands are for ops: a player without the level, typing them as a client does, can neither list the
+    // graves nor remove one, and the grave stays as it was. The same typed list from an op does list it, so the typing
+    // reaches the command.
+    @GameTest
+    public void nonOpCannotRunGraveCommands(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Nosy", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        BlockPos pos = grave.pos();
+        String line = "Ghost " + grave.dimension().identifier() + " " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        try {
+            for (String command : List.of("yolt grave list", "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ())) {
+                helper.assertTrue(Commands.getParseException(helper.getLevel().getServer().getCommands().getDispatcher()
+                        .parse(command, player.createCommandSourceStack())) != null, "'" + command + "' parses for a non-op");
+                int from = player.messages.size();
+                SkinGameTests.type(player, command);
+                List<String> said = player.messages.subList(from, player.messages.size()).stream().map(Component::getString).toList();
+                helper.assertFalse(said.contains(line), "'" + command + "' listed the grave to a non-op: " + said);
+                helper.assertTrue(said.stream().noneMatch(text -> text.startsWith("Removed ")), "'" + command + "' removed: " + said);
+            }
+            helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isPresent(), "the grave record went");
+            helper.assertTrue(helper.getLevel().getBlockState(pos).is(Blocks.PLAYER_HEAD), "the grave head went");
+
+            TestPlayers.op(player);
+            int from = player.messages.size();
+            SkinGameTests.type(player, "yolt grave list");
+            helper.assertTrue(player.messages.subList(from, player.messages.size()).stream().map(Component::getString).toList()
+                    .contains(line), "the op's typed list doesn't show the grave");
+        } finally {
+            TestPlayers.deop(player);
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    // The removal looks in the command's own dimension: from the console, which is in the Overworld, the Nether grave's
+    // position finds nothing, and the same command run in the Nether removes it
+    @GameTest
+    public void removeUsesTheCommandsDimension(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether");
+        ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
+        List<Grave> made = Graves.create(nether, helper.absolutePos(new BlockPos(2, 1, 2)), profile, UUID.randomUUID(), "Ghost",
+                List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND)));
+        helper.assertValueEqual(made.size(), 1, "graves made");
+        Grave grave = made.get(0);
+        BlockPos pos = grave.pos();
+        String at = pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        // The console's own level must have the spot loaded, or the position is refused before any grave is looked for
+        helper.getLevel().getChunk(pos);
+        try {
+            helper.assertValueEqual(run(helper, "yolt grave remove " + at), List.of("No grave at " + at + "."),
+                    "output from the Overworld");
+            helper.assertTrue(GraveStore.get(nether.getServer()).byId(grave.id()).isPresent(), "the Nether grave went");
+            helper.assertValueEqual(run(helper, "execute in minecraft:the_nether run yolt grave remove " + at),
+                    List.of("Removed Ghost's grave and dropped 2 stacks."), "output from the Nether");
+            helper.assertTrue(GraveStore.get(nether.getServer()).byId(grave.id()).isEmpty(), "the Nether grave is still there");
+            helper.assertTrue(nether.getBlockState(pos).isAir(), "the Nether grave's head is still there");
+        } finally {
+            GraveStore.get(nether.getServer()).remove(grave.id());
+            nether.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            nether.getEntitiesOfClass(ItemEntity.class, new AABB(pos).inflate(3.0)).forEach(ItemEntity::discard);
+        }
+        helper.succeed();
+    }
+
+    // The list gives real positions, also to an op whose client sees shifted ones, as docs/commands.md says. Typed back
+    // as that op, they are read in the op's own frame, which is somewhere else, so the grave stays.
+    @GameTest
+    public void listShowsRealPositionsToAnOpWithAnOffset(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        ServerPlayer op = OffsetTestKit.join(helper, "Shifted", GameType.SURVIVAL);
+        BlockPos pos = grave.pos();
+        String real = pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        try {
+            helper.assertFalse(CoordinateOffsets.offset(op).isZero(), "the op has no offset");
+            TestPlayers.op(op);
+            int mark = OffsetTestKit.mark(op);
+            OffsetTestKit.type(op, "yolt grave list");
+            List<String> listed = chat(op, mark);
+            helper.assertTrue(listed.contains("Ghost " + grave.dimension().identifier() + " " + real),
+                    "the op's client wasn't sent the real position: " + listed);
+
+            mark = OffsetTestKit.mark(op);
+            OffsetTestKit.type(op, "yolt grave remove " + real);
+            List<String> removed = chat(op, mark);
+            helper.assertTrue(removed.stream().noneMatch(text -> text.startsWith("Removed ")), "the typed real position removed: " + removed);
+            helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isPresent(), "the grave record went");
+            helper.assertTrue(helper.getLevel().getBlockState(pos).is(Blocks.PLAYER_HEAD), "the grave head went");
+        } finally {
+            TestPlayers.deop(op);
+            cleanUp(helper, grave, op);
+        }
+        helper.succeed();
+    }
+
+    // Relative coordinates are read from where the op stands
+    @GameTest
+    public void removeWithRelativeCoordinatesFromAPlayer(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        ServerPlayer op = TestPlayers.join(helper, "Standing", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            TestPlayers.op(op);
+            BlockPos pos = grave.pos();
+            op.teleportTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+            helper.assertValueEqual(SkinGameTests.console(op.createCommandSourceStack(), "yolt grave remove ~ ~ ~"),
+                    List.of("Removed Ghost's grave and dropped 3 stacks."), "command output");
+            helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isEmpty(), "the grave is still there");
+        } finally {
+            TestPlayers.deop(op);
+            cleanUp(helper, grave, op);
+            discardDrops(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // With no grave anywhere the list still answers, and counts as done. Every record is taken out and put back in this
+    // tick, so no other test sees the store empty.
+    @GameTest
+    public void emptyListSaysNoGraves(GameTestHelper helper) {
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        List<Grave> all = List.copyOf(store.all());
+        List<Integer> results = new ArrayList<>();
+        List<String> output;
+        try {
+            all.forEach(grave -> store.remove(grave.id()));
+            output = CommandGameTests.run(helper.getLevel().getServer(), "yolt grave list", results::add);
+        } finally {
+            all.forEach(store::put);
+        }
+        helper.assertValueEqual(output, List.of("No graves."), "command output");
+        helper.assertValueEqual(results, List.of(1), "command result");
+        helper.succeed();
+    }
+
+    // The list's result is how many graves there are, which execute store and a command block read
+    @GameTest
+    public void listResultIsTheGraveCount(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        try {
+            List<Integer> results = new ArrayList<>();
+            CommandGameTests.run(helper.getLevel().getServer(), "yolt grave list", results::add);
+            helper.assertValueEqual(results, List.of(GraveStore.get(helper.getLevel().getServer()).all().size()), "command result");
+        } finally {
+            cleanUp(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // A command block is an admin's too: it runs the list, its success count is the number of graves, and its last
+    // output line is one of them
+    @GameTest
+    public void commandBlockCanListGraves(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        BlockPos blockAt = new BlockPos(4, 1, 4);
+        try {
+            helper.setBlock(blockAt, Blocks.COMMAND_BLOCK);
+            CommandBlockEntity block = (CommandBlockEntity) helper.getBlockEntity(blockAt, CommandBlockEntity.class);
+            block.getCommandBlock().setTrackOutput(true);
+            block.getCommandBlock().setCommand("yolt grave list");
+            helper.assertTrue(block.getCommandBlock().performCommand(helper.getLevel()), "the command block did not run");
+            Collection<Grave> all = GraveStore.get(helper.getLevel().getServer()).all();
+            helper.assertValueEqual(block.getCommandBlock().getSuccessCount(), all.size(), "the command block's success count");
+            String last = block.getCommandBlock().getLastOutput().getString();
+            helper.assertTrue(all.stream().anyMatch(each -> last.endsWith(each.ownerName() + " " + each.dimension().identifier() + " "
+                    + each.pos().getX() + " " + each.pos().getY() + " " + each.pos().getZ())), "the last output names no grave: " + last);
+        } finally {
+            helper.setBlock(blockAt, Blocks.AIR);
+            cleanUp(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // The log says who removed which grave, where, and how much it dropped
+    @GameTest
+    public void removeIsLoggedWithWhoAndHowMany(GameTestHelper helper) {
+        Grave grave = makeGrave(helper);
+        try {
+            BlockPos pos = grave.pos();
+            List<String> log = OfflineGameTests.yoltLog(() ->
+                    run(helper, "yolt grave remove " + pos.getX() + " " + pos.getY() + " " + pos.getZ()));
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(" removed ")).toList(),
+                    List.of("Server removed Ghost's grave at " + grave.dimension().identifier() + " " + pos + " and dropped 3 stacks"),
+                    "the removal's log lines");
+        } finally {
+            cleanUp(helper, grave);
+            discardDrops(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // What the player's client was shown in chat since packet "from"
+    private static List<String> chat(ServerPlayer player, int from) {
+        return OffsetTestKit.sent(player, from, ClientboundSystemChatPacket.class).stream()
+                .map(packet -> packet.content().getString())
+                .toList();
     }
 
     // Only a record, with no head block, holding the grave head and a diamond
