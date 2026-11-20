@@ -29,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class NightGameTests {
     private static final String NIGHT = "you-only-live-twice-gametest:night";
     private static final String NIGHT_SKIP = "you-only-live-twice-gametest:night_skip";
+    // Midnight with the sleepers hidden and the skip allowed, both held by the environment
+    private static final String NIGHT_SKIP_HIDDEN = "you-only-live-twice-gametest:night_skip_hidden";
     // Midnight in a thunderstorm
     private static final String NIGHT_THUNDER = "you-only-live-twice-gametest:night_thunder";
     // Vanilla skips the night once everyone has slept this long
@@ -85,6 +87,42 @@ public class NightGameTests {
                 helper.assertTrue(now - asleepAt > 5000 && Math.floorMod(now, 24000L) < 1000,
                         "the clock is at " + now + ", " + (now - asleepAt) + " ticks after the sleeper got into bed, not the next morning");
                 helper.assertFalse(sleeper.isSleeping(), "the sleeper is still in bed");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Hiding who sleeps only hides the count: with the night skip allowed, the night still passes once everyone is deep
+    // asleep, and the sleeper, who would get vanilla's "players sleeping" line as everyone in the level does, gets none.
+    // The environment holds both switches for the batch.
+    @GameTest(environment = NIGHT_SKIP_HIDDEN, maxTicks = 140, skyAccess = true)
+    public void hideSleepersAloneStillLetsNightSkip(GameTestHelper helper) {
+        BlockPos head = SleepGameTests.placeBed(helper);
+        TestPlayers.Recording sleeper = TestPlayers.joinRecording(helper, "QuietBird", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        Runnable cleanUp = cleanUp(sleeper, () -> {});
+        boolean waiting = false;
+        try {
+            YoltConfig.SleepSection sleep = Settings.get().sleep;
+            helper.assertTrue(sleep.hideSleepers && !sleep.noNightSkip, "the environment's sleep switches");
+            int from = sleeper.messages.size();
+            long asleepAt = goToSleep(helper, sleeper, head);
+            helper.assertTrue(enoughAsleepForVanilla(helper, false), "someone else in the overworld is awake, so the night can't skip");
+            helper.runBeforeTestEnd(cleanUp);
+            helper.succeedWhen(() -> {
+                long now = SleepGameTests.clockTicks(helper);
+                helper.assertTrue(now - asleepAt > 5000 && Math.floorMod(now, 24000L) < 1000,
+                        "the clock is at " + now + ", " + (now - asleepAt) + " ticks after the sleeper got into bed, not the next morning");
+                helper.assertFalse(sleeper.isSleeping(), "the sleeper is still in bed");
+                List<String> lines = sleeper.messages.subList(from, sleeper.messages.size()).stream()
+                        .map(line -> line.getContents() instanceof TranslatableContents text ? text.getKey() : line.getString())
+                        .filter(key -> key.startsWith("sleep."))
+                        .toList();
+                helper.assertValueEqual(lines, List.of(), "sleep lines sent to the sleeper");
                 cleanUp.run();
             });
             waiting = true;
