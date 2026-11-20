@@ -18,12 +18,16 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.BaseCommandBlock;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -583,6 +587,318 @@ public class ConfigCommandGameTests {
             helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded.",
                     "messages.graveIn: has {where}, which it doesn't fill in, so it shows as typed"), "reload with an unknown placeholder");
             helper.assertValueEqual(Settings.get().messages.graveIn, "In {where}.", "live messages.graveIn after the reload");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A non-op reaches /yolt while players may pick their skin, and every command with restrictCommands off, yet config
+    // and reload can't even be read past "yolt" for them, so neither runs: the live config and the file stay as they
+    // were, though the file now says something a reload would read. The same player made an op is the check that the
+    // command as typed works.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void nonOpCantRunConfigOrReload(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        YoltConfig live = Settings.get();
+        boolean restrictBefore = live.restrictCommands;
+        boolean choiceBefore = live.skins.allowPlayerChoice;
+        ServerPlayer player = TestPlayers.join(helper, "NoConfig", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+        try {
+            live.restrictCommands = false;
+            live.skins.allowPlayerChoice = true;
+            JsonObject edited = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
+            edited.addProperty("randomSpawn", !live.randomSpawn);
+            Files.writeString(path, edited.toString());
+            byte[] editedBytes = Files.readAllBytes(path);
+
+            for (String command : List.of("yolt config chat.radius 20", "yolt reload")) {
+                helper.assertTrue(dispatcher.parse(command, player.createCommandSourceStack()).getReader().canRead(),
+                        "a non-op's '" + command + "' was read past yolt");
+                int[] result = {-1};
+                server.getCommands().performPrefixedCommand(player.createCommandSourceStack().withCallback((success, value) -> result[0] = value),
+                        command);
+                helper.assertTrue(result[0] != 1, "a non-op's '" + command + "' ran");
+                helper.assertTrue(Settings.get() == live, "a non-op's '" + command + "' replaced the live config");
+            }
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(path), editedBytes), "the config file was written");
+
+            TestPlayers.op(player);
+            server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), "yolt config chat.radius 20");
+            helper.assertValueEqual(Settings.get().chat.radius, 20, "chat.radius set by the player made an op");
+        } finally {
+            TestPlayers.deop(player);
+            live.restrictCommands = restrictBefore;
+            live.skins.allowPlayerChoice = choiceBefore;
+            restore(server, fileBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Every key the command takes, set to another value and back. Each is either changed, with the reply naming both
+    // values and the key's note, or refused by a reply that names the key, as one of a pair can be; none fails with an
+    // error. Once all are back the file says what it said before. The live config starts as the file has it, without the
+    // test server's overrides, or setting a key back would write the override into the file. The border keys move the
+    // world's border, which their own tests check, and the revive paper's model is left to its own tests.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void everyKeyCanBeSetAndPutBack(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        JsonElement jsonBefore = JsonParser.parseString(new String(fileBefore, StandardCharsets.UTF_8));
+        GameRules rules = server.getGameRules();
+        boolean respawnBefore = rules.get(GameRules.IMMEDIATE_RESPAWN);
+        boolean locatorBefore = rules.get(GameRules.LOCATOR_BAR);
+        boolean soundsBefore = rules.get(GameRules.GLOBAL_SOUND_EVENTS);
+        int changed = 0;
+        List<String> refused = new ArrayList<>();
+        try {
+            Settings.reload();
+            for (ConfigKey key : ConfigKeys.all()) {
+                if (key.path().startsWith("worldBorder.") || key.path().equals("resourcePack.reviveModel")) {
+                    continue;
+                }
+                String old = key.show(Settings.get());
+                String other = otherValue(key, old);
+                int[] result = {-1};
+                List<String> set = run(server, "yolt config " + key.path() + " " + other, value -> result[0] = value);
+                if (result[0] == 1) {
+                    helper.assertTrue(set.get(0).equals(key.path() + " changed from " + old + " to " + other + key.when().note() + "."),
+                            key.path() + " set to " + other + ": " + set);
+                    result[0] = -1;
+                    List<String> back = run(server, "yolt config " + key.path() + " " + old, value -> result[0] = value);
+                    helper.assertTrue(result[0] == 1 && back.get(0).equals(key.path() + " changed from " + other + " to " + old
+                            + key.when().note() + "."), key.path() + " set back to " + old + ": " + back);
+                    changed++;
+                } else {
+                    helper.assertTrue(result[0] == 0 && set.size() == 1 && set.get(0).contains(key.path()),
+                            key.path() + " set to " + other + " was neither changed nor refused by name: " + set);
+                    refused.add(key.path());
+                }
+                helper.assertValueEqual(key.show(Settings.get()), old, "live " + key.path() + " at the end");
+            }
+            helper.assertValueEqual(JsonParser.parseString(Files.readString(path)), jsonBefore, "the config file once every key was back");
+            // Most keys take another value of their kind; only the odd range or pair refuses it
+            helper.assertTrue(changed > 100 && refused.size() < 10, changed + " keys changed, refused: " + refused);
+        } finally {
+            restore(server, fileBefore);
+            rules.set(GameRules.IMMEDIATE_RESPAWN, respawnBefore, server);
+            rules.set(GameRules.LOCATOR_BAR, locatorBefore, server);
+            rules.set(GameRules.GLOBAL_SOUND_EVENTS, soundsBefore, server);
+        }
+        helper.succeed();
+    }
+
+    // A value of the key's kind that differs from this one: the other switch, the next name, one more, half as much (or
+    // one, for nothing), a time for "offline", and a text with a word in front, which keeps its placeholders
+    private static String otherValue(ConfigKey key, String value) {
+        return switch (key.kind()) {
+            case BOOLEAN -> Boolean.toString(!Boolean.parseBoolean(value));
+            case ENUM -> key.choices().get((key.choices().indexOf(value) + 1) % key.choices().size());
+            case INT -> Integer.toString(Integer.parseInt(value) + 1);
+            case DOUBLE -> Double.parseDouble(value) == 0 ? "1.0" : Double.toString(Double.parseDouble(value) / 2);
+            case BODY_DURATION -> value.equals("offline") ? "30" : "offline";
+            case STRING -> value.isEmpty() ? "Now" : "Now " + value;
+        };
+    }
+
+    // One of a pair crossing the other is refused, and nothing is written. Either way round the reply is the pair's
+    // first line, which names both keys.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void pairKeyCrossingIsRefused(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            helper.assertTrue(Settings.get().hardcore.limp.belowHearts == 2.0 && Settings.get().hardcore.limp.recoverAtHearts == 3.0,
+                    "the test server's limp thresholds");
+            assertRefused(helper, server, fileBefore, "yolt config hardcore.limp.belowHearts 3",
+                    "hardcore.limp.belowHearts must be less than hardcore.limp.recoverAtHearts.");
+            assertRefused(helper, server, fileBefore, "yolt config hardcore.limp.recoverAtHearts 2",
+                    "hardcore.limp.belowHearts must be less than hardcore.limp.recoverAtHearts.");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // The write goes through a temp file, which can't be made where a folder is. The reply is the save's failure, and the
+    // live config and the file stay as they were.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void writeFailureIsReportedAndChangesNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+        Path inTmp = tmp.resolve("inside");
+        YoltConfig before = Settings.get();
+        try {
+            Files.createDirectories(inTmp);
+            int[] result = {-1};
+            List<String> output = run(server, "yolt config chat.radius 20", value -> result[0] = value);
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("The config file could not be saved (")
+                    && output.get(0).endsWith(")."), "command output: " + output);
+            helper.assertValueEqual(result[0], 0, "command result");
+            helper.assertTrue(Settings.get() == before, "the live config was replaced");
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(path), fileBefore), "the config file was written");
+        } finally {
+            // Before the restore, whose reload writes through the temp file
+            Files.deleteIfExists(inTmp);
+            Files.deleteIfExists(tmp);
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // Turning the border feature off moves no border and needs no confirm, though the world's 100 block border already
+    // leaves the tests outside. With it off, a new diameter is only saved: no stranding check, and the border stays.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void borderOffViaConfigLeavesTheBorderAlone(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = CommandGameTests.saveBorders(server);
+        WorldBorder overworld = server.overworld().getWorldBorder();
+        try {
+            Settings.get().worldBorder.enabled = true;
+            overworld.setSize(100);
+            helper.assertValueEqual(run(server, "yolt config worldBorder.enabled false"),
+                    List.of("worldBorder.enabled changed from true to false."), "turning the border off");
+            helper.assertValueEqual(overworld.getSize(), 100.0, "overworld border size once the feature is off");
+            helper.assertValueEqual(run(server, "yolt config worldBorder.diameter 50"),
+                    List.of("worldBorder.diameter changed from 10000 to 50."), "a diameter with the feature off");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, 50, "live diameter");
+            helper.assertValueEqual(fileValue("worldBorder.diameter").getAsInt(), 50, "diameter in the file");
+            helper.assertValueEqual(overworld.getSize(), 100.0, "overworld border size after the diameter");
+        } finally {
+            restore(server, fileBefore);
+            CommandGameTests.restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // With restrictCommands off a non-op has /yolt only to pick their skin. Turning player choice off resends every tree
+    // at once, so their game drops /yolt, and the server no longer reads it for them either.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void skinChoiceOffResendsTreeWithoutYolt(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        YoltConfig live = Settings.get();
+        boolean restrictBefore = live.restrictCommands;
+        boolean choiceBefore = live.skins.allowPlayerChoice;
+        ServerPlayer player = TestPlayers.join(helper, "SkinChooser", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            live.restrictCommands = false;
+            live.skins.allowPlayerChoice = true;
+            server.getCommands().sendCommands(player);
+            helper.assertTrue(CommandRestrictionGameTests.lastTree(helper, player).getChild("yolt") != null,
+                    "the non-op had no /yolt while they may pick a skin");
+
+            helper.assertValueEqual(run(server, "yolt config skins.allowPlayerChoice false"),
+                    List.of("skins.allowPlayerChoice changed from true to false."), "command output");
+            helper.assertTrue(CommandRestrictionGameTests.lastTree(helper, player).getChild("yolt") == null,
+                    "the tree sent after the change still has /yolt");
+            helper.assertTrue(server.getCommands().getDispatcher().parse("yolt skin clear", player.createCommandSourceStack())
+                    .getReader().canRead(), "the server still reads the non-op's /yolt skin clear");
+        } finally {
+            live.restrictCommands = restrictBefore;
+            live.skins.allowPlayerChoice = choiceBefore;
+            restore(server, fileBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // "confirm" is only taken off a border key's value. Anywhere else it is part of the value, which a number or a name
+    // from a list then can't be.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void confirmOnlyStripsFromBorderKeys(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            assertRefused(helper, server, fileBefore, "yolt config chat.radius 20 confirm", "chat.radius takes a whole number, not '20 confirm'.");
+            assertRefused(helper, server, fileBefore, "yolt config chat.mode global confirm",
+                    "chat.mode takes proximity, self_only or global, not 'global confirm'.");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A key that only takes effect later says when, so a change that seems to do nothing doesn't surprise the admin
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void replyCarriesEachWhenNote(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            helper.assertValueEqual(run(server, "yolt config skins.mode off"),
+                    List.of("skins.mode changed from auto to off (applies when a player next joins)."), "skins.mode");
+            helper.assertValueEqual(run(server, "yolt config hide.coordinates true"), List.of("hide.coordinates changed from false to true"
+                    + " (applies when a player next joins, respawns or changes dimension)."), "hide.coordinates");
+            helper.assertValueEqual(run(server, "yolt config deathLockout.cooldownDays 3"),
+                    List.of("deathLockout.cooldownDays changed from 7 to 3 (applies to deaths from now on)."), "deathLockout.cooldownDays");
+            helper.assertValueEqual(run(server, "yolt config hardcore.tougherMobs.health 2.0"),
+                    List.of("hardcore.tougherMobs.health changed from 1.5 to 2.0 (applies to mobs as they load)."), "hardcore.tougherMobs.health");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A command block runs commands at level 2, which is all /yolt config asks for
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void commandBlockCanSetAKey(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        BlockPos pos = new BlockPos(1, 1, 1);
+        try {
+            helper.setBlock(pos, Blocks.COMMAND_BLOCK);
+            BaseCommandBlock block = helper.<CommandBlockEntity>getBlockEntity(pos, CommandBlockEntity.class).getCommandBlock();
+            block.setCommand("yolt config chat.radius 20");
+            helper.assertTrue(block.performCommand(helper.getLevel()), "the command block didn't run");
+            helper.assertValueEqual(block.getSuccessCount(), 1, "the command block's result");
+            helper.assertValueEqual(Settings.get().chat.radius, 20, "live chat.radius");
+            helper.assertValueEqual(fileValue("chat.radius").getAsInt(), 20, "chat.radius in the file");
+        } finally {
+            helper.setBlock(pos, Blocks.AIR);
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A number, a text and a key that doesn't exist have no values to suggest, and asking doesn't fail
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void valueSuggestionsForUnknownOrNumberKeyAreEmpty(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+        CommandSourceStack console = server.createCommandSourceStack();
+        for (String command : List.of("yolt config chat.radus ", "yolt config chat.radius ", "yolt config messages.graveIn ")) {
+            helper.assertValueEqual(suggestions(dispatcher, command, console), List.of(), "values suggested for '" + command + "'");
+        }
+        // The check that the same request does suggest values for a key that has them
+        helper.assertTrue(!suggestions(dispatcher, "yolt config chat.mode ", console).isEmpty(), "no values suggested for chat.mode");
+        helper.succeed();
+    }
+
+    // A body that stays a set time can go back to staying until its owner is back, written as the word the file uses,
+    // and a time of nothing is refused
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void offlineDurationRoundTrips(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            helper.assertValueEqual(run(server, "yolt config bodies.duration 30"), List.of("bodies.duration changed from offline to 30."),
+                    "set to 30");
+            helper.assertValueEqual(run(server, "yolt config bodies.duration offline"), List.of("bodies.duration changed from 30 to offline."),
+                    "set to offline");
+            helper.assertTrue(Settings.get().bodies.duration.isOffline(), "live bodies.duration is not offline");
+            helper.assertValueEqual(fileValue("bodies.duration").getAsString(), "offline", "bodies.duration in the file");
+            assertRefused(helper, server, Files.readAllBytes(Settings.path()), "yolt config bodies.duration 0",
+                    "bodies.duration takes offline or whole minutes of 1 or more, not '0'.");
         } finally {
             restore(server, fileBefore);
         }
