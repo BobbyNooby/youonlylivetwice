@@ -13,11 +13,14 @@ import net.minecraft.core.Holder;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.ConversionParams;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityProcessor;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntitySpawnRequest;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,6 +37,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -55,6 +59,10 @@ public class HardcoreMobsGameTests {
     private static final String MOBS_DOORS = "you-only-live-twice-gametest:hardcore_mobs_doors";
     private static final String MOBS_DOORS_NO_DROP = "you-only-live-twice-gametest:hardcore_mobs_doors_nodrop";
     private static final String MOBS_NO_DOORS = "you-only-live-twice-gametest:hardcore_mobs_no_doors";
+    // Easy, with doorsAnyDifficulty off, so doors stay Hard-only
+    private static final String MOBS_DOORS_HARD_ONLY = "you-only-live-twice-gametest:hardcore_mobs_doors_hard_only";
+    // As MOBS_DOORS, for a test that changes its switch within a tick, apart from the door break that has its own batch
+    private static final String MOBS_DOORS_KEPT = "you-only-live-twice-gametest:hardcore_mobs_doors_kept";
     private static final BlockPos PLAYER_AT = new BlockPos(1, 0, 1);
     private static final BlockPos MOB_AT = new BlockPos(4, 0, 4);
     private static final BlockPos VILLAGER_AT = new BlockPos(6, 0, 1);
@@ -340,6 +348,227 @@ public class HardcoreMobsGameTests {
             spawned.forEach(Entity::discard);
         }
         helper.succeed();
+    }
+
+    // Turning both features off takes their boosts off a mob the next time it loads, here after a save and a load as a
+    // chunk does it. The tag stays, so a mob is never judged again.
+    @GameTest(environment = MOBS)
+    public void mobs2OffTakesTheBoostOffAtTheNextLoad(GameTestHelper helper) {
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        HardcoreConfig.RelentlessMobsSection relentless = Settings.get().hardcore.relentlessMobs;
+        boolean tougherBefore = tougher.enabled;
+        boolean relentlessBefore = relentless.enabled;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Mob zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            assertHealth(helper, zombie, 30.0F, 30.0F, "on first sight");
+            AttributeInstance range = attribute(zombie, Attributes.FOLLOW_RANGE);
+            assertClose(helper, range.getValue(), range.getBaseValue() * 1.5, "the follow range on first sight");
+
+            // Set and put back within this tick
+            tougher.enabled = false;
+            relentless.enabled = false;
+            Mob loaded = reload(helper, spawned, zombie);
+            assertHealth(helper, loaded, 20.0F, 20.0F, "loaded with both features off");
+            AttributeInstance loadedRange = attribute(loaded, Attributes.FOLLOW_RANGE);
+            assertClose(helper, loadedRange.getValue(), loadedRange.getBaseValue(), "the follow range loaded with both off");
+            helper.assertTrue(loaded.entityTags().contains(MobBoosts.TOUGH), "the tag went: " + loaded.entityTags());
+        } finally {
+            tougher.enabled = tougherBefore;
+            relentless.enabled = relentlessBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // damage is read as each hit lands, so a change counts from the next hit on the same zombie
+    @GameTest(environment = MOBS)
+    public void mobs3ADamageChangeAppliesAtOnce(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        double damageBefore = tougher.damage;
+        List<Entity> spawned = new ArrayList<>();
+        List<ServerPlayer> players = new ArrayList<>();
+        try {
+            Mob zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            DamageSource bite = level.damageSources().mobAttack(zombie);
+            assertPlayerTakes(helper, players, "BittenBefore", bite, 3.0F, 3.75F);
+            // Set and put back within this tick
+            tougher.damage = 2.0;
+            assertPlayerTakes(helper, players, "BittenAfter", bite, 3.0F, 6.0F);
+        } finally {
+            tougher.damage = damageBefore;
+            players.forEach(TestPlayers::leave);
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // includeCommandsAndEggs on boosts mobs from commands, eggs and dispensed eggs; includeSpawners off leaves spawner
+    // mobs vanilla for good. Both are read as a mob is first seen, and set within this tick.
+    @GameTest(environment = MOBS)
+    public void mobs7CommandsAndEggsWhenIncluded(GameTestHelper helper) {
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        boolean eggsBefore = tougher.includeCommandsAndEggs;
+        boolean spawnersBefore = tougher.includeSpawners;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            tougher.includeCommandsAndEggs = true;
+            tougher.includeSpawners = false;
+            for (EntitySpawnReason reason : List.of(EntitySpawnReason.COMMAND, EntitySpawnReason.SPAWN_ITEM_USE,
+                    EntitySpawnReason.DISPENSER)) {
+                assertBoosted(helper, create(helper, spawned, EntityTypes.ZOMBIE, reason, MOB_AT), "a zombie from " + reason);
+            }
+            Mob fromSpawner = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.SPAWNER, MOB_AT);
+            helper.assertTrue(fromSpawner.entityTags().contains(MobBoosts.VANILLA), "a spawner zombie isn't tagged " + MobBoosts.VANILLA);
+            assertHealth(helper, fromSpawner, 20.0F, 20.0F, "a spawner zombie");
+        } finally {
+            tougher.includeCommandsAndEggs = eggsBefore;
+            tougher.includeSpawners = spawnersBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // With doorsAnyDifficulty off, a zombie that won its roll still breaks doors on Hard only, as in vanilla: on Easy it
+    // reaches the door and the door stands
+    @GameTest(environment = MOBS_DOORS_HARD_ONLY, maxTicks = 340)
+    public void mobs4DoorsStayHardOnlyWhenSwitchedOff(GameTestHelper helper) {
+        helper.assertValueEqual(helper.getLevel().getDifficulty(), Difficulty.EASY, "difficulty");
+        buildCorridor(helper);
+        List<Entity> spawned = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> spawned.forEach(Entity::discard));
+        boolean waiting = false;
+        try {
+            Zombie zombie = createFree(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, ZOMBIE_AT);
+            helper.assertTrue(zombie.canBreakDoors(), "the zombie did not win its door roll at a chance of 1");
+            Mob villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BEHIND_DOOR);
+            spawned.add(villager);
+            zombie.setTarget(villager);
+            helper.runBeforeTestEnd(cleanUp);
+            helper.runAfterDelay(300, () -> {
+                try {
+                    helper.assertTrue(helper.getBlockState(DOOR_AT).getBlock() instanceof DoorBlock
+                            && helper.getBlockState(DOOR_AT.above()).getBlock() instanceof DoorBlock, "the door was broken on Easy");
+                    double toDoor = zombie.position().distanceTo(helper.absoluteVec(Vec3.atBottomCenterOf(DOOR_AT)));
+                    helper.assertTrue(toDoor < 2.0, "the zombie never reached the door: " + toDoor + " blocks off");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A zombie that won its roll keeps it with the feature off, loaded again, and is never rolled again once it is back
+    // on, even at a chance of 0
+    @GameTest(environment = MOBS_DOORS_KEPT)
+    public void mobs4ADoorWinnerKeepsItAfterTheSwitchGoesOff(GameTestHelper helper) {
+        HardcoreConfig.RelentlessMobsSection relentless = Settings.get().hardcore.relentlessMobs;
+        boolean enabledBefore = relentless.enabled;
+        double chanceBefore = relentless.doorBreakerChance;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Zombie zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            helper.assertTrue(zombie.canBreakDoors(), "the zombie did not win its door roll at a chance of 1");
+            // Set and put back within this tick
+            relentless.enabled = false;
+            Mob offLoad = reload(helper, spawned, zombie);
+            helper.assertTrue(((Zombie) offLoad).canBreakDoors(), "the zombie lost its doors loaded with relentless off");
+            relentless.enabled = true;
+            relentless.doorBreakerChance = 0.0;
+            Mob onLoad = reload(helper, spawned, offLoad);
+            helper.assertTrue(((Zombie) onLoad).canBreakDoors(), "the zombie was rolled again at a chance of 0");
+            helper.assertTrue(onLoad.entityTags().contains(Relentless.DOOR_ROLLED), "the roll's tag went");
+        } finally {
+            relentless.enabled = enabledBefore;
+            relentless.doorBreakerChance = chanceBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // A mob tougher mobs leaves alone is left alone by relentless mobs too: no longer reach and no door roll
+    @GameTest(environment = MOBS)
+    public void mobs5TougherExcludeAlsoKeepsRelentlessOff(GameTestHelper helper) {
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        List<String> excludeBefore = tougher.exclude;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            // Set and put back within this tick
+            List<String> exclude = new ArrayList<>(excludeBefore);
+            exclude.add("minecraft:zombie");
+            tougher.exclude = exclude;
+            Zombie zombie = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            AttributeInstance range = attribute(zombie, Attributes.FOLLOW_RANGE);
+            assertClose(helper, range.getValue(), range.getBaseValue(), "an excluded zombie's follow range");
+            helper.assertFalse(zombie.entityTags().contains(Relentless.DOOR_ROLLED), "an excluded zombie rolled for doors");
+            assertHealth(helper, zombie, 20.0F, 20.0F, "an excluded zombie");
+        } finally {
+            tougher.exclude = excludeBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // Endermen, zombified piglins, piglins and spiders count as hostile, so each gets 1.5 times its own health
+    @GameTest(environment = MOBS)
+    public void mobs6EndermenPiglinsSpidersAreBoosted(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            for (EntityType<? extends Mob> type : List.of(EntityTypes.ENDERMAN, EntityTypes.ZOMBIFIED_PIGLIN, EntityTypes.PIGLIN,
+                    EntityTypes.SPIDER)) {
+                Mob mob = create(helper, spawned, type, EntitySpawnReason.NATURAL, MOB_AT);
+                double base = attribute(mob, Attributes.MAX_HEALTH).getBaseValue();
+                assertClose(helper, mob.getMaxHealth(), base * 1.5, "a " + type + "'s max health");
+                helper.assertTrue(mob.entityTags().contains(MobBoosts.TOUGH), "a " + type + " isn't tagged " + MobBoosts.TOUGH);
+            }
+        } finally {
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // A mob saved before tougher mobs was on carries no verdict, so when it next loads it counts as natural and is
+    // boosted, whatever made it (docs/known-limits.md)
+    @GameTest(environment = MOBS)
+    public void mobs2SavedBeforeTheFeatureCountsAsNatural(GameTestHelper helper) {
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        boolean before = tougher.enabled;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            // Set and put back within this tick
+            tougher.enabled = false;
+            Mob commanded = create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.COMMAND, MOB_AT);
+            helper.assertFalse(commanded.entityTags().contains(MobBoosts.TOUGH) || commanded.entityTags().contains(MobBoosts.VANILLA),
+                    "the zombie was judged with tougher mobs off: " + commanded.entityTags());
+            tougher.enabled = true;
+            Mob loaded = reload(helper, spawned, commanded);
+            assertBoosted(helper, loaded, "a command zombie saved before tougher mobs");
+        } finally {
+            tougher.enabled = before;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // Saved and taken out of the world, then loaded and added back as a chunk would bring it, which runs the load hook
+    private static Mob reload(GameTestHelper helper, List<Entity> spawned, Mob mob) {
+        ServerLevel level = helper.getLevel();
+        TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, level.registryAccess());
+        helper.assertTrue(mob.save(output), "the " + mob.getType() + " was not saved");
+        mob.discard();
+        Entity loaded = EntityType.loadEntityRecursive(output.buildResult(), level,
+                new EntitySpawnRequest(EntitySpawnReason.LOAD, false), EntityProcessor.NOP);
+        helper.assertTrue(loaded instanceof Mob, "the " + mob.getType() + " didn't load as a mob");
+        helper.assertTrue(level.addFreshEntity(loaded), "the loaded " + mob.getType() + " was not added");
+        spawned.add(loaded);
+        return (Mob) loaded;
     }
 
     // Walls and a roof of stone, so the zombie has one way to go, and the cell behind the door closed at the far end
