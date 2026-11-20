@@ -8,6 +8,7 @@ import bobbynooby.dev.bodies.BodyRestart;
 import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
@@ -27,6 +28,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -36,8 +38,10 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerScoreboard;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
@@ -51,6 +55,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.animal.fish.Pufferfish;
@@ -69,8 +74,12 @@ import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.ReadOnlyScoreInfo;
+import net.minecraft.world.scores.ScoreHolder;
 import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -1199,6 +1208,173 @@ public class PlayerBodyGameTests {
                 cleanUp(helper, owner, before);
             }
         }
+    }
+
+    // At the start, a record already taken over has no body to bring back, so it goes; one whose dimension is gone can't
+    // be brought back, and keeps its record for its owner's login, with the reason logged. Every record is read, so this
+    // has the restart batch.
+    @GameTest(environment = BODY_RESTART)
+    public void restoreDropsAPendingRecordAndSkipsAGoneDimension(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer taken = join(helper, "TakenOver", ON_FLOOR);
+        ServerPlayer stranded = join(helper, "Stranded", new BlockPos(3, 1, 1));
+        String strandedName = stranded.nameAndId().name();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody takenBody = leavePlayerBody(helper, taken);
+            PlayerBody strandedBody = leavePlayerBody(helper, stranded);
+            BodyStore store = store(helper);
+            store.put(store.byOwner(taken.getUUID()).orElseThrow().withPendingRemoval(true));
+            BodyRecord strandedRecord = store.byOwner(stranded.getUUID()).orElseThrow();
+            BodySnapshot was = strandedRecord.snapshot();
+            ResourceKey<Level> gone = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("yolt", "gone"));
+            store.put(strandedRecord.withSnapshot(new BodySnapshot(gone, was.pos(), was.yRot(), was.health(), was.absorption(),
+                    was.fallDistance(), was.fireTicks(), was.air(), was.effects(), was.gear())));
+            takenBody.discard();
+            strandedBody.discard();
+
+            List<String> log = OfflineGameTests.yoltLog(() -> BodyRestart.restorePlayerBodies(server));
+            helper.assertTrue(store.byOwner(taken.getUUID()).isEmpty(), "the taken-over record is still there");
+            helper.assertTrue(playerBodiesOf(helper, taken.getUUID()).isEmpty(), "a body came back for the taken-over record");
+            helper.assertTrue(store.byOwner(stranded.getUUID()).isPresent(), "the record in a gone dimension went");
+            helper.assertTrue(playerBodiesOf(helper, stranded.getUUID()).isEmpty(), "a body came back for the gone dimension");
+            helper.assertTrue(log.contains("Could not bring back the body of " + strandedName + ": its dimension yolt:gone is gone"),
+                    "the gone dimension was not logged: " + log);
+        } finally {
+            cleanUp(helper, taken.getUUID(), before);
+            cleanUp(helper, stranded.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // A player body is built again at each start, from the config as it is then: made prone and movable, it comes back
+    // standing and pinned once the config says so. Its owner's main hand isn't in the record, so a left-handed owner's
+    // body comes back right-handed. Every record is read, so this has the restart batch.
+    @GameTest(environment = BODY_RESTART)
+    public void restoredBodyTakesPoseAndMovableFromTheConfig(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "Rebuilt", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            ClientInformation right = ClientInformation.createDefault();
+            player.updateOptions(new ClientInformation(right.language(), right.viewDistance(), right.chatVisibility(),
+                    right.chatColors(), right.modelCustomisation(), HumanoidArm.LEFT, right.textFilteringEnabled(),
+                    right.allowsListing(), right.particleStatus()));
+            PlayerBody body = leavePlayerBody(helper, player);
+            helper.assertValueEqual(body.getPose(), Pose.SWIMMING, "the body's pose as made");
+            helper.assertTrue(body.isEffectiveAi(), "the body is pinned as made");
+            helper.assertValueEqual(body.getMainArm(), HumanoidArm.LEFT, "the body's main hand as made");
+            BodyRestart.snapshotBodies(server);
+            body.discard();
+
+            Settings.get().bodies.pose = YoltConfig.BodyPose.STANDING;
+            Settings.get().bodies.movable = false;
+            BodyRestart.restorePlayerBodies(server);
+            List<PlayerBody> restored = playerBodiesOf(helper, owner);
+            helper.assertValueEqual(restored.size(), 1, "bodies brought back");
+            helper.assertValueEqual(restored.get(0).getPose(), Pose.STANDING, "the restored body's pose");
+            helper.assertFalse(restored.get(0).isEffectiveAi(), "the restored body can still move");
+            helper.assertValueEqual(restored.get(0).getMainArm(), HumanoidArm.RIGHT, "the restored body's main hand");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A player body is the owner in the scoreboard, so its death adds to the owner's death count, which a mannequin's
+    // death or a kill while away with no body doesn't
+    @GameTest
+    public void playerBodyDeathCountsOnTheOwnersDeathCount(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Scoreboard scoreboard = server.getScoreboard();
+        ServerPlayer playerOwner = join(helper, "Counted", ON_FLOOR);
+        ServerPlayer mannequinOwner = join(helper, "Uncounted", new BlockPos(3, 1, 1));
+        ServerPlayer away = join(helper, "AwayUncounted", new BlockPos(5, 1, 1));
+        List<ServerPlayer> owners = List.of(playerOwner, mannequinOwner, away);
+        Objective deaths = scoreboard.addObjective("yolt_deaths_" + UUID.randomUUID().toString().substring(0, 6),
+                ObjectiveCriteria.DEATH_COUNT, Component.literal("Deaths"), ObjectiveCriteria.RenderType.INTEGER, false, null);
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leavePlayerBody(helper, playerOwner);
+            Settings.get().bodies.type = YoltConfig.BodyType.MANNEQUIN;
+            Mannequin mannequin = BodyTestKit.leaveBody(helper, mannequinOwner);
+            Settings.get().bodies.enabled = false;
+            TestPlayers.leave(away);
+
+            body.kill(helper.getLevel());
+            mannequin.kill(helper.getLevel());
+            helper.assertValueEqual(Kills.kill(server, away.nameAndId()), Kills.Result.KILLED_OFFLINE, "the kill while away");
+            helper.assertValueEqual(deathsOf(scoreboard, deaths, playerOwner), 1, "the player body's owner's death count");
+            helper.assertValueEqual(deathsOf(scoreboard, deaths, mannequinOwner), 0, "the mannequin's owner's death count");
+            helper.assertValueEqual(deathsOf(scoreboard, deaths, away), 0, "the death count of the owner killed while away");
+        } finally {
+            scoreboard.removeObjective(deaths);
+            for (ServerPlayer owner : owners) {
+                cleanUp(helper, owner.getUUID(), before);
+                DeathLockout.revive(owner.getUUID(), "Test", "console");
+            }
+        }
+        helper.succeed();
+    }
+
+    // Vanilla puts a hit player's own motion back once their client is told of the knockback, so a player's punch
+    // moves a player body nowhere, while a mob's hit, which vanilla leaves alone, does move it. Bodies on a stone floor,
+    // so only the hits move them. The bodies stay across ticks, so this has the player body batch.
+    @GameTest(maxTicks = 20, environment = PLAYER_BODY)
+    public void playerPunchDoesNotKnockAPlayerBodyBack(GameTestHelper helper) {
+        for (int x = 0; x <= 6; x++) {
+            helper.setBlock(new BlockPos(x, 0, 1), Blocks.STONE);
+        }
+        ServerPlayer punchedOwner = join(helper, "Punched", ON_FLOOR);
+        ServerPlayer mauledOwner = join(helper, "Mauled", new BlockPos(5, 1, 1));
+        ServerPlayer hitter = join(helper, "Puncher", new BlockPos(0, 1, 1));
+        List<Entity> spawned = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            spawned.forEach(Entity::discard);
+            TestPlayers.leave(hitter);
+            removeBodies(helper, punchedOwner.getUUID());
+            removeBodies(helper, mauledOwner.getUUID());
+        });
+        boolean waiting = false;
+        try {
+            YoltConfig.BodiesSection before = usePlayerBodies();
+            PlayerBody punched;
+            PlayerBody mauled;
+            try {
+                punched = leavePlayerBody(helper, punchedOwner);
+                mauled = leavePlayerBody(helper, mauledOwner);
+            } finally {
+                Settings.get().bodies = before;
+            }
+            Vec3 punchedAt = punched.position();
+            Vec3 mauledAt = mauled.position();
+            Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(6, 1, 1));
+            spawned.add(zombie);
+            TestPlayers.markLoaded(hitter);
+            hitter.attack(punched);
+            helper.assertTrue(punched.getHealth() < 20.0F, "the punch did not land");
+            helper.assertTrue(zombie.doHurtTarget(helper.getLevel(), mauled), "the zombie's hit did not land");
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertValueEqual(punched.position(), punchedAt, "the punched body's position");
+                    helper.assertTrue(mauled.position().distanceTo(mauledAt) > 0.1, "the mob's hit did not move the body");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    private static int deathsOf(Scoreboard scoreboard, Objective objective, ServerPlayer owner) {
+        ReadOnlyScoreInfo score = scoreboard.getPlayerScoreInfo(ScoreHolder.forNameOnly(owner.nameAndId().name()), objective);
+        return score == null ? 0 : score.value();
     }
 
     // A size-4 slime, a size-4 magma cube and a puffed-up pufferfish at the spot, each able to hurt by touch
