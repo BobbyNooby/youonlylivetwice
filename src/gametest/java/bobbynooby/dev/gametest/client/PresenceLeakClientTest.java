@@ -81,11 +81,13 @@ public class PresenceLeakClientTest implements FabricClientGameTest {
             ClientTests.withServer(ctx, properties, server -> cast[0] = server.computeOnServer(s -> setUp(s, joined)), (server, connection) -> {
                 Cast c = cast[0];
                 boolean wasOp = server.computeOnServer(s -> s.getPlayerList().isOp(connection.getServerPlayer().nameAndId()));
+                boolean whispersWere = server.computeOnServer(s -> Settings.get().chat.allowWhispers);
                 try {
                     run(ctx, server, connection, c, joined);
                 } finally {
                     server.runOnServer(s -> {
                         List<Runnable> steps = new ArrayList<>();
+                        Settings.get().chat.allowWhispers = whispersWere;
                         ServerPlayer self = connection.getServerPlayer();
                         steps.add(() -> AdminView.set(self, false));
                         if (!wasOp) {
@@ -215,6 +217,11 @@ public class PresenceLeakClientTest implements FabricClientGameTest {
     // What the client holds: no entry, entity, team member or chat line for a hidden player
     private static void checkClientKnowsNone(ClientGameTestContext ctx, List<UUID> ids, List<String> names, int mark) {
         ctx.runOnClient(mc -> {
+            // Itself and the near player, and nobody under any other id
+            if (mc.getConnection().getOnlinePlayerIds().size() != 2 || mc.level.players().size() != 2) {
+                throw new AssertionError("the client knows " + mc.getConnection().getOnlinePlayerIds().size() + " players and has "
+                        + mc.level.players().size() + " in its world, not just itself and the near one");
+            }
             for (UUID id : ids) {
                 if (mc.getConnection().getPlayerInfo(id) != null) {
                     throw new AssertionError("the client has an entry for " + id);
@@ -264,6 +271,19 @@ public class PresenceLeakClientTest implements FabricClientGameTest {
         connection.waitForClientboundPackets();
         if (c.session().hits(distantName) == 0) {
             throw new AssertionError("admin view sent the distant player, but its name wasn't found in what the client got: "
+                    + c.session().summary());
+        }
+        // The same advancement the hidden player got, which an admin does see: its line is a text sent as NBT, so the
+        // search is known to find a name in that form too, and the advancement is known to announce itself
+        int before = c.session().hits(distantName);
+        int mark = ChatStoryClientTest.chatLogEnd(ctx);
+        String name = c.distant().getScoreboardName();
+        server.runOnServer(s -> s.getCommands().performPrefixedCommand(s.createCommandSourceStack(),
+                "advancement grant " + name + " only " + ADVANCEMENT));
+        ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> ChatStoryClientTest.chatLogHas(mc, mark, name),
+                mc -> "an admin's client never got the distant player's advancement line");
+        if (c.session().hits(distantName) <= before) {
+            throw new AssertionError("the advancement line reached the client, but its name wasn't found in the frames: "
                     + c.session().summary());
         }
     }

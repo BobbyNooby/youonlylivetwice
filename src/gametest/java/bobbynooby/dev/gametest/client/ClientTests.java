@@ -6,6 +6,7 @@ import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.TestPlayers;
 import com.mojang.blaze3d.platform.Window;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext;
@@ -47,6 +48,7 @@ public final class ClientTests {
         if (FILTER.isBlank()) {
             return true;
         }
+        checkFilter();
         for (String prefix : FILTER.split(",")) {
             if (!prefix.isBlank() && test.getSimpleName().startsWith(prefix.strip())) {
                 return true;
@@ -54,6 +56,17 @@ public final class ClientTests {
         }
         Yolt.LOGGER.info("Skipping {}: it isn't in yolt.clientTests={}", test.getSimpleName(), FILTER);
         return false;
+    }
+
+    // A prefix no test's name starts with would run nothing and pass, so it fails the run at its first test instead
+    private static void checkFilter() {
+        List<String> names = FabricLoader.getInstance().getEntrypointContainers("fabric-client-gametest", Object.class).stream()
+                .map(container -> container.getEntrypoint().getClass().getSimpleName()).toList();
+        for (String prefix : FILTER.split(",")) {
+            if (!prefix.isBlank() && names.stream().noneMatch(name -> name.startsWith(prefix.strip()))) {
+                throw new AssertionError("yolt.clientTests names \"" + prefix.strip() + "\", which no client test starts with: " + names);
+            }
+        }
     }
 
     // Test players have no client, so each tick the server gets what a client would have sent it, until the client

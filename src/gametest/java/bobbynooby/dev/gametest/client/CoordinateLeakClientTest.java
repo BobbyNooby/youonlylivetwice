@@ -103,6 +103,10 @@ public class CoordinateLeakClientTest implements FabricClientGameTest {
     private static final List<String> SKIPPED_PACKAGES = List.of("net.minecraft.network.protocol.configuration.",
             "net.minecraft.network.protocol.login.", "net.minecraft.network.protocol.status.",
             "net.minecraft.network.protocol.handshake.");
+    // What the scene has to send, by the end of each packet type's id
+    private static final List<String> SCENE_PACKETS = List.of("block_entity_data", "add_entity", "set_entity_data", "sound",
+            "level_particles", "level_event", "block_destruction", "explode", "container_set_content", "respawn",
+            "level_chunk_with_light");
     private static final Pattern NUMBER = Pattern.compile("-?\\d{1,9}");
 
     // What the client is sent, read on its network thread; read back here only under the same lock
@@ -274,6 +278,13 @@ public class CoordinateLeakClientTest implements FabricClientGameTest {
         if (!missing.isEmpty()) {
             throw new AssertionError("the client was never sent these shifted places, so the scan can't be trusted: " + missing
                     + "; packet types " + session.types());
+        }
+        // The control for the rest of the scene: each of these was sent, so a clean scan read them
+        List<String> absent = SCENE_PACKETS.stream()
+                .filter(type -> session.types().keySet().stream().noneMatch(seen -> seen.endsWith(":" + type))).toList();
+        if (!absent.isEmpty()) {
+            throw new AssertionError("the client was never sent " + absent + ", so the scan read less than the scene; it got "
+                    + session.types().keySet());
         }
         if (graveLines.isEmpty()) {
             throw new AssertionError("the client never got the grave line, so the text check read nothing worth trusting");

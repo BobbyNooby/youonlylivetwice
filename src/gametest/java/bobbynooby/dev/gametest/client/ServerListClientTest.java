@@ -22,6 +22,7 @@ import net.minecraft.world.level.GameType;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,7 @@ public class ServerListClientTest implements FabricClientGameTest {
     private static final int PING_BARS_WIDTH = 10;
     private static final int SPACING = 5;
     private static final int COUNT_HEIGHT = 8;
+    private static final String HOVER_NEEDLE = "the first hover line";
 
     // Where the count is drawn, in GUI pixels. The hover answers the mouse anywhere in it, edges included.
     private record Box(int left, int top, int right, int bottom) {
@@ -64,6 +66,8 @@ public class ServerListClientTest implements FabricClientGameTest {
             for (ServerPlayer player : online) {
                 needles.putAll(PacketRecorder.playerNeedles(player.getScoreboardName(), player.getUUID()));
             }
+            // The control: a hover line is in every ping's answer, so finding it shows the answer was searched
+            needles.put(HOVER_NEEDLE, lines.get(0).getBytes(StandardCharsets.UTF_8));
             // Every connection the multiplayer screen opens from here, its pings included, is recorded
             PacketRecorder.Session session = PacketRecorder.arm(new PacketRecorder.Session(needles, null));
             // The multiplayer screen reads its list from the file each time it opens
@@ -138,7 +142,11 @@ public class ServerListClientTest implements FabricClientGameTest {
         if (session.connections() == 0 || session.frames() == 0) {
             throw new AssertionError("the recording never hooked the ping, so its bytes went unread: " + session.summary());
         }
-        if (!session.hits().isEmpty() || !session.problems().isEmpty()) {
+        if (session.hits(HOVER_NEEDLE) == 0) {
+            throw new AssertionError("the hover line wasn't found in the ping's bytes, so the search can't be trusted: "
+                    + session.summary());
+        }
+        if (session.hits().size() != 1 || !session.problems().isEmpty()) {
             throw new AssertionError("the ping sent a name or id of a player who is on: " + session.summary());
         }
     }

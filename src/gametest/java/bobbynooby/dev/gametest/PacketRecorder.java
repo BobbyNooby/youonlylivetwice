@@ -7,6 +7,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import net.minecraft.network.Connection;
 import net.minecraft.network.HandlerNames;
+import net.minecraft.network.protocol.BundlePacket;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import org.jspecify.annotations.Nullable;
@@ -166,7 +167,7 @@ public final class PacketRecorder {
 
         private void packet(Packet<?> packet) {
             synchronized (this) {
-                types.merge(packet.type().toString(), 1, Integer::sum);
+                count(packet);
             }
             if (packets == null) {
                 return;
@@ -176,6 +177,16 @@ public final class PacketRecorder {
                 packets.accept(packet);
             } catch (RuntimeException | Error e) {
                 problem("reading " + packet.type() + " threw " + e);
+            }
+        }
+
+        // A bundle's parts are packets of their own to the client, so each is counted by its own type
+        private void count(Packet<?> packet) {
+            types.merge(packet.type().toString(), 1, Integer::sum);
+            if (packet instanceof BundlePacket<?> bundle) {
+                for (Packet<?> part : bundle.subPackets()) {
+                    count(part);
+                }
             }
         }
 
