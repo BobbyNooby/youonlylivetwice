@@ -121,6 +121,37 @@ public class CoordinateOffsetBorderGameTests {
         helper.succeed();
     }
 
+    // A plain border keeps its movement: shrinking from 64 to 32 goes out as the whole border, shifted, still moving. One
+    // that grows past the server's edge while it moves would show where the edge cuts it, so it goes out as walls that
+    // stand still.
+    @GameTest(environment = BORDER)
+    public void plainMovingBorderKeepsItsLerpUnlessTheEdgeCutsIt(GameTestHelper helper) {
+        BlockPos spot = helper.absolutePos(SPOT);
+        withBorder(helper, spot, 64, () -> {
+            ServerPlayer player = OffsetTestKit.join(helper, "cblerp", GameType.CREATIVE);
+            try {
+                Offset offset = CoordinateOffsets.offset(player);
+                WorldBorder real = helper.getLevel().getWorldBorder();
+                int mark = OffsetTestKit.mark(player);
+                real.lerpSizeBetween(64, 32, 20L * 60L, helper.getLevel().getGameTime());
+                ClientboundInitializeBorderPacket moving = OffsetTestKit.last(helper, player, mark, ClientboundInitializeBorderPacket.class);
+                helper.assertTrue(moving.getLerpTime() > 0L, "the shrinking border went out standing still");
+                helper.assertValueEqual(List.of(moving.getOldSize(), moving.getNewSize()), List.of(64.0, 32.0), "sizes of the shrinking border");
+                helper.assertValueEqual(List.of(moving.getNewCenterX(), moving.getNewCenterZ()),
+                        List.of((double) spot.getX() + offset.x(), (double) spot.getZ() + offset.z()), "centre of the shrinking border");
+
+                mark = OffsetTestKit.mark(player);
+                real.lerpSizeBetween(64, WHOLE, 20L * 60L, helper.getLevel().getGameTime());
+                ClientboundInitializeBorderPacket cut = OffsetTestKit.last(helper, player, mark, ClientboundInitializeBorderPacket.class);
+                helper.assertValueEqual(cut.getLerpTime(), 0L, "lerp time of a border the edge cuts");
+                helper.assertValueEqual(cut.getOldSize(), cut.getNewSize(), "sizes of the walls of a border the edge cuts");
+            } finally {
+                TestPlayers.leave(player);
+            }
+        });
+        helper.succeed();
+    }
+
     // A vanilla change goes out as the whole border through the walls rule, so the client never gets a real centre or size
     @GameTest(environment = BORDER)
     public void borderChangeKeepsTheNearWall(GameTestHelper helper) {
