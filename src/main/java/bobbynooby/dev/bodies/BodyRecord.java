@@ -100,6 +100,11 @@ public record BodyRecord(
                 copiedEffects, held);
     }
 
+    public BodyRecord withLoggedOutAt(long loggedOutAt) {
+        return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
+                copiedEffects, held);
+    }
+
     public BodyRecord withPendingRemoval(boolean pendingRemoval) {
         return new BodyRecord(owner, ownerName, bodyEntity, type, loggedOutAt, pendingRemoval, snapshot, skin, emptyAtLogout,
                 copiedEffects, held);

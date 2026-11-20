@@ -30,8 +30,11 @@ public final class Cooldown {
         if (log.revived()) {
             return 0;
         }
-        long end = log.deathTimeMillis() + log.cooldownDays() * DAY_MS;
-        return Math.max(0, end - nowMillis);
+        long whole = log.cooldownDays() * DAY_MS;
+        long end = log.deathTimeMillis() + whole;
+        // Never longer than the cooldown itself: a death recorded while the server's clock ran ahead, or a clock since
+        // set back, would otherwise keep the player out for the difference on top
+        return Math.clamp(end - nowMillis, 0, Math.max(whole, 0));
     }
 
     /** What a locked-out player is told, at login and when the death kicks them: how they died, then the wait. */

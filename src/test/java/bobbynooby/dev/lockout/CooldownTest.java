@@ -22,6 +22,15 @@ class CooldownTest {
         assertEquals(6 * DAY, Cooldown.remainingMillis(log(7, false), DAY));
     }
 
+    // A death stamped ahead of now: the server's clock ran fast when it was recorded, or was set back since
+    @Test
+    void aClockSetBackNeverMakesTheWaitLongerThanTheCooldown() {
+        DeathLog ahead = new DeathLog(UUID_A, "Bob", 30 * DAY, 7, false, null, null, null);
+        assertEquals(7 * DAY, Cooldown.remainingMillis(ahead, DAY));
+        assertEquals(7 * DAY, Cooldown.remainingMillis(ahead, 30 * DAY));
+        assertEquals(6 * DAY, Cooldown.remainingMillis(ahead, 31 * DAY));
+    }
+
     @Test
     void expiredIsZero() {
         assertEquals(0, Cooldown.remainingMillis(log(7, false), 8 * DAY));

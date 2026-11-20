@@ -79,8 +79,15 @@ public final class BodyExpiry {
         if (duration.isOffline()) {
             return;
         }
+        BodyStore store = BodyStore.get(server);
         int tried = 0;
-        for (BodyRecord record : records) {
+        for (BodyRecord record : List.copyOf(records)) {
+            // A logout stamped later than now means the server's clock was set back since. Its wait starts over from
+            // now, so the body stands one whole duration more at most, not until the clock catches up.
+            if (record.loggedOutAt() > now) {
+                store.put(record.withLoggedOutAt(now));
+                continue;
+            }
             // The rest wait for the next pass
             if (tried >= MAX_PER_PASS) {
                 break;
