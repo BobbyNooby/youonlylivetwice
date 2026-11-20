@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
@@ -9,10 +10,12 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.revive.Revive;
+import bobbynooby.dev.world.RandomSpawn;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -25,13 +28,16 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Util;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
@@ -52,6 +58,8 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -65,6 +73,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -632,6 +641,191 @@ public class ReviveGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // The whole way back as docs/reviving.md tells it: a revived player comes back with nothing, since their things are
+    // in the grave, at a random spot inside the border, not where they died. The spot search is seeded, so a failure
+    // repeats. All in one tick; the victim leaves before the death's kick comes, as the kick would make them.
+    @GameTest(maxTicks = 200)
+    public void revivedPlayerRejoinsWithNothingAtARandomSpot(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel overworld = server.overworld();
+        ServerPlayer victim = TestPlayers.join(helper, "Returning", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        GameProfile profile = victim.getGameProfile();
+        UUID id = victim.getUUID();
+        String name = profile.name();
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "Bringer", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+        boolean randomBefore = Settings.get().randomSpawn;
+        ServerPlayer back = null;
+        try {
+            Settings.get().randomSpawn = true;
+            RandomSpawn.useRandomForTesting(new Random(42));
+            victim.getInventory().add(new ItemStack(Items.DIAMOND, 5));
+            helper.assertTrue(victim.getRespawnConfig() == null, "the victim has a respawn point");
+            BlockPos diedAt = victim.blockPosition();
+            TestPlayers.markLoaded(victim);
+            victim.kill(victim.level());
+            helper.assertTrue(victim.isDeadOrDying(), "the victim did not die");
+            TestPlayers.leave(victim);
+            // The lockout's own check: with the user online the test server is full, which vanilla would say first
+            helper.assertTrue(LockoutGameTests.refusedForLockout(DeathLockout.refusal(id, name)), "the victim is not locked out");
+
+            ItemStack paper = reviveHead(ResolvableProfile.createResolved(profile), 1);
+            user.setItemInHand(InteractionHand.MAIN_HAND, paper);
+            user.gameMode.useItem(user, user.level(), paper, InteractionHand.MAIN_HAND);
+            helper.assertTrue(DeathLockout.refusal(id, name) == null, "the revived victim is still refused");
+            helper.assertTrue(user.getMainHandItem().isEmpty(), "the paper was not used up");
+
+            back = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the victim did not come back dead");
+            back = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
+            helper.assertTrue(back.getInventory().isEmpty(), "the victim came back with items");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, id, Items.DIAMOND), 5, "diamonds in the victim's graves");
+
+            BlockPos feet = back.blockPosition();
+            helper.assertTrue(back.level() == overworld, "came back in " + back.level().dimension().identifier());
+            helper.assertTrue(feet.distManhattan(diedAt) > 64, "came back at " + feet.toShortString() + ", by the death at " + diedAt.toShortString());
+            WorldBorder border = overworld.getWorldBorder();
+            double half = Math.min(border.getSize(), Settings.get().worldBorder.diameter) / 2.0;
+            helper.assertTrue(Math.abs(feet.getX() + 0.5 - border.getCenterX()) <= half
+                            && Math.abs(feet.getZ() + 0.5 - border.getCenterZ()) <= half,
+                    "came back at " + feet.toShortString() + ", more than " + half + " blocks from the border's centre");
+            BlockPos below = feet.below();
+            helper.assertTrue(Block.isFaceFull(overworld.getBlockState(below).getCollisionShape(overworld, below), Direction.UP),
+                    "came back at " + feet.toShortString() + " over " + overworld.getBlockState(below) + ", which has no full top face");
+            BlockPos spawn = overworld.getRespawnData().pos();
+            int radius = overworld.getGameRules().get(GameRules.RESPAWN_RADIUS);
+            helper.assertTrue(Math.max(Math.abs(feet.getX() - spawn.getX()), Math.abs(feet.getZ() - spawn.getZ())) > radius + 1,
+                    "came back at " + feet.toShortString() + ", where vanilla puts a player round the world spawn " + spawn.toShortString());
+        } finally {
+            RandomSpawn.useRandomForTesting(null);
+            Settings.get().randomSpawn = randomBefore;
+            ServerPlayer online = server.getPlayerList().getPlayer(id);
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+            TestPlayers.leave(user);
+            BodyTestKit.removeGraves(helper, id);
+            DeathLockout.revive(id, name, "console");
+        }
+        helper.succeed();
+    }
+
+    // A spectator can't use items, and the paper is no exception: neither a click in the air nor one on a block revives
+    // the owner or uses the paper, and the spectator is told nothing. Two spectators, one for each click, so neither
+    // click is skipped as the second half of the other.
+    @GameTest
+    public void spectatorRightClickRevivesNoOne(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        BlockPos stone = new BlockPos(3, 1, 3);
+        helper.setBlock(stone, Blocks.STONE);
+        helper.setBlock(stone.above(), Blocks.AIR);
+        TestPlayers.Recording inAir = TestPlayers.joinRecording(helper, "AirWatcher", GameType.SPECTATOR, new BlockPos(1, 1, 1));
+        TestPlayers.Recording onBlock = TestPlayers.joinRecording(helper, "BlockWatcher", GameType.SPECTATOR, new BlockPos(1, 1, 3));
+        try {
+            int airMark = inAir.messages.size();
+            int blockMark = onBlock.messages.size();
+            ItemStack airPaper = reviveHead(staticProfile(owner), 2);
+            inAir.setItemInHand(InteractionHand.MAIN_HAND, airPaper);
+            inAir.gameMode.useItem(inAir, inAir.level(), airPaper, InteractionHand.MAIN_HAND);
+            useOnTop(helper, onBlock, reviveHead(staticProfile(owner), 2), stone);
+
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") != null, "a spectator revived the owner");
+            helper.assertValueEqual(inAir.getMainHandItem().getCount(), 2, "papers left after the click in the air");
+            helper.assertValueEqual(onBlock.getMainHandItem().getCount(), 2, "papers left after the click on the block");
+            helper.assertTrue(said(inAir, airMark).isEmpty(), "the spectator clicking in the air was told " + said(inAir, airMark));
+            helper.assertTrue(said(onBlock, blockMark).isEmpty(), "the spectator clicking the block was told " + said(onBlock, blockMark));
+            helper.assertBlockPresent(Blocks.AIR, stone.above());
+        } finally {
+            TestPlayers.leave(inAir);
+            TestPlayers.leave(onBlock);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // The totem's sound is sent to the user alone: played into the world, it would tell anyone near that a revive
+    // happened. The bystander stands two blocks off, well inside where a sound in the world is heard.
+    @GameTest
+    public void reviveSendsTheTotemSoundToTheUserOnly(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        ServerPlayer user = TestPlayers.join(helper, "Chimed", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer bystander = TestPlayers.join(helper, "Nearby", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        try {
+            int userMark = TestPlayers.sentPackets(user).size();
+            int bystanderMark = TestPlayers.sentPackets(bystander).size();
+            helper.assertValueEqual(Revive.tryUse(user, reviveHead(staticProfile(owner), 1)), Revive.Outcome.REVIVED, "outcome");
+            helper.assertValueEqual(totemSounds(user, userMark), 1, "totem sounds the user was sent");
+            helper.assertValueEqual(totemSounds(bystander, bystanderMark), 0, "totem sounds the bystander was sent");
+        } finally {
+            TestPlayers.leave(user);
+            TestPlayers.leave(bystander);
+        }
+        helper.succeed();
+    }
+
+    // A paper whose profile has an id and no name still revives; with no name to show, the replies name the id
+    @GameTest
+    public void headGivenByIdAloneNamesTheUuid(GameTestHelper helper) {
+        UUID owner = lockedOut(helper);
+        TestPlayers.Recording user = TestPlayers.joinRecording(helper, "IdOnly", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            ItemStack paper = reviveHead(ResolvableProfile.createUnresolved(owner), 1);
+            int mark = user.messages.size();
+            helper.assertValueEqual(Revive.tryUse(user, paper), Revive.Outcome.REVIVED, "outcome with the owner dead");
+            helper.assertValueEqual(said(user, mark), List.of(owner + " can come back now."), "reply to the revive");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "the owner is still locked out");
+
+            ItemStack another = reviveHead(ResolvableProfile.createUnresolved(owner), 1);
+            mark = user.messages.size();
+            helper.assertValueEqual(Revive.tryUse(user, another), Revive.Outcome.NOT_DEAD, "outcome with the owner revived");
+            helper.assertValueEqual(said(user, mark), List.of(owner + " is not dead."), "reply with the owner revived");
+            helper.assertValueEqual(another.getCount(), 1, "papers left");
+        } finally {
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
+    // hardcore.curse.reviveRefundHearts gives that many of the hearts lost back at a paper's revive, and no more than
+    // were lost; at 0, the shipped value, a paper gives none back. The switches go back in this tick.
+    @GameTest
+    public void reviveRefundHeartsGivesBackThatMany(GameTestHelper helper) {
+        UUID refunded = lockedOut(helper);
+        UUID kept = lockedOut(helper);
+        ServerPlayer user = TestPlayers.join(helper, "Refunder", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        HardcoreConfig.CurseSection curse = Settings.get().hardcore.curse;
+        boolean curseBefore = curse.enabled;
+        int refundBefore = curse.reviveRefundHearts;
+        try {
+            HardcoreStates.update(refunded, state -> state.curseHeartsLost = 3);
+            HardcoreStates.update(kept, state -> state.curseHeartsLost = 3);
+            curse.enabled = true;
+            curse.reviveRefundHearts = 2;
+            helper.assertValueEqual(Revive.tryUse(user, reviveHead(staticProfile(refunded), 1)), Revive.Outcome.REVIVED,
+                    "outcome with 2 to give back");
+            helper.assertValueEqual(HardcoreStates.read(refunded).curseHeartsLost, 1, "hearts still lost with 2 given back");
+
+            curse.reviveRefundHearts = 0;
+            helper.assertValueEqual(Revive.tryUse(user, reviveHead(staticProfile(kept), 1)), Revive.Outcome.REVIVED,
+                    "outcome with none to give back");
+            helper.assertValueEqual(HardcoreStates.read(kept).curseHeartsLost, 3, "hearts still lost with none given back");
+        } finally {
+            curse.enabled = curseBefore;
+            curse.reviveRefundHearts = refundBefore;
+            HardcoreStates.update(refunded, state -> state.curseHeartsLost = 0);
+            HardcoreStates.update(kept, state -> state.curseHeartsLost = 0);
+            TestPlayers.leave(user);
+        }
+        helper.succeed();
+    }
+
+    // Totem sounds among what the player was sent since packet "from"
+    private static int totemSounds(ServerPlayer player, int from) {
+        List<Packet<?>> sent = TestPlayers.sentPackets(player);
+        return (int) sent.subList(from, sent.size()).stream()
+                .filter(packet -> packet instanceof ClientboundSoundPacket sound && sound.getSound().value() == SoundEvents.TOTEM_USE)
+                .count();
     }
 
     // The head and the recipe's five materials
