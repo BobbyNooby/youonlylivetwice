@@ -118,6 +118,14 @@ public final class BodyStore extends SavedData {
         return writes;
     }
 
+    // Set by the save's own write, on the storage's thread, when it fails
+    private static volatile boolean writeFailed;
+
+    /** Called from the body file's write when it fails, which vanilla would only log. */
+    public static void writeFailed() {
+        writeFailed = true;
+    }
+
     /**
      * Writes the body file now, with every other changed entry of the data storage, which 26.3 can't save one by one.
      * A logout calls it: the player's own save is written at every logout, and a body record left for the next world
@@ -127,8 +135,14 @@ public final class BodyStore extends SavedData {
     public void saveNow(MinecraftServer server) {
         writes++;
         setDirty();
+        writeFailed = false;
         try {
             server.getDataStorage().saveAndJoin();
+            // The storage catches a failed write itself, having counted the store as saved already
+            if (writeFailed) {
+                setDirty();
+                Yolt.LOGGER.error("Could not save the body file at a logout; the next world save tries again");
+            }
         } catch (RuntimeException e) {
             // The storage counts the store as saved before it writes
             setDirty();

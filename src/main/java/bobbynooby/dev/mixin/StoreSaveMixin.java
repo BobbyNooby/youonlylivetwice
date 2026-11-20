@@ -23,7 +23,16 @@ public abstract class StoreSaveMixin {
             target = "Lnet/minecraft/nbt/NbtIo;writeCompressed(Lnet/minecraft/nbt/CompoundTag;Ljava/nio/file/Path;)V"))
     private void writeYoltStoresAtomically(CompoundTag tag, Path path, Operation<Void> original,
                                            @Local(argsOnly = true) SavedDataType<?> type) throws IOException {
-        if (type.equals(GraveStore.TYPE) || type.equals(BodyStore.TYPE) || type.equals(SkinStore.TYPE)) {
+        if (type.equals(BodyStore.TYPE)) {
+            // Vanilla catches a failed write itself and only logs it, with the store already counted as saved. The body
+            // store is told, so it can mark itself for the next save to try again.
+            try {
+                AtomicFiles.write(path, tmp -> original.call(tag, tmp));
+            } catch (IOException | RuntimeException e) {
+                BodyStore.writeFailed();
+                throw e;
+            }
+        } else if (type.equals(GraveStore.TYPE) || type.equals(SkinStore.TYPE)) {
             AtomicFiles.write(path, tmp -> original.call(tag, tmp));
         } else {
             original.call(tag, path);

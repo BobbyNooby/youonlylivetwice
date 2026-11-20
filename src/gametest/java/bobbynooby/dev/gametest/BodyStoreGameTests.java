@@ -161,6 +161,36 @@ public class BodyStoreGameTests {
         helper.succeed();
     }
 
+    // A folder with something in it stands where the body file goes, so the logout's write fails. The logout still
+    // leaves its body, and, as BodyStore.saveNow promises, the next world save tries again: the store stays marked to
+    // be saved. The file is written again in this tick.
+    @GameTest
+    public void failedLogoutSaveKeepsTheStoreDirty(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path file = BodyStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        Path inside = file.resolve("blocker");
+        ServerPlayer player = TestPlayers.join(helper, "Unsaved", GameType.SURVIVAL, new BlockPos(1, 2, 1));
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        BodyStore store = BodyTestKit.store(helper);
+        try {
+            Files.deleteIfExists(file);
+            Files.createDirectories(file);
+            Files.writeString(inside, "");
+            BodyTestKit.leaveBody(helper, player);
+            helper.assertTrue(store.byOwner(player.getUUID()).isPresent(), "the logout left no body record");
+            helper.assertTrue(Files.isDirectory(file), "the body file was written over the folder");
+            helper.assertTrue(store.isDirty(), "the failed write left the body store marked as saved");
+        } finally {
+            Files.deleteIfExists(inside);
+            if (Files.isDirectory(file)) {
+                Files.delete(file);
+            }
+            BodyTestKit.cleanUp(helper, player.getUUID(), before);
+            store.saveNow(server);
+        }
+        helper.succeed();
+    }
+
     // The stop leaves a body for everyone still online, and writes the body file once after them all rather than once
     // for each. What is on disk after is what each one's write would have left: the store, every new record in it. A
     // batch of its own, so only this test's players are online.
