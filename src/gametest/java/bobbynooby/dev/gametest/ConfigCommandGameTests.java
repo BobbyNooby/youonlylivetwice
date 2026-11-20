@@ -547,24 +547,36 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
-    // A text of the messages section: a required placeholder can't be dropped, the revive paper's name says it waits for
-    // new papers, and a placeholder the text doesn't fill in is let through with a line that says so, by the command and
-    // by a reload
+    // Every text of the messages section: set, kept to 256 characters, and read again by a reload, with the note of a
+    // text that waits, such as the revive paper's name. A required placeholder can't be dropped, and one the text doesn't
+    // fill in is let through with a line that says so, by the command and by a reload.
     @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
     public void messagesSetRefuseAndReload(GameTestHelper helper) throws IOException {
         MinecraftServer server = helper.getLevel().getServer();
         byte[] fileBefore = Files.readAllBytes(Settings.path());
+        YoltConfig fresh = new YoltConfig();
         try {
-            setsRefusesAndReloads(helper, server, "messages.lockoutWait", "Try again in {wait}.", "Come back in {wait}.", "",
-                    "Come back later.", "messages.lockoutWait must keep {wait}.", "Wait {wait}.");
-            setsRefusesAndReloads(helper, server, "messages.reviveName", "Revive {name}", "Bring back {name}",
-                    " (applies to revive papers crafted from now on)", "Bring them back", "messages.reviveName must keep {name}.",
-                    "Paper of {name}");
-            setsRefusesAndReloads(helper, server, "messages.help", "But nobody answered....", "Only the wind.", "",
-                    "x".repeat(257), "messages.help must be at most 256 characters.", "Silence.");
+            int texts = 0;
+            for (ConfigKey key : ConfigKeys.all()) {
+                if (!key.path().startsWith("messages.")) {
+                    continue;
+                }
+                String shipped = key.show(fresh);
+                // Placeholders and all, so no text loses one it must keep
+                setsRefusesAndReloads(helper, server, key.path(), shipped, "Now " + shipped, key.when().note(), "x".repeat(257),
+                        key.path() + " must be at most 256 characters.", "Then " + shipped);
+                texts++;
+            }
+            helper.assertValueEqual(texts, 15, "texts in the messages section");
+            for (String[] dropped : new String[][] {{"lockoutWait", "Come back later.", "{wait}"},
+                    {"reviveName", "Bring them back", "{name}"}, {"graveAt", "Dig at {x}", "{y} and {z}"}}) {
+                String path = "messages." + dropped[0];
+                assertRefused(helper, server, Files.readAllBytes(Settings.path()), "yolt config " + path + " " + dropped[1],
+                        path + " must keep " + dropped[2] + ".");
+            }
 
             helper.assertValueEqual(run(server, "yolt config messages.graveIn Your grave lies in {dim}."), List.of(
-                    "messages.graveIn changed from Your grave is in {dimension}. to Your grave lies in {dim}..",
+                    "messages.graveIn changed from Then Your grave is in {dimension}. to Your grave lies in {dim}..",
                     "messages.graveIn has {dim}, which it doesn't fill in, so it shows as typed."), "set with an unknown placeholder");
             helper.assertValueEqual(Settings.get().messages.graveIn, "Your grave lies in {dim}.", "live messages.graveIn");
             Files.writeString(Settings.path(), "{\"messages\": {\"graveIn\": \"In {where}.\"}, \"worldBorder\": {\"enabled\": false}}");
