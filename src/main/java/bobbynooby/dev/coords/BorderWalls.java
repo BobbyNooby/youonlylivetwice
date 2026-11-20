@@ -50,11 +50,11 @@ public final class BorderWalls {
         boolean nearMinZ = Math.abs(playerZ - minZ) <= near;
         boolean nearMaxZ = Math.abs(maxZ - playerZ) <= near;
         if ((nearMinX && nearMaxX) || (nearMinZ && nearMaxZ)) {
-            return new Square((minX + maxX) / 2.0 + offset.x(), (minZ + maxZ) / 2.0 + offset.z(), maxX - minX, true);
+            return new Square(offset.shiftX((minX + maxX) / 2.0), offset.shiftZ((minZ + maxZ) / 2.0), maxX - minX, true);
         }
         // A square twice the world's edge, set so its one near wall is the real one and the far wall lands past the edge
-        double centerX = nearMaxX ? (maxX + offset.x()) - absoluteMax : nearMinX ? (minX + offset.x()) + absoluteMax : 0.0;
-        double centerZ = nearMaxZ ? (maxZ + offset.z()) - absoluteMax : nearMinZ ? (minZ + offset.z()) + absoluteMax : 0.0;
+        double centerX = nearMaxX ? offset.shiftX(maxX) - absoluteMax : nearMinX ? offset.shiftX(minX) + absoluteMax : 0.0;
+        double centerZ = nearMaxZ ? offset.shiftZ(maxZ) - absoluteMax : nearMinZ ? offset.shiftZ(minZ) + absoluteMax : 0.0;
         return new Square(centerX, centerZ, 2.0 * absoluteMax, false);
     }
 }

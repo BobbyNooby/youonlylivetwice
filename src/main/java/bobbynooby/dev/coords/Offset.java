@@ -17,6 +17,10 @@ import java.util.random.RandomGenerator;
 public record Offset(int x, int z) {
     public static final int LIMIT = 999_984;
     public static final Offset ZERO = new Offset(0, 0);
+    // Every shifted X and Z lands on this grid, 2^-27 of a block. A double far from 0 has coarser steps than one near
+    // it, so a real position shifted to near 0 as it is would keep the steps of where it really was, and its unused low
+    // bits would tell how far out that is. The grid is the step at the world's edge, so no position anywhere is finer.
+    private static final double GRID = 0x1.0p27;
 
     public Offset {
         if (!fits(x) || !fits(z)) {
@@ -57,7 +61,7 @@ public record Offset(int x, int z) {
     }
 
     public Vec3 shift(Vec3 pos) {
-        return new Vec3(pos.x + x, pos.y, pos.z + z);
+        return new Vec3(shiftX(pos.x), pos.y, shiftZ(pos.z));
     }
 
     public GlobalPos shift(GlobalPos pos) {
@@ -73,11 +77,18 @@ public record Offset(int x, int z) {
     }
 
     public double shiftX(double realX) {
-        return realX + x;
+        return onGrid(realX + x);
     }
 
     public double shiftZ(double realZ) {
-        return realZ + z;
+        return onGrid(realZ + z);
+    }
+
+    // Exact for anything inside the world, where a double's own step is no coarser than the grid's. Past that, and for
+    // a value that isn't a number, there is nothing finer to hide.
+    private static double onGrid(double value) {
+        double scaled = value * GRID;
+        return Math.abs(scaled) < 0x1.0p52 ? Math.rint(scaled) / GRID : value;
     }
 
     public int shiftChunkX(int chunkX) {

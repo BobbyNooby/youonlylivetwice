@@ -107,4 +107,28 @@ class OffsetTest {
             assertEquals(packed, Mth.packDegrees(Mth.unpackDegrees(packed)), "byte " + i);
         }
     }
+
+    // A real position's low bits depend on how far out it is, and adding the offset alone would keep them
+    @Test
+    void shiftedPositionsDoNotTellHowFarOutTheRealOnesAre() {
+        Random random = new Random(7);
+        for (int real : new int[] {100, 1_000, 4_000, 250_000, 29_000_000}) {
+            Offset offset = Offset.at(real, -real);
+            for (int i = 0; i < 2_000; i++) {
+                double x = offset.shiftX(real + random.nextDouble());
+                double z = offset.shiftZ(-real - random.nextDouble());
+                assertEquals(0.0, Math.abs(Math.IEEEremainder(x, 0x1.0p-27)), "shifted x " + x + " from near " + real + " is off the grid");
+                assertEquals(0.0, Math.abs(Math.IEEEremainder(z, 0x1.0p-27)), "shifted z " + z + " from near " + real + " is off the grid");
+            }
+        }
+    }
+
+    @Test
+    void theGridMovesAPositionByLessThanItsStep() {
+        Offset offset = new Offset(-992, 2_000);
+        double real = 1_000.123456789;
+        assertEquals(real - 992, offset.shiftX(real), 0x1.0p-27);
+        assertEquals(new Vec3(8.5, 64.25, 2_000.5), offset.shift(new Vec3(1_000.5, 64.25, 0.5)), "halves stay exact");
+        assertEquals(1_000.5, offset.negate().shiftX(offset.shiftX(1_000.5)), "there and back");
+    }
 }

@@ -78,8 +78,8 @@ public final class NbtRule {
                     shiftDecorations((CompoundTag) value, offset);
                 } else if (isEntityPos(key, value)) {
                     ListTag pos = (ListTag) value;
-                    pos.set(0, DoubleTag.valueOf(pos.getDoubleOr(0, 0.0) + offset.x()));
-                    pos.set(2, DoubleTag.valueOf(pos.getDoubleOr(2, 0.0) + offset.z()));
+                    pos.set(0, DoubleTag.valueOf(offset.shiftX(pos.getDoubleOr(0, 0.0))));
+                    pos.set(2, DoubleTag.valueOf(offset.shiftZ(pos.getDoubleOr(2, 0.0))));
                 } else {
                     shiftInPlace(value, frame);
                 }
@@ -106,8 +106,8 @@ public final class NbtRule {
     private static void shiftDecorations(CompoundTag decorations, Offset offset) {
         for (String id : decorations.keySet()) {
             if (decorations.get(id) instanceof CompoundTag decoration && isDecoration(decoration)) {
-                decoration.putDouble("x", decoration.getDoubleOr("x", 0.0) + offset.x());
-                decoration.putDouble("z", decoration.getDoubleOr("z", 0.0) + offset.z());
+                decoration.putDouble("x", offset.shiftX(decoration.getDoubleOr("x", 0.0)));
+                decoration.putDouble("z", offset.shiftZ(decoration.getDoubleOr("z", 0.0)));
             }
         }
     }
