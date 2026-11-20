@@ -1102,6 +1102,157 @@ public class VoidGraveGameTests {
         return player.nameAndId();
     }
 
+    // Where the owner last stood is kept per dimension: ground noted in the Overworld means nothing to a death over the
+    // End's void, whose grave goes to land in the End or beside its exit portal. Far out, in a chunk loaded for this
+    // test alone and dug out wherever the land search reads. The grave is made the way the death makes it, for the
+    // owner whose ground was noted.
+    @GameTest(skyAccess = true)
+    public void voidDeathIgnoresLastGroundInAnotherDimension(GameTestHelper helper) {
+        ServerLevel overworld = helper.getLevel();
+        ServerLevel end = level(helper, Level.END);
+        BlockPos onLedge = helper.absolutePos(new BlockPos(3, 1, 3));
+        ChunkPos chunk = new ChunkPos(312, -312);
+        BlockPos death = new BlockPos(chunk.getMiddleBlockX(), end.getMinY() - 70, chunk.getMiddleBlockZ());
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        Map<BlockPos, BlockState> endBefore = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        Grave grave = null;
+        try {
+            setRemembered(overworld, onLedge.below(), Blocks.STONE, before);
+            player = TestPlayers.join(helper, "Elsewhere", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+            standOnGround(player);
+            helper.assertValueEqual(LastGround.in(player.getUUID(), Level.OVERWORLD), Optional.of(onLedge), "last ground in the Overworld");
+            helper.assertValueEqual(LastGround.in(player.getUUID(), Level.END), Optional.empty(), "last ground in the End");
+
+            emptyLoneChunk(helper, end, chunk, endBefore);
+            ResolvableProfile profile = ResolvableProfile.createResolved(player.getGameProfile());
+            grave = Graves.create(end, death, profile, player.getUUID(), player.nameAndId().name(),
+                    List.of(GraveItems.graveHead(profile))).getFirst();
+            helper.assertValueEqual(grave.dimension(), Level.END, "the grave's dimension");
+            helper.assertFalse(sameColumn(grave.pos(), onLedge), "the End grave took the Overworld ground's column at " + grave.pos());
+            assertOnSolid(helper, end, grave.pos());
+        } finally {
+            if (grave != null) {
+                removeGrave(end, grave);
+            }
+            putBack(end, endBefore);
+            if (player != null) {
+                cleanUp(overworld, player);
+            }
+            putBack(overworld, before);
+        }
+        helper.succeed();
+    }
+
+    // The void search keeps the columns it reaches for the radius it was built for. Down to 3 the 7 by 7 hole's rim is
+    // out of reach; back up to 16 it is found again, so the columns were built again for the larger radius.
+    @GameTest(dimension = "minecraft:the_end", skyAccess = true)
+    public void voidSearchRadiusRaisedAgainRebuildsTheColumns(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos middle = helper.absolutePos(new BlockPos(3, 0, 3));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int radiusBefore = graves.voidSearchRadius;
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        try {
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    dig(level, middle.offset(dx, 0, dz), before);
+                }
+            }
+            graves.voidSearchRadius = 16;
+            BlockPos first = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
+            helper.assertValueEqual(flatDistanceSqr(first, middle), 16L, "grave's distance from the hole's middle, squared, at 16");
+            graves.voidSearchRadius = 3;
+            BlockPos fixed = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
+            helper.assertTrue(flatDistanceSqr(fixed, EnderDragonFight.getPodiumLocation(BlockPos.ZERO)) <= 49,
+                    "grave not beside the exit portal at 3: " + fixed);
+            graves.voidSearchRadius = 16;
+            BlockPos again = withoutLastResort(helper, () -> GravePlacement.find(level, belowWorld(level, middle), store(level)));
+            helper.assertValueEqual(flatDistanceSqr(again, middle), 16L,
+                    "grave's distance from the hole's middle, squared, at 16 again");
+        } finally {
+            graves.voidSearchRadius = radiusBefore;
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // Standing in water is no ground: a player who stood on a ledge, then stood on the bottom of a pool, still has the
+    // ledge as their last ground, and a death down a shaft puts the grave there
+    @GameTest(skyAccess = true)
+    public void lastGroundSkipsStandingInWater(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        BlockPos inPool = helper.absolutePos(new BlockPos(3, 1, 3));
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            setRemembered(level, inPool.below(), Blocks.STONE, before);
+            setRemembered(level, inPool, Blocks.WATER, before);
+            setRemembered(level, inPool.above(), Blocks.WATER, before);
+            player = TestPlayers.join(helper, "Wader", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            standOnGround(player);
+            helper.assertValueEqual(LastGround.in(player.getUUID(), level.dimension()), Optional.of(onLedge), "last ground on the ledge");
+
+            player.snapTo(inPool.getX() + 0.5, inPool.getY(), inPool.getZ() + 0.5);
+            // What the player's own tick does first: notice the water it stands in
+            player.baseTick();
+            helper.assertTrue(player.isInLiquid(), "the player is not in the pool");
+            standOnGround(player);
+            helper.assertValueEqual(LastGround.in(player.getUUID(), level.dimension()), Optional.of(onLedge),
+                    "last ground after standing in the pool");
+
+            dieBelowWorld(helper, level, player, shaft);
+            helper.assertValueEqual(onlyGrave(helper, level, player.getUUID()).pos(), onLedge, "grave position");
+        } finally {
+            if (player != null) {
+                cleanUp(level, player);
+            }
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
+    // Ground is only noted while graves are on, since only a grave uses it: a player who stood on a ledge with graves
+    // off has no last ground once they are on again, so a death down a shaft doesn't go back to the ledge. The switch
+    // goes back in this tick.
+    @GameTest(skyAccess = true)
+    public void lastGroundNotKeptWhileGravesOff(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shaft = helper.absolutePos(new BlockPos(1, 0, 1));
+        BlockPos onLedge = helper.absolutePos(new BlockPos(6, 1, 6));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ServerPlayer player = null;
+        try {
+            dig(level, shaft, before);
+            setRemembered(level, onLedge.below(), Blocks.STONE, before);
+            player = TestPlayers.join(helper, "Unnoted", GameType.SURVIVAL, new BlockPos(6, 1, 6));
+            LastGround.forget(player.getUUID());
+            graves.enabled = false;
+            try {
+                standOnGround(player);
+            } finally {
+                graves.enabled = gravesBefore;
+            }
+            helper.assertValueEqual(LastGround.in(player.getUUID(), level.dimension()), Optional.empty(), "last ground noted with graves off");
+
+            dieBelowWorld(helper, level, player, shaft);
+            helper.assertFalse(onlyGrave(helper, level, player.getUUID()).pos().equals(onLedge), "the grave went to the ledge");
+        } finally {
+            graves.enabled = gravesBefore;
+            if (player != null) {
+                cleanUp(level, player);
+            }
+            putBack(level, before);
+        }
+        helper.succeed();
+    }
+
     private static String loginRefusalText(MinecraftServer server, NameAndId who) {
         Component refusal = LockoutGameTests.loginRefusal(server, who);
         return refusal == null ? "" : refusal.getString();
