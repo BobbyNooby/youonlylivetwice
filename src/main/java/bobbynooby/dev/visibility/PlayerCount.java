@@ -13,6 +13,9 @@ public final class PlayerCount {
     // who is online either.
     public static final int SHOWN_ONLINE = 0;
 
+    // What a player is told when every slot is taken, in place of "The server is full!", which gives the count away
+    public static final String FULL_REFUSAL = "You can't join right now. Try again later.";
+
     private PlayerCount() {}
 
     /** The online count a server list, ping or query shows. */

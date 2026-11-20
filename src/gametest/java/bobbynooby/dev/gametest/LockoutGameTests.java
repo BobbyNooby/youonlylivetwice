@@ -10,6 +10,7 @@ import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
 import bobbynooby.dev.lockout.UncountedDeaths;
 import bobbynooby.dev.offline.OfflinePlayerData;
+import bobbynooby.dev.visibility.PlayerCount;
 import com.mojang.authlib.GameProfile;
 import com.mojang.serialization.Codec;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -155,16 +156,27 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
-    // The lockout only takes over "server full" for a player it keeps out: one who never died is still told it's full
+    // "The server is full!" would give away that every slot is taken, while the server list shows nobody on. So a player
+    // who never died is refused in other words, and in vanilla's own when the count isn't hidden.
     @GameTest(environment = LOGIN_CHECK)
-    public void livingPlayerOnFullServerIsToldItIsFull(GameTestHelper helper) {
+    public void livingPlayerOnFullServerIsNotToldItIsFull(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean hiddenBefore = hide.serverPlayerCount;
         ServerPlayer holder = TestPlayers.join(helper, "Holder", GameType.SURVIVAL, new BlockPos(1, 1, 1));
         try {
             helper.assertTrue(server.getPlayerList().getPlayers().size() >= server.getMaxPlayers(), "the server is not full");
-            helper.assertValueEqual(refusalKey(loginRefusal(server, new NameAndId(UUID.randomUUID(), "Living"))),
-                    "multiplayer.disconnect.server_full", "refusal of a living player on a full server");
+            NameAndId living = new NameAndId(UUID.randomUUID(), "Living");
+            hide.serverPlayerCount = true;
+            Component refusal = loginRefusal(server, living);
+            helper.assertTrue(refusal != null, "a living player was let into a full server");
+            helper.assertValueEqual(refusal.getString(), PlayerCount.FULL_REFUSAL, "refusal of a living player on a full server");
+            helper.assertFalse(refusal.getContents() instanceof TranslatableContents, "the refusal is still a vanilla line");
+            hide.serverPlayerCount = false;
+            helper.assertValueEqual(refusalKey(loginRefusal(server, living)), "multiplayer.disconnect.server_full",
+                    "refusal of a living player on a full server whose count isn't hidden");
         } finally {
+            hide.serverPlayerCount = hiddenBefore;
             TestPlayers.leave(holder);
         }
         helper.succeed();

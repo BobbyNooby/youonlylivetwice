@@ -2,6 +2,7 @@ package bobbynooby.dev.mixin;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.lockout.DeathLockout;
+import bobbynooby.dev.visibility.PlayerCount;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.server.MinecraftServer;
@@ -32,6 +33,9 @@ public abstract class PlayerListLoginMixin {
         Component refusal = DeathLockout.refusal(server, nameAndId.id(), nameAndId.name());
         if (refusal != null) {
             cir.setReturnValue(refusal);
+        } else if (cir.getReturnValue() != null && PlayerCount.hides()) {
+            // "The server is full!" would tell that every slot is taken, while the server list shows nobody on
+            cir.setReturnValue(Component.literal(PlayerCount.FULL_REFUSAL));
         }
     }
 
