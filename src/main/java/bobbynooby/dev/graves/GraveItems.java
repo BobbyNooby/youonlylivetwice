@@ -2,6 +2,7 @@ package bobbynooby.dev.graves;
 
 import bobbynooby.dev.config.Messages;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.mixin.CustomDataAccessor;
 import bobbynooby.dev.revive.ReviveLook;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
@@ -115,7 +116,15 @@ public final class GraveItems {
         if (data == null) {
             return Optional.empty();
         }
-        return data.copyTag().getCompound(ROOT).flatMap(inner -> inner.read(GRAVE_ID, UUIDUtil.CODEC));
+        return readOnly(data).getCompound(ROOT).flatMap(inner -> inner.read(GRAVE_ID, UUIDUtil.CODEC));
+    }
+
+    /**
+     * The custom data's own tag, without the deep copy copyTag makes. For reading only: every copy of the stack shares
+     * it. The checks that read it run for every compass every tick and for every head a player uses.
+     */
+    static CompoundTag readOnly(CustomData data) {
+        return ((CustomDataAccessor) (Object) data).yoltTag();
     }
 
     private static CustomData marker(String key) {
@@ -140,7 +149,7 @@ public final class GraveItems {
         if (data == null) {
             return false;
         }
-        return data.copyTag().getCompound(ROOT)
+        return readOnly(data).getCompound(ROOT)
                 .map(inner -> inner.getBooleanOr(key, false))
                 .orElse(false);
     }

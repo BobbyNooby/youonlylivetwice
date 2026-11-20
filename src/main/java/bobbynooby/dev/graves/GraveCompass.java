@@ -107,7 +107,7 @@ public final class GraveCompass {
         if (data == null || !Settings.active()) {
             return;
         }
-        Optional<UUID> graveId = data.copyTag().getCompound(ROOT)
+        Optional<UUID> graveId = GraveItems.readOnly(data).getCompound(ROOT)
                 .flatMap(marker -> marker.read(GRAVE_COMPASS, UUIDUtil.STRING_CODEC));
         if (graveId.isEmpty()) {
             return;
