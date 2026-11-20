@@ -69,6 +69,18 @@ public final class FakeSkinLookup implements SkinLookup {
         answers.put(key(name), () -> CompletableFuture.failedFuture(new IOException("Mojang is unreachable")));
     }
 
+    // The lookup itself is broken for this name: it throws as it is asked, instead of answering
+    public void breakOn(String name) {
+        answers.put(key(name), () -> {
+            throw new IllegalStateException("the skin lookup broke");
+        });
+    }
+
+    // The lookup answers about this name with nothing at all, which a skin can't be made from
+    public void answerNothing(String name) {
+        answers.put(key(name), () -> CompletableFuture.completedFuture(null));
+    }
+
     public int timesAsked(String name) {
         AtomicInteger times = asked.get(key(name));
         return times == null ? 0 : times.get();

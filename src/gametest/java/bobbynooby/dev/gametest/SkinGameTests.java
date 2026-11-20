@@ -32,6 +32,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
@@ -39,22 +40,31 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.CachedUserNameToIdResolver;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.UserBanList;
+import net.minecraft.server.players.UserBanListEntry;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.level.BaseCommandBlock;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -65,6 +75,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
+import java.util.stream.Stream;
 
 // The fake lookup stands in for Mojang (TestServerSetup puts it in before the server starts), and each test sets up
 // names of its own. Logins run in LOGIN_CHECK, where no other test's player is online: the GameTest server holds one
@@ -423,6 +434,596 @@ public class SkinGameTests {
                 helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             }
             DeathLockout.revive(who.id(), who.name(), "console");
+        }
+        helper.succeed();
+    }
+
+    // With skins off YOLT gives no skin, so the same offline kill's grave head has the default skin, though a skin is
+    // saved for the name (docs/known-limits.md)
+    @GameTest
+    public void offlineKillGraveUsesDefaultSkinWithSkinsOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, new GameProfile(UUID.randomUUID(), uniqueName("Plain")), GameType.SURVIVAL,
+                new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        player.getInventory().add(new ItemStack(Items.DIRT));
+        TestPlayers.leave(player);
+        SkinStore.get(server).putSkin(CachedSkin.found(who.name(), FakeSkinLookup.texturesOf(who.name()), System.currentTimeMillis()));
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        YoltConfig.SkinMode modeBefore = skins.mode;
+        try {
+            skins.mode = YoltConfig.SkinMode.OFF;
+            helper.assertValueEqual(Kills.kill(server, who), Kills.Result.KILLED_OFFLINE, "kill result");
+            List<Grave> graves = gravesOf(server, who.id());
+            helper.assertFalse(graves.isEmpty(), "the kill left no grave");
+            for (Grave grave : graves) {
+                assertEqual(helper, textures(grave.profile().partialProfile()), null, "the grave head's textures with skins off");
+            }
+        } finally {
+            skins.mode = modeBefore;
+            for (Grave grave : gravesOf(server, who.id())) {
+                GraveStore.get(server).remove(grave.id());
+                helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            DeathLockout.revive(who.id(), who.name(), "console");
+        }
+        helper.succeed();
+    }
+
+    // A broken skin step never keeps anyone out: a lookup that throws as it is asked fails the step's start, and one that
+    // answers with nothing fails the step as the answer is read. Each time the player logs in with the profile they came
+    // with, and the error is logged.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void brokenSkinStepNeverBlocksALogin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String thrown = uniqueName("Broke");
+        String empty = uniqueName("Empty");
+        MOJANG.breakOn(thrown);
+        MOJANG.answerNothing(empty);
+        try {
+            assertBrokenStepLogsIn(helper, server, thrown, "Could not work out " + thrown + "'s skin, so they join with the one they came with");
+            assertBrokenStepLogsIn(helper, server, empty, "Could not give " + empty + " a skin, so they join with the one they came with");
+        } finally {
+            MOJANG.forget(thrown);
+            MOJANG.forget(empty);
+        }
+        helper.succeed();
+    }
+
+    private static void assertBrokenStepLogsIn(GameTestHelper helper, MinecraftServer server, String name, String error) {
+        GameProfile profile = TestLogins.offline(name);
+        List<TestLogins.Login> logins = new ArrayList<>();
+        List<String> log = OfflineGameTests.yoltLog(() -> {
+            TestLogins.Login login = TestLogins.start(server, profile);
+            logins.add(login);
+            login.tick();
+        });
+        try (TestLogins.Login login = logins.get(0)) {
+            Optional<GameProfile> told = login.finished();
+            helper.assertTrue(told.isPresent(), "the login of " + name + " did not go through");
+            helper.assertValueEqual(told.get().id(), profile.id(), "the id " + name + " logged in with");
+            assertEqual(helper, textures(told.get()), null, "the textures " + name + " logged in with");
+            helper.assertValueEqual(MOJANG.timesAsked(name), 1, "times Mojang was asked about " + name);
+            helper.assertTrue(log.contains(error), "no error logged for " + name + ": " + log);
+        }
+    }
+
+    // A login vanilla is about to refuse, for a ban or a lockout, sends no name to Mojang: it would only tell Mojang who
+    // tried. Each is refused, and the lookup was never asked.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void refusedLoginNeverAsksMojang(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GameProfile banned = TestLogins.offline(uniqueName("Banned"));
+        GameProfile lockedOut = TestLogins.offline(uniqueName("Locked"));
+        MOJANG.answer(banned.name());
+        MOJANG.answer(lockedOut.name());
+        UserBanList bans = server.getPlayerList().getBans();
+        NameAndId bannedWho = new NameAndId(banned);
+        try {
+            bans.add(new UserBanListEntry(bannedWho));
+            DeathLockout.recordDeath(lockedOut.id(), lockedOut.name());
+            for (GameProfile profile : List.of(banned, lockedOut)) {
+                try (TestLogins.Login login = TestLogins.start(server, profile)) {
+                    login.tick();
+                    helper.assertTrue(login.finished().isEmpty(), "the login of " + profile.name() + " went through");
+                }
+                helper.assertValueEqual(MOJANG.timesAsked(profile.name()), 0, "times Mojang was asked about " + profile.name());
+            }
+        } finally {
+            bans.remove(bannedWho);
+            DeathLockout.revive(lockedOut.id(), lockedOut.name(), "console");
+            MOJANG.forget(banned.name());
+            MOJANG.forget(lockedOut.name());
+        }
+        helper.succeed();
+    }
+
+    // The console has no skin of its own, so both of the own-skin forms get vanilla's "a player is required", and nothing
+    // is looked up
+    @GameTest
+    public void consoleOwnSkinFormNeedsAPlayer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        String required = Component.translatable("permissions.requires.player").getString();
+        try {
+            helper.assertValueEqual(console(server, "yolt skin set " + account), List.of(required), "the console's own set");
+            helper.assertValueEqual(console(server, "yolt skin clear"), List.of(required), "the console's own clear");
+            helper.assertValueEqual(MOJANG.timesAsked(account), 0, "times Mojang was asked");
+        } finally {
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // Clearing a pick that isn't there says so, to the player and to the console
+    @GameTest
+    public void clearWithoutAPickSaysSo(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "NoPick", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = uniqueName("Unpicked");
+        joinedBefore(server, name);
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            player.messages.clear();
+            type(player, "yolt skin clear");
+            helper.assertValueEqual(texts(player), List.of("You haven't picked a skin."), "the player's reply");
+            helper.assertValueEqual(console(server, "yolt skin clear " + name), List.of(name + " hasn't picked a skin."), "the console's reply");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A name that never joined here names nobody, so there is no pick to clear and no id is made up for it
+    @GameTest
+    public void clearForAStrangerIsRefused(GameTestHelper helper) {
+        String stranger = uniqueName("Never");
+        int[] result = {-1};
+        helper.assertValueEqual(CommandGameTests.run(helper.getLevel().getServer(), "yolt skin clear " + stranger, value -> result[0] = value),
+                List.of("No player named " + stranger + " has joined this server."), "command output");
+        helper.assertValueEqual(result[0], 0, "command result");
+        helper.succeed();
+    }
+
+    // A player picks, then leaves; the console still clears their pick, which shows at their next join
+    @GameTest
+    public void consoleClearsAnOfflinePlayersPick(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        GameProfile profile = TestLogins.offline(uniqueName("Gone"));
+        SkinStore store = SkinStore.get(server);
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            type(player, "yolt skin set " + account);
+            TestPlayers.leave(player);
+            assertEqual(helper, store.choice(profile.id()), account, "the pick made before leaving");
+
+            helper.assertValueEqual(console(server, "yolt skin clear " + profile.name()),
+                    List.of(profile.name() + "'s skin is back to the default. It shows once they rejoin."), "command output");
+            assertEqual(helper, store.choice(profile.id()), null, "the pick after the console cleared it");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(profile.id());
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // Clearing asks Mojang nothing, so it works with skins off, while a pick, which would ask, is refused
+    @GameTest
+    public void clearWorksWithSkinsOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Off");
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        GameProfile profile = joinedBefore(server, name);
+        SkinStore store = SkinStore.get(server);
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        YoltConfig.SkinMode modeBefore = skins.mode;
+        try {
+            store.choose(profile.id(), account);
+            skins.mode = YoltConfig.SkinMode.OFF;
+            helper.assertValueEqual(console(server, "yolt skin clear " + name),
+                    List.of(name + "'s skin is back to the default. It shows once they rejoin."), "clear with skins off");
+            assertEqual(helper, store.choice(profile.id()), null, "the pick after clearing with skins off");
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + account), List.of("Skins are turned off."),
+                    "set with skins off");
+            assertEqual(helper, store.choice(profile.id()), null, "the pick after a set with skins off");
+            helper.assertValueEqual(MOJANG.timesAsked(account), 0, "times Mojang was asked");
+        } finally {
+            skins.mode = modeBefore;
+            store.clearChoice(profile.id());
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // With another skin mod giving skins, picks are its business: a player's own and the console's are both refused
+    // with the reason, before anything is looked up
+    @GameTest
+    public void skinModPresentRefusesPicks(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "ModPick", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        BooleanSupplier before = Skins.useSkinModCheckForTesting(() -> true);
+        String reason = "Skins are left to the other skin mod on this server.";
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            player.messages.clear();
+            type(player, "yolt skin set " + account);
+            helper.assertValueEqual(texts(player), List.of(reason), "the player's reply");
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + account), List.of(reason), "the console's reply");
+            assertEqual(helper, SkinStore.get(server).choice(player.getUUID()), null, "the pick");
+            helper.assertValueEqual(MOJANG.timesAsked(account), 0, "times Mojang was asked");
+        } finally {
+            Skins.useSkinModCheckForTesting(before);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            SkinStore.get(server).clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // Turning player choice off only stops new picks: a pick made before still gives the player that skin at login
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void playerChoiceOffKeepsEarlierPicksAtLogin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("Kept");
+        String account = uniqueName("Acct");
+        MOJANG.answer(name);
+        MOJANG.answer(account);
+        GameProfile profile = TestLogins.offline(name);
+        SkinStore store = SkinStore.get(server);
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        boolean choiceBefore = skins.allowPlayerChoice;
+        try {
+            store.choose(profile.id(), account);
+            skins.allowPlayerChoice = false;
+            try (TestLogins.Login login = TestLogins.start(server, profile)) {
+                login.tick();
+                helper.assertTrue(login.finished().isPresent(), "the login did not go through");
+                assertEqual(helper, textures(login.profile()), FakeSkinLookup.texturesOf(account), "textures with player choice off");
+            }
+            assertEqual(helper, store.choice(profile.id()), account, "the pick after the login");
+        } finally {
+            skins.allowPlayerChoice = choiceBefore;
+            store.clearChoice(profile.id());
+            MOJANG.forget(name);
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // A skin file that can't be read at all starts the store empty, so before anything is saved over it a copy is kept,
+    // and the file itself is left as it was. Read the way the server reads its own, from a data storage of its own.
+    @GameTest
+    public void unreadableSkinFileIsCopiedBeforeItIsSaved(GameTestHelper helper) throws IOException, ReflectiveOperationException {
+        byte[] junk = "this is no skin file".getBytes(StandardCharsets.UTF_8);
+        withSkinFile(helper, junk, (store, file) -> {
+            helper.assertTrue(store.choice(UUID.randomUUID()) == null && store.skin("Notch") == null, "the unreadable file read as something");
+            List<Path> copies = skinFileCopies(file, ".unreadable-");
+            helper.assertValueEqual(copies.size(), 1, "copies of the unreadable file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copies.get(0)), junk), "the copy differs from the file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(file), junk), "the file itself was changed");
+        });
+        helper.succeed();
+    }
+
+    // One answer that can't be read is left out and the others kept, and a copy of the whole file is kept, since the
+    // next save would drop that answer for good
+    @GameTest
+    public void partlyReadSkinFileKeepsACopy(GameTestHelper helper) throws IOException, ReflectiveOperationException {
+        CompoundTag data = new CompoundTag();
+        data.putInt("format", SkinStore.FORMAT);
+        ListTag skins = new ListTag();
+        skins.add(skinTag("Notch", new SkinTextures("notch value", "notch signature"), 123L));
+        CompoundTag broken = new CompoundTag();
+        broken.putString("name", "Broken");
+        skins.add(broken);
+        data.put("skins", skins);
+        withSkinFile(helper, storeFile(data), (store, file) -> {
+            assertEqual(helper, store.skin("Notch"), CachedSkin.found("Notch", new SkinTextures("notch value", "notch signature"), 123L),
+                    "the readable answer");
+            assertEqual(helper, store.skin("Broken"), null, "the answer with no time");
+            helper.assertValueEqual(skinFileCopies(file, ".unreadable-").size(), 1, "copies of the partly read file");
+        });
+        helper.succeed();
+    }
+
+    // A file from a newer YOLT is read as far as this one can, and kept as a copy before this one saves over it
+    @GameTest
+    public void newerSkinFileKeepsACopy(GameTestHelper helper) throws IOException, ReflectiveOperationException {
+        CompoundTag data = new CompoundTag();
+        data.putInt("format", SkinStore.FORMAT + 1);
+        ListTag skins = new ListTag();
+        skins.add(skinTag("Notch", new SkinTextures("notch value", "notch signature"), 123L));
+        data.put("skins", skins);
+        withSkinFile(helper, storeFile(data), (store, file) -> {
+            helper.assertTrue(store.fromNewer(), "the newer file did not read as newer");
+            helper.assertTrue(store.skin("Notch") != null, "the newer file's answer was not read");
+            helper.assertValueEqual(skinFileCopies(file, ".newer-").size(), 1, "copies of the newer file");
+            helper.assertTrue(skinFileCopies(file, ".unreadable-").isEmpty(), "the newer file was also kept as unreadable");
+        });
+        helper.succeed();
+    }
+
+    private interface SkinFileCheck {
+        void check(SkinStore store, Path file) throws IOException;
+    }
+
+    // Writes the bytes as the skin file in a folder of its own, reads it through a data storage as the server's is read,
+    // and runs the check the store's first use runs, which keeps the copies. The folder goes afterwards.
+    private static void withSkinFile(GameTestHelper helper, byte[] bytes, SkinFileCheck check)
+            throws IOException, ReflectiveOperationException {
+        Path folder = Files.createTempDirectory("yolt-skin-file-test-");
+        Path file = SkinStore.TYPE.id().withSuffix(".dat").resolveAgainst(folder);
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, bytes);
+            SkinStore store = GraveStoreGameTests.freshStorage(helper, folder).computeIfAbsent(SkinStore.TYPE);
+            Method checkFile = SkinStore.class.getDeclaredMethod("checkFile", Path.class);
+            checkFile.setAccessible(true);
+            checkFile.invoke(store, file);
+            check.check(store, file);
+        } finally {
+            GraveStoreGameTests.deleteFolder(folder);
+        }
+    }
+
+    // A whole skin file's bytes, with the data version of today, so no fixer runs
+    private static byte[] storeFile(CompoundTag data) throws IOException {
+        CompoundTag root = new CompoundTag();
+        root.put("data", data);
+        NbtUtils.addCurrentDataVersion(root);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        NbtIo.writeCompressed(root, out);
+        return out.toByteArray();
+    }
+
+    private static List<Path> skinFileCopies(Path file, String marker) throws IOException {
+        String prefix = file.getFileName() + marker;
+        try (Stream<Path> files = Files.list(file.getParent())) {
+            return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
+        }
+    }
+
+    // A level 1 op is no op for skins: the lock and the wait between picks hold them as they hold a non-op. The wait is put
+    // back for this tick only.
+    @GameTest
+    public void levelOneOpIsHeldToThePickRules(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
+        String first = uniqueName("Acct");
+        String second = uniqueName("Acct");
+        MOJANG.answer(first);
+        MOJANG.answer(second);
+        TestPlayers.Recording moderator = TestPlayers.joinRecording(helper, "Moderator", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        Duration waitBefore = SkinCommands.useCooldownForTesting(Duration.ofSeconds(5));
+        try {
+            TestPlayers.op(moderator, LevelBasedPermissionSet.MODERATOR);
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.lockAfterFirstChoice = true;
+            store.choose(moderator.getUUID(), first);
+            moderator.messages.clear();
+            type(moderator, "yolt skin set " + second);
+            helper.assertValueEqual(texts(moderator), List.of("Your skin is locked. Ask an op to change it."), "reply with the lock on");
+
+            config.skins.lockAfterFirstChoice = false;
+            store.clearChoice(moderator.getUUID());
+            type(moderator, "yolt skin set " + first);
+            assertEqual(helper, store.choice(moderator.getUUID()), first, "the first pick with the lock off");
+            moderator.messages.clear();
+            type(moderator, "yolt skin set " + second);
+            helper.assertValueEqual(texts(moderator), List.of("You can pick a skin again in 5 seconds."), "reply to a second pick at once");
+            assertEqual(helper, store.choice(moderator.getUUID()), first, "the pick after a second pick at once");
+        } finally {
+            SkinCommands.useCooldownForTesting(waitBefore);
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            store.clearChoice(moderator.getUUID());
+            TestPlayers.deop(moderator);
+            TestPlayers.leave(moderator);
+            MOJANG.forget(first);
+            MOJANG.forget(second);
+        }
+        helper.succeed();
+    }
+
+    // A command block picks at level 2, so the pick is an op's: kept apart as one, and held to no wait or lock
+    @GameTest
+    public void commandBlockSetsAnotherPlayersSkin(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        boolean lockBefore = skins.lockAfterFirstChoice;
+        String name = uniqueName("Blocked");
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        GameProfile profile = joinedBefore(server, name);
+        SkinStore store = SkinStore.get(server);
+        BlockPos pos = new BlockPos(2, 1, 2);
+        Duration waitBefore = SkinCommands.useCooldownForTesting(Duration.ofSeconds(5));
+        try {
+            skins.lockAfterFirstChoice = true;
+            store.choose(profile.id(), uniqueName("Earlier"));
+            helper.setBlock(pos, Blocks.COMMAND_BLOCK);
+            BaseCommandBlock block = helper.getBlockEntity(pos, CommandBlockEntity.class).getCommandBlock();
+            block.setCommand("yolt skin set " + name + " " + account);
+            helper.assertTrue(block.performCommand(helper.getLevel()), "the command block didn't run");
+            helper.assertValueEqual(block.getSuccessCount(), 1, "the command block's result");
+            assertEqual(helper, store.choice(profile.id()), account, "the pick the command block made");
+            helper.assertTrue(store.pickedByOp(profile.id()), "the command block's pick isn't kept as an op's");
+        } finally {
+            SkinCommands.useCooldownForTesting(waitBefore);
+            skins.lockAfterFirstChoice = lockBefore;
+            helper.setBlock(pos, Blocks.AIR);
+            store.clearChoice(profile.id());
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // An answer saved before account ids were kept has none, and a pick checks whether the account's id has played here,
+    // so the account is asked about again although the answer is fresh
+    @GameTest
+    public void answerSavedWithoutAnIdIsAskedAgainOnAPick(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = uniqueName("NoId");
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        GameProfile profile = joinedBefore(server, name);
+        SkinStore store = SkinStore.get(server);
+        try {
+            store.putSkin(CachedSkin.found(account, FakeSkinLookup.texturesOf(account), System.currentTimeMillis()));
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + account),
+                    List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."), "command output");
+            helper.assertValueEqual(MOJANG.timesAsked(account), 1, "times Mojang was asked");
+            assertEqual(helper, store.skin(account).id(), FakeSkinLookup.idOf(account), "the id saved with the new answer");
+        } finally {
+            store.clearChoice(profile.id());
+            MOJANG.forget(account);
+        }
+        helper.succeed();
+    }
+
+    // The lock is checked again once Mojang answers: another pick that landed meanwhile locks the player's skin, so the
+    // late answer is refused and the pick that landed stays
+    @GameTest(maxTicks = 20)
+    public void lockRecheckedWhenTheAnswerComesIn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean choiceBefore = config.skins.allowPlayerChoice;
+        boolean lockBefore = config.skins.lockAfterFirstChoice;
+        String held = uniqueName("Held");
+        String landed = uniqueName("Landed");
+        CompletableFuture<CachedSkin> mojang = MOJANG.hold(held);
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Racer", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        SkinStore store = SkinStore.get(server);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            config.restrictCommands = restrictBefore;
+            config.skins.allowPlayerChoice = choiceBefore;
+            config.skins.lockAfterFirstChoice = lockBefore;
+            store.clearChoice(player.getUUID());
+            TestPlayers.leave(player);
+            MOJANG.forget(held);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        boolean waiting = false;
+        try {
+            config.restrictCommands = true;
+            config.skins.allowPlayerChoice = true;
+            config.skins.lockAfterFirstChoice = true;
+            player.messages.clear();
+            type(player, "yolt skin set " + held);
+            helper.assertValueEqual(texts(player), List.of(), "reply before Mojang answered");
+            store.choose(player.getUUID(), landed, true);
+            mojang.complete(CachedSkin.found(held, FakeSkinLookup.idOf(held), FakeSkinLookup.texturesOf(held), System.currentTimeMillis()));
+            helper.succeedWhen(() -> {
+                helper.assertValueEqual(texts(player), List.of("Your skin is locked. Ask an op to change it."), "reply once Mojang answered");
+                assertEqual(helper, store.choice(player.getUUID()), landed, "the pick once Mojang answered");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A pick an op makes for themselves is an op's pick, so it stays through their login even after they are de-opped,
+    // though the account's name has played here: a non-op's pick of it would go (docs/skins.md)
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void opOwnPickStaysAfterDeop(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.SkinsSection skins = Settings.get().skins;
+        boolean refuseBefore = skins.refuseKnownPlayers;
+        GameProfile member = new GameProfile(UUID.randomUUID(), uniqueName("Member"));
+        GameProfile op = TestLogins.offline(uniqueName("ExOp"));
+        MOJANG.answer(member.name());
+        MOJANG.answer(op.name());
+        SkinStore store = SkinStore.get(server);
+        try {
+            skins.refuseKnownPlayers = true;
+            TestPlayers.leave(TestPlayers.join(helper, member, GameType.SURVIVAL, new BlockPos(1, 1, 1)));
+            ServerPlayer online = TestPlayers.join(helper, op, GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            TestPlayers.op(online);
+            type(online, "yolt skin set " + member.name());
+            assertEqual(helper, store.choice(op.id()), member.name(), "the op's own pick");
+            helper.assertTrue(store.pickedByOp(op.id()), "the op's own pick isn't kept as an op's");
+            TestPlayers.deop(online);
+            TestPlayers.leave(online);
+
+            try (TestLogins.Login login = TestLogins.start(server, op)) {
+                login.tick();
+                helper.assertTrue(login.finished().isPresent(), "the login did not go through");
+                assertEqual(helper, textures(login.profile()), FakeSkinLookup.texturesOf(member.name()), "the skin logged in with");
+            }
+            assertEqual(helper, store.choice(op.id()), member.name(), "the pick after the de-opped player's login");
+        } finally {
+            skins.refuseKnownPlayers = refuseBefore;
+            ServerPlayer still = server.getPlayerList().getPlayer(op.id());
+            if (still != null) {
+                TestPlayers.deop(still);
+                TestPlayers.leave(still);
+            }
+            store.clearChoice(op.id());
+            store.takeReset(op.id());
+            MOJANG.forget(member.name());
+            MOJANG.forget(op.name());
+        }
+        helper.succeed();
+    }
+
+    // A body takes the skin its owner had when it was made, so a pick made after it leaves the body's skin alone
+    @GameTest
+    public void olderBodyKeepsItsSkinAfterAPick(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String account = uniqueName("Acct");
+        MOJANG.answer(account);
+        SkinTextures before = new SkinTextures("body textures", "body signature");
+        ServerPlayer player = TestPlayers.join(helper, Skins.withTextures(new GameProfile(UUID.randomUUID(), uniqueName("Bodied")), before),
+                GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        try {
+            Mannequin body = BodyTestKit.leaveBodyWithDefaults(helper, player);
+            assertEqual(helper, textures(body.getProfile().partialProfile()), before, "the body's textures when made");
+            helper.assertValueEqual(console(server, "yolt skin set " + name + " " + account),
+                    List.of(name + "'s skin is now " + account + "'s. It shows once they rejoin."), "command output");
+            assertEqual(helper, textures(body.getProfile().partialProfile()), before, "the body's textures after the pick");
+        } finally {
+            SkinStore.get(server).clearChoice(owner);
+            BodyTestKit.cleanUp(helper, owner);
+            MOJANG.forget(account);
         }
         helper.succeed();
     }
