@@ -519,6 +519,170 @@ public class VisibilityGameTests {
         helper.succeed();
     }
 
+    // The control for the test above: with distant players shown the trail keeps vanilla's force, so a player 100 blocks
+    // off, past the normal 32, gets it
+    @GameTest
+    public void creakingTrailForcedFarWithDistantPlayersShown(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        BlockPos heartPos = new BlockPos(1, 1, 1);
+        Creaking creaking = null;
+        try {
+            hide.distantPlayers = false;
+            ServerPlayer near = join(helper, joined, "visheartshownn", new BlockPos(3, 1, 1));
+            ServerPlayer far = join(helper, joined, "visheartshownf", new BlockPos(3, 1, 1));
+            far.teleportTo(far.getX() + 100, far.getY(), far.getZ());
+            helper.setBlock(heartPos, Blocks.CREAKING_HEART);
+            CreakingHeartBlockEntity heart = helper.getBlockEntity(heartPos, CreakingHeartBlockEntity.class);
+            creaking = helper.spawn(EntityTypes.CREAKING, new BlockPos(1, 1, 3));
+            heart.setCreakingInfo(creaking);
+            int nearMark = TestPlayers.sentPackets(near).size();
+            int farMark = TestPlayers.sentPackets(far).size();
+
+            heart.creakingHurt();
+            List<ClientboundLevelParticlesPacket> nearTrail = trail(near, nearMark);
+            helper.assertFalse(nearTrail.isEmpty(), "no trail sent to a player next to the heart");
+            helper.assertTrue(nearTrail.getFirst().overrideLimiter(), "the trail lost vanilla's force with distant players shown");
+            helper.assertFalse(trail(far, farMark).isEmpty(), "no trail sent to a player 100 blocks away with distant players shown");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            if (creaking != null) {
+                creaking.discard();
+            }
+            helper.setBlock(heartPos, Blocks.AIR);
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla tells every client that a leaving player is gone. A client that never had the far player's entry is told
+    // nothing, or it would learn they had been online, while the near player it knew is removed as usual. The near one
+    // is made known the way tracking makes it.
+    @GameTest
+    public void logoutOfUnknownPlayerSendsNoRemove(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            ServerPlayer viewer = join(helper, joined, "vislogview", BlockPos.ZERO);
+            ServerPlayer near = join(helper, joined, "vislognear", new BlockPos(2, 0, 0));
+            ServerPlayer far = join(helper, joined, "vislogfar", new BlockPos(1, 0, 0));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            PlayerVisibility.onPairingStart(viewer, near);
+            helper.assertTrue(PlayerVisibility.known(viewer).contains(near.getUUID()), "the viewer doesn't know the near player");
+            helper.assertFalse(PlayerVisibility.known(viewer).contains(far.getUUID()), "the viewer knows the far player");
+
+            int from = TestPlayers.sentPackets(viewer).size();
+            for (ServerPlayer leaving : List.of(near, far)) {
+                joined.remove(leaving);
+                TestPlayers.leave(leaving);
+            }
+            List<Packet<?>> packets = TestPlayers.sentPackets(viewer);
+            List<Packet<?>> after = packets.subList(from, packets.size());
+            helper.assertValueEqual(removesNaming(after, near), 1L, "removes naming the near player");
+            helper.assertValueEqual(removesNaming(after, far), 0L, "removes naming the far player");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // With the tab list shown, an entry the viewer gets is listed, its own and a near player's alike. The far player's
+    // entry still never comes: the tab list switch shows the known players, not everyone.
+    @GameTest
+    public void tabListSwitchOffListsKnownPlayers(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean tabListBefore = hide.tabList;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.tabList = false;
+            ServerPlayer far = join(helper, joined, "vistabfar", new BlockPos(1, 0, 0));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            ServerPlayer viewer = join(helper, joined, "vistabview", BlockPos.ZERO);
+            ServerPlayer near = join(helper, joined, "vistabnear", new BlockPos(2, 0, 0));
+            PlayerVisibility.onPairingStart(viewer, near);
+
+            ClientboundPlayerInfoUpdatePacket.Entry own = addedEntry(viewer, viewer);
+            helper.assertTrue(own != null && own.listed(), "the viewer's own entry is missing or unlisted");
+            ClientboundPlayerInfoUpdatePacket.Entry nearEntry = addedEntry(viewer, near);
+            helper.assertTrue(nearEntry != null && nearEntry.listed(), "the near player's entry is missing or unlisted");
+            helper.assertTrue(addedEntry(viewer, far) == null, "the viewer's client got the far player's entry");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.tabList = tabListBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // /yolt config shows or hides the tab list for everyone online at once, through each entry's listed flag. The command
+    // writes the config file, so it runs with the other tests that do and puts the file back in the same tick.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void configTabListRelistsOnlinePlayersAtOnce(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            helper.assertTrue(Settings.get().hide.tabList, "the test server's tab list is shown");
+            ServerPlayer viewer = join(helper, joined, "vistabcfg", BlockPos.ZERO);
+            ServerPlayer near = join(helper, joined, "vistabcfgn", new BlockPos(2, 0, 0));
+            PlayerVisibility.onPairingStart(viewer, near);
+            helper.assertFalse(listedFor(viewer, near), "the near player is listed while the tab list is hidden");
+
+            CommandGameTests.run(server, "yolt config hide.tabList false");
+            helper.assertTrue(listedFor(viewer, near), "the near player is not listed once the tab list is shown");
+            helper.assertTrue(listedFor(viewer, viewer), "the viewer is not listed for itself once the tab list is shown");
+
+            CommandGameTests.run(server, "yolt config hide.tabList true");
+            helper.assertFalse(listedFor(viewer, near), "the near player is still listed once the tab list is hidden again");
+            helper.assertFalse(listedFor(viewer, viewer), "the viewer is still listed for itself once the tab list is hidden again");
+        } finally {
+            leaveAll(joined);
+            ConfigCommandGameTests.restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    // A player body is a player outside the player list, so its entry is never listed, even with the tab list shown.
+    // A player who has left stands in for one, with the pairing call made directly.
+    @GameTest
+    public void playerBodyNeverListedWithTabListOff(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean tabListBefore = hide.tabList;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.tabList = false;
+            ServerPlayer viewer = join(helper, joined, "vistabbodyv", BlockPos.ZERO);
+            ServerPlayer body = TestPlayers.join(helper, "vistabbody", GameType.SURVIVAL, new BlockPos(1, 0, 0));
+            TestPlayers.leave(body);
+
+            PlayerVisibility.onPairingStart(viewer, body);
+            ClientboundPlayerInfoUpdatePacket.Entry entry = addedEntry(viewer, body);
+            helper.assertTrue(entry != null && !entry.listed(), "the body's entry is missing or listed");
+            ClientboundPlayerInfoUpdatePacket.Entry own = addedEntry(viewer, viewer);
+            helper.assertTrue(own != null && own.listed(), "the viewer's own entry is unlisted, so the tab list isn't shown");
+            PlayerVisibility.onPairingStop(viewer, body);
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.tabList = tabListBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    private static long removesNaming(List<Packet<?>> packets, ServerPlayer seen) {
+        return packets.stream()
+                .filter(p -> p instanceof ClientboundPlayerInfoRemovePacket remove && remove.profileIds().contains(seen.getUUID()))
+                .count();
+    }
+
     // The trail particles this player's client was sent, from its packet number from on
     private static List<ClientboundLevelParticlesPacket> trail(ServerPlayer player, int from) {
         List<Packet<?>> packets = TestPlayers.sentPackets(player);

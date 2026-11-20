@@ -5,6 +5,7 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.gametest.mixin.AttackStrengthAccessor;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.PlayerVisibility;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -21,12 +22,14 @@ import net.minecraft.world.entity.animal.wolf.Wolf;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static bobbynooby.dev.visibility.NameTagTeam.TEAM_NAME;
@@ -357,6 +360,158 @@ public class NameTagGameTests {
             scoreboard.removePlayerTeam(admins);
         }
         helper.succeed();
+    }
+
+    // The nametag rule follows the switch at each apply, in the server's team and in what each client is sent: shown with
+    // the switch off, hidden with it on
+    @GameTest
+    public void nametagsSwitchOffShowsNametags(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean nametagsBefore = hide.nametags;
+        ServerPlayer viewer = TestPlayers.join(helper, "tagrule", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            PlayerTeam team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+            helper.assertTrue(team != null, "there is no " + TEAM_NAME + " team");
+            hide.nametags = false;
+            NameTagTeam.apply(server);
+            helper.assertValueEqual(team.getNameTagVisibility(), Team.Visibility.ALWAYS, "the team's rule with the switch off");
+            helper.assertValueEqual(lastSettings(viewer).nameTagVisibility(), Team.Visibility.ALWAYS, "the rule sent with the switch off");
+
+            hide.nametags = true;
+            NameTagTeam.apply(server);
+            helper.assertValueEqual(team.getNameTagVisibility(), Team.Visibility.NEVER, "the team's rule with the switch on");
+            helper.assertValueEqual(lastSettings(viewer).nameTagVisibility(), Team.Visibility.NEVER, "the rule sent with the switch on");
+        } finally {
+            hide.nametags = nametagsBefore;
+            NameTagTeam.apply(server);
+            TestPlayers.leave(viewer);
+        }
+        helper.succeed();
+    }
+
+    // Everyone shares our team, so seeing invisible teammates would show every invisible player. An admin's /team modify
+    // turning it on is undone at the next apply, in the team and in what clients are sent.
+    @GameTest
+    public void teammatesNeverSeeInvisiblePlayers(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer viewer = TestPlayers.join(helper, "taginvis", GameType.SURVIVAL, BlockPos.ZERO);
+        PlayerTeam team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+        try {
+            helper.assertTrue(team != null, "there is no " + TEAM_NAME + " team");
+            team.setSeeFriendlyInvisibles(true);
+            helper.assertTrue((lastSettings(viewer).options() & SEE_INVISIBLES) != 0, "the client wasn't sent the admin's change");
+            NameTagTeam.apply(server);
+            helper.assertFalse(team.canSeeFriendlyInvisibles(), "the team still sees invisible teammates");
+            helper.assertValueEqual(lastSettings(viewer).options() & SEE_INVISIBLES, 0, "the see-invisibles bit sent after the apply");
+        } finally {
+            if (team != null) {
+                team.setSeeFriendlyInvisibles(false);
+            }
+            TestPlayers.leave(viewer);
+        }
+        helper.succeed();
+    }
+
+    // An admin moved the player into a team of their own, which would show their nametag. Changing dimension puts them
+    // back in ours.
+    @GameTest
+    public void dimensionChangePutsPlayerBackInOurTeam(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        PlayerTeam admins = scoreboard.addPlayerTeam(CommandGameTests.uniqueName("tagdimadmins"));
+        ServerPlayer player = TestPlayers.join(helper, "tagdim", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            ServerLevel nether = server.getLevel(Level.NETHER);
+            helper.assertTrue(nether != null, "no nether to go to");
+            scoreboard.addPlayerToTeam(player.getScoreboardName(), admins);
+            helper.assertTrue(player.getTeam() == admins, "the player is not in the admin's team");
+            player.teleportTo(nether, 0.5, 64.0, 0.5, Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            helper.assertTrue(player.getTeam() != null && NameTagTeam.isOurs((PlayerTeam) player.getTeam()),
+                    "the player is not back in " + TEAM_NAME + " after changing dimension");
+        } finally {
+            TestPlayers.leave(player);
+            scoreboard.removePlayerTeam(admins);
+        }
+        helper.succeed();
+    }
+
+    // The same through a rejoin: the team is kept by name across the logout, and the join puts them back in ours, which
+    // their own client is told
+    @GameTest
+    public void rejoinPutsPlayerBackInOurTeam(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerScoreboard scoreboard = server.getScoreboard();
+        PlayerTeam admins = scoreboard.addPlayerTeam(CommandGameTests.uniqueName("tagjoinadmins"));
+        GameProfile profile = TestPlayers.profile("tagrejoin");
+        ServerPlayer online = TestPlayers.join(helper, profile, GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            scoreboard.addPlayerToTeam(online.getScoreboardName(), admins);
+            TestPlayers.leave(online);
+            ServerPlayer gone = online;
+            online = null;
+            helper.assertTrue(scoreboard.getPlayersTeam(gone.getScoreboardName()) == admins, "the admin's team didn't keep the name");
+
+            online = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, BlockPos.ZERO);
+            helper.assertTrue(online.getTeam() != null && NameTagTeam.isOurs((PlayerTeam) online.getTeam()),
+                    "the player is not back in " + TEAM_NAME + " after rejoining");
+            helper.assertTrue(addedToTeam(online, online), "the rejoined player's client wasn't told they are in " + TEAM_NAME);
+        } finally {
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+            scoreboard.removePlayerTeam(admins);
+        }
+        helper.succeed();
+    }
+
+    // Friendly fire off in our team stops nothing, since its members are nobody's allies for being in it. PvP and the
+    // team's friendly fire go back in the same tick.
+    @GameTest
+    public void friendlyFireOffInOurTeamStillLetsPlayersHit(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        GameRules rules = level.getGameRules();
+        boolean pvpBefore = rules.get(GameRules.PVP);
+        PlayerTeam team = server.getScoreboard().getPlayerTeam(TEAM_NAME);
+        boolean friendlyFireBefore = team != null && team.isAllowFriendlyFire();
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            helper.assertTrue(team != null, "there is no " + TEAM_NAME + " team");
+            rules.set(GameRules.PVP, true, server);
+            team.setAllowFriendlyFire(false);
+            ServerPlayer attacker = join(helper, joined, "tagfire", new BlockPos(1, 1, 1));
+            ServerPlayer target = join(helper, joined, "tagfiret", new BlockPos(2, 1, 1));
+            TestPlayers.markLoaded(target);
+            helper.assertTrue(attacker.getTeam() == team && target.getTeam() == team, "the players are not both in " + TEAM_NAME);
+            attacker.attack(target);
+            helper.assertTrue(target.getHealth() < target.getMaxHealth(), "the hit did not land with friendly fire off");
+        } finally {
+            rules.set(GameRules.PVP, pvpBefore, server);
+            if (team != null) {
+                team.setAllowFriendlyFire(friendlyFireBefore);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // PlayerTeam's option bit for seeing invisible teammates
+    private static final int SEE_INVISIBLES = 2;
+
+    // The settings in the newest packet that creates or changes our team on this client
+    private static ClientboundSetPlayerTeamPacket.Parameters lastSettings(ServerPlayer viewer) {
+        ClientboundSetPlayerTeamPacket.Parameters last = null;
+        for (Packet<?> packet : TestPlayers.sentPackets(viewer)) {
+            if (packet instanceof ClientboundSetPlayerTeamPacket team && team.getName().equals(TEAM_NAME) && team.getParameters().isPresent()) {
+                last = team.getParameters().get();
+            }
+        }
+        if (last == null) {
+            throw new AssertionError(viewer.getPlainTextName() + " was never sent " + TEAM_NAME + "'s settings");
+        }
+        return last;
     }
 
     /** Puts our team back with every online player in it, as joining would have, after a test removed it. */

@@ -338,6 +338,34 @@ public class ServerListGameTests {
         helper.succeed();
     }
 
+    // A known limit: the flavour lines are only on the normal ping. A client older than 1.7 is answered with the MOTD from
+    // server.properties, in both pre-1.7 replies, whatever the lines are. The query port's reply is left out: it is built
+    // here from a stand-in server, so it couldn't show what the real one sends.
+    @GameTest
+    public void legacyPingKeepsTheServerMotd(GameTestHelper helper) throws ReflectiveOperationException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Method version1 = LegacyQueryHandler.class.getDeclaredMethod("createVersion1Response", ServerInfo.class);
+        version1.setAccessible(true);
+        Method version0 = LegacyQueryHandler.class.getDeclaredMethod("createVersion0Response", ServerInfo.class);
+        version0.setAccessible(true);
+        List<String> motdBefore = Settings.get().serverList.motdLines;
+        try {
+            Settings.get().serverList.motdLines = List.of("Flavour");
+            // Written as text, so a server with no MOTD, as the test server is, sends "null"
+            String motd = String.valueOf(server.getMotd());
+            // The 1.4 to 1.6 reply: a marker, protocol, version, MOTD and the two counts, split by NUL
+            String[] legacy = ((String) version1.invoke(null, server)).split("\u0000", -1);
+            helper.assertValueEqual(legacy.length, 6, "fields in the legacy ping");
+            helper.assertValueEqual(legacy[3], motd, "the MOTD in the legacy ping");
+            // The beta reply: the MOTD and the two counts, split by §
+            String beta = (String) version0.invoke(null, server);
+            helper.assertTrue(beta.startsWith(motd + "\u00a7") && !beta.contains("Flavour"), "the beta ping: " + beta);
+        } finally {
+            Settings.get().serverList.motdLines = motdBefore;
+        }
+        helper.succeed();
+    }
+
     // As with the hover lines, the § codes stay in the text the client is sent, and the client draws them as colours
     @GameTest
     public void motdLineKeepsItsColourCodes(GameTestHelper helper) {

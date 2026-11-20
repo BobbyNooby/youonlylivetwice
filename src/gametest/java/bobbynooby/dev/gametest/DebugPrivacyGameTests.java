@@ -232,6 +232,30 @@ public class DebugPrivacyGameTests {
         helper.succeed();
     }
 
+    // A client is sent the brand once, as it configures, so turning the switch on reaches no one already online, as the
+    // command's note says: nothing goes to the player on, and the next client to join is sent "vanilla"
+    @GameTest(environment = DEBUG_PRIVACY)
+    public void brandSwitchWaitsForTheNextJoin(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        ServerPlayer player = join(helper, "dpbrandon");
+        try {
+            helper.assertFalse(Settings.get().hide.serverBrand, "the test server already fakes the brand");
+            int from = TestPlayers.sentPackets(player).size();
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.serverBrand true"),
+                    List.of("hide.serverBrand changed from false to true (applies when a player next joins)."), "command output");
+            List<Packet<?>> packets = TestPlayers.sentPackets(player);
+            helper.assertFalse(packets.subList(from, packets.size()).stream().anyMatch(packet ->
+                    packet instanceof ClientboundCustomPayloadPacket custom && custom.payload() instanceof BrandPayload),
+                    "the online player was sent a brand");
+            helper.assertValueEqual(sentBrand(server), Optional.of("vanilla"), "brand sent to the next client");
+        } finally {
+            ConfigCommandGameTests.restore(server, fileBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     private static ServerPlayer join(GameTestHelper helper, String name) {
         return TestPlayers.join(helper.getLevel().getServer(), name, GameType.SURVIVAL, helper.absolutePos(new BlockPos(1, 1, 1)));
     }

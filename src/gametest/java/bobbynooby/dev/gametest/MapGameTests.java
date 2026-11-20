@@ -15,9 +15,12 @@ import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MapItem;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
@@ -235,6 +238,78 @@ public class MapGameTests {
 
             helper.assertValueEqual(count(sentTo(helper, map, viewer), MapDecorationTypes.PLAYER_OFF_LIMITS), 1,
                     "switch off: far player's marker sent to the viewer");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Only player markers are cut: a banner's and a frame's are no one's whereabouts, so every holder keeps them, near or
+    // far, while the far holder's own marker still never reaches the viewer
+    @GameTest
+    public void bannerAndFrameMarkersStayForEveryHolder(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ItemStack map = newMap(helper);
+        BlockPos banner = onMap(helper, map, new BlockPos(3, 1, 3));
+        try {
+            hide.distantPlayers = true;
+            hide.mapPlayers = true;
+            ServerPlayer viewer = join(helper, joined, "mapbannerv", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer far = join(helper, joined, "mapbannerfar", onMap(helper, map, new BlockPos(1, 0, 0)));
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            helper.getLevel().setBlock(banner, Blocks.BANNER.pick(DyeColor.WHITE).defaultBlockState(), Block.UPDATE_CLIENTS);
+            MapItemSavedData data = data(helper, map);
+            helper.assertTrue(data.toggleBanner(helper.getLevel(), banner), "the banner wasn't added to the map");
+            carry(helper, map, List.of(viewer, far));
+            ItemFrame frame = new ItemFrame(helper.getLevel(), onMap(helper, map, new BlockPos(2, 0, 2)), Direction.NORTH);
+            data.tickCarriedBy(viewer, map.copy(), frame);
+
+            List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.WHITE_BANNER), 1, "banner markers sent to the viewer");
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.FRAME), 1, "frame markers sent to the viewer");
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_LIMITS), 0, "far player's marker sent to the viewer");
+            List<MapDecoration> farSees = sentTo(helper, map, far);
+            helper.assertValueEqual(count(farSees, MapDecorationTypes.WHITE_BANNER), 1, "banner markers sent to the far holder");
+            helper.assertValueEqual(count(farSees, MapDecorationTypes.FRAME), 1, "frame markers sent to the far holder");
+            helper.assertValueEqual(count(farSees, MapDecorationTypes.PLAYER), 0, "viewer's marker sent to the far holder");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            hide.mapPlayers = mapBefore;
+            helper.getLevel().setBlock(banner, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A holder just past the map's edge, though within vanilla's 320 blocks, shows as a marker pinned to the edge. The
+    // viewer doesn't track them, so it isn't sent that marker either.
+    @GameTest
+    public void offMapMarkerOfUnseenPlayerHidden(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        boolean mapBefore = hide.mapPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            hide.mapPlayers = true;
+            ItemStack map = newMap(helper);
+            MapItemSavedData data = data(helper, map);
+            ServerPlayer viewer = join(helper, joined, "mapedgev", onMap(helper, map, BlockPos.ZERO));
+            ServerPlayer edge = join(helper, joined, "mapedge", onMap(helper, map, new BlockPos(1, 0, 0)));
+            // A scale-0 map is 128 blocks across, so 100 blocks east of its centre is just past the edge
+            edge.teleportTo(data.centerX + 100.5, edge.getY(), data.centerZ + 0.5);
+            carry(helper, map, List.of(viewer, edge));
+
+            helper.assertValueEqual(count(data.getDecorations(), MapDecorationTypes.PLAYER_OFF_MAP), 1,
+                    "the edge holder's marker on the map itself");
+            List<MapDecoration> viewerSees = sentTo(helper, map, viewer);
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER), 1, "player markers sent to the viewer");
+            helper.assertValueEqual(count(viewerSees, MapDecorationTypes.PLAYER_OFF_MAP), 0, "the edge holder's marker sent to the viewer");
         } finally {
             hide.distantPlayers = distantBefore;
             hide.mapPlayers = mapBefore;

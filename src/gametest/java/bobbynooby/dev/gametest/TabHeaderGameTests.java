@@ -211,6 +211,41 @@ public class TabHeaderGameTests {
         helper.succeed();
     }
 
+    // A reload keeps a player's line while it is still in the list, so a list that only grew doesn't reshuffle anyone's
+    // header. With two lines to pick from, ten new picks would almost surely land on the other one at least once.
+    @GameTest(environment = TAB_HEADER_LINES)
+    public void reloadKeepsALineThatIsStillListed(GameTestHelper helper) throws ReflectiveOperationException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean switchBefore = hide.tabHeader;
+        List<String> linesBefore = hide.tabHeaderLines;
+        String first = ChatFormatting.GREEN + "Here first";
+        String added = ChatFormatting.AQUA + "Added later";
+        ServerPlayer player = null;
+        try {
+            hide.tabHeader = true;
+            hide.tabHeaderLines = List.of(first);
+            player = TestPlayers.join(helper, "tabkeep", GameType.SURVIVAL, BlockPos.ZERO);
+            helper.assertValueEqual(picked(player.getUUID()).line(), first, "the line picked at the join");
+
+            hide.tabHeaderLines = List.of(first, added);
+            for (int i = 0; i < 10; i++) {
+                LiveSettings.applyAll(server);
+                helper.assertValueEqual(picked(player.getUUID()).line(), first, "the line after apply " + (i + 1));
+                helper.assertTrue(tabListPackets(player).getLast().header().getString().endsWith(first),
+                        "the header sent by apply " + (i + 1) + " doesn't show the kept line");
+            }
+        } finally {
+            hide.tabHeader = switchBefore;
+            hide.tabHeaderLines = linesBefore;
+            LiveSettings.applyAll(server);
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
+        }
+        helper.succeed();
+    }
+
     // Private and only read here: the header and footer each player was given at their join
     private static TabHeaders.HeaderFooter picked(UUID uuid) throws ReflectiveOperationException {
         Field field = TabHeaders.class.getDeclaredField("PLAYER_MAP");

@@ -217,6 +217,46 @@ public class AdminViewGameTests {
         helper.succeed();
     }
 
+    // Admin view is about what a client is sent, so the console, which has none, gets vanilla's "a player is required"
+    // and the command fails
+    @GameTest
+    public void consoleAdminViewNeedsAPlayer(GameTestHelper helper) {
+        int[] result = {-1};
+        List<String> output = CommandGameTests.run(helper.getLevel().getServer(), "yolt adminview", value -> result[0] = value);
+        helper.assertValueEqual(output, List.of(Component.translatable("permissions.requires.player").getString()), "command output");
+        helper.assertValueEqual(result[0], 0, "command result");
+        helper.succeed();
+    }
+
+    // With coordinates hidden, an offset only changes when a frame starts, so the reply says the change waits for the
+    // next one. With them shown there is nothing to wait for, and the reply is the plain one.
+    @GameTest
+    public void replyNamesTheNextFrameOnlyWithCoordinatesHidden(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean coordinatesBefore = hide.coordinates;
+        TestPlayers.Recording admin = TestPlayers.joinRecording(helper, "avframe", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            TestPlayers.op(admin);
+            hide.coordinates = true;
+            run(admin, "yolt adminview");
+            run(admin, "yolt adminview");
+            hide.coordinates = false;
+            run(admin, "yolt adminview");
+            run(admin, "yolt adminview");
+            helper.assertValueEqual(admin.messages.stream().map(Component::getString).toList(), List.of(
+                    "Admin view on. Real coordinates start at your next join, respawn or dimension change.",
+                    "Admin view off. Offset coordinates start at your next join, respawn or dimension change.",
+                    "Admin view on.",
+                    "Admin view off."), "the replies");
+        } finally {
+            hide.coordinates = coordinatesBefore;
+            AdminView.set(admin, false);
+            TestPlayers.deop(admin);
+            TestPlayers.leave(admin);
+        }
+        helper.succeed();
+    }
+
     // A /team modify or a reload sends our team's settings to everyone again, which must not undo an admin's rule
     @GameTest
     public void adminKeepsNametagsThroughTeamChanges(GameTestHelper helper) {
