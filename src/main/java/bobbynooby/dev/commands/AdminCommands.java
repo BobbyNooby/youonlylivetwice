@@ -16,6 +16,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,7 +51,18 @@ final class AdminCommands {
         MinecraftServer server = source.getServer();
         YoltConfig live = Settings.get();
         YoltConfig.WorldBorderSection liveBorder = live.worldBorder;
-        ConfigLoader.Result result = Settings.reload();
+        ConfigLoader.Result result;
+        try {
+            result = Settings.reload();
+        } catch (UncheckedIOException e) {
+            // An older file is upgraded only once a copy of it is kept. When a reload can't make that copy the loader throws
+            // before anything is written or swapped in, so the live config is untouched and the command fails as it does
+            // for a broken file, rather than with vanilla's "unexpected error"
+            String problem = "the file is from an older version and could not be copied before its upgrade ("
+                    + e.getCause().getMessage() + ")";
+            Yolt.LOGGER.warn("{} tried to reload the config: {}", source.getTextName(), problem);
+            return YoltCommands.fail(source, "Config not reloaded, nothing changed: " + problem);
+        }
         // With no file the loader hands back the live config itself: nothing was read, so it is refused like a broken file
         if (result.unparseable() || result.config() == live) {
             String problem = String.join(", ", result.warnings());

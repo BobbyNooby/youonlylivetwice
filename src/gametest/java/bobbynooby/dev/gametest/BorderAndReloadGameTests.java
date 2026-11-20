@@ -7,6 +7,7 @@ import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.config.ConfigLoader;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.CommandGameTests.SavedBackups;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
@@ -32,6 +33,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,6 +42,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static bobbynooby.dev.gametest.CommandGameTests.CONFIG_COMMAND;
 import static bobbynooby.dev.gametest.CommandGameTests.restoreBackups;
@@ -1139,6 +1142,70 @@ public class BorderAndReloadGameTests {
             restoreBorders(bordersBefore);
         }
         helper.succeed();
+    }
+
+    // An older file is upgraded only once a copy of it is kept. In a read-only config folder that copy can't be made, so
+    // the reload reads nothing: one line says why, the command fails, and the live config, the world and the file are as
+    // they were. Where the folder can't be made read-only, as for root, there is nothing to check, as in the loader's
+    // own test.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadOfAnOlderFileThatCantBeCopiedChangesNothing(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        YoltConfig configBefore = Settings.get();
+        List<Path> copiesBefore = olderCopies(path);
+        File folder = path.toAbsolutePath().getParent().toFile();
+        // New bytes, so no copy from an earlier run already holds them and the copy has to be made
+        String older = "{/* " + UUID.randomUUID() + " */ \"configVersion\": 1, \"chat\": {\"radius\": 20},"
+                + " \"worldBorder\": {\"enabled\": false}}";
+        try {
+            Files.writeString(path, older);
+            if (!folder.setWritable(false) || Files.isWritable(folder.toPath())) {
+                Yolt.LOGGER.warn("reloadOfAnOlderFileThatCantBeCopiedChangesNothing: skipped, the config folder can't be made read-only here");
+                helper.succeed();
+                return;
+            }
+            int[] result = {-1};
+            List<String> output;
+            try {
+                output = run(server, "yolt reload", value -> result[0] = value);
+            } finally {
+                folder.setWritable(true);
+            }
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("Config not reloaded, nothing changed: the file is from"
+                    + " an older version and could not be copied before its upgrade (") && output.get(0).endsWith(")"),
+                    "command output: " + output);
+            helper.assertValueEqual(result[0], 0, "command result");
+            helper.assertTrue(Settings.get() == configBefore, "the live config was replaced");
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertValueEqual(Files.readString(path), older, "config file");
+            helper.assertValueEqual(olderCopies(path), copiesBefore, "copies of older files");
+        } finally {
+            folder.setWritable(true);
+            Files.writeString(path, fileBefore);
+            removeNewCopies(path, copiesBefore);
+            if (Settings.get() != configBefore) {
+                restoreConfig(server);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The copies an upgrade keeps of a file from version 1, for removeNewCopies
+    private static List<Path> olderCopies(Path config) throws IOException {
+        String prefix = config.getFileName() + ".v1.bak";
+        try (Stream<Path> files = Files.list(config.toAbsolutePath().getParent())) {
+            return files.filter(file -> file.getFileName().toString().startsWith(prefix)).sorted().toList();
+        }
+    }
+
+    private static void removeNewCopies(Path config, List<Path> before) throws IOException {
+        for (Path copy : olderCopies(config)) {
+            if (!before.contains(copy)) {
+                Files.delete(copy);
+            }
+        }
     }
 
     private static void assertCentre(GameTestHelper helper, ServerLevel level, double x, double z) {
