@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.config.Messages;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
@@ -111,11 +112,12 @@ public final class GraveNotice {
     }
 
     private static String atLine(Grave grave, BlockPos pos) {
-        return "Your grave is at " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + " in " + dimensionName(grave.dimension()) + ".";
+        return Messages.fill(Settings.get().messages.graveAt, "x", String.valueOf(pos.getX()), "y", String.valueOf(pos.getY()),
+                "z", String.valueOf(pos.getZ()), "dimension", dimensionName(grave.dimension()));
     }
 
     private static String inLine(Grave grave) {
-        return "Your grave is in " + dimensionName(grave.dimension()) + ".";
+        return Messages.fill(Settings.get().messages.graveIn, "dimension", dimensionName(grave.dimension()));
     }
 
     // The first grave of the death: one made within the minute before it, the newest such. One death's graves share a

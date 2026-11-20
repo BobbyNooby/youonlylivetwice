@@ -18,6 +18,8 @@ public @interface Applies {
         NEW_BODIES(" (applies to new bodies)"),
         NEW_DEATHS(" (applies to deaths from now on)"),
         MOBS_LOAD(" (applies to mobs as they load)"),
+        NEW_PAPERS(" (applies to revive papers crafted from now on)"),
+        NEXT_BLOOD_MOON(" (applies from the next blood moon)"),
         // No key needs it today; kept, with its test, for a later key that does
         RESTART(" (needs a restart)");
 

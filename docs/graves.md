@@ -33,7 +33,7 @@ Where the grave goes:
 `graves.tellLocation` says whether you are told where your grave is: `never`, `whenMoved` (the default: only when it
 is more than `graves.tellLocationDistance` blocks, default 16, from where you died, or in another dimension) or
 `always`. You are told in the lockout kick and the login screen, or in chat after you respawn if the death kicked
-nobody. Only you are told.
+nobody. Only you are told. The words are `messages.graveAt` and `messages.graveIn`, see [`messages`](config.md#messages).
 
 With `graves.enabled` off, deaths drop items the vanilla way. A death while you're offline (your body's, or `/yolt
 kill`) drops them where a grave's items would be safe instead, and they never despawn, since you aren't there to pick

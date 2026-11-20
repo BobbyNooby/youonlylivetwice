@@ -3,6 +3,7 @@ package bobbynooby.dev.commands;
 import bobbynooby.dev.config.ConfigKey;
 import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.ConfigLoader;
+import bobbynooby.dev.config.Messages;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.world.LiveSettings;
@@ -101,6 +102,13 @@ final class ConfigCommands {
         }
         Yolt.LOGGER.info("{} set config {} from {} to {}", source.getTextName(), name, change.oldValue(), change.newValue());
         YoltCommands.reply(source, name + " changed from " + change.oldValue() + " to " + change.newValue() + key.when().note() + ".");
+        // Allowed, since it may be meant, but most likely a misspelt placeholder
+        for (String notice : Messages.unknownPlaceholders(change.config())) {
+            if (notice.startsWith(name + ":")) {
+                Yolt.LOGGER.warn("Config: {}", notice);
+                YoltCommands.reply(source, ConfigKeys.asReply(notice));
+            }
+        }
         tellBackup(source, change);
         if (border && change.config().worldBorder.enabled) {
             if (Settings.borderHeld()) {

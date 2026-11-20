@@ -39,6 +39,11 @@ public final class Settings {
         for (String warning : result.warnings()) {
             Yolt.LOGGER.warn("Config: {}", warning);
         }
+        // Not among the warnings, which would keep a copy of a file that loaded as typed. /yolt reload and /yolt config say
+        // them for themselves.
+        for (String notice : Messages.unknownPlaceholders(config)) {
+            Yolt.LOGGER.warn("Config: {}", notice);
+        }
         noteCurseAndLimp(null, config);
         borderFellBack = result.borderProblem() != null;
         borderHeld = borderFellBack;

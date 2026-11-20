@@ -168,6 +168,7 @@ final class ConfigChecks {
             c.resourcePack.reviveModel = fallback.resourcePack.reviveModel;
             fellBack.accept("resourcePack.reviveModel", "must be an id such as you-only-live-twice:revive_paper");
         }
+        Messages.check(c.messages, fallback.messages, fellBack);
         return reset;
     }
 

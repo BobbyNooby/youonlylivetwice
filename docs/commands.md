@@ -28,7 +28,7 @@ console has no player, so `/yolt adminview`, `/status` and the own-skin forms of
 | `/yolt skin clear <player>` | Ops, console | Clears another player's pick. |
 | `/w <player> <message>` | Everyone when `chat.allowWhispers` is on (the default); ops always | Whispers to a player within `chat.whisperRadius`, for ops too. Doesn't tab-complete names. `/msg` and `/tell` are the same command. |
 | `/status` | Everyone while a hardcore feature is on, as the anvil and Mending rules are by default; ops always | Shows a report on your own body. See [`/status`](hardcore.md#status). |
-| `/help` | Everyone | Answers with a spooky message. |
+| `/help` | Everyone | Answers with a spooky message (`messages.help`). |
 
 A command that names a player finds them only where this server knows them: online players, the server's name cache,
 the death log and YOLT's record of joins. It never asks Mojang. Anyone else gets "No player named X has joined this

@@ -201,13 +201,17 @@ class ConfigKeysTest {
                 Map.entry("hardcore.bloodMoon.chargedCreeperChance", Applies.When.MOBS_LOAD),
                 Map.entry("hide.serverBrand", Applies.When.NEXT_JOIN),
                 Map.entry("hide.coordinates", Applies.When.NEXT_FRAME),
-                Map.entry("skins.mode", Applies.When.NEXT_JOIN)), waiting);
+                Map.entry("skins.mode", Applies.When.NEXT_JOIN),
+                Map.entry("messages.reviveName", Applies.When.NEW_PAPERS),
+                Map.entry("messages.bloodMoonBarTitle", Applies.When.NEXT_BLOOD_MOON)), waiting);
         assertEquals("", Applies.When.NOW.note());
         assertEquals(" (applies when a player next joins)", Applies.When.NEXT_JOIN.note());
         assertEquals(" (applies when a player next joins, respawns or changes dimension)", Applies.When.NEXT_FRAME.note());
         assertEquals(" (applies to new bodies)", Applies.When.NEW_BODIES.note());
         assertEquals(" (applies to deaths from now on)", Applies.When.NEW_DEATHS.note());
         assertEquals(" (applies to mobs as they load)", Applies.When.MOBS_LOAD.note());
+        assertEquals(" (applies to revive papers crafted from now on)", Applies.When.NEW_PAPERS.note());
+        assertEquals(" (applies from the next blood moon)", Applies.When.NEXT_BLOOD_MOON.note());
     }
 
     // A reply keeps a key's name as it is, dotted or not, and drops the log form's colon

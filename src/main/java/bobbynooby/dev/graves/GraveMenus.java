@@ -1,5 +1,7 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.config.Messages;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.Later;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -67,7 +69,7 @@ public final class GraveMenus {
             return;
         }
         player.openMenu(new SimpleMenuProvider((id, inventory, p) -> new GraveMenu(id, inventory, grave),
-                Component.literal(grave.ownerName() + "'s Grave")));
+                Component.literal(Messages.fill(Settings.get().messages.graveTitle, "name", grave.ownerName()))));
     }
 
     /** The container every open menu on this grave shares, or null when nobody has the grave open. */

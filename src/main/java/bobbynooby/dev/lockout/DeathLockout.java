@@ -157,7 +157,7 @@ public final class DeathLockout {
         if (remaining <= 0) {
             return null;
         }
-        return new LockedOut(log.get(), Cooldown.refusal(log.get().deathMessage(), remaining));
+        return new LockedOut(log.get(), Cooldown.refusal(log.get().deathMessage(), remaining, Settings.get().messages));
     }
 
     /**

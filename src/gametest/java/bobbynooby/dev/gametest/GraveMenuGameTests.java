@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Later;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveBlocks;
@@ -14,6 +16,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -82,6 +86,40 @@ public class GraveMenuGameTests {
             cleanUp(helper, grave, player);
         }
         helper.succeed();
+    }
+
+    // The menu's title is messages.graveTitle with the owner's name: "Ghost's Grave" as it ships, then the config's own
+    // words. The menu is told by its kind, not its title, so it still holds the grave.
+    @GameTest
+    public void menuTitleTakesTheConfigsWords(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND));
+        ServerPlayer player = join(helper, "Reader");
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String before = texts.graveTitle;
+        try {
+            GraveMenus.open(player, grave);
+            helper.assertValueEqual(lastScreenTitle(helper, player), "Ghost's Grave", "title as it ships");
+            player.closeContainer();
+            texts.graveTitle = "§8Here lies {name}";
+            GraveMenus.open(player, grave);
+            helper.assertValueEqual(lastScreenTitle(helper, player), "§8Here lies Ghost", "title in the config's words");
+            helper.assertTrue(player.containerMenu instanceof GraveMenu, "the grave's menu is not open");
+        } finally {
+            texts.graveTitle = before;
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    private static String lastScreenTitle(GameTestHelper helper, ServerPlayer player) {
+        ClientboundOpenScreenPacket last = null;
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundOpenScreenPacket screen) {
+                last = screen;
+            }
+        }
+        helper.assertTrue(last != null, "no menu was opened");
+        return last.getTitle().getString();
     }
 
     @GameTest

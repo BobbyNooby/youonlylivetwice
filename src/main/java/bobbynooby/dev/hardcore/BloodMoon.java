@@ -2,6 +2,7 @@ package bobbynooby.dev.hardcore;
 
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.StandIn;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
@@ -45,11 +46,12 @@ public final class BloodMoon {
     public static final String LAST_DAY = "lastBloodMoonDay";
     // So a restart later the same night doesn't bring back one that ended early, as a frozen clock or /yolt stop can
     public static final String ENDED_DAY = "lastBloodMoonEndedDay";
-    public static final String WARNING_TITLE = "The moon will rise red tonight…";
-    public static final String WARNING_LINE = "A blood moon rises tonight. Find somewhere safe before dark.";
-    public static final String RISEN_LINE = "The blood moon has risen. Mobs are stronger and more numerous until dawn.";
-    public static final String UP_LINE = "A blood moon is up. Mobs are stronger and more numerous until dawn.";
-    public static final String SET_LINE = "The blood moon has set.";
+    // The lines as a fresh config words them, which the tests compare against. What is sent is the live config's.
+    private static final YoltConfig.MessagesSection DEFAULT_TEXTS = new YoltConfig.MessagesSection();
+    public static final String WARNING_TITLE = DEFAULT_TEXTS.bloodMoonWarningTitle;
+    public static final String WARNING_LINE = DEFAULT_TEXTS.bloodMoonWarningLine;
+    public static final String UP_LINE = DEFAULT_TEXTS.bloodMoonUpLine;
+    public static final String SET_LINE = DEFAULT_TEXTS.bloodMoonSetLine;
     private static final int STATUS_ORDER = 90;
     private static final long TICKS_PER_DAY = 24000L;
     // The bar is a rough clock, so once a second is plenty
@@ -311,7 +313,7 @@ public final class BloodMoon {
         ServerBossEvent bar = config().bossBar ? newBar((float) left) : null;
         night = new Night(day, startClock, endClock, startTick, length, bar);
         warned = false;
-        Component line = Component.literal(resumed ? UP_LINE : RISEN_LINE);
+        Component line = Component.literal(resumed ? texts().bloodMoonUpLine : texts().bloodMoonRisenLine);
         for (ServerPlayer player : overworldPlayers(server)) {
             if (bar != null) {
                 bar.addPlayer(player);
@@ -334,7 +336,7 @@ public final class BloodMoon {
         }
         endedDay = ended.day;
         HardcoreStates.setWorld(ENDED_DAY, ended.day);
-        Component line = Component.literal(SET_LINE);
+        Component line = Component.literal(texts().bloodMoonSetLine);
         for (ServerPlayer player : overworldPlayers(server)) {
             player.sendSystemMessage(line);
         }
@@ -346,10 +348,10 @@ public final class BloodMoon {
         for (ServerPlayer player : overworldPlayers(server)) {
             if (warning.title) {
                 player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
-                player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(WARNING_TITLE)));
+                player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(texts().bloodMoonWarningTitle)));
             }
             if (warning.chat) {
-                player.sendSystemMessage(Component.literal(WARNING_LINE));
+                player.sendSystemMessage(Component.literal(texts().bloodMoonWarningLine));
             }
             if (warning.sound) {
                 player.connection.send(new ClientboundSoundPacket(SoundEvents.RAID_HORN, SoundSource.AMBIENT,
@@ -360,8 +362,8 @@ public final class BloodMoon {
 
     private static ServerBossEvent newBar(float progress) {
         HardcoreConfig.BloodMoonSection config = config();
-        ServerBossEvent bar = new ServerBossEvent(UUID.randomUUID(), Component.literal("Blood Moon"), BossEvent.BossBarColor.RED,
-                BossEvent.BossBarOverlay.PROGRESS);
+        ServerBossEvent bar = new ServerBossEvent(UUID.randomUUID(), Component.literal(texts().bloodMoonBarTitle),
+                BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
         bar.setDarkenScreen(config.darkenSky);
         bar.setCreateWorldFog(config.fog);
         bar.setProgress(progress);
@@ -389,7 +391,7 @@ public final class BloodMoon {
         if (current.bar != null) {
             current.bar.addPlayer(player);
         }
-        player.sendSystemMessage(Component.literal(UP_LINE));
+        player.sendSystemMessage(Component.literal(texts().bloodMoonUpLine));
     }
 
     private static void changedLevel(ServerPlayer player, ServerLevel destination) {
@@ -486,5 +488,9 @@ public final class BloodMoon {
 
     private static HardcoreConfig.BloodMoonSection config() {
         return Settings.get().hardcore.bloodMoon;
+    }
+
+    private static YoltConfig.MessagesSection texts() {
+        return Settings.get().messages;
     }
 }

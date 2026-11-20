@@ -410,6 +410,8 @@ On some nights, picked by chance, more mobs come out, and they are tougher, bett
   and optionally there is fog (`fog`). A player who joins or comes into the overworld gets the bar and one chat line.
 - At dawn a line says the blood moon has set.
 - `/status` shows "Blood moon tonight" from the warning until it ends, in the overworld.
+- The title, the lines and the bar's title can be reworded with the `messages.bloodMoon…` keys, see
+  [`messages`](config.md#messages).
 
 **What changes:**
 

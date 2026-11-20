@@ -35,7 +35,7 @@ public abstract class PlayerListLoginMixin {
             cir.setReturnValue(refusal);
         } else if (cir.getReturnValue() != null && PlayerCount.hides()) {
             // "The server is full!" would tell that every slot is taken, while the server list shows nobody on
-            cir.setReturnValue(Component.literal(PlayerCount.FULL_REFUSAL));
+            cir.setReturnValue(Component.literal(Settings.get().messages.serverFull));
         }
     }
 

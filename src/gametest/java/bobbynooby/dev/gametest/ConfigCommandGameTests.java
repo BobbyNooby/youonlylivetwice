@@ -512,6 +512,36 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // A text of the messages section: a required placeholder can't be dropped, the revive paper's name says it waits for
+    // new papers, and a placeholder the text doesn't fill in is let through with a line that says so, by the command and
+    // by a reload
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void messagesSetRefuseAndReload(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            setsRefusesAndReloads(helper, server, "messages.lockoutWait", "Try again in {wait}.", "Come back in {wait}.", "",
+                    "Come back later.", "messages.lockoutWait must keep {wait}.", "Wait {wait}.");
+            setsRefusesAndReloads(helper, server, "messages.reviveName", "Revive {name}", "Bring back {name}",
+                    " (applies to revive papers crafted from now on)", "Bring them back", "messages.reviveName must keep {name}.",
+                    "Paper of {name}");
+            setsRefusesAndReloads(helper, server, "messages.help", "But nobody answered....", "Only the wind.", "",
+                    "x".repeat(257), "messages.help must be at most 256 characters.", "Silence.");
+
+            helper.assertValueEqual(run(server, "yolt config messages.graveIn Your grave lies in {dim}."), List.of(
+                    "messages.graveIn changed from Your grave is in {dimension}. to Your grave lies in {dim}..",
+                    "messages.graveIn has {dim}, which it doesn't fill in, so it shows as typed."), "set with an unknown placeholder");
+            helper.assertValueEqual(Settings.get().messages.graveIn, "Your grave lies in {dim}.", "live messages.graveIn");
+            Files.writeString(Settings.path(), "{\"messages\": {\"graveIn\": \"In {where}.\"}, \"worldBorder\": {\"enabled\": false}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded.",
+                    "messages.graveIn: has {where}, which it doesn't fill in, so it shows as typed"), "reload with an unknown placeholder");
+            helper.assertValueEqual(Settings.get().messages.graveIn, "In {where}.", "live messages.graveIn after the reload");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
     /**
      * Shows the key at its shipped value, sets it with the command, whose reply ends with the key's note, has a bad value
      * refused, then writes the file with only that key, with the border kept off as the test server needs, and reloads

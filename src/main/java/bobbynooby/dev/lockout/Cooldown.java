@@ -1,5 +1,7 @@
 package bobbynooby.dev.lockout;
 
+import bobbynooby.dev.config.Messages;
+import bobbynooby.dev.config.YoltConfig;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
@@ -37,17 +39,31 @@ public final class Cooldown {
         return Math.clamp(end - nowMillis, 0, Math.max(whole, 0));
     }
 
-    /** What a locked-out player is told, at login and when the death kicks them: how they died, then the wait. */
+    /** The same, in the words a fresh config has. */
     public static String refusal(@Nullable String deathMessage, long remainingMillis) {
-        String died = deathMessage == null || deathMessage.isBlank() ? "You died." : "You died: " + deathMessage;
-        return died + "\n" + message(remainingMillis);
+        return refusal(deathMessage, remainingMillis, new YoltConfig.MessagesSection());
     }
 
     /**
-     * "Try again in …". Rounded up to the second, so a kick straight after a 7-day death says 1 week, and a wait
-     * under a second isn't 0.
+     * What a locked-out player is told, at login and when the death kicks them: how they died, then the wait, in the
+     * config's words.
      */
+    public static String refusal(@Nullable String deathMessage, long remainingMillis, YoltConfig.MessagesSection texts) {
+        String died = deathMessage == null || deathMessage.isBlank() ? texts.lockoutDiedPlain
+                : Messages.fill(texts.lockoutDied, "death", deathMessage);
+        return died + "\n" + message(remainingMillis, texts.lockoutWait);
+    }
+
+    /** The same, in the words a fresh config has. */
     public static String message(long remainingMillis) {
+        return message(remainingMillis, new YoltConfig.MessagesSection().lockoutWait);
+    }
+
+    /**
+     * "Try again in …", with the wait filled into the text's {wait}. Rounded up to the second, so a kick straight after a
+     * 7-day death says 1 week, and a wait under a second isn't 0.
+     */
+    public static String message(long remainingMillis, String text) {
         long seconds = Math.ceilDiv(remainingMillis, SECOND_MS);
         List<String> parts = new ArrayList<>();
         for (Unit unit : UNITS) {
@@ -60,7 +76,7 @@ public final class Cooldown {
         if (seconds > 0 || parts.isEmpty()) {
             parts.add(withUnit(seconds, "second"));
         }
-        return "Try again in " + String.join(", ", parts) + ".";
+        return Messages.fill(text, "wait", String.join(", ", parts));
     }
 
     private static String withUnit(long count, String unit) {

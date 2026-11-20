@@ -54,6 +54,8 @@ public class HardcoreBloodMoonGameTests {
     // Every night past the grace days rolls, with no break between
     private static final String CLOCK = "you-only-live-twice-gametest:hardcore_blood_moon_clock";
     private static final String WARNING = "you-only-live-twice-gametest:hardcore_blood_moon_warning";
+    // The same, for the warning in the config's words, since each batch drives its own stand-in clock
+    private static final String WORDS = "you-only-live-twice-gametest:hardcore_blood_moon_words";
     // The same, with a night of 100 ticks
     private static final String FROZEN = "you-only-live-twice-gametest:hardcore_blood_moon_frozen";
     private static final long DAY = 24000L;
@@ -386,6 +388,87 @@ public class HardcoreBloodMoonGameTests {
             cleanUp.run();
             throw e;
         }
+    }
+
+    // The warning's title and line in the config's words
+    @GameTest(environment = WORDS, maxTicks = 100)
+    public void info1WarningTakesTheConfigsWords(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String titleBefore = texts.bloodMoonWarningTitle;
+        String lineBefore = texts.bloodMoonWarningLine;
+        long[] clock = {freshDay() * DAY + config.warnTick};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
+        List<ServerPlayer> players = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            texts.bloodMoonWarningTitle = titleBefore;
+            texts.bloodMoonWarningLine = lineBefore;
+            BloodMoon.stop(server);
+            realClock.run();
+            // A warning saves no day, so the next batch would pick this same day and find it warned already
+            BloodMoon.restartForTesting();
+            players.forEach(TestPlayers::leave);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            texts.bloodMoonWarningTitle = "§4Look up.";
+            texts.bloodMoonWarningLine = "Tonight it bleeds.";
+            ServerPlayer player = TestPlayers.join(helper, "MoonWarned", GameType.SURVIVAL, PLAYER_AT);
+            players.add(player);
+            int mark = TestPlayers.sentPackets(player).size();
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
+                    .thenExecute(() -> {
+                        List<String> warning = moonPackets(player, mark);
+                        helper.assertTrue(warning.contains("title §4Look up."), "no warning title in the config's words: " + warning);
+                        helper.assertTrue(warning.contains("chat Tonight it bleeds."), "no warning line in the config's words: " + warning);
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // The lines a blood moon sends and its bar's title in the config's words: risen at the start, up for a player who
+    // arrives during it, set at the end. Relies on nothing else sending these players a chat line or a boss bar.
+    @GameTest(environment = MOON)
+    public void bloodLinesAndBarTakeTheConfigsWords(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String risenBefore = texts.bloodMoonRisenLine;
+        String upBefore = texts.bloodMoonUpLine;
+        String setBefore = texts.bloodMoonSetLine;
+        String barBefore = texts.bloodMoonBarTitle;
+        List<ServerPlayer> players = new ArrayList<>();
+        try {
+            texts.bloodMoonRisenLine = "§4Red.";
+            texts.bloodMoonUpLine = "Still red.";
+            texts.bloodMoonSetLine = "Pale again.";
+            texts.bloodMoonBarTitle = "§cThe Red";
+            ServerPlayer first = TestPlayers.join(helper, "MoonWords", GameType.SURVIVAL, PLAYER_AT);
+            players.add(first);
+            int mark = TestPlayers.sentPackets(first).size();
+            BloodMoon.start(server);
+            ServerPlayer late = TestPlayers.join(helper, "MoonWordsLate", GameType.SURVIVAL, SECOND_PLAYER_AT);
+            players.add(late);
+            BloodMoon.stop(server);
+            List<String> sent = moonPackets(first, mark);
+            helper.assertTrue(sent.contains("chat §4Red."), "no risen line in the config's words: " + sent);
+            helper.assertTrue(sent.stream().anyMatch(line -> line.startsWith("bar add §cThe Red ")), "no bar with the config's title: " + sent);
+            helper.assertValueEqual(sent.getLast(), "chat Pale again.", "the last line: " + sent);
+            helper.assertTrue(chatLines(late, 0).contains("Still red."), "no up line for the late player: " + chatLines(late, 0));
+        } finally {
+            texts.bloodMoonRisenLine = risenBefore;
+            texts.bloodMoonUpLine = upBefore;
+            texts.bloodMoonSetLine = setBefore;
+            texts.bloodMoonBarTitle = barBefore;
+            BloodMoon.stop(server);
+            players.forEach(TestPlayers::leave);
+        }
+        helper.succeed();
     }
 
     // Relies on nothing else sending this player a chat line or a boss bar between its join and the stop

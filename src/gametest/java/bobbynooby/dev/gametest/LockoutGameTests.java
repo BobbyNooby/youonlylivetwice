@@ -182,6 +182,54 @@ public class LockoutGameTests {
         helper.succeed();
     }
 
+    // The lockout's lines and the full server's in the config's words, read as each refusal is made: the death message
+    // and the wait filled in, the plain line for a death with no message
+    @GameTest(environment = LOGIN_CHECK)
+    public void refusalsTakeTheConfigsWords(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String diedBefore = texts.lockoutDied;
+        String plainBefore = texts.lockoutDiedPlain;
+        String waitBefore = texts.lockoutWait;
+        String fullBefore = texts.serverFull;
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean hiddenBefore = hide.serverPlayerCount;
+        ServerPlayer holder = null;
+        try {
+            texts.lockoutDied = "§4Gone: {death}";
+            texts.lockoutDiedPlain = "§4Gone.";
+            texts.lockoutWait = "Back in {wait}, maybe.";
+            UUID faller = UUID.randomUUID();
+            DeathLockout.recordDeath(faller, "Faller", "Faller fell from a high place");
+            Component refusal = loginRefusal(server, new NameAndId(faller, "Faller"));
+            String text = refusal == null ? "" : refusal.getString();
+            helper.assertTrue(text.startsWith("§4Gone: Faller fell from a high place\nBack in ") && text.endsWith(", maybe."),
+                    "login refusal: " + text);
+            UUID quiet = UUID.randomUUID();
+            DeathLockout.recordDeath(quiet, "Quiet");
+            Component plain = loginRefusal(server, new NameAndId(quiet, "Quiet"));
+            helper.assertTrue(plain != null && plain.getString().startsWith("§4Gone.\nBack in "),
+                    "login refusal with no death message: " + (plain == null ? null : plain.getString()));
+
+            texts.serverFull = "§7Not now.";
+            holder = TestPlayers.join(helper, "WordsHolder", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+            helper.assertTrue(server.getPlayerList().getPlayers().size() >= server.getMaxPlayers(), "the server is not full");
+            hide.serverPlayerCount = true;
+            Component full = loginRefusal(server, new NameAndId(UUID.randomUUID(), "Living"));
+            helper.assertValueEqual(full == null ? "" : full.getString(), "§7Not now.", "refusal on a full server");
+        } finally {
+            texts.lockoutDied = diedBefore;
+            texts.lockoutDiedPlain = plainBefore;
+            texts.lockoutWait = waitBefore;
+            texts.serverFull = fullBefore;
+            hide.serverPlayerCount = hiddenBefore;
+            if (holder != null) {
+                TestPlayers.leave(holder);
+            }
+        }
+        helper.succeed();
+    }
+
     // The second line's wait is CooldownTest's; this pins what login shows from the death log
     @GameTest(environment = LOGIN_CHECK)
     public void loginRefusalShowsDeathMessage(GameTestHelper helper) {

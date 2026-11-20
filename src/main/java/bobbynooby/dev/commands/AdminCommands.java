@@ -2,6 +2,7 @@ package bobbynooby.dev.commands;
 
 import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.ConfigLoader;
+import bobbynooby.dev.config.Messages;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.coords.CoordinateOffsets;
@@ -100,6 +101,7 @@ final class AdminCommands {
         }
         LiveSettings.applyAll(server, applyBorder);
         warnings.addAll(CommandRestriction.allowedCommandNotes(server));
+        warnings.addAll(Messages.unknownPlaceholders(Settings.get()));
 
         Yolt.LOGGER.info("{} reloaded the config", source.getTextName());
         YoltCommands.reply(source, "Config reloaded.");

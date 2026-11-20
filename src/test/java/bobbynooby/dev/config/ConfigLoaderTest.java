@@ -1206,7 +1206,8 @@ class ConfigLoaderTest {
         assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak",
                 turnedOn("skins.lockAfterFirstChoice"),
                 turnedOn("chat.allowWhispers"),
-                "the file had no allowedCommands, serverList.motdLines, hardcore, resourcePack, so they take their defaults"),
+                "the file had no allowedCommands, serverList.motdLines, hardcore, resourcePack, messages, so they take their"
+                        + " defaults"),
                 r.warnings());
         // Everything else, hardcore and resourcePack included, is this version's default
         YoltConfig expected = new YoltConfig();

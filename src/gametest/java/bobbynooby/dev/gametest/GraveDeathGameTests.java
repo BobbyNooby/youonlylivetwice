@@ -1262,6 +1262,40 @@ public class GraveDeathGameTests {
         helper.succeed();
     }
 
+    // messages.graveAt and graveIn: the refusal's grave line in the config's words, the coordinates and the dimension's
+    // name filled in, and the dimension alone while coordinates are hidden. The texts go back in the same tick.
+    @GameTest
+    public void refusalGraveLineTakesTheConfigsWords(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String atBefore = texts.graveAt;
+        String inBefore = texts.graveIn;
+        UUID owner = UUID.randomUUID();
+        String name = "Worded";
+        GraveStore store = GraveStore.get(server);
+        BlockPos at = new BlockPos(30000, 70, 30000);
+        List<Grave> made = new ArrayList<>();
+        try {
+            assertDefaultTelling(helper);
+            DeathLockout.recordDeath(owner, name);
+            DeathLog death = DeathLockout.newestDeath(owner);
+            helper.assertTrue(death != null, "the death was not recorded");
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at), death.deathTimeMillis());
+            texts.graveAt = "§7Dig at {x} {y} {z}, {dimension}";
+            texts.graveIn = "Somewhere in {dimension}";
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of("§7Dig at 30000 70 30000, the Overworld"),
+                    "grave line in the config's words");
+            Component hidden = OffsetTestKit.withCoordinates(() -> DeathLockout.refusal(server, owner, name));
+            helper.assertTrue(hidden != null && hidden.getString().endsWith("\nSomewhere in the Overworld"),
+                    "grave line with coordinates hidden: " + (hidden == null ? null : hidden.getString()));
+        } finally {
+            texts.graveAt = atBefore;
+            texts.graveIn = inBefore;
+            made.forEach(grave -> store.remove(grave.id()));
+        }
+        helper.succeed();
+    }
+
     // An owner killed while away is told in chat at the respawn once they are back, as after an online death: here a
     // body killed with the lockout off. Always tells, since the grave is where the body stood. The whole test runs in
     // one tick, and both switches go back in it.

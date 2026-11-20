@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
@@ -88,6 +89,29 @@ public class ReviveGameTests {
             helper.assertTrue(Boolean.TRUE.equals(result.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE)), "result has no glint");
             helper.assertValueEqual(result.get(DataComponents.RARITY), Rarity.EPIC, "rarity");
         } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // messages.reviveName names the paper the recipe makes. A paper is told by its data, so it is still a revive paper
+    // with its owner whatever it is called.
+    @GameTest
+    public void recipeNamesThePaperInTheConfigsWords(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Named", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig.MessagesSection texts = Settings.get().messages;
+        String before = texts.reviveName;
+        try {
+            texts.reviveName = "§5Bring back {name}";
+            CraftingInput input = grid(withMaterials(GraveItems.graveHead(Profiles.of(player))));
+            Optional<RecipeHolder<CraftingRecipe>> recipe = findRecipe(helper, input);
+            helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and its five materials");
+            ItemStack result = recipe.get().value().assemble(input);
+            helper.assertValueEqual(result.getHoverName().getString(), "§5Bring back " + player.getGameProfile().name(), "result name");
+            helper.assertTrue(GraveItems.isReviveHead(result), "result is not a revive head");
+            helper.assertTrue(GraveItems.ownerId(result).filter(player.getUUID()::equals).isPresent(), "result lost the owner");
+        } finally {
+            texts.reviveName = before;
             TestPlayers.leave(player);
         }
         helper.succeed();

@@ -27,6 +27,7 @@ public class YoltConfig {
     public SkinsSection skins = new SkinsSection();
     public HardcoreConfig.HardcoreSection hardcore = new HardcoreConfig.HardcoreSection();
     public HardcoreConfig.ResourcePackSection resourcePack = new HardcoreConfig.ResourcePackSection();
+    public MessagesSection messages = new MessagesSection();
 
     // YOLT's flavour lines, shipped as both the tab-list header's and the server list's MOTD lines
     private static final List<String> FLAVOUR_LINES = List.of(
@@ -159,6 +160,34 @@ public class YoltConfig {
         public boolean refuseKnownPlayers = true;
         // A non-op picks once; after that only an op changes it, with /yolt skin set <player> <name>
         public boolean lockAfterFirstChoice = true;
+    }
+
+    // What players are told, in YOLT's words. § colour codes work, and a \n starts a new line where the text is a chat
+    // line or a kick. Each {placeholder} a text's @Placeholders names is filled in; a required one can't be left out.
+    public static class MessagesSection {
+        // The kick and login refusal of a locked-out player: how they died, then the wait on a line of its own
+        @Placeholders("death") public String lockoutDied = "You died: {death}";
+        // With no death message to tell, as when the show_death_messages game rule is off
+        public String lockoutDiedPlain = "You died.";
+        @Placeholders(value = "wait", required = "wait") public String lockoutWait = "Try again in {wait}.";
+        // A non-op's /help, in red unless the text has colour codes of its own
+        public String help = "But nobody answered....";
+        // A player who can't join a full server while the server list hides the count, in place of vanilla's line
+        public String serverFull = "You can't join right now. Try again later.";
+        // Where a dead player's grave is; the dimension alone when the coordinates are hidden from them
+        @Placeholders(value = {"x", "y", "z", "dimension"}, required = {"x", "y", "z"})
+        public String graveAt = "Your grave is at {x}, {y}, {z} in {dimension}.";
+        @Placeholders("dimension") public String graveIn = "Your grave is in {dimension}.";
+        // A paper is told apart by its data, not its name, so a new name only changes what players read
+        @Applies(Applies.When.NEW_PAPERS) @Placeholders(value = "name", required = "name") public String reviveName = "Revive {name}";
+        @Placeholders("name") public String graveTitle = "{name}'s Grave";
+        public String bloodMoonWarningTitle = "The moon will rise red tonight…";
+        public String bloodMoonWarningLine = "A blood moon rises tonight. Find somewhere safe before dark.";
+        public String bloodMoonRisenLine = "The blood moon has risen. Mobs are stronger and more numerous until dawn.";
+        public String bloodMoonUpLine = "A blood moon is up. Mobs are stronger and more numerous until dawn.";
+        public String bloodMoonSetLine = "The blood moon has set.";
+        // The bar is made as the blood moon starts, so one already up keeps its title
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public String bloodMoonBarTitle = "Blood Moon";
     }
 
     public enum EnderChestMode {

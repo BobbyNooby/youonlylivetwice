@@ -1,6 +1,7 @@
 package bobbynooby.dev.visibility;
 
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import net.minecraft.server.players.NameAndId;
 
 import java.nio.charset.StandardCharsets;
@@ -13,8 +14,9 @@ public final class PlayerCount {
     // who is online either.
     public static final int SHOWN_ONLINE = 0;
 
-    // What a player is told when every slot is taken, in place of "The server is full!", which gives the count away
-    public static final String FULL_REFUSAL = "You can't join right now. Try again later.";
+    // What a player is told when every slot is taken, in place of "The server is full!", which gives the count away, as a
+    // fresh config words it. The tests compare against it; what is sent is messages.serverFull.
+    public static final String FULL_REFUSAL = new YoltConfig.MessagesSection().serverFull;
 
     private PlayerCount() {}
 

@@ -225,7 +225,10 @@ public final class CommandRestriction {
         }
 
         if (commandRoot.equals("help")) {
-            player.sendSystemMessage(Component.literal("But nobody answered....").withStyle(ChatFormatting.RED));
+            String help = Settings.get().messages.help;
+            // Red, as it always was, unless the text brings colours of its own
+            player.sendSystemMessage(help.indexOf(ChatFormatting.PREFIX_CODE) >= 0 ? Component.literal(help)
+                    : Component.literal(help).withStyle(ChatFormatting.RED));
         }
 
         return true;

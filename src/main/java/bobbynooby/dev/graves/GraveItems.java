@@ -1,5 +1,6 @@
 package bobbynooby.dev.graves;
 
+import bobbynooby.dev.config.Messages;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.revive.ReviveLook;
 import net.minecraft.core.UUIDUtil;
@@ -40,8 +41,8 @@ public final class GraveItems {
 
     /**
      * The revive paper the recipe makes, with every component of the grave head in the grid and the recipe's own on top,
-     * as vanilla's transmute recipe does, so it keeps the owner's profile, and named "Revive <owner>", with the resource
-     * pack's model while that is on. Any other result is left as it is.
+     * as vanilla's transmute recipe does, so it keeps the owner's profile, and named by messages.reviveName ("Revive
+     * <owner>"), with the resource pack's model while that is on. Any other result is left as it is.
      */
     public static ItemStack reviveHeadFrom(ItemStack made, ItemStackTemplate result, CraftingInput input) {
         if (!isReviveHead(made)) {
@@ -53,7 +54,8 @@ public final class GraveItems {
                 ItemStack paper = TransmuteRecipe.createWithOriginalComponents(result, stack);
                 ResolvableProfile profile = paper.get(DataComponents.PROFILE);
                 if (profile != null) {
-                    profile.name().ifPresent(name -> paper.set(DataComponents.ITEM_NAME, Component.literal("Revive " + name)));
+                    profile.name().ifPresent(name -> paper.set(DataComponents.ITEM_NAME,
+                            Component.literal(Messages.fill(Settings.get().messages.reviveName, "name", name))));
                 }
                 ReviveLook.apply(paper);
                 return paper;

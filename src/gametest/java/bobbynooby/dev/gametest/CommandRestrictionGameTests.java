@@ -15,6 +15,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
@@ -23,6 +24,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.SignableCommand;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
@@ -65,6 +67,42 @@ public class CommandRestrictionGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // messages.help in place of the spooky line: red, as it ships, for plain text, and as typed for text with colours of
+    // its own
+    @GameTest
+    public void restrictedHelpTakesTheConfigsWords(GameTestHelper helper) {
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "HelpWords", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        String helpBefore = config.messages.help;
+        try {
+            config.restrictCommands = true;
+            run(player, "help");
+            assertHelpReply(helper, player, "But nobody answered....", true);
+            config.messages.help = "Only the wind.";
+            run(player, "help");
+            assertHelpReply(helper, player, "Only the wind.", true);
+            config.messages.help = "§aEcho";
+            run(player, "help");
+            assertHelpReply(helper, player, "§aEcho", false);
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.messages.help = helpBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static void assertHelpReply(GameTestHelper helper, TestPlayers.Recording player, String text, boolean red) {
+        helper.assertFalse(player.messages.isEmpty(), "no reply to /help");
+        Component reply = player.messages.getLast();
+        helper.assertValueEqual(reply.getString(), text, "reply to /help");
+        // -1 for none
+        TextColor colour = reply.getStyle().getColor();
+        int expected = red ? TextColor.fromLegacyFormat(ChatFormatting.RED).getValue() : -1;
+        helper.assertValueEqual(colour == null ? -1 : colour.getValue(), expected, "colour of the reply " + text);
     }
 
     // trigger is a level 0 command, so only the restriction can keep it from running

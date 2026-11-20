@@ -8,6 +8,9 @@ You died: Steve was slain by Zombie
 Try again in 1 week.
 ```
 
+The words are `messages.lockoutDied`, `messages.lockoutDiedPlain` and `messages.lockoutWait`, see
+[`messages`](config.md#messages).
+
 - Each death keeps the cooldown it was recorded with. Changing `cooldownDays` only affects deaths from then on. Use
   `/yolt unkill` to end a lockout early.
 - With a cooldown of 0 there is no wait and no kick.
@@ -20,8 +23,9 @@ Try again in 1 week.
 - Ops are locked out like everyone else. An op who locks themselves out needs the console to run `/yolt unkill`.
 - A locked-out player who tries to join a full server is told how long they have left, not "server is full". Bans and
   the whitelist still come first.
-- Anyone else who tries to join a full server is told "You can't join right now. Try again later." while the server
-  list hides the player count (`hide.serverPlayerCount`), since "The server is full!" would give the count away.
+- Anyone else who tries to join a full server is told "You can't join right now. Try again later."
+  (`messages.serverFull`) while the server list hides the player count (`hide.serverPlayerCount`), since "The server is
+  full!" would give the count away.
 - Deaths in creative or spectator mode don't count (`deathLockout.countCreativeAndSpectatorDeaths`): no lockout, no
   grave, and the player keeps their items, XP and score. With the switch on they count. A spectator still keeps
   everything, as in vanilla, so their grave holds only their grave head.

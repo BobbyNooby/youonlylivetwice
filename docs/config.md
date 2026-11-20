@@ -16,6 +16,7 @@ Contents:
 - [`hardcore`](#hardcore): the [hardcore layer](hardcore.md), off by default apart from the curse, the flat anvil price
   and Mending
 - [`resourcePack`](#resourcepack)
+- [`messages`](#messages): what YOLT tells players, in your own words
 - [File-only settings](#file-only-settings)
 - [Load checks](#load-checks)
 
@@ -32,6 +33,8 @@ No setting needs a restart. The "Restart?" column says when a change shows:
 - **New deaths:** for deaths from then on. Graves and lockouts already there stay as they are.
 - **As mobs load:** for each mob the next time it loads: when it spawns, or when its chunk loads again. Mobs already
   loaded keep the old value until then.
+- **New papers:** for revive papers crafted from then on. Papers already made keep their name.
+- **Next blood moon:** when the next blood moon starts. One that is up keeps what it started with.
 
 How the file is read:
 
@@ -488,6 +491,36 @@ See [revive paper texture](hardcore.md#revive-paper-texture). The pack itself is
 | `reviveTexture` | `false` | Revive papers show `reviveModel`, which the server's resource pack must hold. Papers in players' inventories follow a change within a second. | No |
 | `reviveModel` | `"you-only-live-twice:revive_paper"` | The item model, an id such as `you-only-live-twice:revive_paper`. | No |
 
+## `messages`
+
+What YOLT tells players. Each is one text of at most 256 characters, and `/yolt config messages.<key> <text>` sets it
+like any other key. The defaults are YOLT's own words.
+
+- `§` colour codes work, for example `"§cNo one is coming."`. In the file, `\n` starts a new line where the text is a
+  kick screen or a chat line; a title, the boss bar, an item's name and a menu's title stay on one line.
+- A `{placeholder}` is filled in when the text is sent. A text that leaves out a required one falls back, with a
+  warning naming the key, as a bad value does, and `/yolt config` refuses it. Any other `{word}` is kept as typed, with
+  a warning in the log and in the reply to `/yolt config` or `/yolt reload`, since it is most likely a misspelt
+  placeholder.
+
+| Key | Default | Where it shows | Placeholders | Restart? |
+|---|---|---|---|---|
+| `lockoutDied` | `"You died: {death}"` | The first line of a locked-out player's kick and login refusal. | `{death}`: the death message | No |
+| `lockoutDiedPlain` | `"You died."` | The same line when there is no death message, as with the `show_death_messages` game rule off. | – | No |
+| `lockoutWait` | `"Try again in {wait}."` | The second line of the kick and login refusal. | `{wait}`, required: what is left, such as `1 week, 2 days` | No |
+| `help` | `"But nobody answered...."` | A non-op's `/help`. Red, unless the text has a colour code of its own. | – | No |
+| `serverFull` | `"You can't join right now. Try again later."` | A player a full server refuses while `hide.serverPlayerCount` hides the count. | – | No |
+| `graveAt` | `"Your grave is at {x}, {y}, {z} in {dimension}."` | Where a dead player's grave is, as `graves.tellLocation` says. | `{x}`, `{y}` and `{z}`, required; `{dimension}`: `the Overworld`, `the Nether`, `the End` or a modded dimension's id | No |
+| `graveIn` | `"Your grave is in {dimension}."` | The same while the player's coordinates are hidden (`hide.coordinates`). | `{dimension}` | No |
+| `reviveName` | `"Revive {name}"` | A crafted revive paper's name. A paper is known by its data, not its name. | `{name}`, required: the grave's owner | New papers |
+| `graveTitle` | `"{name}'s Grave"` | The title of a grave's menu. | `{name}`: the grave's owner | No |
+| `bloodMoonWarningTitle` | `"The moon will rise red tonight…"` | The blood moon warning's title (`hardcore.bloodMoon.warning.title`). | – | No |
+| `bloodMoonWarningLine` | `"A blood moon rises tonight. Find somewhere safe before dark."` | The warning's chat line (`warning.chat`). | – | No |
+| `bloodMoonRisenLine` | `"The blood moon has risen. Mobs are stronger and more numerous until dawn."` | The chat line as a blood moon starts. | – | No |
+| `bloodMoonUpLine` | `"A blood moon is up. Mobs are stronger and more numerous until dawn."` | The chat line for a player who joins or comes into the Overworld during one, and for everyone when one carries on after a restart. | – | No |
+| `bloodMoonSetLine` | `"The blood moon has set."` | The chat line at dawn. | – | No |
+| `bloodMoonBarTitle` | `"Blood Moon"` | The boss bar's title. | – | Next blood moon |
+
 ## File-only settings
 
 These are lists and maps, so `/yolt config` can't change them. Edit the file and run `/yolt reload`. A map is read
@@ -537,7 +570,7 @@ three, or a dish with the staple it lacks, do.
 
 ## Load checks
 
-The hardcore and `resourcePack` values are checked as the file loads, the same way as core's: a value that fails
+The hardcore, `resourcePack` and `messages` values are checked as the file loads, the same way as core's: a value that fails
 falls back on its own (to the default at startup, to the value in use on `/yolt reload`), with a warning in the log
 naming the key, and `/yolt config` refuses it. The rest of the file still counts.
 
@@ -567,7 +600,8 @@ naming the key, and `/yolt config` refuses it. The rest of the file still counts
   `health` above 0. A map that isn't an object of numbers falls back whole too.
 - **Choices:** `nutrients.unknownFood` and `tougherMobs.damageAppliesTo` must be one of their values.
 - **`resourcePack.reviveModel`** must be an id such as `you-only-live-twice:revive_paper`.
+- **`messages`:** each text is at most 256 characters and keeps its required placeholders.
 
-Every key above is under `hardcore.` except `resourcePack.reviveModel`.
+Every key above is under `hardcore.` except `resourcePack.reviveModel` and the `messages` texts.
 
 [All pages](README.md)
