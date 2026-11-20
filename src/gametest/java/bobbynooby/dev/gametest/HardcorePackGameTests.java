@@ -1,16 +1,22 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.HardcoreConfig;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.GraveItems;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -20,6 +26,10 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,7 +42,11 @@ import java.util.UUID;
 public class HardcorePackGameTests {
     private static final String ON = "you-only-live-twice-gametest:hardcore_pack";
     private static final String OFF = "you-only-live-twice-gametest:hardcore_pack_off";
+    // Each on with a batch of its own, since its test changes the shared resourcePack keys halfway through
+    private static final String MODEL_CHANGE = "you-only-live-twice-gametest:hardcore_pack_model";
+    private static final String MENUS = "you-only-live-twice-gametest:hardcore_pack_menus";
     private static final Identifier MODEL = Identifier.parse("you-only-live-twice:revive_paper");
+    private static final Identifier OTHER = Identifier.parse("you-only-live-twice:revive_paper_two");
     private static final Identifier PAPER = Identifier.withDefaultNamespace("paper");
     private static final Identifier BOOK = Identifier.withDefaultNamespace("book");
     private static final int SWEPT = 21;
@@ -136,6 +150,153 @@ public class HardcorePackGameTests {
             if (!waiting) {
                 TestPlayers.leave(player);
             }
+        }
+    }
+
+    // reviveModel needs no restart: papers that carry the model YOLT gave them take a new one at the next sweep, and lose
+    // whichever one they carry when the switch goes off. One paper starts as YOLT left papers before it noted the model
+    // it set, showing the model with no note. A model set by hand stays through both changes.
+    @GameTest(environment = MODEL_CHANGE, maxTicks = 80)
+    public void pack1ChangedReviveModelReachesExistingPapers(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "PackModel", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        HardcoreConfig.ResourcePackSection cfg = Settings.get().resourcePack;
+        String modelBefore = cfg.reviveModel;
+        boolean switchBefore = cfg.reviveTexture;
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cfg.reviveModel = modelBefore;
+            cfg.reviveTexture = switchBefore;
+            TestPlayers.leave(player);
+        });
+        ResolvableProfile owner = ghost();
+        Inventory inventory = player.getInventory();
+        boolean waiting = false;
+        try {
+            helper.assertValueEqual(Identifier.parse(cfg.reviveModel), MODEL, "reviveModel at the start");
+            inventory.setItem(SLOT_PAPER, ReviveGameTests.reviveHead(owner, 1));
+            inventory.setItem(SLOT_PLAIN, withModel(ReviveGameTests.reviveHead(owner, 1), MODEL));
+            inventory.setItem(SLOT_CUSTOM, withModel(paper(), BOOK));
+            helper.runAfterDelay(SWEPT, () -> step(cleanUp, () -> {
+                helper.assertValueEqual(inventory.getItem(SLOT_PAPER).get(DataComponents.ITEM_MODEL), MODEL, "new paper's model");
+                helper.assertValueEqual(inventory.getItem(SLOT_PLAIN).get(DataComponents.ITEM_MODEL), MODEL, "older paper's model");
+                cfg.reviveModel = OTHER.toString();
+            }));
+            helper.runAfterDelay(2 * SWEPT, () -> step(cleanUp, () -> {
+                helper.assertValueEqual(inventory.getItem(SLOT_PAPER).get(DataComponents.ITEM_MODEL), OTHER,
+                        "new paper's model after reviveModel changed");
+                helper.assertValueEqual(inventory.getItem(SLOT_PLAIN).get(DataComponents.ITEM_MODEL), OTHER,
+                        "older paper's model after reviveModel changed");
+                helper.assertValueEqual(inventory.getItem(SLOT_CUSTOM).get(DataComponents.ITEM_MODEL), BOOK,
+                        "custom model after reviveModel changed");
+                cfg.reviveTexture = false;
+            }));
+            helper.runAfterDelay(3 * SWEPT, () -> {
+                try {
+                    for (int slot : List.of(SLOT_PAPER, SLOT_PLAIN)) {
+                        ItemStack swept = inventory.getItem(slot);
+                        assertNoModelOfItsOwn(helper, swept, "paper in slot " + slot + " after the switch went off");
+                        helper.assertTrue(GraveItems.isReviveHead(swept), "the paper in slot " + slot + " lost its marker");
+                        // As the recipe made it again, so it stacks with a paper that never had the model
+                        helper.assertTrue(ItemStack.isSameItemSameComponents(swept, ReviveGameTests.reviveHead(owner, 1)),
+                                "the paper in slot " + slot + " doesn't match a fresh one: " + swept.getComponentsPatch());
+                    }
+                    helper.assertValueEqual(inventory.getItem(SLOT_CUSTOM).get(DataComponents.ITEM_MODEL), BOOK,
+                            "custom model after the switch went off");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The sweep reaches the open chest's slots and the cursor, and tells the chest its contents changed so its chunk is
+    // saved with them. Papers in a closed chest, an item frame and on the ground wait until a player has them
+    // (docs/known-limits.md). The switch then goes off, and the open chest's and the cursor's papers lose the model.
+    @GameTest(environment = MENUS, maxTicks = 80)
+    public void pack1PapersOnCursorAndInOpenChestFollowTheSwitch(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = TestPlayers.join(helper, "PackMenus", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        HardcoreConfig.ResourcePackSection cfg = Settings.get().resourcePack;
+        boolean switchBefore = cfg.reviveTexture;
+        List<Entity> made = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cfg.reviveTexture = switchBefore;
+            player.closeContainer();
+            made.forEach(Entity::discard);
+            TestPlayers.leave(player);
+        });
+        boolean waiting = false;
+        try {
+            BlockPos openAt = new BlockPos(3, 1, 1);
+            BlockPos closedAt = new BlockPos(5, 1, 1);
+            helper.setBlock(openAt, Blocks.CHEST);
+            helper.setBlock(closedAt, Blocks.CHEST);
+            ChestBlockEntity open = helper.getBlockEntity(openAt, ChestBlockEntity.class);
+            ChestBlockEntity closed = helper.getBlockEntity(closedAt, ChestBlockEntity.class);
+            open.setItem(0, paper());
+            closed.setItem(0, paper());
+            player.openMenu(open);
+            helper.assertTrue(player.containerMenu.slots.getFirst().container == open, "the chest's menu is not open");
+            player.containerMenu.setCarried(paper());
+
+            BlockPos wall = new BlockPos(3, 1, 4);
+            helper.setBlock(wall, Blocks.STONE);
+            ItemFrame frame = new ItemFrame(level, helper.absolutePos(wall).north(), Direction.NORTH);
+            frame.setItem(paper(), false);
+            level.addFreshEntity(frame);
+            made.add(frame);
+            Vec3 ground = helper.absoluteVec(new Vec3(6.5, 1.0, 4.5));
+            ItemEntity dropped = new ItemEntity(level, ground.x, ground.y, ground.z, paper(), 0.0, 0.0, 0.0);
+            dropped.setNeverPickUp();
+            level.addFreshEntity(dropped);
+            made.add(dropped);
+
+            // Every tick until the sweep gives the open chest's paper its model, the chunk counts as saved, so only the
+            // sweep's own change can leave it unsaved
+            LevelChunk chunk = level.getChunkAt(helper.absolutePos(openAt));
+            helper.onEachTick(() -> {
+                if (!open.getItem(0).hasNonDefault(DataComponents.ITEM_MODEL)) {
+                    chunk.tryMarkSaved();
+                }
+            });
+            helper.runAfterDelay(SWEPT, () -> step(cleanUp, () -> {
+                helper.assertValueEqual(open.getItem(0).get(DataComponents.ITEM_MODEL), MODEL, "open chest's paper's model");
+                helper.assertTrue(chunk.isUnsaved(), "the open chest's chunk wasn't told its paper changed");
+                helper.assertValueEqual(player.containerMenu.getCarried().get(DataComponents.ITEM_MODEL), MODEL, "cursor paper's model");
+                assertNoModelOfItsOwn(helper, closed.getItem(0), "closed chest's paper");
+                assertNoModelOfItsOwn(helper, frame.getItem(), "item frame's paper");
+                assertNoModelOfItsOwn(helper, dropped.getItem(), "paper on the ground");
+                cfg.reviveTexture = false;
+            }));
+            helper.runAfterDelay(2 * SWEPT, () -> {
+                try {
+                    assertNoModelOfItsOwn(helper, open.getItem(0), "open chest's paper after the switch went off");
+                    assertNoModelOfItsOwn(helper, player.containerMenu.getCarried(), "cursor paper after the switch went off");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A failed check ends the test at once, so the switches go back and the player isn't left online for the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
         }
     }
 

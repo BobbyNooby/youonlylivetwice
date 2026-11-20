@@ -1,0 +1,7 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "resourcePack.reviveTexture": "true",
+    "resourcePack.reviveModel": "you-only-live-twice:revive_paper"
+  }
+}

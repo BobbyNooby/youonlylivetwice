@@ -5,6 +5,7 @@ import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.graves.GraveItems;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,6 +13,8 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Gives revive papers the resource pack's model while resourcePack.reviveTexture is on, and takes it away again when it
@@ -20,6 +23,10 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class ReviveLook {
     private static final int TICKS_PER_SECOND = 20;
+    // The paper's own marker ({yolt: {revive: true}}) also keeps the model YOLT put on it, so after reviveModel changes
+    // the old model can still be told from one an admin set by hand
+    private static final String ROOT = "yolt";
+    private static final String MODEL = "model";
 
     private ReviveLook() {}
 
@@ -28,9 +35,9 @@ public final class ReviveLook {
     }
 
     /**
-     * On a revive paper: with the switch on, a paper with no model of its own gets reviveModel; with it off, a paper
-     * showing reviveModel goes back to plain paper. A model anyone else set is left alone, and so is every other item.
-     * Returns true when the stack was changed.
+     * On a revive paper: with the switch on, a paper with no model of its own, or with a model YOLT put on it that isn't
+     * reviveModel any more, gets reviveModel; with it off, a paper showing a model YOLT put on it goes back to plain
+     * paper. A model anyone else set is left alone, and so is every other item. Returns true when the stack was changed.
      */
     public static boolean apply(ItemStack stack) {
         if (!GraveItems.isReviveHead(stack)) {
@@ -41,15 +48,21 @@ public final class ReviveLook {
             return false;
         }
         // Every item has a model from its type; only one set on the stack itself shows up here
-        boolean ownModel = stack.hasNonDefault(DataComponents.ITEM_MODEL);
+        Identifier shown = stack.hasNonDefault(DataComponents.ITEM_MODEL) ? stack.get(DataComponents.ITEM_MODEL) : null;
+        Identifier noted = noted(stack);
+        // A paper from before YOLT noted its model shows reviveModel as it was then, so that one counts as YOLT's too
+        boolean ours = shown != null && (shown.equals(noted) || shown.equals(model));
         if (Settings.on(c -> c.resourcePack.reviveTexture)) {
-            if (!ownModel) {
+            if (shown == null || ours && !(shown.equals(model) && model.equals(noted))) {
                 stack.set(DataComponents.ITEM_MODEL, model);
+                note(stack, model);
                 return true;
             }
-        } else if (ownModel && model.equals(stack.get(DataComponents.ITEM_MODEL))) {
+        } else if (ours) {
             // Setting the type's own model drops it from the stack; remove() would leave the paper with no model at all
             stack.set(DataComponents.ITEM_MODEL, stack.getPrototype().get(DataComponents.ITEM_MODEL));
+            // Without the note the paper is as the recipe made it again, so it stacks with papers that never had one
+            note(stack, null);
             return true;
         }
         return false;
@@ -83,5 +96,29 @@ public final class ReviveLook {
                 slot.setChanged();
             }
         }
+    }
+
+    // The model YOLT last put on the paper, if it noted one
+    private static @Nullable Identifier noted(ItemStack stack) {
+        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        if (data == null) {
+            return null;
+        }
+        return data.copyTag().getCompound(ROOT)
+                .flatMap(inner -> inner.getString(MODEL))
+                .map(Identifier::tryParse)
+                .orElse(null);
+    }
+
+    private static void note(ItemStack stack, @Nullable Identifier model) {
+        CustomData.update(DataComponents.CUSTOM_DATA, stack, tag -> {
+            CompoundTag inner = tag.getCompoundOrEmpty(ROOT);
+            if (model == null) {
+                inner.remove(MODEL);
+            } else {
+                inner.putString(MODEL, model.toString());
+            }
+            tag.put(ROOT, inner);
+        });
     }
 }
