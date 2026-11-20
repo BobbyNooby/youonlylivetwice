@@ -53,6 +53,29 @@ class CooldownTest {
         assertEquals(0, Cooldown.remainingMillis(log(0, false), 0));
     }
 
+    // The wait ends on the cooldown's last millisecond, not a day or a second either side
+    @Test
+    void waitEndsExactlyAtTheCooldown() {
+        assertEquals(0, Cooldown.remainingMillis(log(7, false), 7 * DAY));
+        assertEquals(1, Cooldown.remainingMillis(log(7, false), 7 * DAY - 1));
+    }
+
+    // A row with days below zero, which only a hand edit of the database makes, keeps no one out, even at a time before
+    // the death
+    @Test
+    void negativeDaysInTheDatabaseMeanNoWait() {
+        assertEquals(0, Cooldown.remainingMillis(log(-3, false), 0));
+        assertEquals(0, Cooldown.remainingMillis(log(-3, false), -DAY));
+    }
+
+    // The longest cooldown an int holds still counts in milliseconds without wrapping round to a short or negative wait
+    @Test
+    void longestCooldownDoesNotOverflow() {
+        long remaining = Cooldown.remainingMillis(log(Integer.MAX_VALUE, false), 0);
+        assertEquals(Integer.MAX_VALUE * DAY, remaining);
+        assertEquals("Try again in 5883516 years, 10 months, 1 week.", Cooldown.message(remaining));
+    }
+
     @Test
     void messageFormatsUnits() {
         assertEquals("Try again in 1 day, 1 hour, 1 minute, 1 second.", Cooldown.message(90_061_000L));
@@ -79,6 +102,12 @@ class CooldownTest {
     @Test
     void refusalWithoutMessageStillGivesTheWait() {
         assertEquals("You died.\nTry again in 2 days.", Cooldown.refusal(null, 2 * DAY));
+    }
+
+    // A death message of spaces alone says nothing, so it reads as no message at all
+    @Test
+    void blankDeathMessageReadsAsYouDied() {
+        assertEquals("You died.\nTry again in 2 days.", Cooldown.refusal("   ", 2 * DAY));
     }
 
     // The config's words, with the same death message and wait filled in; the plain line when there is no message

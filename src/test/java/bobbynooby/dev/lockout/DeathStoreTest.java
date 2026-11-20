@@ -109,6 +109,76 @@ class DeathStoreTest {
         assertEquals(1, query(file, "SELECT COUNT(*) FROM death_logs"));
     }
 
+    // The revive looks for the newest row of that player only, not the newest row in the table
+    @Test
+    void reviveOnlyTouchesThatPlayersNewestRow() {
+        DeathStore store = DeathStore.open(dir.resolve("test.db"));
+        UUID other = UUID.randomUUID();
+        try {
+            store.recordDeath(uuid, "Bob", 1000L, 7, null);
+            store.recordDeath(other, "Alex", 2000L, 7, null);
+            assertTrue(store.revive(uuid, 2500L, "Steve"));
+            assertEquals(new DeathLog(uuid, "Bob", 1000L, 7, true, null, 2500L, "Steve"), store.latest(uuid).orElseThrow());
+            DeathLog untouched = store.latest(other).orElseThrow();
+            assertFalse(untouched.revived());
+            assertNull(untouched.revivedBy());
+        } finally {
+            store.close();
+        }
+    }
+
+    // No rows reads as 0. Two deaths alike in every value still get different ids, so a check made before the second
+    // can tell it apart from the first.
+    @Test
+    void latestIdIsZeroThenRisesForAnIdenticalDeath() {
+        DeathStore store = DeathStore.open(dir.resolve("test.db"));
+        try {
+            assertEquals(0, store.latestId(uuid));
+            store.recordDeath(uuid, "Bob", 1000L, 7, "Bob drowned");
+            long first = store.latestId(uuid);
+            store.recordDeath(uuid, "Bob", 1000L, 7, "Bob drowned");
+            long second = store.latestId(uuid);
+            assertTrue(first > 0, "first id " + first);
+            assertTrue(second > first, "second id " + second + " after " + first);
+        } finally {
+            store.close();
+        }
+    }
+
+    // Another program holding the file's lock, as a backup tool can. A death waits out a short hold (the write's 3 s) and
+    // is recorded; a read under a hold gives up after its own short wait instead.
+    @Test
+    void writeWaitsOutAShortLock() throws Exception {
+        Path file = dir.resolve("test.db");
+        DeathStore store = DeathStore.open(file);
+        try (Connection lock = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = lock.createStatement()) {
+            statement.execute("BEGIN EXCLUSIVE");
+            long start = System.nanoTime();
+            assertThrows(IllegalStateException.class, () -> store.latest(uuid));
+            long readMillis = (System.nanoTime() - start) / 1_000_000;
+            assertTrue(readMillis < 1000, "the read waited " + readMillis + " ms");
+
+            // The other program lets go half a second in, well inside the write's wait
+            Thread release = Thread.ofPlatform().start(() -> {
+                try {
+                    Thread.sleep(500);
+                    statement.execute("ROLLBACK");
+                } catch (InterruptedException | SQLException e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+            start = System.nanoTime();
+            store.recordDeath(uuid, "Bob", 1000L, 7, null);
+            long writeMillis = (System.nanoTime() - start) / 1_000_000;
+            release.join();
+            assertTrue(writeMillis >= 400, "the write didn't wait for the lock: " + writeMillis + " ms");
+            assertEquals(1000L, store.latest(uuid).orElseThrow().deathTimeMillis());
+        } finally {
+            store.close();
+        }
+    }
+
     @Test
     void reviveWithNoDeathsReturnsFalse() {
         DeathStore store = DeathStore.open(dir.resolve("test.db"));
@@ -212,6 +282,47 @@ class DeathStoreTest {
         }
         assertEquals(1, query(copy, "SELECT COUNT(*) FROM death_logs"));
         assertEquals(DeathStore.SCHEMA_VERSION, query(copy, "PRAGMA user_version"));
+    }
+
+    // The read-only version check can't read a file behind a hot journal, so it is skipped. The check inside the
+    // read-write open must still refuse a newer schema, and leave the file at its last committed state.
+    @Test
+    void newerSchemaBehindAHotJournalIsStillRefused() throws IOException, SQLException {
+        Path file = dir.resolve("newer.db");
+        DeathStore before = DeathStore.open(file);
+        before.recordDeath(uuid, "Bob", 1000L, 7, null);
+        before.close();
+        try (Connection newer = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = newer.createStatement()) {
+            statement.execute("PRAGMA user_version = " + (NOW + 1));
+        }
+
+        // A write left open while the file and its journal are copied, as in hotJournalStillOpens
+        Path copy = dir.resolve("copy.db");
+        try (Connection writer = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = writer.createStatement()) {
+            statement.execute("PRAGMA synchronous = OFF");
+            writer.setAutoCommit(false);
+            statement.execute("INSERT INTO death_logs (uuid, username, death_time_ms, cooldown_days, bypass) "
+                    + "VALUES ('" + uuid + "', 'Bob', 2000, 7, 0)");
+            Files.copy(file, copy);
+            Files.copy(dir.resolve("newer.db-journal"), dir.resolve("copy.db-journal"));
+            writer.rollback();
+        }
+        // So the open below really takes the path past the read-only check
+        SQLiteConfig readOnly = new SQLiteConfig();
+        readOnly.setReadOnly(true);
+        SQLiteException skipped = assertThrows(SQLiteException.class, () -> {
+            try (Connection reader = DriverManager.getConnection("jdbc:sqlite:" + copy.toAbsolutePath(), readOnly.toProperties());
+                 Statement statement = reader.createStatement()) {
+                statement.executeQuery("PRAGMA user_version").close();
+            }
+        });
+        assertEquals(SQLiteErrorCode.SQLITE_READONLY_ROLLBACK, skipped.getResultCode());
+
+        assertThrows(IllegalStateException.class, () -> DeathStore.open(copy));
+        assertEquals(NOW + 1, query(copy, "PRAGMA user_version"));
+        assertEquals(1, query(copy, "SELECT COUNT(*) FROM death_logs"));
     }
 
     @Test
