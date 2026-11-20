@@ -5,6 +5,7 @@ import bobbynooby.dev.bodies.BodyExpiry;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
+import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -18,22 +19,26 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.animal.pig.Pig;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -52,8 +57,10 @@ import org.apache.logging.log4j.core.LogEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1011,6 +1018,184 @@ public class BodyBehaviourGameTests {
             cleanUp(helper, owner, before);
         }
         helper.succeed();
+    }
+
+    // Nobody can take items off a body: clicking any part of it, empty-handed, holding an item or holding shears, leaves
+    // its gear and the clicker's inventory as they were. Each click comes in through the interact packet a client sends.
+    @GameTest
+    public void playerCannotTakeItemsOffABody(GameTestHelper helper) {
+        ServerPlayer owner = join(helper, "Untouchable", new BlockPos(1, 1, 1));
+        ServerPlayer other = join(helper, "Grabber", new BlockPos(2, 1, 1));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        ArmorStand stand = null;
+        try {
+            owner.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            owner.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            owner.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+            owner.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.SHIELD));
+            Mannequin body = leaveBody(helper, owner);
+            Map<EquipmentSlot, ItemStack> gear = new EnumMap<>(EquipmentSlot.class);
+            for (EquipmentSlot slot : GearSync.SLOTS) {
+                gear.put(slot, body.getItemBySlot(slot).copy());
+            }
+            TestPlayers.markLoaded(other);
+            // Where a click lands on the body, as the packet gives it: feet, legs, chest and head height
+            List<Vec3> spots = List.of(new Vec3(0.0, 0.1, 0.0), new Vec3(0.0, 0.6, 0.0), new Vec3(0.0, 1.2, 0.0),
+                    new Vec3(0.0, 1.7, 0.0));
+            for (ItemStack held : List.of(ItemStack.EMPTY, new ItemStack(Items.STONE, 8), new ItemStack(Items.SHEARS))) {
+                for (Vec3 spot : spots) {
+                    for (boolean sneaking : List.of(false, true)) {
+                        other.getInventory().clearContent();
+                        other.setItemInHand(InteractionHand.MAIN_HAND, held.copy());
+                        TestPlayers.receive(other, new ServerboundInteractPacket(body.getId(), InteractionHand.MAIN_HAND, spot, sneaking));
+                        String click = "a click at " + spot + (sneaking ? " sneaking" : "") + " holding " + held;
+                        for (EquipmentSlot slot : GearSync.SLOTS) {
+                            helper.assertTrue(ItemStack.matches(body.getItemBySlot(slot), gear.get(slot)),
+                                    click + " changed the body's " + slot.getName() + " to " + body.getItemBySlot(slot));
+                        }
+                        helper.assertTrue(ItemStack.matches(other.getMainHandItem(), held), click + " changed the hand to "
+                                + other.getMainHandItem());
+                        helper.assertValueEqual(nonEmptyStacks(other), held.isEmpty() ? 0 : 1, "stacks the clicker has after " + click);
+                    }
+                }
+            }
+            // Proves the clicks get through: the same packet takes a helmet off an armour stand beside it
+            stand = helper.spawn(EntityTypes.ARMOR_STAND, new BlockPos(2, 1, 2));
+            stand.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.GOLDEN_HELMET));
+            other.getInventory().clearContent();
+            TestPlayers.receive(other, new ServerboundInteractPacket(stand.getId(), InteractionHand.MAIN_HAND, new Vec3(0.0, 1.7, 0.0), false));
+            helper.assertTrue(other.getMainHandItem().is(Items.GOLDEN_HELMET), "the click took nothing off the armour stand");
+            helper.assertTrue(stand.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "the armour stand kept its helmet");
+        } finally {
+            if (stand != null) {
+                stand.discard();
+            }
+            TestPlayers.leave(other);
+            cleanUp(helper, owner.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // The duration "offline" means a body never expires however long ago its owner left, and a pass with it changes
+    // nothing. The same body expires on the next pass once the duration is a minute. The expiry pass runs over every
+    // body, so this has the expiry batch.
+    @GameTest(environment = PlayerBodyGameTests.BODY_EXPIRY)
+    public void offlineDurationNeverExpires(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "LongGone", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            helper.assertTrue(Settings.get().bodies.duration.isOffline(), "the default duration is not offline");
+            Mannequin body = leaveBody(helper, player);
+            BodyRecord record = store(helper).byOwner(owner).orElseThrow();
+            store(helper).put(record.withLoggedOutAt(1L));
+            BodyExpiry.tick(server);
+            helper.assertFalse(body.isRemoved(), "an offline body expired");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "an offline body's record went");
+
+            Settings.get().bodies.duration = new BodyDuration(1);
+            BodyExpiry.tick(server);
+            helper.assertTrue(body.isRemoved(), "the body did not expire once the duration was a minute");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "the expired body's record is still there");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A logout stamped after now, as after the server's clock was set back: the wait starts over from now, so the body
+    // stands one whole duration, to the millisecond, rather than until the clock catches up. With the retry test's batch,
+    // since the clock is stepped ahead by hand, where every other body would be due.
+    @GameTest(environment = BODY_RETRY)
+    public void bodyLoggedOutInTheFutureWaitsOneWholeDuration(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Ahead", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            long now = System.currentTimeMillis();
+            BodyRecord record = store(helper).byOwner(owner).orElseThrow();
+            store(helper).put(record.withLoggedOutAt(now + Duration.ofDays(1).toMillis()));
+
+            BodyExpiry.tick(server, now);
+            helper.assertValueEqual(store(helper).byOwner(owner).map(BodyRecord::loggedOutAt), Optional.of(now),
+                    "the logout time after a pass at now");
+            BodyExpiry.tick(server, now + 59_999L);
+            helper.assertFalse(body.isRemoved(), "the body expired a millisecond before its minute");
+            BodyExpiry.tick(server, now + 60_000L);
+            helper.assertTrue(body.isRemoved(), "the body did not expire after its minute");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "the expired body's record is still there");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A falling anvil or a stalactite hurts only the helmet, through its own call, which vanilla leaves empty for
+    // everything but players. A body's helmet wears from it, unless armourWears is off.
+    @GameTest
+    public void mannequinHelmetWearsFromAFallingBlock(GameTestHelper helper) {
+        ServerPlayer worn = join(helper, "Anvilled", new BlockPos(1, 1, 1));
+        ServerPlayer kept = join(helper, "Unanvilled", new BlockPos(3, 1, 1));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            worn.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            kept.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+            Mannequin wornBody = leaveBody(helper, worn);
+            Mannequin keptBody = leaveBody(helper, kept);
+            DamageSource anvil = helper.getLevel().damageSources().anvil(null);
+            wornBody.hurtHelmet(anvil, 8.0F);
+            helper.assertTrue(wornBody.getItemBySlot(EquipmentSlot.HEAD).getDamageValue() > 0, "the helmet did not wear");
+            Settings.get().bodies.armourWears = false;
+            keptBody.hurtHelmet(anvil, 8.0F);
+            helper.assertValueEqual(keptBody.getItemBySlot(EquipmentSlot.HEAD).getDamageValue(), 0, "helmet damage with armourWears off");
+        } finally {
+            cleanUp(helper, worn.getUUID(), before);
+            cleanUp(helper, kept.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // A boat holds two, and vanilla takes every passenger through a portal. A body as the second passenger, behind a pig,
+    // still keeps the boat out; with only the pig aboard it may go.
+    @GameTest
+    public void bodyAsSecondBoatPassengerKeepsTheBoatOutOfPortals(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Deckhand", new BlockPos(1, 1, 1));
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Entity boat = EntityTypes.OAK_BOAT.create(helper.getLevel(), EntitySpawnReason.COMMAND);
+            helper.assertTrue(boat != null, "no boat");
+            boat.snapTo(body.getX(), body.getY(), body.getZ(), 0.0F, 0.0F);
+            helper.assertTrue(helper.getLevel().addFreshEntity(boat), "the boat was not added");
+            spawned.add(boat);
+            Pig pig = helper.spawnWithNoFreeWill(EntityTypes.PIG, new BlockPos(2, 1, 2));
+            spawned.add(pig);
+            helper.assertTrue(pig.startRiding(boat, true, false), "the pig did not get in the boat");
+            helper.assertTrue(body.startRiding(boat, true, false), "the body did not get in the boat");
+            helper.assertTrue(boat.getPassengers().indexOf(body) == 1, "the body is not the second passenger: " + boat.getPassengers());
+            helper.assertFalse(boat.canUsePortal(false), "a boat carrying a body behind a pig can use a portal");
+            body.stopRiding();
+            helper.assertTrue(boat.canUsePortal(false), "a boat with only a pig can't use a portal");
+        } finally {
+            spawned.forEach(Entity::discard);
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    private static int nonEmptyStacks(ServerPlayer player) {
+        int stacks = 0;
+        for (ItemStack stack : player.getInventory()) {
+            if (!stack.isEmpty()) {
+                stacks++;
+            }
+        }
+        return stacks;
     }
 
     private static List<AttributeInstance.Packed> attributes(GameTestHelper helper, CompoundTag saved) {
