@@ -33,6 +33,7 @@ import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.MinecraftServer;
@@ -50,19 +51,26 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.animal.fish.Pufferfish;
+import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -995,6 +1003,228 @@ public class PlayerBodyGameTests {
             cleanUp(helper, owner, before);
         }
         helper.succeed();
+    }
+
+    // A player body's entry goes only to clients that start tracking it, as a near player's would: the near viewer gets
+    // it unlisted, under the owner's name, and a viewer 200 blocks off, though driven the same way, gets nothing naming
+    // the owner. The body stays across ticks, so this has the player body batch.
+    @GameTest(maxTicks = 20, environment = PLAYER_BODY)
+    public void distantPlayerGetsNoEntryForAPlayerBody(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "Overheard", ON_FLOOR);
+        UUID owner = player.getUUID();
+        String name = player.nameAndId().name();
+        ServerPlayer near = join(helper, "BodyNear", ON_FLOOR.offset(5, 0, 0));
+        ServerPlayer far = join(helper, "BodyFar", ON_FLOOR.offset(1, 0, 0));
+        far.teleportTo(far.getX() + 200.0, far.getY(), far.getZ());
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            TestPlayers.leave(near);
+            TestPlayers.leave(far);
+            cleanUp(helper, owner);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertTrue(Settings.get().hide.distantPlayers, "hide.distantPlayers is off");
+            YoltConfig.BodiesSection before = usePlayerBodies();
+            PlayerBody body;
+            int nearMark = TestPlayers.sentPackets(near).size();
+            int farMark = TestPlayers.sentPackets(far).size();
+            try {
+                body = leavePlayerBody(helper, player);
+            } finally {
+                Settings.get().bodies = before;
+            }
+            helper.onEachTick(() -> {
+                TestPlayers.driveTracking(near);
+                TestPlayers.driveTracking(far);
+            });
+            helper.runAfterDelay(5, () -> {
+                try {
+                    List<ClientboundPlayerInfoUpdatePacket.Entry> toNear = entriesNamed(near, nearMark, name);
+                    helper.assertValueEqual(toNear.size(), 1, "entries naming the owner sent to the near viewer");
+                    helper.assertValueEqual(toNear.get(0).profileId(), body.getUUID(), "the near viewer's entry's id");
+                    helper.assertFalse(toNear.get(0).listed(), "the body's entry is listed while the tab list is hidden");
+                    helper.assertTrue(entriesNamed(far, farMark, name).isEmpty(), "the far viewer got an entry naming the owner");
+                    helper.assertFalse(PlayerVisibility.known(far).contains(body.getUUID()), "the far viewer knows the body");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // With the pvp game rule off, or friendly fire off between team mates, a player can't hurt another player, and a
+    // player body is one. A mannequin isn't, so the same hit lands on it. The rule and the team go back in this tick.
+    @GameTest
+    public void playerBodyIsNotHurtByPlayersWithPvpOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel level = helper.getLevel();
+        ServerPlayer playerOwner = join(helper, "Peaceable", ON_FLOOR);
+        ServerPlayer mannequinOwner = join(helper, "Strawman", new BlockPos(3, 1, 1));
+        ServerPlayer hitter = join(helper, "Hitter", new BlockPos(2, 1, 2));
+        boolean pvpBefore = server.getGameRules().get(GameRules.PVP);
+        Scoreboard scoreboard = server.getScoreboard();
+        PlayerTeam team = null;
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        try {
+            PlayerBody body = leavePlayerBody(helper, playerOwner);
+            Settings.get().bodies.type = YoltConfig.BodyType.MANNEQUIN;
+            Mannequin mannequin = BodyTestKit.leaveBody(helper, mannequinOwner);
+
+            server.getGameRules().set(GameRules.PVP, false, server);
+            helper.assertFalse(body.hurtServer(level, level.damageSources().playerAttack(hitter), 4.0F), "the hit landed with pvp off");
+            helper.assertValueEqual(body.getHealth(), 20.0F, "player body health with pvp off");
+            helper.assertTrue(mannequin.hurtServer(level, level.damageSources().playerAttack(hitter), 4.0F),
+                    "the hit on the mannequin did not land with pvp off");
+            helper.assertValueEqual(mannequin.getHealth(), 16.0F, "mannequin health with pvp off");
+            server.getGameRules().set(GameRules.PVP, true, server);
+
+            team = scoreboard.addPlayerTeam("yolt_test_ff_" + UUID.randomUUID().toString().substring(0, 6));
+            team.setAllowFriendlyFire(false);
+            scoreboard.addPlayerToTeam(hitter.getScoreboardName(), team);
+            scoreboard.addPlayerToTeam(body.getScoreboardName(), team);
+            helper.assertFalse(body.hurtServer(level, level.damageSources().playerAttack(hitter), 4.0F),
+                    "the hit landed with friendly fire off");
+            helper.assertValueEqual(body.getHealth(), 20.0F, "player body health with friendly fire off");
+            scoreboard.removePlayerTeam(team);
+            team = null;
+            // Proves the hits above were turned away, not too weak to land
+            body.damageCooldownTime = 0;
+            helper.assertTrue(body.hurtServer(level, level.damageSources().playerAttack(hitter), 4.0F), "the hit did not land with pvp on");
+            helper.assertValueEqual(body.getHealth(), 16.0F, "player body health with pvp on");
+        } finally {
+            server.getGameRules().set(GameRules.PVP, pvpBefore, server);
+            if (team != null) {
+                scoreboard.removePlayerTeam(team);
+            }
+            TestPlayers.leave(hitter);
+            cleanUp(helper, playerOwner.getUUID(), before);
+            cleanUp(helper, mannequinOwner.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // Slimes, magma cubes and pufferfish hurt a player who touches them, and a player body touches what it overlaps on
+    // its own ticks. Neither body type loses health to them in 40 ticks. A loaded player touched by the same kinds is
+    // hurt, so the mobs can hurt. The player body stays across ticks, so this has the player body batch.
+    @GameTest(maxTicks = 60, environment = PLAYER_BODY)
+    public void slimeAndPufferfishTouchHurtNeitherBodyType(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        helper.setBlock(new BlockPos(4, 0, 1), Blocks.STONE);
+        ServerPlayer playerOwner = join(helper, "Squished", ON_FLOOR);
+        ServerPlayer mannequinOwner = join(helper, "Puffed", new BlockPos(4, 1, 1));
+        ServerPlayer control = join(helper, "Stung", new BlockPos(7, 1, 1));
+        List<Entity> spawned = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            spawned.forEach(Entity::discard);
+            cleanUp(helper, playerOwner.getUUID());
+            cleanUp(helper, mannequinOwner.getUUID());
+            cleanUp(helper, control.getUUID());
+        });
+        boolean waiting = false;
+        try {
+            TestPlayers.markLoaded(control);
+            for (Mob toucher : touchers(helper, spawned, new BlockPos(7, 1, 1))) {
+                control.setHealth(20.0F);
+                control.damageCooldownTime = 0;
+                toucher.playerTouch(control);
+                helper.assertTrue(control.getHealth() < 20.0F, "a " + toucher.getType() + " did not hurt a loaded player it touched");
+            }
+            TestPlayers.leave(control);
+
+            YoltConfig.BodiesSection before = usePlayerBodies();
+            PlayerBody body;
+            Mannequin mannequin;
+            try {
+                body = leavePlayerBody(helper, playerOwner);
+                Settings.get().bodies.type = YoltConfig.BodyType.MANNEQUIN;
+                mannequin = BodyTestKit.leaveBody(helper, mannequinOwner);
+            } finally {
+                Settings.get().bodies = before;
+            }
+            touchers(helper, spawned, ON_FLOOR);
+            touchers(helper, spawned, new BlockPos(4, 1, 1));
+            helper.runAfterDelay(40, () -> {
+                try {
+                    helper.assertTrue(body.tickCount >= 30, "the player body did not tick: " + body.tickCount);
+                    helper.assertValueEqual(body.getHealth(), 20.0F, "player body health");
+                    helper.assertValueEqual(mannequin.getHealth(), 20.0F, "mannequin health");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A player body never sleeps, but the time since rest that brings phantoms never counts up for it. The body ticks
+    // the whole while, so a stat the tick awarded would show. The body stays across ticks, so this has the player body
+    // batch.
+    @GameTest(maxTicks = 220, environment = PLAYER_BODY)
+    public void playerBodyNeverAccruesTimeSinceRest(GameTestHelper helper) {
+        helper.setBlock(new BlockPos(1, 0, 1), Blocks.STONE);
+        ServerPlayer player = join(helper, "Restless", ON_FLOOR);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = usePlayerBodies();
+        boolean waiting = false;
+        try {
+            PlayerBody body = leavePlayerBody(helper, player);
+            Settings.get().bodies = before;
+            int ticked = body.tickCount;
+            helper.runAfterDelay(200, () -> {
+                try {
+                    helper.assertTrue(body.tickCount - ticked >= 190, "the body ticked only " + (body.tickCount - ticked) + " times");
+                    helper.assertValueEqual(body.getStats().getValue(Stats.CUSTOM.get(Stats.TIME_SINCE_REST)), 0,
+                            "the body's time since rest");
+                } finally {
+                    removeBodies(helper, owner);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            Settings.get().bodies = before;
+            if (!waiting) {
+                cleanUp(helper, owner, before);
+            }
+        }
+    }
+
+    // A size-4 slime, a size-4 magma cube and a puffed-up pufferfish at the spot, each able to hurt by touch
+    private static List<Mob> touchers(GameTestHelper helper, List<Entity> spawned, BlockPos at) {
+        Slime slime = helper.spawn(EntityTypes.SLIME, at);
+        slime.setSize(4, true);
+        MagmaCube magma = helper.spawn(EntityTypes.MAGMA_CUBE, at);
+        magma.setSize(4, true);
+        Pufferfish puffer = helper.spawn(EntityTypes.PUFFERFISH, at);
+        puffer.setPuffState(2);
+        List<Mob> made = List.of(slime, magma, puffer);
+        spawned.addAll(made);
+        return made;
+    }
+
+    // The player info entries naming this profile the player was sent since packet "from"
+    private static List<ClientboundPlayerInfoUpdatePacket.Entry> entriesNamed(ServerPlayer player, int from, String name) {
+        List<ClientboundPlayerInfoUpdatePacket.Entry> found = new ArrayList<>();
+        for (ClientboundPlayerInfoUpdatePacket packet : OffsetTestKit.sent(player, from, ClientboundPlayerInfoUpdatePacket.class)) {
+            for (ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
+                if (entry.profile() != null && name.equals(entry.profile().name())) {
+                    found.add(entry);
+                }
+            }
+        }
+        return found;
     }
 
     // Five blocks above a stone floor. The switches only matter while the body spawns, so they go back before the wait.
