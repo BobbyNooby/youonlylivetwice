@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.hardcore.BedRest;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -24,6 +25,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
 public class PhantomGameTests {
+    // Bed rest on at noon with the clock stopped
+    private static final String BED = "you-only-live-twice-gametest:hardcore_bed";
+
     // Phantoms stay vanilla, so our sleep changes must not stop a bed from resetting the rest timer
     @GameTest(skyAccess = true)
     public void enteringBedResetsTimeSinceRest(GameTestHelper helper) {
@@ -62,6 +66,33 @@ public class PhantomGameTests {
             clocks.setTotalTicks(clock, savedTicks);
             level.updateSkyBrightness();
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A daytime nap from bed rest is a rest too, so phantoms count from it as from any sleep (docs/hardcore.md), and it
+    // moves no clock
+    @GameTest(environment = BED)
+    public void daytimeNapResetsTimeSinceRest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer napper = TestPlayers.join(helper, "PhantomNapper", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        try {
+            // A storm the batch before left may still be fading, and a thunderstorm's sky counts as dark at noon
+            level.setRainLevel(0.0F);
+            level.setThunderLevel(0.0F);
+            level.updateSkyBrightness();
+            helper.assertFalse(level.isDarkOutside(), "it is dark, so this would be a night's sleep, not a nap");
+            Stat<?> timeSinceRest = Stats.CUSTOM.get(Stats.TIME_SINCE_REST);
+            napper.getStats().setValue(napper, timeSinceRest, 100000);
+            long clockBefore = SleepGameTests.clockTicks(helper);
+            SleepGameTests.useBed(helper, napper, head);
+            helper.assertTrue(napper.isSleeping(), "the player could not lie down at noon");
+            helper.assertTrue(BedRest.napping(napper), "lying down at noon is not a nap");
+            helper.assertValueEqual(napper.getStats().getValue(timeSinceRest), 0, "time since rest after lying down at noon");
+            helper.assertValueEqual(SleepGameTests.clockTicks(helper), clockBefore, "the clock after lying down");
+        } finally {
+            SleepGameTests.wakeAndLeave(napper);
         }
         helper.succeed();
     }

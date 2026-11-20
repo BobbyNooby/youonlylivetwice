@@ -21,6 +21,8 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.util.List;
@@ -34,6 +36,12 @@ public class HardcoreBedGameTests {
     private static final String BED = "you-only-live-twice-gametest:hardcore_bed";
     // The clock running and the night skip allowed, with the napper the only player
     private static final String BED_SKIP = "you-only-live-twice-gametest:hardcore_bed_skip";
+    // Noon with the clock stopped, legs and nutrients on as well
+    private static final String BED_NUTRIENTS = "you-only-live-twice-gametest:hardcore_bed_nutrients";
+    // Noon with the clock stopped, no healing, and a heal's cost of 1.0 once there is
+    private static final String BED_ZERO = "you-only-live-twice-gametest:hardcore_bed_zero";
+    // Bed rest on, for the Nether
+    private static final String BED_NETHER = "you-only-live-twice-gametest:hardcore_bed_nether";
     private static final BlockPos STANDING = new BlockPos(4, 1, 4);
     // Four blocks across from the bed's head, inside vanilla's 8 by 5 monster box
     private static final BlockPos ZOMBIE_AT = new BlockPos(5, 1, 2);
@@ -215,6 +223,112 @@ public class HardcoreBedGameTests {
             if (!waiting) {
                 cleanUp.run();
             }
+        }
+    }
+
+    // Low protein halves bed healing as it does other healing: a heal every 100 ticks rather than every 50
+    @GameTest(environment = BED_NUTRIENTS, maxTicks = 140)
+    public void bed1LowProteinHalvesBedHealing(GameTestHelper helper) {
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer player = TestPlayers.join(helper, "LowProteinRester", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        TestPlayers.markLoaded(player);
+        Runnable cleanUp = BodyTestKit.once(() -> SleepGameTests.wakeAndLeave(player));
+        boolean waiting = false;
+        try {
+            HardcoreStates.update(player.getUUID(), s -> {
+                s.protein = 0.2;
+                s.vitamins = 0.6;
+                s.sugar = 0.6;
+            });
+            feed(player, 17, 0.0F);
+            player.setHealth(10.0F);
+            SleepGameTests.useBed(helper, player, head);
+            helper.assertTrue(player.isSleeping(), "the player could not lie down at noon");
+            helper.runAfterDelay(55, () -> step(cleanUp, () -> assertHealth(helper, player, 10.0F, "55 ticks in bed with low protein")));
+            helper.runAfterDelay(105, () -> {
+                try {
+                    assertHealth(helper, player, 11.0F, "105 ticks in bed with low protein");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Where a bed blows up, daytime is never lifted: vanilla's own bed rule stands, so the bed explodes rather than
+    // letting anyone nap. A batch of its own, so the blast can't reach another test's.
+    @GameTest(environment = BED_NETHER, dimension = "minecraft:the_nether")
+    public void bed3BedsThatExplodeStayVanilla(GameTestHelper helper) {
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer player = TestPlayers.join(helper, "NetherNapper", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        try {
+            helper.assertValueEqual(helper.getLevel().dimension(), Level.NETHER, "the test's dimension");
+            helper.assertTrue(Settings.get().hardcore.bedRest.allowDaytime, "allowDaytime is off");
+            helper.assertFalse(BedRest.allowsDaytime(player), "the Nether's beds let a nap happen");
+            SleepGameTests.useBed(helper, player, head);
+            helper.assertFalse(player.isSleeping(), "the player lay down in a Nether bed");
+            helper.assertFalse(helper.getBlockState(head).getBlock() instanceof BedBlock, "the Nether bed didn't blow up");
+        } finally {
+            SleepGameTests.wakeAndLeave(player);
+        }
+        helper.succeed();
+    }
+
+    // healEveryTicks 0 heals nothing at all; at 50 each heal costs exhaustionPerHeal, 1.0, straight off the food data
+    @GameTest(environment = BED_ZERO, maxTicks = 200)
+    public void bed1ZeroTicksHealsNothingAndExhaustionIsCharged(GameTestHelper helper) {
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer player = TestPlayers.join(helper, "ZeroRester", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        TestPlayers.markLoaded(player);
+        HardcoreConfig.BedRestSection cfg = Settings.get().hardcore.bedRest;
+        int ticksBefore = cfg.healEveryTicks;
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cfg.healEveryTicks = ticksBefore;
+            SleepGameTests.wakeAndLeave(player);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertValueEqual(cfg.healEveryTicks, 0, "the environment's healEveryTicks");
+            feed(player, 17, 0.0F);
+            player.setHealth(10.0F);
+            SleepGameTests.useBed(helper, player, head);
+            helper.assertTrue(player.isSleeping(), "the player could not lie down at noon");
+            helper.runAfterDelay(120, () -> step(cleanUp, () -> {
+                assertHealth(helper, player, 10.0F, "120 ticks in bed with healEveryTicks 0");
+                helper.assertValueEqual(((FoodDataAccessor) player.getFoodData()).yoltExhaustion(), 0.0F, "exhaustion with no heals");
+                cfg.healEveryTicks = 50;
+            }));
+            helper.runAfterDelay(175, () -> {
+                try {
+                    assertHealth(helper, player, 11.0F, "55 ticks in bed at healEveryTicks 50");
+                    float exhaustion = ((FoodDataAccessor) player.getFoodData()).yoltExhaustion();
+                    helper.assertTrue(Math.abs(exhaustion - 1.0F) < CLOSE, "exhaustion " + exhaustion + " after one heal, not 1.0");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A failed check ends the test at once, so the switches go back and the player isn't left online for the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
         }
     }
 

@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:all_of",
+  "definitions": [
+    {
+      "type": "minecraft:weather",
+      "weather": "clear"
+    },
+    {
+      "type": "you-only-live-twice-gametest:config",
+      "values": {
+        "hardcore.cold.enabled": "true",
+        "hardcore.weight.enabled": "true",
+        "hardcore.hungerTax.multiplier": "2"
+      }
+    }
+  ]
+}
