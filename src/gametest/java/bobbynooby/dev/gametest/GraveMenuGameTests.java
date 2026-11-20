@@ -12,13 +12,17 @@ import bobbynooby.dev.graves.GraveRecheck;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.HashedStack;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -729,6 +733,104 @@ public class GraveMenuGameTests {
             cleanUpLeft(helper, grave, aroundOld, looter);
         }
         helper.succeed();
+    }
+
+    // The other tests click through menu.clicked; this one sends the click packets a real client sends, through the
+    // connection, so the packet handler's own checks and the coordinate offset's hook on it run too. Each kind of take
+    // moves its items once: pick up and put down, shift-click, a number key, Q. A click made against an old state still
+    // happens, and the client is sent the whole menu again to put it right.
+    @GameTest
+    public void graveTakesThroughTheContainerClickPacket(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 5), new ItemStack(Items.IRON_SWORD),
+                new ItemStack(Items.EMERALD, 3), new ItemStack(Items.GOLD_INGOT, 2), new ItemStack(Items.APPLE, 4));
+        ServerPlayer player = join(helper, "Clicker");
+        AABB around = new AABB(player.blockPosition()).inflate(4.0);
+        try {
+            TestPlayers.markLoaded(player);
+            GraveMenus.open(player, grave);
+            helper.assertTrue(player.containerMenu instanceof GraveMenu, "grave menu did not open");
+            AbstractContainerMenu menu = player.containerMenu;
+
+            click(player, menu.getStateId(), 1, PRIMARY, ContainerInput.PICKUP);
+            helper.assertTrue(menu.getCarried().is(Items.DIAMOND) && menu.getCarried().getCount() == 5,
+                    "the diamonds are not on the cursor: " + menu.getCarried());
+            click(player, menu.getStateId(), OWN_SLOT, PRIMARY, ContainerInput.PICKUP);
+            helper.assertTrue(menu.getCarried().isEmpty(), "the diamonds stayed on the cursor");
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.DIAMOND), 0, "diamonds in the grave");
+            helper.assertValueEqual(player.getInventory().getItem(9).getCount(), 5, "diamonds put down in the inventory");
+
+            click(player, menu.getStateId(), 2, PRIMARY, ContainerInput.QUICK_MOVE);
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.IRON_SWORD), 0, "swords in the grave");
+            helper.assertValueEqual(count(player, Items.IRON_SWORD), 1, "swords the player has");
+
+            // Number key 1 swaps with hotbar slot 0
+            click(player, menu.getStateId(), 3, 0, ContainerInput.SWAP);
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.EMERALD), 0, "emeralds in the grave");
+            helper.assertTrue(player.getInventory().getItem(0).is(Items.EMERALD) && player.getInventory().getItem(0).getCount() == 3,
+                    "hotbar slot 0 after the number key: " + player.getInventory().getItem(0));
+
+            int beforeThrow = TestPlayers.sentPackets(player).size();
+            click(player, menu.getStateId(), 4, 0, ContainerInput.THROW);
+            helper.assertValueEqual(countIn(stored(helper, grave).items(), Items.GOLD_INGOT), 1, "gold left in the grave after Q");
+            helper.assertValueEqual(onGround(helper, around, Items.GOLD_INGOT, false), 1, "gold thrown");
+            helper.assertFalse(sentWholeMenu(player, beforeThrow, menu), "a click in step was answered with the whole menu");
+
+            // The client's state is behind: the click still counts, and the whole menu is sent again after it
+            int before = TestPlayers.sentPackets(player).size();
+            click(player, menu.getStateId() - 1, 5, PRIMARY, ContainerInput.PICKUP);
+            helper.assertTrue(menu.getCarried().is(Items.APPLE) && menu.getCarried().getCount() == 4,
+                    "the stale click did not pick up the apples: " + menu.getCarried());
+            helper.assertTrue(sentWholeMenu(player, before, menu), "the stale click was not answered with the whole menu");
+            click(player, menu.getStateId(), OWN_SLOT + 1, PRIMARY, ContainerInput.PICKUP);
+
+            List<ItemStack> left = stored(helper, grave).items();
+            helper.assertValueEqual(left.size(), 2, "stacks left in the grave: " + left);
+            helper.assertTrue(GraveItems.isGraveHead(left.get(0)), "the grave head is not first: " + left);
+            helper.assertValueEqual(countIn(left, Items.GOLD_INGOT), 1, "gold left in the grave");
+            helper.assertValueEqual(count(player, Items.DIAMOND), 5, "diamonds the player has");
+            helper.assertValueEqual(count(player, Items.EMERALD), 3, "emeralds the player has");
+            helper.assertValueEqual(count(player, Items.APPLE), 4, "apples the player has");
+            helper.assertValueEqual(count(player, Items.GOLD_INGOT), 0, "gold the player has");
+            helper.assertValueEqual(onGround(helper, around, Items.GOLD_INGOT, false), 1, "gold on the ground at the end");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    // A menu provider kept from before the grave went, as a click queued behind the removal would hold: opening it does
+    // nothing, so nobody gets a menu onto items that are on the ground now
+    @GameTest
+    public void openingARemovedGraveDoesNothing(GameTestHelper helper) {
+        Grave grave = makeGrave(helper, new ItemStack(Items.DIAMOND, 2));
+        ServerPlayer player = join(helper, "LateOpener");
+        AABB around = new AABB(grave.pos()).inflate(4.0);
+        try {
+            Graves.removeAndDrop(helper.getLevel().getServer(), grave);
+            helper.assertTrue(GraveStore.get(helper.getLevel().getServer()).byId(grave.id()).isEmpty(), "the grave is still stored");
+            GraveMenus.open(player, grave);
+            helper.assertTrue(player.containerMenu == player.inventoryMenu, "a menu opened on the removed grave");
+            helper.assertTrue(GraveMenus.containerFor(grave) == null, "a container was made for the removed grave");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, grave, player);
+        }
+        helper.succeed();
+    }
+
+    // Whether the player was sent the menu's whole contents since packet "from"
+    private static boolean sentWholeMenu(ServerPlayer player, int from, AbstractContainerMenu menu) {
+        List<Packet<?>> sent = TestPlayers.sentPackets(player);
+        return sent.subList(from, sent.size()).stream().anyMatch(packet ->
+                packet instanceof ClientboundContainerSetContentPacket content && content.containerId() == menu.containerId);
+    }
+
+    // A client's click on the open menu, with no slots it claims changed and nothing it thinks it carries, so the
+    // server's answer is what puts the client right
+    private static void click(ServerPlayer player, int stateId, int slot, int button, ContainerInput input) {
+        TestPlayers.receive(player, new ServerboundContainerClickPacket(player.containerMenu.containerId, stateId,
+                (short) slot, (byte) button, input, new Int2ObjectOpenHashMap<>(), HashedStack.EMPTY));
     }
 
     // The grave head comes first, as in a real death; empty stacks in the list are dropped by the record

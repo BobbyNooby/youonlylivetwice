@@ -8,8 +8,10 @@ import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.skins.Skins;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.ByteTag;
 import net.minecraft.nbt.CompoundTag;
@@ -18,11 +20,17 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.component.ResolvableProfile;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
 import org.jspecify.annotations.Nullable;
 
@@ -157,6 +165,89 @@ public class GraveItemsGameTests {
     private static Optional<UUID> compassMark(@Nullable CustomData data) {
         return Optional.ofNullable(data).flatMap(found -> found.copyTag().getCompound("yolt"))
                 .flatMap(marker -> marker.read("grave_compass", UUIDUtil.STRING_CODEC));
+    }
+
+    // A container in a container goes into the grave whole: the shulker box keeps the bundle, and the bundle its ten
+    // items, with nothing spilled at the death spot
+    @GameTest
+    public void bundleInsideShulkerKeepsItsContentsInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Nested", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        BlockPos at = player.blockPosition();
+        try {
+            ItemStack bundle = new ItemStack(Items.BUNDLE);
+            bundle.set(DataComponents.BUNDLE_CONTENTS, new BundleContents(List.of(
+                    ItemStackTemplate.fromNonEmptyStack(new ItemStack(Items.DIAMOND, 6)),
+                    ItemStackTemplate.fromNonEmptyStack(new ItemStack(Items.EMERALD, 4)))));
+            ItemStack box = new ItemStack(Items.SHULKER_BOX);
+            box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(bundle)));
+            player.getInventory().add(box);
+            dieBesideTest(helper, player);
+
+            List<Grave> graves = BodyTestKit.gravesOf(helper, owner);
+            helper.assertValueEqual(graves.size(), 1, "graves");
+            List<ItemStack> boxes = graves.get(0).items().stream().filter(stack -> stack.is(Items.SHULKER_BOX)).toList();
+            helper.assertValueEqual(boxes.size(), 1, "shulker boxes in the grave");
+            List<ItemStack> inBox = boxes.get(0).getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+                    .nonEmptyItemCopyStream().toList();
+            helper.assertTrue(inBox.size() == 1 && inBox.get(0).is(Items.BUNDLE), "the box holds " + inBox);
+            List<ItemStack> inBundle = inBox.get(0).getOrDefault(DataComponents.BUNDLE_CONTENTS, BundleContents.EMPTY)
+                    .itemCopies().toList();
+            helper.assertValueEqual(GraveAsserts.count(inBundle, Items.DIAMOND), 6, "diamonds in the bundle");
+            helper.assertValueEqual(GraveAsserts.count(inBundle, Items.EMERALD), 4, "emeralds in the bundle");
+            for (Item item : List.of(Items.SHULKER_BOX, Items.BUNDLE, Items.DIAMOND, Items.EMERALD)) {
+                helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, item, at, 4.0), 0, item + " spilled at the death spot");
+            }
+        } finally {
+            TestPlayers.leave(player);
+            BodyTestKit.removeGraves(helper, owner);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla's death destroys curse of vanishing items in the inventory only, and so does YOLT's: a cursed sword packed in
+    // a shulker box isn't in the inventory, so it reaches the grave in its box, while the loose one is gone
+    @GameTest
+    public void vanishingItemInsideShulkerSurvivesTheDeath(GameTestHelper helper) {
+        Holder<Enchantment> vanishing = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.VANISHING_CURSE);
+        ServerPlayer player = TestPlayers.join(helper, "PackedCurse", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        BlockPos at = player.blockPosition();
+        try {
+            ItemStack loose = new ItemStack(Items.IRON_SWORD);
+            loose.enchant(vanishing, 1);
+            ItemStack packed = loose.copy();
+            ItemStack box = new ItemStack(Items.SHULKER_BOX);
+            box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(packed)));
+            player.getInventory().add(loose);
+            player.getInventory().add(box);
+            dieBesideTest(helper, player);
+
+            List<Grave> graves = BodyTestKit.gravesOf(helper, owner);
+            helper.assertValueEqual(graves.size(), 1, "graves");
+            List<ItemStack> items = graves.get(0).items();
+            helper.assertValueEqual(GraveAsserts.count(items, Items.IRON_SWORD), 0, "loose cursed swords in the grave");
+            List<ItemStack> boxes = items.stream().filter(stack -> stack.is(Items.SHULKER_BOX)).toList();
+            helper.assertValueEqual(boxes.size(), 1, "shulker boxes in the grave");
+            List<ItemStack> inBox = boxes.get(0).getOrDefault(DataComponents.CONTAINER, ItemContainerContents.EMPTY)
+                    .nonEmptyItemCopyStream().toList();
+            helper.assertTrue(inBox.size() == 1 && ItemStack.matches(inBox.get(0), packed), "the box holds " + inBox);
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.IRON_SWORD, at, 4.0), 0, "cursed swords dropped");
+        } finally {
+            TestPlayers.leave(player);
+            BodyTestKit.removeGraves(helper, owner);
+        }
+        helper.succeed();
+    }
+
+    // A survival death with a respawn point beside the test, so a later respawn searches no random spot. The player
+    // leaves in the same tick, before the kick comes.
+    private static void dieBesideTest(GameTestHelper helper, ServerPlayer player) {
+        GraveDeathGameTests.respawnBesideTest(helper, player);
+        TestPlayers.markLoaded(player);
+        player.kill(player.level());
+        helper.assertTrue(player.isDeadOrDying(), "the player did not die");
     }
 
     // An offline player's grave head is built from the name and id alone, with no skin to copy
