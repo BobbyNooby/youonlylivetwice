@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:all_of",
+  "definitions": [
+    {
+      "type": "you-only-live-twice-gametest:config",
+      "values": {
+        "hide.distantPlayers": "true",
+        "chat.mode": "proximity",
+        "chat.radius": "48"
+      }
+    }
+  ]
+}

@@ -524,6 +524,45 @@ public class CommandRestrictionGameTests {
         helper.succeed();
     }
 
+    // With restrictCommands off a non-op has vanilla's commands, but /msg and /tell stay YOLT's ranged whisper: a player
+    // 200 blocks off gets neither, and the sender's reply is the usual one, which never says whether it arrived
+    @GameTest
+    public void nonOpMsgStaysRangedWithRestrictionOff(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        int whisperRadiusBefore = config.chat.whisperRadius;
+        TestPlayers.Recording sender = TestPlayers.joinRecording(helper, "msgfrom", GameType.SURVIVAL, BlockPos.ZERO);
+        TestPlayers.Recording far = TestPlayers.joinRecording(helper, "msgfar", GameType.SURVIVAL, BlockPos.ZERO);
+        try {
+            config.restrictCommands = false;
+            config.chat.allowWhispers = true;
+            config.chat.radius = 48;
+            config.chat.whisperRadius = 0;
+            far.teleportTo(far.getX() + 200, far.getY(), far.getZ());
+            String farName = far.nameAndId().name();
+            sender.messages.clear();
+            far.messages.clear();
+            int from = TestPlayers.sentPackets(far).size();
+
+            run(sender, "msg " + farName + " hi");
+            run(sender, "tell " + farName + " hi");
+            helper.assertValueEqual(sender.messages.stream().map(Component::getString).toList(),
+                    List.of("You whisper to " + farName + ": hi", "You whisper to " + farName + ": hi"), "sender messages");
+            helper.assertValueEqual(far.messages.stream().map(Component::getString).toList(), List.of(), "far player messages");
+            helper.assertValueEqual(chatLines(far, from), List.of(), "chat lines sent to the far player");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            config.chat.whisperRadius = whisperRadiusBefore;
+            TestPlayers.leave(sender);
+            TestPlayers.leave(far);
+        }
+        helper.succeed();
+    }
+
     // What a client sends for a command it has no signature for, as a vanilla client does for one its tree lacks
     private static void sendCommand(ServerPlayer player, String command) {
         player.connection.handleChatCommand(new ServerboundChatCommandPacket(command));

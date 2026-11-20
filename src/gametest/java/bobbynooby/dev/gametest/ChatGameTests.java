@@ -4,12 +4,16 @@ import bobbynooby.dev.chat.ChatDelivery;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.PlayerVisibility;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FilterMask;
+import net.minecraft.network.chat.OutgoingChatMessage;
 import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.Packet;
@@ -17,19 +21,27 @@ import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.animal.wolf.Wolf;
+import net.minecraft.world.entity.player.ChatVisiblity;
 import net.minecraft.world.level.GameType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // Other tests share the server, so these check who is in a set, never the whole set.
 // Switches are restored in a finally block in the same tick.
 public class ChatGameTests {
+    // Proximity chat with distant players hidden, held for a batch whose test runs over several ticks
+    private static final String CHAT_SPECTATOR = "you-only-live-twice-gametest:chat_spectator";
+
     @GameTest
     public void proximityRecipientsUseLivePositions(GameTestHelper helper) {
         YoltConfig.ChatSection chat = Settings.get().chat;
@@ -270,6 +282,270 @@ public class ChatGameTests {
             leaveAll(joined);
         }
         helper.succeed();
+    }
+
+    // Vanilla never shows a spectator to a player who isn't one, so the listener's client has no entry for the spectator
+    // 10 blocks off, and would throw its player chat away: it gets the line as text instead. A player in survival beside
+    // them, whom the listener does come to know, is heard as player chat, which shows the tracking ran. A batch of its
+    // own, with the switches held, since the players are driven over several ticks to start tracking.
+    @GameTest(environment = CHAT_SPECTATOR, maxTicks = 20)
+    public void spectatorChatReachesAnUnknownNearPlayerAsText(GameTestHelper helper) {
+        List<ServerPlayer> joined = new ArrayList<>();
+        TestPlayers.Recording listener = joinRecording(helper, joined, "spechear", BlockPos.ZERO);
+        TestPlayers.Recording walker = joinRecording(helper, joined, "specwalk", new BlockPos(5, 0, 0));
+        ServerPlayer spectator = TestPlayers.join(helper, "specsay", GameType.SPECTATOR, new BlockPos(10, 0, 0));
+        joined.add(spectator);
+        boolean waiting = false;
+        try {
+            helper.onEachTick(() -> joined.forEach(TestPlayers::driveTracking));
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(PlayerVisibility.known(listener).contains(walker.getUUID()), "the listener never came to know the walker");
+                    helper.assertFalse(PlayerVisibility.known(listener).contains(spectator.getUUID()), "the listener knows the spectator");
+                    String walked = "walking by " + CommandGameTests.uniqueName("x");
+                    chatFrom(helper, walker, PlayerChatMessage.unsigned(walker.getUUID(), walked));
+                    helper.assertTrue(TestPlayers.sentPackets(listener).stream().anyMatch(packet ->
+                            packet instanceof ClientboundPlayerChatPacket chat && chat.body().content().equals(walked)),
+                            "the listener did not get the walker's line as player chat");
+
+                    String watched = "just watching " + CommandGameTests.uniqueName("x");
+                    chatFrom(helper, spectator, PlayerChatMessage.unsigned(spectator.getUUID(), watched));
+                    helper.assertTrue(asText(listener, watched), "the listener did not get the spectator's line as text");
+                    helper.assertValueEqual(timesHeard(listener, watched), 1, "times the listener got the spectator's line");
+                } finally {
+                    leaveAll(joined);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                leaveAll(joined);
+            }
+        }
+    }
+
+    // A plain chat line, as a client's chat packet hands it to the player list: once to each player in range and to the
+    // sender, and nothing at all to a player out of range, neither as player chat nor as the text a client that doesn't
+    // know the sender gets
+    @GameTest
+    public void plainChatReachesOnlyPlayersInRadius(GameTestHelper helper) {
+        YoltConfig.ChatSection chat = Settings.get().chat;
+        YoltConfig.ChatMode modeBefore = chat.mode;
+        int radiusBefore = chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            chat.mode = YoltConfig.ChatMode.PROXIMITY;
+            chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "plainfrom", BlockPos.ZERO);
+            TestPlayers.Recording near = joinRecording(helper, joined, "plainnear", new BlockPos(10, 0, 0));
+            TestPlayers.Recording far = joinRecording(helper, joined, "plainfar", BlockPos.ZERO);
+            far.teleportTo(far.getX() + 200, far.getY(), far.getZ());
+
+            String text = "anyone near " + CommandGameTests.uniqueName("x");
+            chatFrom(helper, sender, PlayerChatMessage.unsigned(sender.getUUID(), text));
+            helper.assertValueEqual(timesHeard(sender, text), 1, "times the sender got their own line");
+            helper.assertValueEqual(timesHeard(near, text), 1, "times the player 10 blocks away got the line");
+            helper.assertValueEqual(timesHeard(far, text), 0, "times the player 200 blocks away got the line");
+        } finally {
+            chat.mode = modeBefore;
+            chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Self-only chat reaches nobody but the sender, however close, and the admins in admin view, however far
+    @GameTest
+    public void selfOnlyChatReachesOnlySenderAndAdmins(GameTestHelper helper) {
+        YoltConfig.ChatSection chat = Settings.get().chat;
+        YoltConfig.ChatMode modeBefore = chat.mode;
+        List<ServerPlayer> joined = new ArrayList<>();
+        TestPlayers.Recording admin = null;
+        try {
+            chat.mode = YoltConfig.ChatMode.SELF_ONLY;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "selffrom", BlockPos.ZERO);
+            TestPlayers.Recording near = joinRecording(helper, joined, "selfnear", new BlockPos(2, 0, 0));
+            admin = joinRecording(helper, joined, "selfadmin", BlockPos.ZERO);
+            admin.teleportTo(admin.getX() + 200, admin.getY(), admin.getZ());
+            TestPlayers.op(admin);
+            AdminView.set(admin, true);
+
+            String text = "talking to myself " + CommandGameTests.uniqueName("x");
+            chatFrom(helper, sender, PlayerChatMessage.unsigned(sender.getUUID(), text));
+            helper.assertValueEqual(timesHeard(sender, text), 1, "times the sender got their own line");
+            helper.assertValueEqual(timesHeard(admin, text), 1, "times the admin in admin view got the line");
+            helper.assertValueEqual(timesHeard(near, text), 0, "times the player 2 blocks away got the line");
+        } finally {
+            chat.mode = modeBefore;
+            if (admin != null) {
+                AdminView.set(admin, false);
+                TestPlayers.deop(admin);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Hidden game messages are the chat ones. An action-bar line, such as a bed's, still goes to everyone it is for.
+    @GameTest
+    public void overlayGameMessagesStillReachEveryone(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean hiddenBefore = hide.gameMessages;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.gameMessages = true;
+            TestPlayers.Recording a = joinRecording(helper, joined, "overlaya", BlockPos.ZERO);
+            TestPlayers.Recording b = joinRecording(helper, joined, "overlayb", new BlockPos(1, 0, 0));
+            b.teleportTo(b.getX() + 200, b.getY(), b.getZ());
+
+            String overlay = "on the action bar " + CommandGameTests.uniqueName("x");
+            String line = "in the chat " + CommandGameTests.uniqueName("x");
+            server.getPlayerList().broadcastSystemMessage(Component.literal(overlay), true);
+            server.getPlayerList().broadcastSystemMessage(Component.literal(line), false);
+            for (TestPlayers.Recording player : List.of(a, b)) {
+                helper.assertTrue(texts(player).contains(overlay), player.getPlainTextName() + " missed the action-bar line");
+                helper.assertFalse(texts(player).contains(line), player.getPlainTextName() + " got the hidden chat line");
+            }
+        } finally {
+            hide.gameMessages = hiddenBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A client set to show only system messages, or none, throws player chat away, so the text sent in its place for a
+    // sender it doesn't know isn't sent to it either. A client showing everything is the check that the text goes out.
+    @GameTest
+    public void fallbackTextRespectsRecipientChatVisibility(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            hide.distantPlayers = true;
+            op = joinRecording(helper, joined, "visibleop", BlockPos.ZERO);
+            TestPlayers.op(op);
+            TestPlayers.Recording full = joinRecording(helper, joined, "visiblefull", BlockPos.ZERO);
+            full.teleportTo(full.getX() + 200, full.getY(), full.getZ());
+            TestPlayers.Recording systemOnly = joinRecording(helper, joined, "visiblesystem", BlockPos.ZERO);
+            systemOnly.teleportTo(systemOnly.getX() - 200, systemOnly.getY(), systemOnly.getZ());
+            ClientInformation shown = ClientInformation.createDefault();
+            systemOnly.updateOptions(new ClientInformation(shown.language(), shown.viewDistance(), ChatVisiblity.SYSTEM, shown.chatColors(),
+                    shown.modelCustomisation(), shown.mainHand(), shown.textFilteringEnabled(), shown.allowsListing(), shown.particleStatus()));
+            helper.assertFalse(PlayerVisibility.known(full).contains(op.getUUID()) || PlayerVisibility.known(systemOnly).contains(op.getUUID()),
+                    "a far player knows the op");
+
+            String text = "hear ye " + CommandGameTests.uniqueName("x");
+            broadcast(helper, PlayerChatMessage.unsigned(op.getUUID(), text), op.createCommandSourceStack(), ChatType.SAY_COMMAND);
+            helper.assertTrue(asText(full, text), "the player showing all chat did not get the op's /say as text");
+            helper.assertValueEqual(timesHeard(systemOnly, text), 0, "times the player showing system messages only got the /say");
+        } finally {
+            hide.distantPlayers = distantBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // The text sent for an unknown sender blanks the words the server's filter took out, as the client would have shown
+    // the player chat it replaces, and only when that recipient's copy is filtered
+    @GameTest
+    public void fallbackTextBlanksFilteredWords(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean distantBefore = hide.distantPlayers;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            hide.distantPlayers = true;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "filterfrom", BlockPos.ZERO);
+            TestPlayers.Recording far = joinRecording(helper, joined, "filterfar", BlockPos.ZERO);
+            far.teleportTo(far.getX() + 1000, far.getY(), far.getZ());
+            helper.assertFalse(PlayerVisibility.known(far).contains(sender.getUUID()), "the far player knows the sender");
+
+            String text = "meet at the secret base";
+            FilterMask mask = new FilterMask(text.length());
+            int secret = text.indexOf("secret");
+            for (int i = secret; i < secret + "secret".length(); i++) {
+                mask.setFiltered(i);
+            }
+            OutgoingChatMessage message = OutgoingChatMessage.create(PlayerChatMessage.unsigned(sender.getUUID(), text).filter(mask));
+            ChatType.Bound type = ChatType.bind(ChatType.CHAT, sender);
+            far.sendChatMessage(message, true, type);
+            helper.assertTrue(asText(far, "meet at the ###### base"), "the filtered copy's text: " + texts(far));
+            far.sendChatMessage(message, false, type);
+            helper.assertTrue(asText(far, text), "the unfiltered copy's text: " + texts(far));
+        } finally {
+            hide.distantPlayers = distantBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A chat bridge, such as a Discord one, listens for chat that went out to everyone. Proximity chat went out to some,
+    // so the bridge never hears it; global chat it hears once, which shows the listener works.
+    @GameTest
+    public void chatBridgeEventsDoNotSeeProximityChat(GameTestHelper helper) {
+        listenAsABridge();
+        YoltConfig.ChatSection chat = Settings.get().chat;
+        YoltConfig.ChatMode modeBefore = chat.mode;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            TestPlayers.Recording sender = joinRecording(helper, joined, "bridgefrom", BlockPos.ZERO);
+            chat.mode = YoltConfig.ChatMode.PROXIMITY;
+            String near = "just nearby " + CommandGameTests.uniqueName("x");
+            chatFrom(helper, sender, PlayerChatMessage.unsigned(sender.getUUID(), near));
+            helper.assertValueEqual(timesHeard(sender, near), 1, "times the sender got their proximity line");
+            helper.assertFalse(BRIDGED.contains(near), "the bridge heard proximity chat");
+
+            chat.mode = YoltConfig.ChatMode.GLOBAL;
+            String everyone = "to everyone " + CommandGameTests.uniqueName("x");
+            chatFrom(helper, sender, PlayerChatMessage.unsigned(sender.getUUID(), everyone));
+            helper.assertValueEqual(BRIDGED.stream().filter(everyone::equals).count(), 1L, "times the bridge heard global chat");
+        } finally {
+            chat.mode = modeBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // What a bridge's listener has heard. Fabric's events can't drop a listener, so it is added once and stays.
+    private static final List<String> BRIDGED = new CopyOnWriteArrayList<>();
+    private static final AtomicBoolean BRIDGE_LISTENING = new AtomicBoolean();
+
+    private static void listenAsABridge() {
+        if (BRIDGE_LISTENING.compareAndSet(false, true)) {
+            ServerMessageEvents.CHAT_MESSAGE.register((message, sender, type) -> BRIDGED.add(message.signedContent()));
+        }
+    }
+
+    // How a client's chat line reaches the player list
+    private static void chatFrom(GameTestHelper helper, ServerPlayer sender, PlayerChatMessage message) {
+        helper.getLevel().getServer().getPlayerList().broadcastChatMessage(message, sender, ChatType.bind(ChatType.CHAT, sender));
+    }
+
+    // How many times this player was sent the line, as player chat or as the text in its place
+    private static int timesHeard(TestPlayers.Recording player, String text) {
+        int times = 0;
+        for (Packet<?> packet : TestPlayers.sentPackets(player)) {
+            if (packet instanceof ClientboundPlayerChatPacket signed && signed.body().content().equals(text)
+                    || packet instanceof ClientboundDisguisedChatPacket disguised && disguised.message().getString().equals(text)) {
+                times++;
+            }
+        }
+        for (Component message : player.messages) {
+            if (message.getContents() instanceof TranslatableContents line && Arrays.stream(line.getArgs())
+                    .anyMatch(arg -> arg instanceof Component part && part.getString().equals(text))) {
+                times++;
+            }
+        }
+        return times;
+    }
+
+    private static List<String> texts(TestPlayers.Recording player) {
+        return player.messages.stream().map(Component::getString).toList();
     }
 
     // How /say and /me hand their message to the player list

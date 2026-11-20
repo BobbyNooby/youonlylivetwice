@@ -12,6 +12,7 @@ import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ArgumentSignatures;
@@ -33,15 +34,23 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundChatCommandSignedPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommandSuggestionsProvider;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.world.level.BaseCommandBlock;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.world.phys.Vec2;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -760,6 +769,182 @@ public class WhisperGameTests {
             leaveAll(joined);
         }
         helper.succeed();
+    }
+
+    // A gamemaster op may whisper with whispers off, as the whisper's own check allows, while restrictCommands keeps it
+    // from every non-op. The target is in range, so only the switch could stop it.
+    @GameTest
+    public void gamemasterOpWhispersWithWhispersOff(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        ServerPlayer op = null;
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wgmop", BlockPos.ZERO);
+            op = sender;
+            TestPlayers.op(op);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wgmto", new BlockPos(10, 0, 0));
+            String targetName = target.nameAndId().name();
+            sender.messages.clear();
+            target.messages.clear();
+
+            run(sender, "w " + targetName + " hi");
+            helper.assertValueEqual(texts(sender), List.of("You whisper to " + targetName + ": hi"), "the op's messages");
+            helper.assertValueEqual(texts(target), List.of(sender.nameAndId().name() + " whispers to you: hi"), "target messages");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            if (op != null) {
+                TestPlayers.deop(op);
+            }
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A sign an op wrote runs its click command at level 2, but as the non-op who clicked it. The whisper goes by the
+    // player's own level, so with whispers off nothing is sent and nothing is logged as heard.
+    @GameTest
+    public void opSignCannotWhisperForANonOpWithWhispersOff(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = false;
+            config.chat.radius = 48;
+            TestPlayers.Recording clicker = joinRecording(helper, joined, "wsignclick", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wsignto", new BlockPos(10, 0, 0));
+            String text = "from a sign " + CommandGameTests.uniqueName("x");
+            target.messages.clear();
+
+            List<String> log = OfflineGameTests.yoltLog(() -> clicker.level().getServer().getCommands().performPrefixedCommand(
+                    signSource(clicker), "w " + target.nameAndId().name() + " " + text));
+            helper.assertValueEqual(texts(target), List.of(), "target messages");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(), List.of(), "whisper log lines");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // Range is only within one dimension: a target in the Nether at the sender's own X and Z is out of reach. The sender's
+    // reply is the same as ever, and only the log says it wasn't heard.
+    @GameTest
+    public void whisperToAnotherDimensionIsNotHeard(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.chat.radius = 48;
+            ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+            helper.assertTrue(nether != null, "no nether to go to");
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wdimfrom", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wdimto", BlockPos.ZERO);
+            target.teleportTo(nether, sender.getX(), sender.getY(), sender.getZ(), Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(target.level() == nether, "the target did not reach the nether");
+            String senderName = sender.nameAndId().name();
+            String targetName = target.nameAndId().name();
+            String text = "over there " + CommandGameTests.uniqueName("x");
+            sender.messages.clear();
+            target.messages.clear();
+
+            List<String> log = OfflineGameTests.yoltLog(() -> run(sender, "w " + targetName + " " + text));
+            helper.assertValueEqual(texts(sender), List.of("You whisper to " + targetName + ": " + text), "sender messages");
+            helper.assertValueEqual(texts(target), List.of(), "target messages");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(),
+                    List.of("Whisper from " + senderName + " to " + targetName + " (not heard): " + text), "whisper log lines");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // A command block is no player, so its /msg is vanilla's, with a selector and no range: a target 500 blocks off gets
+    // it, and it is no whisper for the log
+    @GameTest
+    public void commandBlockMsgStaysVanilla(GameTestHelper helper) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+        TestPlayers.Recording target = TestPlayers.joinRecording(helper, "wcbto", GameType.SURVIVAL, BlockPos.ZERO);
+        String tag = CommandGameTests.uniqueName("wcb");
+        String text = "from a command block " + CommandGameTests.uniqueName("x");
+        try {
+            target.teleportTo(target.getX() + 500, target.getY(), target.getZ());
+            target.addTag(tag);
+            helper.setBlock(pos, Blocks.COMMAND_BLOCK);
+            BaseCommandBlock block = helper.<CommandBlockEntity>getBlockEntity(pos, CommandBlockEntity.class).getCommandBlock();
+            block.setCommand("msg @a[tag=" + tag + "] " + text);
+            int from = TestPlayers.sentPackets(target).size();
+            List<String> log = OfflineGameTests.yoltLog(() -> block.performCommand(helper.getLevel()));
+            helper.assertValueEqual(block.getSuccessCount(), 1, "the command block's result");
+            List<Packet<?>> packets = TestPlayers.sentPackets(target);
+            helper.assertTrue(packets.subList(from, packets.size()).stream().anyMatch(packet ->
+                            packet instanceof ClientboundDisguisedChatPacket chat && chat.message().getString().contains(text)),
+                    "the far player did not get the command block's /msg");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(), List.of(), "whisper log lines");
+        } finally {
+            helper.setBlock(pos, Blocks.AIR);
+            TestPlayers.leave(target);
+        }
+        helper.succeed();
+    }
+
+    // A name is found whatever its case, as vanilla's /msg finds it, and the reply and the log keep it as typed
+    @GameTest
+    public void whisperNameCaseMatchesVanillaLookup(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        boolean whispersBefore = config.chat.allowWhispers;
+        int radiusBefore = config.chat.radius;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            config.restrictCommands = true;
+            config.chat.allowWhispers = true;
+            config.chat.radius = 48;
+            TestPlayers.Recording sender = joinRecording(helper, joined, "wcasefrom", BlockPos.ZERO);
+            TestPlayers.Recording target = joinRecording(helper, joined, "wcaseto", new BlockPos(10, 0, 0));
+            String typed = target.nameAndId().name().toUpperCase(Locale.ROOT);
+            String senderName = sender.nameAndId().name();
+            String text = "loud " + CommandGameTests.uniqueName("x");
+            sender.messages.clear();
+            target.messages.clear();
+
+            List<String> log = OfflineGameTests.yoltLog(() -> run(sender, "w " + typed + " " + text));
+            helper.assertValueEqual(texts(target), List.of(senderName + " whispers to you: " + text), "target messages");
+            helper.assertValueEqual(texts(sender), List.of("You whisper to " + typed + ": " + text), "sender messages");
+            helper.assertValueEqual(log.stream().filter(line -> line.contains(text)).toList(),
+                    List.of("Whisper from " + senderName + " to " + typed + " (heard): " + text), "whisper log lines");
+        } finally {
+            config.restrictCommands = restrictBefore;
+            config.chat.allowWhispers = whispersBefore;
+            config.chat.radius = radiusBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    // What an op-placed sign runs its click command as (vanilla's SignBlockEntity)
+    private static CommandSourceStack signSource(ServerPlayer player) {
+        return new CommandSourceStack(CommandSource.NULL, player.position(), Vec2.ZERO, player.level(),
+                LevelBasedPermissionSet.GAMEMASTER, player.level().getServer(), player);
     }
 
     private static List<String> childNames(RootCommandNode<CommandSourceStack> root) {
