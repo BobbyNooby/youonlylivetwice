@@ -1,12 +1,10 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
+# Builds the jar and runs every test, but only for a push to release, whose tested jar becomes the draft release, and
+# for a run started by hand. Day-to-day work is tested locally instead: docs/contributing.md says how.
 
 name: build
 on:
-  pull_request:
   push:
+    branches: [release]
   # Manual run for hunting flaky tests: filter picks GameTests by name,
   # verify repeats each of them 100 times per rotation, and client adds the client tests
   workflow_dispatch:
@@ -55,7 +53,7 @@ jobs:
       - name: setup gradle
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          # The action only saves its cache on the default branch (release) unless told, and every push here is to dev
+          # The action only saves its cache on the default branch (release) unless told, and only release pushes run here
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
@@ -114,8 +112,8 @@ jobs:
           path: build/libs/
 
   client_game_test:
-    # Pull requests, pushes to release (the release job needs it) and manual runs that ask for it. Pushes to any other branch skip it.
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/release') || (github.event_name == 'workflow_dispatch' && inputs.client)
+    # Pushes to release (the release job needs it) and manual runs that ask for it
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/release') || (github.event_name == 'workflow_dispatch' && inputs.client)
     runs-on: ubuntu-24.04
     # A client that can't open a window hangs instead of exiting
     timeout-minutes: 30
