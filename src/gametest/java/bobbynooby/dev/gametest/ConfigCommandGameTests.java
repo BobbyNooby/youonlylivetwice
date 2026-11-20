@@ -512,6 +512,20 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // A new switch: set off by the command, refused when not true or false, and on again from the file by a reload
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void tabHeaderFrameSetsAndReloads(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            setsRefusesAndReloads(helper, server, "hide.tabHeaderFrame", "true", "false", "", "maybe",
+                    "hide.tabHeaderFrame takes true or false, not 'maybe'.", "true");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
     // A text of the messages section: a required placeholder can't be dropped, the revive paper's name says it waits for
     // new papers, and a placeholder the text doesn't fill in is let through with a line that says so, by the command and
     // by a reload

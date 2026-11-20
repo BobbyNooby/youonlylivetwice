@@ -140,6 +140,7 @@ diameter to the area you want people to spawn in.
 | `gameMessages` | `true` | Hides death, join, leave and advancement messages. | No |
 | `tabHeader` | `true` | Shows a random flavour header in the tab list. Off clears it. | No |
 | `tabHeaderLines` | 13 flavour lines | The lines the header is picked from, at most 64 of 256 characters each. `[]` shows no header. File only. | No (on `/yolt reload`) |
+| `tabHeaderFrame` | `true` | A grey row of dashes above the header's line and as the footer. Off sends the line alone, with no footer. | No |
 | `distantPlayers` | `true` | Each player's game only learns about players near them. | No |
 | `locatorBar` | `true` | Turns the `locator_bar` game rule off. | No |
 | `globalSounds` | `true` | Turns the `global_sound_events` game rule off. | No |

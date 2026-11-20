@@ -97,9 +97,11 @@ public class YoltConfig {
         public boolean serverPlayerCount = true;
         public boolean gameMessages = true;
         public boolean tabHeader = true;
-        // Each player's tab-list header is one of these, picked at random, under a row of dashes; § colour codes work.
-        // A reload gives a player whose line is gone a new one. An empty list shows no header.
+        // Each player's tab-list header is one of these, picked at random, under a row of dashes while tabHeaderFrame is
+        // on; § colour codes work. A reload gives a player whose line is gone a new one. An empty list shows no header.
         public List<String> tabHeaderLines = new ArrayList<>(FLAVOUR_LINES);
+        // The row of dashes over the header's line and as the footer. Off sends the line alone, with no footer.
+        public boolean tabHeaderFrame = true;
         public boolean distantPlayers = true;
         public boolean locatorBar = true;
         public boolean globalSounds = true;

@@ -813,6 +813,24 @@ class ConfigLoaderTest {
         assertEquals(List.of(problem + ", using the current value"), reloaded.warnings());
     }
 
+    // Ships on, the dashes the header always had. A value that isn't true or false falls back, as any switch's does.
+    @Test
+    void tabHeaderFrameShipsOnAndFallsBack() throws IOException {
+        assertTrue(new YoltConfig().hide.tabHeaderFrame);
+        assertFalse(loadJson("{\"hide\":{\"tabHeaderFrame\":false}}").config().hide.tabHeaderFrame);
+        ConfigLoader.Result bad = loadJson("{\"hide\":{\"tabHeaderFrame\":\"no\"}}");
+        assertTrue(bad.config().hide.tabHeaderFrame);
+        assertTrue(bad.warnings().contains("hide.tabHeaderFrame: expected true or false, using default"), bad.warnings().toString());
+
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"hide\":{\"tabHeaderFrame\":1}}");
+        YoltConfig live = new YoltConfig();
+        live.hide.tabHeaderFrame = false;
+        ConfigLoader.Result reloaded = ConfigLoader.load(file, live, false);
+        assertFalse(reloaded.config().hide.tabHeaderFrame);
+        assertEquals(List.of("hide.tabHeaderFrame: expected true or false, using the current value"), reloaded.warnings());
+    }
+
     @Test
     void badTabHeaderLinesFallBackToDefault() throws IOException {
         for (String bad : List.of("\"text\"", "[1, 2]", "[\"ok\", null]")) {
@@ -1206,8 +1224,8 @@ class ConfigLoaderTest {
         assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak",
                 turnedOn("skins.lockAfterFirstChoice"),
                 turnedOn("chat.allowWhispers"),
-                "the file had no allowedCommands, serverList.motdLines, hardcore, resourcePack, messages, so they take their"
-                        + " defaults"),
+                "the file had no hide.tabHeaderFrame, allowedCommands, serverList.motdLines, hardcore, resourcePack, messages,"
+                        + " so they take their defaults"),
                 r.warnings());
         // Everything else, hardcore and resourcePack included, is this version's default
         YoltConfig expected = new YoltConfig();

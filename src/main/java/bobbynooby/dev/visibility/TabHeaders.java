@@ -20,8 +20,8 @@ import java.util.UUID;
  * settings are applied. Server thread only.
  */
 public final class TabHeaders {
-    // Over the picked line and as the footer. Decoration, not one of the lines.
-    private static final String HEADER_FOOTER = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString()
+    // Over the picked line and as the footer while hide.tabHeaderFrame is on. Decoration, not one of the lines.
+    private static final String FRAME = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY.toString()
             + "--------------";
 
     private static final Map<UUID, HeaderFooter> PLAYER_MAP = new HashMap<>();
@@ -29,14 +29,12 @@ public final class TabHeaders {
 
     private TabHeaders() {}
 
-    // A line starts from plain text, so the dashes' grey doesn't run into it
     private static HeaderFooter pick() {
         List<String> lines = Settings.get().hide.tabHeaderLines;
         if (lines.isEmpty()) {
             return HeaderFooter.NONE;
         }
-        String line = lines.get(RANDOM.nextInt(lines.size()));
-        return new HeaderFooter(line, HEADER_FOOTER + "\n" + ChatFormatting.RESET + line, HEADER_FOOTER);
+        return new HeaderFooter(lines.get(RANDOM.nextInt(lines.size())));
     }
 
     // The client keeps a header until it disconnects, so one send per join is enough.
@@ -90,9 +88,24 @@ public final class TabHeaders {
         PLAYER_MAP.remove(uuid);
     }
 
-    /** A player's header: the configured line it shows, or null for none, and the texts sent for it. */
-    public record HeaderFooter(@Nullable String line, String header, String footer) {
-        static final HeaderFooter NONE = new HeaderFooter(null, "", "");
+    /**
+     * A player's header: the configured line it shows, or null for none. The texts sent for it follow hide.tabHeaderFrame
+     * as it is when they are sent, so a change to the frame shows at the next send.
+     */
+    public record HeaderFooter(@Nullable String line) {
+        static final HeaderFooter NONE = new HeaderFooter(null);
+
+        // Under the frame the line starts from plain text, so the dashes' grey doesn't run into it
+        public String header() {
+            if (line == null) {
+                return "";
+            }
+            return Settings.get().hide.tabHeaderFrame ? FRAME + "\n" + ChatFormatting.RESET + line : line;
+        }
+
+        public String footer() {
+            return line != null && Settings.get().hide.tabHeaderFrame ? FRAME : "";
+        }
 
         // Still one of the lines, or still no line while the list is empty
         boolean pickedFrom(List<String> lines) {

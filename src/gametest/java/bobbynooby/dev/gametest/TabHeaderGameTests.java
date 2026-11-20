@@ -25,6 +25,7 @@ public class TabHeaderGameTests {
     private static final String TAB_HEADER_OFF = "you-only-live-twice-gametest:tab_header_off";
     private static final String TAB_HEADER_ON = "you-only-live-twice-gametest:tab_header_on";
     private static final String TAB_HEADER_LINES = "you-only-live-twice-gametest:tab_header_lines";
+    private static final String TAB_HEADER_FRAME = "you-only-live-twice-gametest:tab_header_frame";
 
     @GameTest
     public void headerEntryRemovedOnLeave(GameTestHelper helper) {
@@ -156,6 +157,51 @@ public class TabHeaderGameTests {
             helper.assertValueEqual(cleared.footer().getString(), "", "footer with an empty list");
         } finally {
             hide.tabHeader = switchBefore;
+            hide.tabHeaderLines = linesBefore;
+            LiveSettings.applyAll(server);
+            if (player != null) {
+                TestPlayers.leave(player);
+            }
+        }
+        helper.succeed();
+    }
+
+    // hide.tabHeaderFrame: on, as it ships, the line comes under a row of dashes that is the footer too; off, applied as
+    // /yolt config applies it, the line alone with no footer; on again, the dashes are back. A batch of its own, since
+    // applying the live settings reaches every online player.
+    @GameTest(environment = TAB_HEADER_FRAME)
+    public void frameSwitchSendsTheLineAlone(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean switchBefore = hide.tabHeader;
+        boolean frameBefore = hide.tabHeaderFrame;
+        List<String> linesBefore = hide.tabHeaderLines;
+        String dashes = ChatFormatting.RESET.toString() + ChatFormatting.DARK_GRAY + "--------------";
+        String line = ChatFormatting.GREEN + "Framed or not";
+        ServerPlayer player = null;
+        try {
+            helper.assertTrue(hide.tabHeaderFrame, "the frame doesn't ship on");
+            hide.tabHeader = true;
+            hide.tabHeaderLines = List.of(line);
+            player = TestPlayers.join(helper, "tabframe", GameType.SURVIVAL, BlockPos.ZERO);
+            ClientboundTabListPacket joined = tabListPackets(player).getLast();
+            helper.assertValueEqual(joined.header().getString(), dashes + "\n" + ChatFormatting.RESET + line, "header at the join");
+            helper.assertValueEqual(joined.footer().getString(), dashes, "footer at the join");
+
+            hide.tabHeaderFrame = false;
+            LiveSettings.applyAll(server);
+            ClientboundTabListPacket bare = tabListPackets(player).getLast();
+            helper.assertValueEqual(bare.header().getString(), line, "header with the frame off");
+            helper.assertValueEqual(bare.footer().getString(), "", "footer with the frame off");
+
+            hide.tabHeaderFrame = true;
+            LiveSettings.applyAll(server);
+            ClientboundTabListPacket framed = tabListPackets(player).getLast();
+            helper.assertValueEqual(framed.header().getString(), dashes + "\n" + ChatFormatting.RESET + line, "header with the frame on again");
+            helper.assertValueEqual(framed.footer().getString(), dashes, "footer with the frame on again");
+        } finally {
+            hide.tabHeader = switchBefore;
+            hide.tabHeaderFrame = frameBefore;
             hide.tabHeaderLines = linesBefore;
             LiveSettings.applyAll(server);
             if (player != null) {
