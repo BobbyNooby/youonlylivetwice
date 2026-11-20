@@ -15,8 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(CakeBlock.class)
 public abstract class HardcoreCakeMixin {
-    // Cake never goes through an item's eating, so its slice is counted where the food bar takes it
-    @Inject(method = "eat", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/food/FoodData;eat(IF)V", shift = At.Shift.AFTER))
+    // Cake never goes through an item's eating, so its slice is counted where the food bar takes it: just before, while
+    // the bar still says how much of the slice fits
+    @Inject(method = "eat", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/food/FoodData;eat(IF)V"))
     private static void afterSlice(LevelAccessor level, BlockPos pos, BlockState state, Player player,
                                    CallbackInfoReturnable<InteractionResult> cir) {
         if (player instanceof ServerPlayer serverPlayer) {

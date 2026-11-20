@@ -92,13 +92,20 @@ public final class Nutrients {
         Guard.run(() -> eat(player, taken, shares(eaten)), "Could not count what {} ate", player.nameAndId().name());
     }
 
-    /** A slice of cake, which is eaten from the block rather than as an item. Only a hungry player can eat one. */
+    /**
+     * A slice of cake, which is eaten from the block rather than as an item. Called just before the food bar takes it,
+     * so only what fits counts, like any other food: one point of the two with the bar one short of full.
+     */
     public static void onEatCake(ServerPlayer player) {
         if (!counts(player)) {
             return;
         }
+        int taken = NutrientMaths.pointsTaken(CAKE_SLICE, player.getFoodData().getFoodLevel());
+        if (taken == 0) {
+            return;
+        }
         Map<String, Double> shares = cfg().foods.get(CAKE);
-        Guard.run(() -> eat(player, CAKE_SLICE, shares != null ? shares : unknownShares()),
+        Guard.run(() -> eat(player, taken, shares != null ? shares : unknownShares()),
                 "Could not count the cake {} ate", player.nameAndId().name());
     }
 

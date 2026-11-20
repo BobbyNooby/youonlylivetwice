@@ -109,6 +109,29 @@ public class HardcoreNutrientsGameTests {
         helper.succeed();
     }
 
+    // With the bar one short of full, one of the slice's two points fits, and only that one counts
+    @GameTest(environment = NUTRIENTS)
+    public void nut2CakeAtAnAlmostFullBarCountsHalf(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "NutCakeFull");
+        try {
+            levels(player, 0.6, 0.6, 0.6);
+            feed(player, 19, 0.0F);
+            helper.setBlock(CAKE_AT, Blocks.CAKE);
+            BlockPos cake = helper.absolutePos(CAKE_AT);
+            helper.getLevel().getBlockState(cake).useWithoutItem(helper.getLevel(), player,
+                    new BlockHitResult(Vec3.atCenterOf(cake), Direction.UP, cake, false));
+            helper.assertValueEqual(helper.getBlockState(CAKE_AT).getValue(CakeBlock.BITES), 1, "bites taken from the cake");
+            HardcoreState state = HardcoreStates.read(player.getUUID());
+            // Half of what nut2CakeCounts gets from the whole slice
+            assertLevel(helper, state.sugar, 0.63, "sugar after half a slice of cake");
+            assertLevel(helper, state.protein, 0.615, "protein after half a slice of cake");
+            assertLevel(helper, state.vitamins, 0.6075, "vitamins after half a slice of cake");
+        } finally {
+            leave(player);
+        }
+        helper.succeed();
+    }
+
     // The table and the unknown-food rule change on the live config for this tick only
     @GameTest(environment = NUTRIENTS)
     public void nut2UnlistedFoodGivesNothing(GameTestHelper helper) {
