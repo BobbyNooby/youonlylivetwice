@@ -363,7 +363,7 @@ public final class BloodMoon {
     private static ServerBossEvent newBar(float progress) {
         HardcoreConfig.BloodMoonSection config = config();
         ServerBossEvent bar = new ServerBossEvent(UUID.randomUUID(), Component.literal(texts().bloodMoonBarTitle),
-                BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
+                barColour(config.barColour), BossEvent.BossBarOverlay.PROGRESS);
         bar.setDarkenScreen(config.darkenSky);
         bar.setCreateWorldFog(config.fog);
         bar.setProgress(progress);
@@ -488,6 +488,11 @@ public final class BloodMoon {
 
     private static HardcoreConfig.BloodMoonSection config() {
         return Settings.get().hardcore.bloodMoon;
+    }
+
+    /** Vanilla's colour of the same name. The config keeps its own list, so it reads no Minecraft class as it loads. */
+    public static BossEvent.BossBarColor barColour(HardcoreConfig.BarColour colour) {
+        return BossEvent.BossBarColor.valueOf(colour.name());
     }
 
     private static YoltConfig.MessagesSection texts() {

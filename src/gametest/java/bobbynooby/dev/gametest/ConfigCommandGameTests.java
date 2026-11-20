@@ -526,6 +526,27 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // The bar's colour, a name from a list, and the bar's other settings, which all say they wait for the next blood moon
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void bloodMoonBarKeysSayTheyWaitForTheNextOne(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        String next = " (applies from the next blood moon)";
+        try {
+            setsRefusesAndReloads(helper, server, "hardcore.bloodMoon.barColour", "red", "blue", next, "maroon",
+                    "hardcore.bloodMoon.barColour takes pink, blue, red, green, yellow, purple or white, not 'maroon'.", "purple");
+            helper.assertValueEqual(run(server, "yolt config hardcore.bloodMoon.bossBar false"),
+                    List.of("hardcore.bloodMoon.bossBar changed from true to false" + next + "."), "bossBar reply");
+            helper.assertValueEqual(run(server, "yolt config hardcore.bloodMoon.darkenSky false"),
+                    List.of("hardcore.bloodMoon.darkenSky changed from true to false" + next + "."), "darkenSky reply");
+            helper.assertValueEqual(run(server, "yolt config hardcore.bloodMoon.fog true"),
+                    List.of("hardcore.bloodMoon.fog changed from false to true" + next + "."), "fog reply");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
     // A text of the messages section: a required placeholder can't be dropped, the revive paper's name says it waits for
     // new papers, and a placeholder the text doesn't fill in is let through with a line that says so, by the command and
     // by a reload

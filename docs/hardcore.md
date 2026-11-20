@@ -406,8 +406,9 @@ On some nights, picked by chance, more mobs come out, and they are tougher, bett
 - At tick 9000 (`warnTick`), about 3 minutes before dark, every player in the overworld gets a title ("The moon will
   rise red tonight…"), a chat line and the raid horn (`warning.title`, `warning.chat`, `warning.sound`). Each is sent
   to each player on their own, never played in the world.
-- During the night, a red "Blood Moon" boss bar drains as the night passes (`bossBar`), the sky darkens (`darkenSky`),
-  and optionally there is fog (`fog`). A player who joins or comes into the overworld gets the bar and one chat line.
+- During the night, a red "Blood Moon" boss bar drains as the night passes (`bossBar`, `barColour`), the sky darkens
+  (`darkenSky`), and optionally there is fog (`fog`). These are read as the blood moon starts, so a change waits for
+  the next one. A player who joins or comes into the overworld gets the bar and one chat line.
 - At dawn a line says the blood moon has set.
 - `/status` shows "Blood moon tonight" from the warning until it ends, in the overworld.
 - The title, the lines and the bar's title can be reworded with the `messages.bloodMoon…` keys, see

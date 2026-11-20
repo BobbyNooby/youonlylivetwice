@@ -1,5 +1,7 @@
 package bobbynooby.dev.hardcore;
 
+import bobbynooby.dev.config.HardcoreConfig;
+import net.minecraft.world.BossEvent;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,5 +48,15 @@ class HardcoreBloodMoonTest {
             }
         }
         assertTrue(rolled >= 800 && rolled <= 1200, rolled + " of 10000 nights rolled");
+    }
+
+    // The config's colours are vanilla's, one for one, so any of them makes a bar, and red is the one it always had
+    @Test
+    void barColoursAreVanillasOwn() {
+        assertEquals(BossEvent.BossBarColor.values().length, HardcoreConfig.BarColour.values().length);
+        for (HardcoreConfig.BarColour colour : HardcoreConfig.BarColour.values()) {
+            assertEquals(colour.name(), BloodMoon.barColour(colour).name());
+        }
+        assertEquals(BossEvent.BossBarColor.RED, BloodMoon.barColour(new HardcoreConfig.BloodMoonSection().barColour));
     }
 }

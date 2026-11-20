@@ -368,6 +368,7 @@ class HardcoreConfigTest {
         d.put("hardcore.bloodMoon.bossBar", "true");
         d.put("hardcore.bloodMoon.darkenSky", "true");
         d.put("hardcore.bloodMoon.fog", "false");
+        d.put("hardcore.bloodMoon.barColour", "red");
         d.put("hardcore.bloodMoon.warning.title", "true");
         d.put("hardcore.bloodMoon.warning.chat", "true");
         d.put("hardcore.bloodMoon.warning.sound", "true");
@@ -424,6 +425,25 @@ class HardcoreConfigTest {
         assertEquals(Map.of("minecraft:ghast", Map.of("health", 2.0), "minecraft:phantom", Map.of("health", 1.0, "damage", 1.0, "speed", 1.0),
                 "minecraft:creeper", Map.of("damage", 1.0)), fresh.hardcore.tougherMobs.overrides);
         assertEquals(List.of("minecraft:warden"), fresh.hardcore.relentlessMobs.exclude);
+    }
+
+    // Named in the file as the other enums are, lowercase, and offered as such by the command
+    @Test
+    void bloodMoonBarColourReadsLowercase() throws IOException {
+        assertEquals(List.of("pink", "blue", "red", "green", "yellow", "purple", "white"), key("hardcore.bloodMoon.barColour").choices());
+        assertEquals(HardcoreConfig.BarColour.BLUE,
+                loadJson("{\"hardcore\":{\"bloodMoon\":{\"barColour\":\"blue\"}}}").config().hardcore.bloodMoon.barColour);
+        ConfigLoader.Result unknown = loadJson("{\"hardcore\":{\"bloodMoon\":{\"barColour\":\"maroon\"}}}");
+        assertEquals(HardcoreConfig.BarColour.RED, unknown.config().hardcore.bloodMoon.barColour);
+        assertTrue(unknown.warnings().contains("hardcore.bloodMoon.barColour: unknown value, using default"), unknown.warnings().toString());
+
+        Path file = dir.resolve("config.json");
+        Files.writeString(file, "{\"hardcore\":{\"bloodMoon\":{\"barColour\":\"maroon\"}}}");
+        YoltConfig live = new YoltConfig();
+        live.hardcore.bloodMoon.barColour = HardcoreConfig.BarColour.PURPLE;
+        ConfigLoader.Result reloaded = ConfigLoader.load(file, live, false);
+        assertEquals(HardcoreConfig.BarColour.PURPLE, reloaded.config().hardcore.bloodMoon.barColour);
+        assertEquals(List.of("hardcore.bloodMoon.barColour: unknown value, using the current value"), reloaded.warnings());
     }
 
     // One of each kind of label; the full list of keys that wait is ConfigKeysTest's
@@ -483,7 +503,7 @@ class HardcoreConfigTest {
                   "relentlessMobs": {"followRange": 0, "doorBreakerChance": 2},
                   "bloodMoon": {"chance": 2, "minNightsBetween": -1, "graceDays": -1, "health": 0, "damage": -1,
                                 "speed": -1, "spawnCap": -1, "armourChance": 2, "enchantChance": 2, "xp": -1,
-                                "extraLootRolls": -1, "chargedCreeperChance": 2},
+                                "extraLootRolls": -1, "chargedCreeperChance": 2, "barColour": "maroon"},
                   "cold": {"chillPerSecond": -1, "warmPerSecond": -1, "shelteredBelowSkyLight": 16, "heatRadius": 9,
                            "leatherPerPiece": 2, "wetMultiplier": -1, "waterMultiplier": -1, "maxSlow": 2,
                            "damageEverySeconds": 0, "shiverExhaustionPerSecond": -1}
@@ -562,6 +582,7 @@ class HardcoreConfigTest {
                 "hardcore.bloodMoon.xp: must be 0 or more",
                 "hardcore.bloodMoon.extraLootRolls: must be 0 or more",
                 "hardcore.bloodMoon.chargedCreeperChance: must be 0 to 1",
+                "hardcore.bloodMoon.barColour: unknown value",
                 "hardcore.cold.chillPerSecond: must be 0 or more",
                 "hardcore.cold.warmPerSecond: must be 0 or more",
                 "hardcore.cold.shelteredBelowSkyLight: must be 0 to 15",

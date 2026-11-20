@@ -453,15 +453,17 @@ mobs' own, and the chances are the least a mob spawned in a blood moon gets.
 | `xp` | `2.0` | Multiplies the XP marked mobs drop, 0 or more. | No |
 | `extraLootRolls` | `1` | Extra rolls of a marked mob's own loot table when a player kills it, 0 or more. | No |
 | `chargedCreeperChance` | `0.0` | The chance a creeper spawns charged, 0 to 1. Rolled as the creeper spawns. | As mobs load |
-| `bossBar` | `true` | Shows the "Blood Moon" boss bar. | No |
-| `darkenSky` | `true` | The boss bar darkens the sky. | No |
-| `fog` | `false` | The boss bar adds fog. | No |
+| `bossBar` | `true` | Shows the "Blood Moon" boss bar. | Next blood moon |
+| `barColour` | `"red"` | The boss bar's colour: `pink`, `blue`, `red`, `green`, `yellow`, `purple` or `white`. | Next blood moon |
+| `darkenSky` | `true` | The boss bar darkens the sky. | Next blood moon |
+| `fog` | `false` | The boss bar adds fog. | Next blood moon |
 | `warning.title` | `true` | The warning sends a title. | No |
 | `warning.chat` | `true` | The warning sends a chat line. | No |
 | `warning.sound` | `true` | The warning plays the raid horn to each player. | No |
 
 `warnTick`, `startTick` and `endTick` must keep 0 <= `warnTick` < `startTick` < `endTick` <= 23999. `bossBar`,
-`darkenSky` and `fog` are read when a blood moon starts.
+`barColour`, `darkenSky` and `fog` (and `messages.bloodMoonBarTitle`) are read when a blood moon starts, so changing one
+while a blood moon is up does nothing until the next, and `/yolt config` says so.
 
 ### `hardcore.cold`
 
@@ -599,7 +601,8 @@ naming the key, and `/yolt config` refuses it. The rest of the file still counts
 - **Maps:** a map with a value below 0 falls back whole. In `foods`, every share must be 0 to 1 and name `protein`,
   `vitamins` or `sugar`. In `overrides`, every value must name `health`, `damage` or `speed` and be 0 or more, with
   `health` above 0. A map that isn't an object of numbers falls back whole too.
-- **Choices:** `nutrients.unknownFood` and `tougherMobs.damageAppliesTo` must be one of their values.
+- **Choices:** `nutrients.unknownFood`, `tougherMobs.damageAppliesTo` and `bloodMoon.barColour` must be one of their
+  values.
 - **`resourcePack.reviveModel`** must be an id such as `you-only-live-twice:revive_paper`.
 - **`messages`:** each text is at most 256 characters and keeps its required placeholders.
 

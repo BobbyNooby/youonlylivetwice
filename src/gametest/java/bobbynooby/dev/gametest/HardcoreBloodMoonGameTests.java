@@ -471,6 +471,48 @@ public class HardcoreBloodMoonGameTests {
         helper.succeed();
     }
 
+    // barColour and darkenSky are read as a blood moon starts: changed while one is up, its bar stays as it began, even
+    // for a player who arrives then, and the next blood moon takes them. Red is the colour it always had.
+    @GameTest(environment = MOON)
+    public void blood4BarColourAndSkyWaitForTheNextBloodMoon(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        HardcoreConfig.BarColour colourBefore = config.barColour;
+        boolean darkenBefore = config.darkenSky;
+        List<ServerPlayer> players = new ArrayList<>();
+        try {
+            ServerPlayer first = TestPlayers.join(helper, "MoonColour", GameType.SURVIVAL, PLAYER_AT);
+            players.add(first);
+            int mark = TestPlayers.sentPackets(first).size();
+            BloodMoon.start(server);
+            assertBar(helper, moonPackets(first, mark), "RED", true, "the first blood moon");
+            config.barColour = HardcoreConfig.BarColour.BLUE;
+            config.darkenSky = false;
+            ServerPlayer late = TestPlayers.join(helper, "MoonColourLate", GameType.SURVIVAL, SECOND_PLAYER_AT);
+            players.add(late);
+            assertBar(helper, moonPackets(late, 0), "RED", true, "a player arriving after the change");
+            BloodMoon.stop(server);
+
+            mark = TestPlayers.sentPackets(first).size();
+            BloodMoon.start(server);
+            assertBar(helper, moonPackets(first, mark), "BLUE", false, "the next blood moon");
+            BloodMoon.stop(server);
+        } finally {
+            config.barColour = colourBefore;
+            config.darkenSky = darkenBefore;
+            BloodMoon.stop(server);
+            players.forEach(TestPlayers::leave);
+        }
+        helper.succeed();
+    }
+
+    private static void assertBar(GameTestHelper helper, List<String> sent, String colour, boolean darken, String when) {
+        List<String> added = sent.stream().filter(line -> line.startsWith("bar add ")).toList();
+        helper.assertValueEqual(added.size(), 1, "bars added for " + when + ": " + sent);
+        helper.assertTrue(added.getFirst().contains(" " + colour + " PROGRESS darken " + darken + " "),
+                "the bar for " + when + ": " + added.getFirst());
+    }
+
     // Relies on nothing else sending this player a chat line or a boss bar between its join and the stop
     @GameTest(environment = MOON)
     public void bloodCommandsStartStopAndReport(GameTestHelper helper) {

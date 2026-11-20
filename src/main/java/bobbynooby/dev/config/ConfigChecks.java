@@ -375,6 +375,10 @@ final class ConfigChecks {
             moon.chargedCreeperChance = fallback.chargedCreeperChance;
             fellBack.accept("hardcore.bloodMoon.chargedCreeperChance", "must be 0 to 1");
         }
+        if (moon.barColour == null) {
+            moon.barColour = fallback.barColour;
+            fellBack.accept("hardcore.bloodMoon.barColour", "unknown value");
+        }
     }
 
     // Freeze damage is counted in whole seconds, so the shortest gap is one

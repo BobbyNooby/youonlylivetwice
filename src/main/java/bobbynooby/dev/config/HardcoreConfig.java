@@ -305,10 +305,23 @@ public final class HardcoreConfig {
         public double xp = 2.0;
         public int extraLootRolls = 1;
         @Applies(Applies.When.MOBS_LOAD) public double chargedCreeperChance = 0.0;
-        public boolean bossBar = true;
-        public boolean darkenSky = true;
-        public boolean fog = false;
+        // The bar is made as a blood moon starts, so one already up keeps what it started with
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean bossBar = true;
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean darkenSky = true;
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean fog = false;
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public BarColour barColour = BarColour.RED;
         public WarningSection warning = new WarningSection();
+    }
+
+    // The boss bar's colours, vanilla's seven
+    public enum BarColour {
+        @SerializedName("pink") PINK,
+        @SerializedName("blue") BLUE,
+        @SerializedName("red") RED,
+        @SerializedName("green") GREEN,
+        @SerializedName("yellow") YELLOW,
+        @SerializedName("purple") PURPLE,
+        @SerializedName("white") WHITE
     }
 
     // What the warning before a blood moon sends each player in the overworld
