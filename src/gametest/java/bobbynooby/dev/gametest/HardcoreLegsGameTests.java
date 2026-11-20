@@ -14,6 +14,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -26,6 +27,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
 
 import java.io.IOException;
@@ -49,6 +51,10 @@ public class HardcoreLegsGameTests {
     private static final String LEGS_NO_REGEN = "you-only-live-twice-gametest:hardcore_legs_no_regen";
     // A batch of its own: it changes the switch through the config file
     private static final String LEGS_SWITCH = "you-only-live-twice-gametest:hardcore_legs_switch";
+    // healthFirst off, which the other legs tests count on being on
+    private static final String LEGS_HEALTH_ANY = "you-only-live-twice-gametest:hardcore_legs_health_any";
+    // regenEffectHeals off
+    private static final String LEGS_NO_REGEN_EFFECT = "you-only-live-twice-gametest:hardcore_legs_no_regen_effect";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final double CLOSE = 1e-9;
     // Weight weighs again every 10 ticks; raise it with that interval
@@ -521,6 +527,223 @@ public class HardcoreLegsGameTests {
         if (online != null) {
             TestPlayers.leave(online);
         }
+    }
+
+    // A stalagmite counts as a fall: 8 damage, past the 6 that breaks them
+    @GameTest(environment = LEGS)
+    public void legs2AStalagmiteBreaksLegs(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Impaled");
+        try {
+            helper.assertTrue(player.hurtServer(helper.getLevel(), helper.getLevel().damageSources().stalagmite(), 8.0F),
+                    "the stalagmite did nothing");
+            helper.assertTrue(Legs.broken(player), "a stalagmite left the legs whole");
+            helper.assertTrue(actionBars(player).contains("Your legs broke."), "action bar: " + actionBars(player));
+        } finally {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Flying into a wall breaks nothing as it ships, and breaks them with includeElytraCrash on, set within this tick
+    @GameTest(environment = LEGS)
+    public void legs2ElytraCrashOnlyWithItsSwitch(GameTestHelper helper) {
+        ServerPlayer shipped = join(helper, "Crashed");
+        ServerPlayer switched = join(helper, "CrashedSwitched");
+        HardcoreConfig.LegsSection cfg = Settings.get().hardcore.legs;
+        boolean before = cfg.includeElytraCrash;
+        try {
+            helper.assertFalse(before, "includeElytraCrash ships on");
+            shipped.hurtServer(helper.getLevel(), helper.getLevel().damageSources().flyIntoWall(), 8.0F);
+            helper.assertTrue(shipped.getHealth() < shipped.getMaxHealth(), "the crash did no damage");
+            helper.assertFalse(Legs.broken(shipped), "an elytra crash broke the legs with includeElytraCrash off");
+            cfg.includeElytraCrash = true;
+            switched.hurtServer(helper.getLevel(), helper.getLevel().damageSources().flyIntoWall(), 8.0F);
+            helper.assertTrue(Legs.broken(switched), "an elytra crash left the legs whole with includeElytraCrash on");
+        } finally {
+            cfg.includeElytraCrash = before;
+            Legs.set(switched.getUUID(), false);
+            leave(shipped);
+            leave(switched);
+        }
+        helper.succeed();
+    }
+
+    // With healthFirst off legs heal while hurt: full food and saturation give a point at 40 ticks, at half health
+    @GameTest(environment = LEGS_HEALTH_ANY, maxTicks = 60)
+    public void legs3HealthFirstOffHealsWhileHurt(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "HurtHealer");
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertFalse(Settings.get().hardcore.legs.healthFirst, "the environment left healthFirst on");
+            Legs.set(player.getUUID(), true);
+            feed(player, 20, 5.0F);
+            player.setHealth(10.0F);
+            helper.runAfterDelay(43, () -> {
+                try {
+                    helper.assertValueEqual(player.getHealth(), 10.0F, "health, which nothing here heals");
+                    assertPoints(helper, player, 1.0, "43 ticks in at half health");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The last point heals them and says so over the hotbar
+    @GameTest(environment = LEGS, maxTicks = 60)
+    public void legs3HealedLegsSayHealed(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Mended");
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Legs.set(player.getUUID(), false);
+            leave(player);
+        });
+        boolean waiting = false;
+        try {
+            Legs.set(player.getUUID(), true);
+            HardcoreStates.update(player.getUUID(), state -> state.legHealPoints = 29.0);
+            feed(player, 20, 5.0F);
+            helper.runAfterDelay(43, () -> {
+                try {
+                    helper.assertFalse(Legs.broken(player), "the legs are still broken after the thirtieth point");
+                    helper.assertValueEqual(HardcoreStates.read(player.getUUID()).legHealPoints, 0.0, "heal points after healing");
+                    helper.assertTrue(actionBars(player).contains("Your legs have healed."), "action bar: " + actionBars(player));
+                    assertSlow(helper, player, 0.0, "with the legs healed");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // With regenEffectHeals off, Regeneration II does nothing for the legs: at food 10 they don't heal, and at full food
+    // they heal at food's pace, a point at 40 ticks for 3.0 exhaustion, rather than Regeneration II's 25 for none
+    @GameTest(environment = LEGS_NO_REGEN_EFFECT, maxTicks = 160)
+    public void legs3RegenEffectOffLeavesLegsToFood(GameTestHelper helper) {
+        ServerPlayer starved = join(helper, "RegenStarved");
+        ServerPlayer fed = join(helper, "RegenFed", AT.offset(2, 0, 0));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            for (ServerPlayer player : List.of(starved, fed)) {
+                Legs.set(player.getUUID(), false);
+                leave(player);
+            }
+        });
+        boolean waiting = false;
+        try {
+            helper.assertFalse(Settings.get().hardcore.legs.regenEffectHeals, "the environment left regenEffectHeals on");
+            for (ServerPlayer player : List.of(starved, fed)) {
+                Legs.set(player.getUUID(), true);
+                player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 1200, 1));
+            }
+            feed(starved, 10, 0.0F);
+            feed(fed, 20, 5.0F);
+            helper.runAfterDelay(30, () -> step(cleanUp, () -> assertPoints(helper, fed, 0.0, "30 ticks in at full food")));
+            helper.runAfterDelay(45, () -> step(cleanUp, () -> {
+                assertPoints(helper, fed, 1.0, "45 ticks in at full food");
+                float spent = ((FoodDataAccessor) fed.getFoodData()).yoltExhaustion();
+                helper.assertTrue(Math.abs(spent - 3.0F) < 1e-5, "the point cost " + spent + " exhaustion, not 3.0");
+            }));
+            helper.runAfterDelay(100, () -> {
+                try {
+                    assertPoints(helper, starved, 0.0, "100 ticks in at food 10 under Regeneration II");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Full food with saturation heals a point every 40 ticks; 19 food, every 80
+    @GameTest(environment = LEGS, maxTicks = 120)
+    public void legs3SaturatedFoodHealsEveryFortyTicks(GameTestHelper helper) {
+        ServerPlayer saturated = join(helper, "Saturated");
+        ServerPlayer fed = join(helper, "NineteenFed", AT.offset(2, 0, 0));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            for (ServerPlayer player : List.of(saturated, fed)) {
+                Legs.set(player.getUUID(), false);
+                leave(player);
+            }
+        });
+        boolean waiting = false;
+        try {
+            for (ServerPlayer player : List.of(saturated, fed)) {
+                Legs.set(player.getUUID(), true);
+            }
+            feed(saturated, 20, 5.0F);
+            feed(fed, 19, 5.0F);
+            helper.runAfterDelay(37, () -> step(cleanUp, () -> assertPoints(helper, saturated, 0.0, "37 ticks in, saturated")));
+            helper.runAfterDelay(43, () -> step(cleanUp, () -> {
+                assertPoints(helper, saturated, 1.0, "43 ticks in, saturated");
+                assertPoints(helper, fed, 0.0, "43 ticks in at 19 food");
+            }));
+            helper.runAfterDelay(77, () -> step(cleanUp, () -> assertPoints(helper, fed, 0.0, "77 ticks in at 19 food")));
+            helper.runAfterDelay(83, () -> {
+                try {
+                    assertPoints(helper, fed, 1.0, "83 ticks in at 19 food");
+                    assertPoints(helper, saturated, 2.0, "83 ticks in, saturated");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Soft landings cut the fall as in vanilla, so 9 blocks onto hay leaves the legs whole while 9 onto stone breaks them;
+    // a creative player takes no fall at all
+    @GameTest(environment = LEGS)
+    public void legs1HayBaleAndCreativeKeepLegs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer onHay = join(helper, "HayLander");
+        ServerPlayer onStone = join(helper, "StoneLander");
+        ServerPlayer creative = TestPlayers.join(helper, "CreativeLander", GameType.CREATIVE, AT);
+        TestPlayers.markLoaded(creative);
+        try {
+            BlockPos hay = helper.absolutePos(new BlockPos(3, 0, 3));
+            BlockPos stone = helper.absolutePos(new BlockPos(5, 0, 3));
+            helper.setBlock(new BlockPos(3, 0, 3), Blocks.HAY_BLOCK);
+            helper.setBlock(new BlockPos(5, 0, 3), Blocks.STONE);
+            Blocks.HAY_BLOCK.fallOn(level, level.getBlockState(hay), hay, onHay, 9.0);
+            helper.assertTrue(onHay.getHealth() < onHay.getMaxHealth(), "the fall onto hay did no damage");
+            helper.assertFalse(Legs.broken(onHay), "9 blocks onto hay broke the legs");
+            Blocks.STONE.fallOn(level, level.getBlockState(stone), stone, onStone, 9.0);
+            helper.assertTrue(Legs.broken(onStone), "9 blocks onto stone left the legs whole");
+            Blocks.STONE.fallOn(level, level.getBlockState(stone), stone, creative, 20.0);
+            helper.assertFalse(Legs.broken(creative), "a creative player's 20-block fall broke the legs");
+        } finally {
+            Legs.set(onStone.getUUID(), false);
+            leave(onHay);
+            leave(onStone);
+            leave(creative);
+        }
+        helper.succeed();
     }
 
     // A failed check ends the test at once, so the player isn't left online for the rest of the batch
