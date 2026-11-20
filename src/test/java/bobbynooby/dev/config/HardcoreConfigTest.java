@@ -1,6 +1,8 @@
 package bobbynooby.dev.config;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -658,5 +660,142 @@ class HardcoreConfigTest {
         assertEquals(List.of(), edges.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList());
         assertEquals(6, edges.config().hardcore.curse.maxLostHearts);
         assertNull(ConfigChecks.curseOutlastsLimp(edges.config()));
+    }
+
+    // A file holding each value at its dotted path, as an admin would type them, read at startup
+    private ConfigLoader.Result loadValues(Map<String, String> values) throws IOException {
+        JsonObject root = new JsonObject();
+        for (Map.Entry<String, String> value : values.entrySet()) {
+            JsonObject section = root;
+            String[] parts = value.getKey().split("\\.");
+            for (int i = 0; i < parts.length - 1; i++) {
+                if (!section.has(parts[i])) {
+                    section.add(parts[i], new JsonObject());
+                }
+                section = section.getAsJsonObject(parts[i]);
+            }
+            section.add(parts[parts.length - 1], JsonParser.parseString(value.getValue()));
+        }
+        return loadJson(root.toString());
+    }
+
+    // Each value right on the edge of what its check allows, alone or with the pair it has to fit, is read as typed
+    // with no warning at all. One check written with < for <= would send it back.
+    @Test
+    void config1EveryLoadCheckKeepsItsInsideEdges() throws IOException {
+        List<String> shares = List.of("hardcore.slow.cap", "hardcore.weight.maxSlow", "hardcore.weight.containerContents",
+                "hardcore.legs.slow", "hardcore.limp.slow", "hardcore.nutrients.startLevel", "hardcore.nutrients.deficientBelow",
+                "hardcore.nutrients.penalties.sugar.sprintSlow", "hardcore.nutrients.penalties.vitamins.miningSlow",
+                "hardcore.anvil.breakChance", "hardcore.relentlessMobs.doorBreakerChance", "hardcore.bloodMoon.chance",
+                "hardcore.bloodMoon.armourChance", "hardcore.bloodMoon.enchantChance", "hardcore.bloodMoon.chargedCreeperChance",
+                "hardcore.cold.leatherPerPiece", "hardcore.cold.maxSlow");
+        List<Map<String, String>> cases = new ArrayList<>();
+        for (String share : shares) {
+            cases.add(Map.of(share, "0"));
+            cases.add(Map.of(share, "1"));
+        }
+        for (String aboveZero : List.of("hardcore.slow.step", "hardcore.curse.healEveryDays", "hardcore.tougherMobs.health",
+                "hardcore.relentlessMobs.followRange", "hardcore.bloodMoon.health", "hardcore.limp.belowHearts")) {
+            cases.add(Map.of(aboveZero, "1e-9"));
+        }
+        for (String price : List.of("hardcore.anvil.enchantCost", "hardcore.anvil.repairCost", "hardcore.anvil.renameCost")) {
+            cases.add(Map.of(price, "1"));
+            cases.add(Map.of(price, "39"));
+        }
+        cases.add(Map.of("hardcore.weight.containerDepth", "0"));
+        cases.add(Map.of("hardcore.weight.containerDepth", "8"));
+        cases.add(Map.of("hardcore.cold.shelteredBelowSkyLight", "0"));
+        cases.add(Map.of("hardcore.cold.shelteredBelowSkyLight", "15"));
+        cases.add(Map.of("hardcore.cold.heatRadius", "0"));
+        cases.add(Map.of("hardcore.cold.heatRadius", "8"));
+        cases.add(Map.of("hardcore.cold.damageEverySeconds", "1"));
+        cases.add(Map.of("hardcore.curse.afkMinutes", "1"));
+        cases.add(Map.of("hardcore.bloodMoon.warnTick", "0"));
+        cases.add(Map.of("hardcore.bloodMoon.endTick", "23999"));
+        cases.add(Map.of("hardcore.bloodMoon.warnTick", "0", "hardcore.bloodMoon.startTick", "1", "hardcore.bloodMoon.endTick", "2"));
+        cases.add(Map.of("hardcore.slow.cap", "1", "hardcore.slow.step", "1"));
+        cases.add(Map.of("hardcore.limp.belowHearts", "0.5", "hardcore.limp.recoverAtHearts", "0.51"));
+        cases.add(Map.of("hardcore.legs.breakAtDamage", "0", "hardcore.legs.breakAtDamageFullLoad", "0"));
+        cases.add(Map.of("hardcore.weight.freeLoad", "0", "hardcore.weight.fullLoad", "1e-9"));
+
+        for (Map<String, String> values : cases) {
+            ConfigLoader.Result r = loadValues(values);
+            assertEquals(List.of(), r.warnings(), values.toString());
+            for (Map.Entry<String, String> value : values.entrySet()) {
+                assertEquals(Double.parseDouble(value.getValue()), key(value.getKey()).json(r.config()).getAsDouble(),
+                        values.toString());
+            }
+        }
+    }
+
+    // One step past each edge, or a pair that only just touches, falls back: exactly that key's warning, or both keys of
+    // the pair (all three of the blood moon's times), and every hardcore value is its default again
+    @Test
+    void config1EveryLoadCheckRefusesJustOutside() throws IOException {
+        String order = "must keep 0 <= warnTick < startTick < endTick <= 23999";
+        List<String> moonOrder = List.of("hardcore.bloodMoon.warnTick: " + order, "hardcore.bloodMoon.startTick: " + order,
+                "hardcore.bloodMoon.endTick: " + order);
+        Map<Map<String, String>, List<String>> cases = new LinkedHashMap<>();
+        cases.put(Map.of("hardcore.weight.containerDepth", "-1"), List.of("hardcore.weight.containerDepth: must be 0 to 8"));
+        cases.put(Map.of("hardcore.cold.shelteredBelowSkyLight", "-1"), List.of("hardcore.cold.shelteredBelowSkyLight: must be 0 to 15"));
+        cases.put(Map.of("hardcore.cold.heatRadius", "-1"), List.of("hardcore.cold.heatRadius: must be 0 to 8"));
+        cases.put(Map.of("hardcore.anvil.enchantCost", "40"), List.of("hardcore.anvil.enchantCost: must be 1 to 39"));
+        cases.put(Map.of("hardcore.anvil.renameCost", "40"), List.of("hardcore.anvil.renameCost: must be 1 to 39"));
+        cases.put(Map.of("hardcore.anvil.repairCost", "0"), List.of("hardcore.anvil.repairCost: must be 1 to 39"));
+        cases.put(Map.of("hardcore.bloodMoon.endTick", "24000"), moonOrder);
+        cases.put(Map.of("hardcore.bloodMoon.warnTick", "-1"), moonOrder);
+        cases.put(Map.of("hardcore.bloodMoon.warnTick", "12542"), moonOrder);
+        cases.put(Map.of("hardcore.bloodMoon.startTick", "23460"), moonOrder);
+        cases.put(Map.of("hardcore.weight.freeLoad", "144"), List.of("hardcore.weight.freeLoad: must be below hardcore.weight.fullLoad",
+                "hardcore.weight.fullLoad: must be above hardcore.weight.freeLoad"));
+        cases.put(Map.of("hardcore.limp.belowHearts", "3"), List.of("hardcore.limp.belowHearts: must be less than hardcore.limp.recoverAtHearts",
+                "hardcore.limp.recoverAtHearts: must be more than hardcore.limp.belowHearts"));
+        cases.put(Map.of("hardcore.slow.step", "0.500000001"), List.of("hardcore.slow.step: must be at most hardcore.slow.cap",
+                "hardcore.slow.cap: must be at least hardcore.slow.step"));
+        for (Map.Entry<Map<String, String>, List<String>> refused : cases.entrySet()) {
+            assertFellBack(loadValues(refused.getKey()), refused.getValue());
+        }
+    }
+
+    // A mob may do no extra damage, and an entry with nothing in it changes nothing, but a health of 0 would kill the
+    // mob as it loads, so it sends the whole map back
+    @Test
+    void config1OverrideHealthZeroIsRefusedButDamageZeroIsKept() throws IOException {
+        Map<String, Map<String, Double>> kept = loadJson("{\"hardcore\":{\"tougherMobs\":{\"overrides\":"
+                + "{\"minecraft:zombie\":{\"damage\":0},\"minecraft:husk\":{}}}}}").config().hardcore.tougherMobs.overrides;
+        assertEquals(Map.of("minecraft:zombie", Map.of("damage", 0.0), "minecraft:husk", Map.of()), kept);
+
+        ConfigLoader.Result refused = loadJson("{\"hardcore\":{\"tougherMobs\":{\"overrides\":{\"minecraft:zombie\":{\"health\":0}}}}}");
+        assertEquals(new YoltConfig().hardcore.tougherMobs.overrides, refused.config().hardcore.tougherMobs.overrides);
+        assertTrue(refused.warnings().contains("hardcore.tougherMobs.overrides: every value must name health, damage or speed and be 0"
+                + " or more, with health above 0, using default"), refused.warnings().toString());
+    }
+
+    // A share of exactly 0 or 1 is fine, and so is a food that gives nothing at all; a hair over 1 sends the map back
+    @Test
+    void config1FoodSharesAtTheirEdgesAndEmptyObjectAreKept() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"hardcore\":{\"nutrients\":{\"foods\":"
+                + "{\"minecraft:apple\":{\"protein\":0,\"sugar\":1},\"minecraft:bread\":{}}}}}");
+        assertEquals(Map.of("minecraft:apple", Map.of("protein", 0.0, "sugar", 1.0), "minecraft:bread", Map.of()),
+                r.config().hardcore.nutrients.foods);
+        assertEquals(List.of(), r.warnings());
+
+        ConfigLoader.Result over = loadJson("{\"hardcore\":{\"nutrients\":{\"foods\":{\"minecraft:apple\":{\"protein\":1.0000001}}}}}");
+        assertEquals(new YoltConfig().hardcore.nutrients.foods, over.config().hardcore.nutrients.foods);
+        assertTrue(over.warnings().contains("hardcore.nutrients.foods: every share must be 0 to 1 and name protein, vitamins or sugar,"
+                + " using default"), over.warnings().toString());
+    }
+
+    // The curse may take more hearts than a player has; the notice then counts what is left as none, not below none
+    @Test
+    void config1CurseOutlastsLimpNoticeClampsAtZeroHearts() {
+        YoltConfig config = new YoltConfig();
+        config.hardcore.curse.enabled = true;
+        config.hardcore.limp.enabled = true;
+        config.hardcore.curse.maxLostHearts = 12;
+        String notice = ConfigChecks.curseOutlastsLimp(config);
+        assertNotNull(notice);
+        assertTrue(notice.startsWith("with hardcore.curse.maxLostHearts 12, a fully cursed player has 0 hearts,"), notice);
+        assertFalse(notice.contains("-2"), notice);
     }
 }
