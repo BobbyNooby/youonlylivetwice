@@ -237,4 +237,42 @@ class ConfigKeysTest {
     void emptyProblemStaysEmpty() {
         assertEquals("", ConfigKeys.asReply(""));
     }
+
+    // Each kind reads only text that is plainly its own: the case of true and of a choice's name matters, a whole
+    // number must fit in an int and have no exponent or spaces, and a duration is whole minutes from 1 or exactly offline
+    @Test
+    void parsesEdgeTextForEachKind() throws ConfigKey.BadValue {
+        badValue("hide.tabList", "TRUE");
+        badValue("hide.tabList", "True");
+
+        assertEquals("chat.radius takes a whole number, not '2147483648'.", badValue("chat.radius", "2147483648"));
+        badValue("chat.radius", "1e3");
+        badValue("chat.radius", " 5");
+        assertEquals(new JsonPrimitive(5), key("chat.radius").parse("+5"));
+        assertEquals(new JsonPrimitive(Integer.MIN_VALUE), key("chat.radius").parse("-2147483648"));
+
+        assertEquals("worldBorder.endScale takes a number, not 'Infinity'.", badValue("worldBorder.endScale", "Infinity"));
+        badValue("worldBorder.endScale", "-Infinity");
+        // Too small for a double, so it reads as 0, which the range checks then judge
+        assertEquals(new JsonPrimitive(0.0), key("worldBorder.endScale").parse("1e-400"));
+
+        badValue("chat.mode", "Global");
+        badValue("chat.mode", "PROXIMITY");
+        badValue("graves.tellLocation", "whenmoved");
+
+        for (String bad : List.of("-1", "1.5", "Offline", "OFFLINE", "2147483648")) {
+            assertEquals("bodies.duration takes offline or whole minutes of 1 or more, not '" + bad + "'.", badValue("bodies.duration", bad));
+        }
+        assertEquals(new JsonPrimitive(1), key("bodies.duration").parse("1"));
+    }
+
+    // Java's own number reading takes a type suffix, a hex float and spaces round the number, and the file then holds
+    // the plain number. Harmless, but pinned so a change to it is a choice.
+    @Test
+    void doubleTakesJavaSuffixesAndHexFloats() throws ConfigKey.BadValue {
+        assertEquals(new JsonPrimitive(2.5), key("worldBorder.endScale").parse("2.5d"));
+        assertEquals(new JsonPrimitive(2.5), key("worldBorder.endScale").parse("2.5f"));
+        assertEquals(new JsonPrimitive(2.0), key("worldBorder.endScale").parse("0x1p1"));
+        assertEquals(new JsonPrimitive(2.5), key("worldBorder.endScale").parse(" 2.5 "));
+    }
 }
