@@ -18,6 +18,9 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.animal.wolf.Wolf;
 import net.minecraft.world.level.GameType;
 
 import java.util.ArrayList;
@@ -146,6 +149,54 @@ public class ChatGameTests {
             BodyTestKit.removeGraves(helper, dying.getUUID());
         }
         helper.succeed();
+    }
+
+    // Vanilla sends a pet's death message straight to its owner, wherever they are, and it names the killer
+    @GameTest
+    public void petDeathMessageDoesNotNameTheKillerToTheOwner(GameTestHelper helper) {
+        YoltConfig.HideSection hide = Settings.get().hide;
+        boolean hiddenBefore = hide.gameMessages;
+        List<ServerPlayer> joined = new ArrayList<>();
+        try {
+            TestPlayers.Recording owner = joinRecording(helper, joined, "petowner", BlockPos.ZERO);
+            owner.teleportTo(owner.getX() + 200, owner.getY(), owner.getZ());
+            ServerPlayer killer = join(helper, joined, "petkiller", new BlockPos(1, 0, 0));
+            String killerName = killer.getGameProfile().name();
+
+            // The control: with game messages shown, the owner is told, so the kill below does send the line
+            hide.gameMessages = false;
+            killPet(helper, owner, killer);
+            helper.assertValueEqual(linesNaming(owner, killerName), 1, "pet death messages the owner got with game messages shown");
+
+            owner.messages.clear();
+            hide.gameMessages = true;
+            killPet(helper, owner, killer);
+            helper.assertValueEqual(linesNaming(owner, killerName), 0, "pet death messages the owner got with game messages hidden");
+
+            owner.messages.clear();
+            TestPlayers.op(owner);
+            AdminView.set(owner, true);
+            killPet(helper, owner, killer);
+            helper.assertValueEqual(linesNaming(owner, killerName), 1, "pet death messages an owner in admin view got");
+            AdminView.set(owner, false);
+            TestPlayers.deop(owner);
+        } finally {
+            hide.gameMessages = hiddenBefore;
+            leaveAll(joined);
+        }
+        helper.succeed();
+    }
+
+    private static void killPet(GameTestHelper helper, ServerPlayer owner, ServerPlayer killer) {
+        Wolf wolf = EntityTypes.WOLF.spawn(helper.getLevel(), helper.absolutePos(new BlockPos(1, 1, 1)), EntitySpawnReason.TRIGGERED);
+        helper.assertTrue(wolf != null, "no wolf was spawned");
+        wolf.tame(owner);
+        wolf.hurtServer(helper.getLevel(), helper.getLevel().damageSources().playerAttack(killer), 1_000.0F);
+        helper.assertTrue(wolf.isDeadOrDying(), "the wolf did not die");
+    }
+
+    private static int linesNaming(TestPlayers.Recording player, String name) {
+        return (int) player.messages.stream().filter(message -> message.getString().contains(name)).count();
     }
 
     // With restrictCommands off anyone may /me, and only a gamemaster's is an announcement

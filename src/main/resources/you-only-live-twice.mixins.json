@@ -85,6 +85,7 @@
     "NoBedRespawnMixin",
     "NorthCompassPlayerListMixin",
     "NorthCompassServerMixin",
+    "PetDeathMessageMixin",
     "PlayerCountLegacyMixin",
     "PlayerCountMixin",
     "PlayerCountQueryMixin",

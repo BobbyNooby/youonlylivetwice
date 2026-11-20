@@ -63,6 +63,11 @@ public final class ChatDelivery {
         return recipients;
     }
 
+    /** True when a game message, such as a death message, may go to this player: always, unless they are hidden. */
+    public static boolean seesGameMessages(ServerPlayer player) {
+        return !Settings.on(c -> c.hide.gameMessages) || AdminView.isOn(player);
+    }
+
     private static boolean onChat(PlayerChatMessage message, ServerPlayer sender, ChatType.Bound chatType) {
         if (!Settings.on(c -> c.chat.mode != YoltConfig.ChatMode.GLOBAL)) {
             return true;
