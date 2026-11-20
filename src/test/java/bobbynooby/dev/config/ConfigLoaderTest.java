@@ -1416,6 +1416,213 @@ class ConfigLoaderTest {
         assertFalse(Files.exists(dir.resolve("config.json.bak")));
     }
 
+    // The smallest border, no wait at all, a chat radius of one block, the smallest End scale a double holds, and an End
+    // border of exactly vanilla's largest are all kept as typed. One block below the radius's edge falls back.
+    @Test
+    void coreRangesKeepTheirInsideEdges() throws IOException {
+        ConfigLoader.Result small = loadJson("{\"worldBorder\":{\"diameter\":1,\"endScale\":" + Double.MIN_VALUE + "},"
+                + "\"deathLockout\":{\"cooldownDays\":0},\"chat\":{\"radius\":1}}");
+        assertEquals(List.of(), small.warnings());
+        assertEquals(1, small.config().worldBorder.diameter);
+        assertEquals(Double.MIN_VALUE, small.config().worldBorder.endScale);
+        assertEquals(0, small.config().deathLockout.cooldownDays);
+        assertEquals(1, small.config().chat.radius);
+
+        ConfigLoader.Result atTheCap = loadJson("{\"worldBorder\":{\"diameter\":" + ConfigLoader.MAX_BORDER_DIAMETER / 2
+                + ",\"endScale\":2.0}}");
+        assertEquals(List.of(), atTheCap.warnings());
+        assertEquals(2.0, atTheCap.config().worldBorder.endScale);
+
+        ConfigLoader.Result below = loadJson("{\"chat\":{\"radius\":-5}}");
+        assertEquals(48, below.config().chat.radius);
+        assertTrue(below.warnings().contains("chat.radius: must be 1 or more, using default"), below.warnings().toString());
+    }
+
+    // A reload of a file 1.0.0 wrote upgrades it as a start would: the copy, the switch turned on with its note, and the
+    // rewrite at this version. A key the old file leaves out keeps the value in use, as on any reload, not its default.
+    @Test
+    void reloadOfAV1FileUpgradesAndKeepsLiveValuesForMissingKeys() throws IOException {
+        Path file = dir.resolve("config.json");
+        String old = "{\"configVersion\":1,\"hide\":{\"coordinates\":false}}";
+        Files.writeString(file, old);
+        YoltConfig live = new YoltConfig();
+        live.chat.radius = 20;
+        live.randomSpawn = false;
+        live.hide.coordinates = false;
+
+        ConfigLoader.Result r = ConfigLoader.load(file, live, false);
+        assertEquals(List.of("config was v1 and is upgraded to v2, old file saved as config.json.v1.bak", turnedOn("hide.coordinates")),
+                r.warnings());
+        assertTrue(r.config().hide.coordinates);
+        assertEquals(20, r.config().chat.radius);
+        assertFalse(r.config().randomSpawn);
+        assertTrue(r.rewritten());
+        assertEquals(old, Files.readString(dir.resolve("config.json.v1.bak")));
+        JsonObject written = readJson(file);
+        assertEquals(ConfigLoader.CURRENT_VERSION, written.get("configVersion").getAsInt());
+        assertTrue(written.getAsJsonObject("hide").get("coordinates").getAsBoolean());
+        assertEquals(20, written.getAsJsonObject("chat").get("radius").getAsInt());
+    }
+
+    // The file is the admin's to fix, so comments in it are read past rather than making it unreadable. It isn't kept
+    // as a .bak, since nothing typed fell back, and the rewrite leaves the comments out, as the docs say.
+    @Test
+    void commentedFileIsReadNotReset() throws IOException {
+        ConfigLoader.Result r = loadJson("""
+                {
+                  // proximity chat reaches this far
+                  "chat": {"radius": 20 /* blocks */}
+                }""");
+        assertEquals(20, r.config().chat.radius);
+        assertFalse(r.unparseable());
+        assertEquals(List.of(), r.warnings());
+        assertFalse(Files.exists(dir.resolve("config.json.bak")));
+        String rewritten = Files.readString(dir.resolve("config.json"));
+        assertFalse(rewritten.contains("//") || rewritten.contains("/*"), rewritten);
+        assertEquals(20, readJson(dir.resolve("config.json")).getAsJsonObject("chat").get("radius").getAsInt());
+    }
+
+    // A damaged 1.0.0 file whose sections aren't objects can't stop the upgrade: the step has nothing to flip there, the
+    // merge warns as it would in any file, and a switch whose section is missing takes its new default with no note
+    @Test
+    void v1StepSkipsASectionThatIsNotAnObject() throws IOException {
+        ConfigLoader.Result r = assertDoesNotThrow(() -> loadJson("{\"configVersion\":1,\"hide\":true,\"skins\":[]}"));
+        assertTrue(r.warnings().contains("hide: expected an object, using default"), r.warnings().toString());
+        assertTrue(r.warnings().contains("skins: expected an object, using default"), r.warnings().toString());
+        assertTrue(r.warnings().stream().noneMatch(w -> w.contains("To keep it off")), r.warnings().toString());
+        assertTrue(r.config().hide.coordinates);
+        assertTrue(r.config().skins.lockAfterFirstChoice);
+        assertTrue(r.config().chat.allowWhispers);
+        assertEquals(ConfigLoader.CURRENT_VERSION, readJson(dir.resolve("config.json")).get("configVersion").getAsInt());
+    }
+
+    // Some editors on Windows start a UTF-8 file with a byte order mark, which must not make it unreadable
+    @Test
+    void fileWithAByteOrderMarkIsRead() throws IOException {
+        ConfigLoader.Result r = loadJson("﻿{\"chat\":{\"radius\":20}}");
+        assertFalse(r.unparseable());
+        assertEquals(20, r.config().chat.radius);
+        assertEquals(List.of(), r.warnings());
+    }
+
+    // The JSON reader keeps the last of two values for one key and says nothing, so the second one counts. Pinned so a
+    // change to that is a choice.
+    @Test
+    void duplicateKeyTakesTheLastValueSilently() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":{\"radius\":20,\"radius\":30}}");
+        assertEquals(30, r.config().chat.radius);
+        assertEquals(List.of(), r.warnings());
+    }
+
+    // The docs say an unknown key is left out of the rewrite. What was typed is kept in the .bak first, since the
+    // rewrite drops it.
+    @Test
+    void unknownKeyIsLeftOutOfTheRewrite() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":{\"colour\":1,\"radius\":20}}");
+        assertTrue(r.warnings().contains("chat.colour: unknown key, ignored"), r.warnings().toString());
+        assertEquals(20, r.config().chat.radius);
+        JsonObject chat = readJson(dir.resolve("config.json")).getAsJsonObject("chat");
+        assertFalse(chat.has("colour"), chat.toString());
+        assertEquals(20, chat.get("radius").getAsInt());
+        assertEquals(1, readJson(dir.resolve("config.json.bak")).getAsJsonObject("chat").get("colour").getAsInt());
+    }
+
+    // Only whole minutes from 1 up to an int's largest, or exactly "offline", are a duration. Each other value falls
+    // back to offline, the default, with the warning for its kind.
+    @Test
+    void bodyDurationRejectsFractionsStringsAndOtherCases() throws IOException {
+        String notADuration = "bodies.duration: expected \"offline\" or minutes of 1 or more, using default";
+        Map<String, String> refused = new LinkedHashMap<>();
+        refused.put("1.5", notADuration);
+        refused.put("\"30\"", notADuration);
+        refused.put("\"Offline\"", notADuration);
+        refused.put("2147483648", notADuration);
+        refused.put("true", "bodies.duration: expected \"offline\" or a number, using default");
+        refused.put("{}", "bodies.duration: wrong type, using default");
+        for (Map.Entry<String, String> bad : refused.entrySet()) {
+            ConfigLoader.Result r = loadJson("{\"bodies\":{\"duration\":" + bad.getKey() + "}}");
+            assertTrue(r.config().bodies.duration.isOffline(), bad.getKey());
+            assertTrue(r.warnings().contains(bad.getValue()), bad.getKey() + ": " + r.warnings());
+        }
+        assertEquals(1, loadJson("{\"bodies\":{\"duration\":1}}").config().bodies.duration.minutes());
+        ConfigLoader.Result most = loadJson("{\"bodies\":{\"duration\":2147483647}}");
+        assertEquals(Integer.MAX_VALUE, most.config().bodies.duration.minutes());
+        assertEquals(List.of(), most.warnings());
+    }
+
+    // A choice's name is matched exactly, as /yolt config matches it, so a capital or a missing one is an unknown value
+    @Test
+    void enumCaseMismatchFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"chat\":{\"mode\":\"Global\"},\"graves\":{\"tellLocation\":\"whenmoved\"}}");
+        assertEquals(YoltConfig.ChatMode.PROXIMITY, r.config().chat.mode);
+        assertEquals(YoltConfig.TellLocation.WHEN_MOVED, r.config().graves.tellLocation);
+        assertTrue(r.warnings().contains("chat.mode: unknown value, using default"), r.warnings().toString());
+        assertTrue(r.warnings().contains("graves.tellLocation: unknown value, using default"), r.warnings().toString());
+    }
+
+    // The reader takes a bare NaN as text, which is no number: the key falls back, and the rewrite, which can't hold a
+    // NaN, still goes through
+    @Test
+    void lenientNaNForADoubleFallsBack() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"worldBorder\":{\"endScale\":NaN},\"chat\":{\"radius\":20}}");
+        assertEquals(2.0, r.config().worldBorder.endScale);
+        assertEquals(20, r.config().chat.radius);
+        assertTrue(r.warnings().contains("worldBorder.endScale: expected a number, using default"), r.warnings().toString());
+        assertTrue(r.rewritten());
+        assertEquals(2.0, readJson(dir.resolve("config.json")).getAsJsonObject("worldBorder").get("endScale").getAsDouble());
+    }
+
+    // With no file at all, setting a key writes the whole config, so the next start reads every key back. There was
+    // nothing to copy.
+    @Test
+    void setKeyWithNoFileWritesTheWholeConfig() throws IOException {
+        Path file = dir.resolve("config.json");
+        ConfigLoader.Change change = ConfigLoader.setKey(file, new YoltConfig(), key("chat.radius"), new JsonPrimitive(20));
+        assertNull(change.problem());
+        assertNull(change.backup());
+        assertEquals(20, change.config().chat.radius);
+        assertEquals(new Gson().toJsonTree(change.config()), readJson(file));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file.getFileName()), files.map(Path::getFileName).toList());
+        }
+    }
+
+    // A value fine on its own that crosses its pair is refused before the file is touched, with the pair rule's own
+    // words. Moving the other key out of the way first lets the same kind of change through.
+    @Test
+    void setKeyRefusesAPairCrossing() throws IOException {
+        Path file = dir.resolve("config.json");
+        byte[] before = "{}".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, before);
+        YoltConfig live = new YoltConfig();
+        Map<String, JsonPrimitive> crossing = new LinkedHashMap<>();
+        crossing.put("hardcore.limp.belowHearts", new JsonPrimitive(3.0));
+        crossing.put("hardcore.slow.cap", new JsonPrimitive(0.03));
+        crossing.put("hardcore.bloodMoon.warnTick", new JsonPrimitive(13000));
+        crossing.put("hardcore.weight.freeLoad", new JsonPrimitive(144.0));
+        Map<String, String> problems = Map.of(
+                "hardcore.limp.belowHearts", "hardcore.limp.belowHearts: must be less than hardcore.limp.recoverAtHearts",
+                "hardcore.slow.cap", "hardcore.slow.step: must be at most hardcore.slow.cap",
+                "hardcore.bloodMoon.warnTick", "hardcore.bloodMoon.warnTick: must keep 0 <= warnTick < startTick < endTick <= 23999",
+                "hardcore.weight.freeLoad", "hardcore.weight.freeLoad: must be below hardcore.weight.fullLoad");
+        for (Map.Entry<String, JsonPrimitive> value : crossing.entrySet()) {
+            ConfigLoader.Change change = ConfigLoader.setKey(file, live, key(value.getKey()), value.getValue());
+            assertEquals(problems.get(value.getKey()), change.problem(), value.getKey());
+            assertNull(change.config(), value.getKey());
+            assertArrayEquals(before, Files.readAllBytes(file), value.getKey());
+        }
+
+        ConfigLoader.Change recover = ConfigLoader.setKey(file, live, key("hardcore.limp.recoverAtHearts"), new JsonPrimitive(6.0));
+        assertNull(recover.problem());
+        ConfigLoader.Change below = ConfigLoader.setKey(file, recover.config(), key("hardcore.limp.belowHearts"), new JsonPrimitive(5.0));
+        assertNull(below.problem());
+        assertEquals(5.0, below.config().hardcore.limp.belowHearts);
+        assertEquals(6.0, below.config().hardcore.limp.recoverAtHearts);
+        JsonObject limp = readJson(file).getAsJsonObject("hardcore").getAsJsonObject("limp");
+        assertEquals(5.0, limp.get("belowHearts").getAsDouble());
+        assertEquals(6.0, limp.get("recoverAtHearts").getAsDouble());
+    }
+
     // A map in the file replaces the default whole, so an entry a later version adds to the default never reaches it.
     // Whoever adds one has to write a step for it.
     @Test
