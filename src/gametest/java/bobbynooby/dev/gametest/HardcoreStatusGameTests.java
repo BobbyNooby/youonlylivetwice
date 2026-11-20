@@ -34,12 +34,15 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.gamerules.GameRules;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -50,6 +53,10 @@ import java.util.regex.Pattern;
 // Each test flips its switches and puts them back inside one tick, so no other test sees them. A test line answers
 // only for the test's own player, since every test shares the one server.
 public class HardcoreStatusGameTests {
+    // Every switch off, said out loud
+    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
+    // The limp on, which needs a tick to see a player's health
+    private static final String LIMP = "you-only-live-twice-gametest:hardcore_limp";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final String TEST_LINE = "Feeling fine";
     private static final Pattern DIGITS = Pattern.compile("\\d+");
@@ -359,6 +366,226 @@ public class HardcoreStatusGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // Something with no body, the console or a command block, is told so and nothing else, and the command fails
+    @GameTest
+    public void status1ConsoleIsToldOnlyAPlayerHasABody(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        boolean weightBefore = config.hardcore.weight.enabled;
+        try {
+            config.hardcore.weight.enabled = true;
+            int[] result = {-1};
+            helper.assertValueEqual(CommandGameTests.run(server, "status", value -> result[0] = value),
+                    List.of("Only a player has a body to report on."), "the console's /status");
+            helper.assertValueEqual(result[0], 0, "the console's result");
+
+            BlockPos blockAt = new BlockPos(4, 1, 4);
+            helper.setBlock(blockAt, Blocks.COMMAND_BLOCK);
+            CommandBlockEntity block = helper.getBlockEntity(blockAt, CommandBlockEntity.class);
+            block.getCommandBlock().setCommand("status");
+            block.getCommandBlock().performCommand(helper.getLevel());
+            // A command block counts any run that parsed as a success, whatever the command returned, so only its
+            // output tells
+            helper.assertTrue(block.getCommandBlock().getLastOutput().getString().endsWith("Only a player has a body to report on."),
+                    "the command block's output: " + block.getCommandBlock().getLastOutput().getString());
+        } finally {
+            config.hardcore.weight.enabled = weightBefore;
+        }
+        helper.succeed();
+    }
+
+    // The report goes straight to the player, so it shows even with command feedback off
+    @GameTest
+    public void status1ReportShowsWithCommandFeedbackOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Unfed", GameType.SURVIVAL, AT);
+        YoltConfig config = Settings.get();
+        boolean weightBefore = config.hardcore.weight.enabled;
+        boolean feedbackBefore = helper.getLevel().getGameRules().get(GameRules.SEND_COMMAND_FEEDBACK);
+        Runnable unregister = testLine(player);
+        try {
+            config.hardcore.weight.enabled = true;
+            helper.getLevel().getGameRules().set(GameRules.SEND_COMMAND_FEEDBACK, false, server);
+            int from = player.messages.size();
+            sendCommand(player, "status");
+            List<String> lines = texts(player, from);
+            helper.assertTrue(!lines.isEmpty() && lines.getFirst().equals("Your body"), "the report: " + lines);
+            helper.assertTrue(lines.stream().anyMatch(line -> line.startsWith("Load ")), "the report has no load line: " + lines);
+            helper.assertTrue(lines.contains(TEST_LINE), "the report has no test line: " + lines);
+        } finally {
+            helper.getLevel().getGameRules().set(GameRules.SEND_COMMAND_FEEDBACK, feedbackBefore, server);
+            config.hardcore.weight.enabled = weightBefore;
+            unregister.run();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The hunger tax has no switch, so a multiplier other than 1 is a feature on by itself: everyone gets /status, and
+    // the report is the rules block alone
+    @GameTest(environment = ALL_OFF)
+    public void status1HungerTaxAloneTurnsStatusOn(GameTestHelper helper) {
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "TaxedOnly", GameType.SURVIVAL, AT);
+        YoltConfig config = Settings.get();
+        boolean restrictBefore = config.restrictCommands;
+        double hungerBefore = config.hardcore.hungerTax.multiplier;
+        try {
+            helper.assertFalse(Hardcore.anyOn(), "a hardcore switch is on");
+            config.hardcore.hungerTax.multiplier = 2.0;
+            config.restrictCommands = true;
+            helper.assertTrue(Hardcore.anyOn(), "the hunger tax alone isn't a feature on");
+            helper.getLevel().getServer().getCommands().sendCommands(player);
+            helper.assertTrue(CommandRestrictionGameTests.lastTree(helper, player).getChild("status") != null,
+                    "the tree sent to a non-op has no status with the hunger tax alone");
+            int from = player.messages.size();
+            sendCommand(player, "status");
+            helper.assertValueEqual(texts(player, from), List.of("Your body", "Server rules", "  hunger ×2"), "the report");
+        } finally {
+            config.hardcore.hungerTax.multiplier = hungerBefore;
+            config.restrictCommands = restrictBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A line that throws is left out and logged; the rest of the report still comes
+    @GameTest
+    public void status1ABrokenLineCostsNothingElse(GameTestHelper helper) {
+        TestPlayers.Recording player = TestPlayers.joinRecording(helper, "Broken", GameType.SURVIVAL, AT);
+        UUID id = player.getUUID();
+        YoltConfig config = Settings.get();
+        boolean weightBefore = config.hardcore.weight.enabled;
+        Runnable unregisterBroken = Status.registerForTesting(12, p -> {
+            if (p.getUUID().equals(id)) {
+                throw new IllegalStateException("a status line that fails");
+            }
+            return List.of();
+        });
+        Runnable unregisterGood = testLine(player);
+        try {
+            config.hardcore.weight.enabled = true;
+            int from = player.messages.size();
+            sendCommand(player, "status");
+            List<String> lines = texts(player, from);
+            helper.assertTrue(!lines.isEmpty() && lines.getFirst().equals("Your body"), "the report: " + lines);
+            helper.assertTrue(lines.stream().anyMatch(line -> line.startsWith("Load ")), "the report has no load line: " + lines);
+            helper.assertTrue(lines.contains(TEST_LINE), "the report has no test line: " + lines);
+        } finally {
+            config.hardcore.weight.enabled = weightBefore;
+            unregisterBroken.run();
+            unregisterGood.run();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // With a feature on but nothing to say about this player, an op reading their report is told so
+    @GameTest
+    public void status1OpReadsNothingToReportForAQuietPlayer(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Quiet", GameType.SURVIVAL, AT);
+        String name = player.nameAndId().name();
+        YoltConfig config = Settings.get();
+        boolean legsBefore = config.hardcore.legs.enabled;
+        try {
+            config.hardcore.legs.enabled = true;
+            helper.assertTrue(Hardcore.anyOn(), "no hardcore feature is on");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt status " + name), List.of(name + "'s body", "Nothing to report"),
+                    "/yolt status for a player with whole legs");
+        } finally {
+            config.hardcore.legs.enabled = legsBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The limp has no line of its own, so the Total line's hover names it, and only while the player limps
+    @GameTest(environment = LIMP, maxTicks = 20)
+    public void status1TotalHoverNamesALimp(GameTestHelper helper) {
+        ServerPlayer limper = TestPlayers.join(helper, "HoverLimper", GameType.SURVIVAL, AT);
+        ServerPlayer walker = TestPlayers.join(helper, "HoverWalker", GameType.SURVIVAL, AT.offset(3, 0, 0));
+        UUID walkerId = walker.getUUID();
+        Runnable unregister = Slowdowns.registerForTesting("test", p -> p.getUUID().equals(walkerId) ? 0.1 : 0.0);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            unregister.run();
+            TestPlayers.leave(limper);
+            TestPlayers.leave(walker);
+        });
+        boolean waiting = false;
+        try {
+            limper.setHealth(3.0F);
+            helper.runAfterDelay(2, () -> {
+                try {
+                    String limping = totalHover(helper, limper);
+                    helper.assertTrue(limping.endsWith(" It includes a limp from low health."), "the limper's hover: " + limping);
+                    String walking = totalHover(helper, walker);
+                    helper.assertFalse(walking.contains("limp"), "the hover at full health: " + walking);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // The order the hardcore page shows, and the rules in theirs
+    @GameTest
+    public void status1LinesComeInTheDocumentedOrder(GameTestHelper helper) {
+        List<String> lines = fullReport(helper, "Orderly").stream().map(Component::getString).toList();
+        int last = -1;
+        for (String start : List.of("Your body", "Load ", "Legs ", "Total ", "Curse ", "Nutrients ", "Cold ", "Resting ",
+                "Server rules", "  hunger ×", "  Mending ", "  anvil: ")) {
+            int at = -1;
+            for (int i = 0; i < lines.size(); i++) {
+                if (lines.get(i).startsWith(start)) {
+                    at = i;
+                    break;
+                }
+            }
+            helper.assertTrue(at > last, "'" + start + "' at line " + at + ", not after line " + last + ": " + lines);
+            last = at;
+        }
+        helper.succeed();
+    }
+
+    // Names are matched as the player list matches them, whatever their case
+    @GameTest
+    public void status1YoltStatusNameCase(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "CaseMixed", GameType.SURVIVAL, AT);
+        String name = player.nameAndId().name();
+        Runnable unregister = testLine(player);
+        YoltConfig config = Settings.get();
+        boolean weightBefore = config.hardcore.weight.enabled;
+        try {
+            config.hardcore.weight.enabled = true;
+            for (String typed : List.of(name.toLowerCase(Locale.ROOT), name.toUpperCase(Locale.ROOT))) {
+                List<String> output = CommandGameTests.run(server, "yolt status " + typed);
+                helper.assertTrue(!output.isEmpty() && output.getFirst().equals(name + "'s body"),
+                        "/yolt status " + typed + ": " + output);
+                helper.assertTrue(output.contains(TEST_LINE), "/yolt status " + typed + " left out the test line: " + output);
+            }
+        } finally {
+            config.hardcore.weight.enabled = weightBefore;
+            unregister.run();
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The Total line's hover, which the report must have
+    private static String totalHover(GameTestHelper helper, ServerPlayer player) {
+        Component total = startingWith(helper, Status.report(player), "Total ");
+        String text = hover(total.getStyle());
+        helper.assertTrue(text != null, "the Total line has no hover");
+        return text;
     }
 
     // A /status at its fullest: every feature on with something to say, in a bed. Everything is put back before it returns.
