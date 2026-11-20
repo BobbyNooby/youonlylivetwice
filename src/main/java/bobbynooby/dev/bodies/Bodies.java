@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
 public final class Bodies {
@@ -97,17 +99,29 @@ public final class Bodies {
 
     /** What a logout leaves: the body, with the player's last ground kept for it. */
     public static void leaveBody(ServerPlayer player) {
+        leaveBody(player, store -> store.saveNow(player.level().getServer()));
+    }
+
+    private static void leaveBody(ServerPlayer player, Consumer<BodyStore> save) {
         // A failure here must not stop the logout save that follows
-        Guard.run(() -> BodyLogout.onLogout(player), "Could not leave a body for {}", player.nameAndId().name());
+        Guard.run(() -> BodyLogout.onLogout(player, save), "Could not leave a body for {}", player.nameAndId().name());
         Guard.run(() -> keepGroundForBody(player), "Could not keep the last ground of {} for their body",
                 player.nameAndId().name());
     }
 
-    // The stop's kick most likely never gets as far as LEAVE, so everyone still online gets their body here. A LEAVE
-    // that does come after replaces it through the logout's own old-record path.
-    private static void leaveBodiesAtStop(MinecraftServer server) {
+    /**
+     * The stop's kick most likely never gets as far as LEAVE, so everyone still online gets their body here. A LEAVE
+     * that does come after replaces it through the logout's own old-record path. Each logout's write of the body file
+     * would write the whole data storage, so the stop writes it once, after them all, with the same in it. Public so a
+     * test can run it.
+     */
+    public static void leaveBodiesAtStop(MinecraftServer server) {
+        AtomicBoolean due = new AtomicBoolean();
         for (ServerPlayer player : List.copyOf(server.getPlayerList().getPlayers())) {
-            leaveBody(player);
+            leaveBody(player, store -> due.set(true));
+        }
+        if (due.get()) {
+            BodyStore.get(server).saveNow(server);
         }
     }
 

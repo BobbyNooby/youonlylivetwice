@@ -19,6 +19,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Leaves a body behind when a player logs out. */
 public final class BodyLogout {
@@ -26,6 +27,14 @@ public final class BodyLogout {
 
     /** The new body, or empty when this logout gets none. */
     public static Optional<Entity> onLogout(ServerPlayer player) {
+        return onLogout(player, store -> store.saveNow(player.level().getServer()));
+    }
+
+    /**
+     * The same, with save run on the store wherever the logout changed it and it would be written at once. The stop's
+     * logouts put that off to one write after them all.
+     */
+    static Optional<Entity> onLogout(ServerPlayer player, Consumer<BodyStore> save) {
         YoltConfig.BodiesSection cfg = Settings.get().bodies;
         // Dead players get none: the lockout's kick after a death comes through here too
         if (!Settings.active() || player.isDeadOrDying()
@@ -43,7 +52,7 @@ public final class BodyLogout {
             old.ifPresent(record -> {
                 store.remove(record.owner());
                 retire(server, player, record);
-                store.saveNow(server);
+                save.accept(store);
             });
             return Optional.empty();
         }
@@ -72,7 +81,7 @@ public final class BodyLogout {
         // it: the owner's next login takes over the record's state, so nothing is lost.
         old.ifPresent(record -> retire(server, player, record));
         // On disk before the logout is over, like the player's own save
-        store.saveNow(server);
+        save.accept(store);
         return Optional.of(body);
     }
 

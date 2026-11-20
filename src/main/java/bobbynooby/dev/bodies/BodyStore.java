@@ -60,6 +60,7 @@ public final class BodyStore extends SavedData {
     // True when a record in the file, or part of one, couldn't be read, so the next save would drop it
     private final boolean partlyRead;
     private boolean fileChecked;
+    private int writes;
 
     private BodyStore() {
         fromDisk = false;
@@ -112,6 +113,11 @@ public final class BodyStore extends SavedData {
         return fromNewer;
     }
 
+    /** How many times saveNow has written the data storage for this store. For a test. */
+    public int writes() {
+        return writes;
+    }
+
     /**
      * Writes the body file now, with every other changed entry of the data storage, which 26.3 can't save one by one.
      * A logout calls it: the player's own save is written at every logout, and a body record left for the next world
@@ -119,6 +125,7 @@ public final class BodyStore extends SavedData {
      * failed save is logged, never thrown: the logout goes on, and the next world save tries again.
      */
     public void saveNow(MinecraftServer server) {
+        writes++;
         setDirty();
         try {
             server.getDataStorage().saveAndJoin();

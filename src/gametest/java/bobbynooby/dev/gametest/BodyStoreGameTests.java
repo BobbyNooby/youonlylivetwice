@@ -2,6 +2,7 @@ package bobbynooby.dev.gametest;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.nbt.NbtAccounter;
+import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.BodyStore;
@@ -48,6 +49,8 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 public class BodyStoreGameTests {
+    private static final String BODY_STOP = "you-only-live-twice-gametest:body_stop";
+
     private static ItemStack damaged(net.minecraft.world.item.Item item, int damage) {
         ItemStack stack = new ItemStack(item);
         stack.set(DataComponents.DAMAGE, damage);
@@ -154,6 +157,39 @@ public class BodyStoreGameTests {
                     "the body file doesn't hold the record of the player who just logged out");
         } finally {
             BodyTestKit.cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // The stop leaves a body for everyone still online, and writes the body file once after them all rather than once
+    // for each. What is on disk after is what each one's write would have left: the store, every new record in it. A
+    // batch of its own, so only this test's players are online.
+    @GameTest(environment = BODY_STOP)
+    public void stopWritesTheBodyFileOnceForEveryone(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path file = BodyStore.TYPE.id().withSuffix(".dat").resolveAgainst(server.getWorldPath(LevelResource.DATA));
+        List<ServerPlayer> players = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            players.add(TestPlayers.join(helper, "AtTheStop" + i, GameType.SURVIVAL, new BlockPos(1 + 2 * i, 2, 1)));
+        }
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            helper.assertValueEqual(server.getPlayerList().getPlayers().size(), players.size(), "players online");
+            BodyStore store = BodyTestKit.store(helper);
+            int writes = store.writes();
+            Bodies.leaveBodiesAtStop(server);
+            helper.assertValueEqual(store.writes() - writes, 1, "writes of the body file at the stop");
+            for (ServerPlayer player : players) {
+                helper.assertTrue(store.byOwner(player.getUUID()).filter(record -> !record.pendingRemoval()).isPresent(),
+                        "no body record for " + player.nameAndId().name());
+            }
+            RegistryOps<Tag> ops = server.registryAccess().createSerializationContext(NbtOps.INSTANCE);
+            helper.assertValueEqual(NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap()).get("data"),
+                    BodyStore.TYPE.codec().encodeStart(ops, store).getOrThrow(), "the body file after the stop");
+        } finally {
+            for (ServerPlayer player : players) {
+                BodyTestKit.cleanUp(helper, player.getUUID(), before);
+            }
         }
         helper.succeed();
     }
