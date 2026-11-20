@@ -13,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleMenuProvider;
@@ -26,6 +27,7 @@ import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -345,6 +347,137 @@ public class HardcoreWeightGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // Told once as the load first slows, not again while it stays slow; put down and picked up again, told again
+    @GameTest(environment = WEIGHT, maxTicks = 120)
+    public void weight3TheHotbarSaysOnceWhenTheLoadFirstSlows(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Told", GameType.SURVIVAL, AT);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            player.getInventory().clearContent();
+            TestPlayers.leave(player);
+        });
+        boolean waiting = false;
+        try {
+            fill(player, Items.COBBLESTONE, 12);
+            helper.runAfterDelay(SETTLE, () -> step(cleanUp, () -> assertToldSlow(helper, player, 1, "once the load slowed")));
+            helper.runAfterDelay(SETTLE + 40, () -> step(cleanUp, () -> {
+                assertToldSlow(helper, player, 1, "40 ticks later, still slowed");
+                player.getInventory().clearContent();
+            }));
+            helper.runAfterDelay(2 * SETTLE + 40, () -> step(cleanUp, () -> {
+                assertSlow(helper, player, 0.0, "after the load was put down");
+                fill(player, Items.COBBLESTONE, 12);
+            }));
+            helper.runAfterDelay(3 * SETTLE + 40, () -> {
+                try {
+                    assertSlow(helper, player, 0.1, "with the load picked up again");
+                    assertToldSlow(helper, player, 2, "after the load was picked up again");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // With countContainers off a full box weighs what the box itself does
+    @GameTest
+    public void weight5CountContainersOffWeighsOnlyTheBox(GameTestHelper helper) {
+        ItemStack fullOfStone = shulker(Collections.nCopies(27, new ItemStack(Items.COBBLESTONE, 64)));
+        HardcoreConfig.WeightSection off = new HardcoreConfig.WeightSection();
+        off.countContainers = false;
+        assertWeighs(helper, off, fullOfStone, 0.1);
+        assertWeighs(helper, off, bundle(List.of(new ItemStack(Items.COBBLESTONE, 32))), 0.1);
+        // The same box with it on, for comparison
+        assertWeighs(helper, new HardcoreConfig.WeightSection(), fullOfStone, 0.1 + 27 * 3.0);
+        helper.succeed();
+    }
+
+    // The hardcore page's other examples: wolf armour isn't armour here, feathers and string are light, raw metal blocks
+    // weigh as storage blocks, and deepslate bricks are in the items list as stone
+    @GameTest
+    public void weight1WolfArmourFeathersStringRawBlocks(GameTestHelper helper) {
+        HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
+        assertWeighs(helper, cfg, new ItemStack(Items.WOLF_ARMOR), 0.1);
+        assertWeighs(helper, cfg, new ItemStack(Items.FEATHER, 64), 0.25);
+        assertWeighs(helper, cfg, new ItemStack(Items.STRING, 64), 0.25);
+        assertWeighs(helper, cfg, new ItemStack(Items.RAW_IRON_BLOCK, 64), 27.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.DEEPSLATE_BRICKS, 64), 3.0);
+        helper.succeed();
+    }
+
+    // Armour whose material has no factor weighs the default stack weight for one item: 1.0 for something that stacks to 1
+    @GameTest
+    public void weight2UnlistedArmourMaterialWeighsTheDefault(GameTestHelper helper) {
+        HardcoreConfig.WeightSection cfg = new HardcoreConfig.WeightSection();
+        cfg.armourFactors = new LinkedHashMap<>(cfg.armourFactors);
+        cfg.armourFactors.remove("iron");
+        assertWeighs(helper, cfg, new ItemStack(Items.IRON_CHESTPLATE), 1.0);
+        assertWeighs(helper, cfg, new ItemStack(Items.DIAMOND_CHESTPLATE), 8 * 0.15);
+        helper.succeed();
+    }
+
+    // A full load slows the walk but leaves a jump as high as an empty-handed one
+    @GameTest(environment = WEIGHT, maxTicks = 30)
+    public void weight7JumpHeightIgnoresLoad(GameTestHelper helper) {
+        ServerPlayer laden = TestPlayers.join(helper, "HighLaden", GameType.SURVIVAL, AT);
+        ServerPlayer light = TestPlayers.join(helper, "HighLight", GameType.SURVIVAL, AT.offset(2, 0, 0));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            for (ServerPlayer player : List.of(laden, light)) {
+                player.getInventory().clearContent();
+                TestPlayers.leave(player);
+            }
+        });
+        boolean waiting = false;
+        try {
+            fill(laden, Items.IRON_BLOCK, 6);
+            helper.runAfterDelay(SETTLE, () -> {
+                try {
+                    assertSlow(helper, laden, 0.5, "at a full load");
+                    for (ServerPlayer player : List.of(laden, light)) {
+                        player.setOnGround(true);
+                        player.setDeltaMovement(Vec3.ZERO);
+                        player.jumpFromGround();
+                    }
+                    double ladenRise = laden.getDeltaMovement().y;
+                    helper.assertTrue(ladenRise > 0.0, "the laden player didn't jump");
+                    helper.assertValueEqual(ladenRise, light.getDeltaMovement().y, "the laden jump against the empty-handed one");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A failed check ends the test at once, so the player isn't left online for the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    private static void assertToldSlow(GameTestHelper helper, ServerPlayer player, long expected, String when) {
+        List<String> told = TestPlayers.sentPackets(player).stream()
+                .filter(packet -> packet instanceof ClientboundSystemChatPacket chat && chat.overlay())
+                .map(packet -> ((ClientboundSystemChatPacket) packet).content().getString())
+                .toList();
+        helper.assertValueEqual(told.stream().filter("Your load is slowing you down."::equals).count(), expected,
+                "lines " + when + ": " + told);
     }
 
     private static void assertWeighs(GameTestHelper helper, HardcoreConfig.WeightSection cfg, ItemStack stack, double expected) {

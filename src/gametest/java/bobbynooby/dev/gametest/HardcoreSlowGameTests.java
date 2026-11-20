@@ -1,14 +1,18 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.HardcoreConfig;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.hardcore.Hardcore;
 import bobbynooby.dev.hardcore.Slowdowns;
+import bobbynooby.dev.hardcore.Status;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -20,6 +24,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.GameType;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -207,6 +212,43 @@ public class HardcoreSlowGameTests {
         } finally {
             if (!waiting) {
                 TestPlayers.leave(player);
+            }
+        }
+    }
+
+    // A part that comes out as NaN counts as nothing, so the others still slow the player and the report's total is
+    // theirs. Weight goes on for the report only, within the tick, so it has a layer to report on.
+    @GameTest
+    public void slow2ANaNPartLeavesTheOthers(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "SlowedNaN", GameType.SURVIVAL, AT);
+        UUID id = player.getUUID();
+        Runnable unregister = Slowdowns.registerForTesting("test", only(id, 0.2));
+        Runnable unregisterNaN = Slowdowns.registerForTesting("nan", only(id, Double.NaN));
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            unregisterNaN.run();
+            unregister.run();
+            TestPlayers.leave(player);
+        });
+        boolean waiting = false;
+        try {
+            helper.runAfterDelay(2, () -> {
+                HardcoreConfig.WeightSection weight = Settings.get().hardcore.weight;
+                boolean weightBefore = weight.enabled;
+                try {
+                    assertSlow(helper, player, 0.2, "with a NaN part beside a part of 0.2");
+                    weight.enabled = true;
+                    List<String> report = Status.report(player).stream().map(Component::getString).toList();
+                    helper.assertTrue(report.contains("Total 20% slower · cap 50%"), "the report: " + report);
+                } finally {
+                    weight.enabled = weightBefore;
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
             }
         }
     }
