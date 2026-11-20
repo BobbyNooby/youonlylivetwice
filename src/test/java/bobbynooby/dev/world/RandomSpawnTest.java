@@ -2,7 +2,11 @@ package bobbynooby.dev.world;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -74,6 +78,31 @@ class RandomSpawnTest {
             assertTrue(column.x() >= -1000 && column.x() + 1 <= 1000, "x outside the world's edge: " + column.x());
             assertTrue(column.z() >= -1000 && column.z() + 1 <= 1000, "z outside the world's edge: " + column.z());
         }
+    }
+
+    // A seeded random gives the same columns every time, which is what useRandomForTesting relies on, and over a 10-wide
+    // area every column can come up, the first and the last whole block included, and none past them
+    @Test
+    void seededPickReachesBothEdgesAndRepeats() {
+        RandomSpawn.Area area = RandomSpawn.area(0, 10, 0, 10, 5, 5, 10000);
+        List<RandomSpawn.Column> first = new ArrayList<>();
+        List<RandomSpawn.Column> second = new ArrayList<>();
+        Random once = new Random(42);
+        Random again = new Random(42);
+        for (int i = 0; i < 2000; i++) {
+            first.add(RandomSpawn.pickColumn(once, area));
+            second.add(RandomSpawn.pickColumn(again, area));
+        }
+        assertEquals(first, second);
+        Set<Integer> xs = new HashSet<>();
+        Set<Integer> zs = new HashSet<>();
+        for (RandomSpawn.Column column : first) {
+            xs.add(column.x());
+            zs.add(column.z());
+        }
+        Set<Integer> everyColumn = Set.of(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+        assertEquals(everyColumn, xs);
+        assertEquals(everyColumn, zs);
     }
 
     // An edge cut on one side only, with the centre off it: the other side still ends at the diameter
