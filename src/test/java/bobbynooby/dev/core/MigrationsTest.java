@@ -33,6 +33,18 @@ class MigrationsTest {
                 assertEquals(List.of("1to2", "2to3"), Migrations.run("test data", Integer.MIN_VALUE, 3, STEPS, List.of())));
     }
 
+    // A version with no step of its own, here 2 between the steps from 1 and from 3, only changes the number: the walk
+    // goes on to the next step rather than stopping at the gap. A step from the target version itself never runs.
+    @Test
+    void versionWithNoStepOnlyChangesTheNumberAndLaterStepsStillRun() {
+        List<Migrations.Step<List<String>>> gap = List.of(
+                new Migrations.Step<List<String>>(1, data -> append(data, "1to2")),
+                new Migrations.Step<List<String>>(3, data -> append(data, "3to4")));
+        assertEquals(List.of("1to2", "3to4"), Migrations.run("test data", 1, 4, gap, List.of()));
+        assertEquals(List.of("3to4"), Migrations.run("test data", 2, 4, gap, List.of()));
+        assertEquals(List.of("1to2"), Migrations.run("test data", 1, 3, gap, List.of()));
+    }
+
     @Test
     void currentVersionRunsNothing() {
         List<String> data = List.of("saved");
