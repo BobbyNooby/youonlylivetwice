@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Frame;
 import bobbynooby.dev.coords.Offset;
@@ -7,12 +8,14 @@ import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
@@ -22,12 +25,16 @@ import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.Relative;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -38,6 +45,8 @@ import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -220,7 +229,7 @@ public class CoordinateOffsetFrameGameTests {
         helper.assertTrue(nether != null, "no nether to go to");
         ServerPlayer player = OffsetTestKit.join(helper, "cfkept", GameType.CREATIVE);
         try {
-            Frame first = CoordinateOffsets.frame(player);
+            Frame first = OffsetTestKit.assertDistinctOffsets(helper, player);
             helper.assertFalse(first.isZero(), "the join got no offset");
             helper.assertTrue(CoordinateOffsets.frame(player) == first, "the frame was made again though nothing changed");
             helper.assertValueEqual(first.dimension(), helper.getLevel().dimension(), "the first frame's dimension");
@@ -230,7 +239,7 @@ public class CoordinateOffsetFrameGameTests {
 
             OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
             helper.assertTrue(player.level() == nether, "the player did not reach the nether");
-            Frame arrived = CoordinateOffsets.frame(player);
+            Frame arrived = OffsetTestKit.assertDistinctOffsets(helper, player);
             helper.assertTrue(arrived != first, "the frame was kept across a dimension change");
             helper.assertValueEqual(arrived.dimension(), Level.NETHER, "the new frame's dimension");
             helper.assertValueEqual(arrived.offset(), new Offset(-32, 64), "the new frame's offset");
@@ -240,6 +249,157 @@ public class CoordinateOffsetFrameGameTests {
             assertSentAsFramed(helper, player, arrived);
         } finally {
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Each dimension has its own amount, which an item naming a spot there is sent in: a lodestone compass for each of
+    // the three, held in the Overworld, goes out with each target shifted by its own dimension's amount. The amounts are
+    // checked apart first, so a target read through the wrong one can't pass by being equal.
+    @GameTest(environment = FRAMES)
+    public void distinctOffsetPerDimension(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cfdistinct", GameType.CREATIVE);
+        try {
+            Frame frame = OffsetTestKit.assertDistinctOffsets(helper, player);
+            helper.assertValueEqual(frame.dimension(), helper.getLevel().dimension(), "the frame's dimension");
+            BlockPos real = new BlockPos(1_000, 70, -2_000);
+            List<ResourceKey<Level>> dimensions = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
+            for (int i = 0; i < dimensions.size(); i++) {
+                ItemStack compass = new ItemStack(Items.COMPASS);
+                compass.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(dimensions.get(i), real)), false));
+                player.getInventory().setItem(9 + i, compass);
+            }
+            int mark = OffsetTestKit.mark(player);
+            player.inventoryMenu.sendAllDataToRemote();
+
+            List<ItemStack> sent = OffsetTestKit.last(helper, player, mark, ClientboundContainerSetContentPacket.class).items();
+            for (int i = 0; i < dimensions.size(); i++) {
+                ResourceKey<Level> dimension = dimensions.get(i);
+                helper.assertValueEqual(sent.get(9 + i).get(DataComponents.LODESTONE_TRACKER).target(),
+                        Optional.of(GlobalPos.of(dimension, frame.offsetIn(dimension).shift(real))), "target in " + dimension.identifier());
+            }
+            helper.assertValueEqual(frame.offsetIn(Level.NETHER), CoordinateOffsets.awayOffset(player, Level.NETHER), "the Nether's amount");
+            helper.assertValueEqual(frame.offsetIn(Level.END), CoordinateOffsets.awayOffset(player, Level.END), "the End's amount");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The offset only changes when a frame starts. Two hundred ticks of teleports that take the player 500 blocks east
+    // start none: every position still goes out in the join's offset, and no respawn packet is sent.
+    @GameTest(environment = FRAMES, maxTicks = 240)
+    public void offsetNeverChangesOnATimer(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cftimer", GameType.CREATIVE);
+        Runnable cleanUp = BodyTestKit.once(() -> TestPlayers.leave(player));
+        helper.runBeforeTestEnd(cleanUp);
+        Frame frame = CoordinateOffsets.frame(player);
+        helper.assertFalse(frame.isZero(), "the join got no offset");
+        int mark = OffsetTestKit.mark(player);
+        Vec3 start = player.position();
+        int[] moves = {0};
+        helper.onEachTick(() -> {
+            if (moves[0] < 200) {
+                moves[0]++;
+                player.teleportTo(start.x + 2.5 * moves[0], start.y, start.z);
+            }
+        });
+        helper.runAfterDelay(205, () -> {
+            try {
+                helper.assertValueEqual(moves[0], 200, "moves made");
+                helper.assertTrue(CoordinateOffsets.frame(player) == frame, "the frame changed while the player moved");
+                helper.assertTrue(OffsetTestKit.sent(player, mark, ClientboundRespawnPacket.class).isEmpty(), "a respawn packet was sent");
+                Vec3 last = OffsetTestKit.last(helper, player, mark, ClientboundPlayerPositionPacket.class).change().position();
+                helper.assertValueEqual(last, frame.offset().shift(new Vec3(start.x + 500, start.y, start.z)), "the last teleport sent");
+            } finally {
+                cleanUp.run();
+            }
+            helper.succeed();
+        });
+    }
+
+    // Admin view changes nothing mid-stretch: the offset stays until the next frame starts, which has none. Turned off,
+    // real coordinates likewise stay until a frame starts again, which has an offset.
+    @GameTest(environment = FRAMES)
+    public void adminViewToggleMidStretchKeepsTheFrame(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cfadmintoggle", GameType.CREATIVE);
+        ServerPlayer current = player;
+        try {
+            Offset old = CoordinateOffsets.offset(player);
+            helper.assertFalse(old.isZero(), "the join got no offset");
+            TestPlayers.op(player);
+            AdminView.set(player, true);
+            helper.assertValueEqual(CoordinateOffsets.offset(player), old, "offset right after admin view came on");
+            current = OffsetTestKit.respawn(helper, player, helper.absolutePos(RESPAWN), false);
+            helper.assertValueEqual(CoordinateOffsets.offset(current), Offset.ZERO, "offset after a respawn in admin view");
+
+            AdminView.set(current, false);
+            helper.assertValueEqual(CoordinateOffsets.offset(current), Offset.ZERO, "offset right after admin view went off");
+            current = OffsetTestKit.respawn(helper, current, helper.absolutePos(RESPAWN), false);
+            helper.assertFalse(CoordinateOffsets.offset(current).isZero(), "the respawn after admin view went off got no offset");
+        } finally {
+            AdminView.set(current, false);
+            TestPlayers.deop(current);
+            TestPlayers.leave(current);
+        }
+        helper.succeed();
+    }
+
+    // A dimension change starts a frame too: in admin view it has no offset, and once admin view is off the way back has one
+    @GameTest(environment = FRAMES)
+    public void adminViewDimensionChangeGivesRealCoordinates(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "cfadminnether", GameType.CREATIVE);
+        try {
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the join got no offset");
+            TestPlayers.op(player);
+            AdminView.set(player, true);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "offset in the nether with admin view on");
+
+            AdminView.set(player, false);
+            BlockPos back = helper.absolutePos(RESPAWN);
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(helper.getLevel(), back.getX() + 0.5, back.getY(), back.getZ() + 0.5,
+                    Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == helper.getLevel(), "the player did not come back");
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the way back with admin view off got no offset");
+        } finally {
+            AdminView.set(player, false);
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A /yolt config that turns the switch on starts no frame: the player keeps real coordinates, and the very packets go
+    // out, until their next respawn, which has an offset. The command writes the config file, so it runs with the other
+    // tests that do.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void switchOnMidStretchWaitsForTheNextFrame(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        ServerPlayer player = TestPlayers.join(helper, "cfswitchon", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        ServerPlayer current = player;
+        try {
+            helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "offset at a join with the switch off");
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt config hide.coordinates true"), List.of("hide.coordinates changed"
+                    + " from false to true (applies when a player next joins, respawns or changes dimension)."), "command output");
+            helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "offset right after the switch came on");
+            int mark = OffsetTestKit.mark(player);
+            ClientboundSetChunkCacheCenterPacket centre = new ClientboundSetChunkCacheCenterPacket(3, 4);
+            player.connection.send(centre);
+            helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundSetChunkCacheCenterPacket.class) == centre,
+                    "a copy went out before the next frame");
+
+            player.setRespawnPosition(new ServerPlayer.RespawnConfig(
+                    LevelData.RespawnData.of(helper.getLevel().dimension(), helper.absolutePos(RESPAWN), 0.0F, 0.0F), true), false);
+            current = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
+            helper.assertFalse(CoordinateOffsets.offset(current).isZero(), "the respawn after the switch came on got no offset");
+        } finally {
+            ConfigCommandGameTests.restore(server, fileBefore);
+            TestPlayers.leave(current);
         }
         helper.succeed();
     }

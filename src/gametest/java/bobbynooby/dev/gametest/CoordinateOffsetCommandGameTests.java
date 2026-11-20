@@ -11,8 +11,12 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.advancements.AdvancementRewards;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.TrailParticleOption;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
@@ -21,16 +25,27 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.Marker;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.LodestoneTracker;
+import net.minecraft.world.level.BaseCommandBlock;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -211,6 +226,217 @@ public class CoordinateOffsetCommandGameTests {
             ClientboundLevelParticlesPacket sent = OffsetTestKit.last(helper, player, mark, ClientboundLevelParticlesPacket.class);
             helper.assertValueEqual(List.of(sent.x(), sent.z()), List.of(clientX + 0.5, clientZ + 0.5), "spot of the particle");
             helper.assertValueEqual(List.of(sent.xDist(), sent.yDist(), sent.zDist()), List.of(0.0F, 0.0F, 0.0F), "spread");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A command block's numbers were written by whoever set it, in real coordinates, even when it moves an op with an
+    // offset: only what a player types is read in their frame
+    @GameTest(environment = COMMANDS)
+    public void commandBlockUsesRealCoordinates(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmblock", GameType.CREATIVE);
+        String tag = CommandGameTests.uniqueName("yoltcb");
+        BlockPos pos = new BlockPos(2, 1, 2);
+        try {
+            TestPlayers.op(player);
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            player.addTag(tag);
+            helper.setBlock(pos, Blocks.COMMAND_BLOCK);
+            BaseCommandBlock block = helper.getBlockEntity(pos, CommandBlockEntity.class).getCommandBlock();
+            block.setCommand("tp @a[tag=" + tag + "] 40 120 -73");
+            helper.assertTrue(block.performCommand(helper.getLevel()), "the command block didn't run");
+            helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the command block's teleport went");
+        } finally {
+            helper.setBlock(pos, Blocks.AIR);
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A selector's x, y and z are read as real even when an op types them. Read in the op's frame they would point a
+    // whole offset away, where nothing is, and the marker at the real spot would live.
+    @GameTest(environment = COMMANDS)
+    public void selectorCoordinatesReadAsReal(GameTestHelper helper) {
+        TestPlayers.Recording player = OffsetTestKit.joinRecording(helper, "cmselector", GameType.CREATIVE);
+        Marker marker = null;
+        try {
+            TestPlayers.op(player);
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            marker = helper.spawn(EntityTypes.MARKER, new BlockPos(3, 2, 3));
+            // Written out in full, since a selector can't read a number such as 1.2E7
+            OffsetTestKit.type(player, "kill @e[type=marker,x=" + plain(marker.getX()) + ",y=" + plain(marker.getY()) + ",z="
+                    + plain(marker.getZ()) + ",distance=..0.5]");
+            helper.assertTrue(marker.isRemoved(), "the marker at the selector's real numbers is still there: "
+                    + player.messages.stream().map(Component::getString).toList() + " marker at " + marker.position());
+        } finally {
+            if (marker != null) {
+                marker.discard();
+            }
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Positions inside typed SNBT are real too: a lodestone target in /give, and an end gateway's exit in /setblock,
+    // whose block position, typed as an argument, is still read in the op's frame
+    @GameTest(environment = COMMANDS)
+    public void snbtPositionsReadAsReal(GameTestHelper helper) throws ReflectiveOperationException {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmsnbt", GameType.CREATIVE);
+        BlockPos gateway = helper.absolutePos(new BlockPos(3, 1, 3));
+        BlockPos real = new BlockPos(1_000, 70, -2_000);
+        String array = "[I;" + real.getX() + "," + real.getY() + "," + real.getZ() + "]";
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            player.getInventory().clearContent();
+            OffsetTestKit.type(player, "give @s minecraft:compass[minecraft:lodestone_tracker={target:{dimension:\"minecraft:overworld\",pos:"
+                    + array + "},tracked:false}]");
+            ItemStack compass = ItemStack.EMPTY;
+            for (int slot = 0; slot < player.getInventory().getContainerSize() && compass.isEmpty(); slot++) {
+                if (player.getInventory().getItem(slot).is(Items.COMPASS)) {
+                    compass = player.getInventory().getItem(slot);
+                }
+            }
+            LodestoneTracker tracker = compass.get(DataComponents.LODESTONE_TRACKER);
+            helper.assertTrue(tracker != null, "the given compass has no lodestone target");
+            helper.assertValueEqual(tracker.target(), Optional.of(GlobalPos.of(Level.OVERWORLD, real)), "the given compass's target");
+
+            BlockPos typed = offset.shift(gateway);
+            OffsetTestKit.type(player, "setblock " + typed.getX() + " " + typed.getY() + " " + typed.getZ()
+                    + " minecraft:end_gateway{exit_portal:" + array + "}");
+            helper.assertTrue(helper.getLevel().getBlockEntity(gateway) instanceof TheEndGatewayBlockEntity,
+                    "no end gateway at the spot typed in the op's frame");
+            Field exit = TheEndGatewayBlockEntity.class.getDeclaredField("exitPortal");
+            exit.setAccessible(true);
+            helper.assertValueEqual(exit.get(helper.getLevel().getBlockEntity(gateway)), real, "the gateway's exit");
+        } finally {
+            helper.getLevel().setBlock(gateway, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            player.getInventory().clearContent();
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A function an op schedules runs later as the server, with the numbers its data pack wrote: real ones. It moves the
+    // player it finds by tag.
+    @GameTest(environment = COMMANDS, maxTicks = 20)
+    public void scheduledFunctionUsesRealCoordinates(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmschedule", GameType.CREATIVE);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            player.removeTag("yolt_scheduled_tp");
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        TestPlayers.op(player);
+        helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+        player.addTag("yolt_scheduled_tp");
+        OffsetTestKit.type(player, "schedule function you-only-live-twice-gametest:offset_tp_scheduled 1t");
+        helper.succeedWhen(() -> {
+            helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the scheduled function's teleport went");
+            cleanUp.run();
+        });
+    }
+
+    // A macro's arguments are read as real when an op types them, like the rest of the function
+    @GameTest(environment = COMMANDS)
+    public void functionMacroArgumentsReadAsReal(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cmmacro", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            OffsetTestKit.type(player, "function you-only-live-twice-gametest:offset_tp_macro {x:40,z:-73}");
+            helper.assertValueEqual(player.position(), FUNCTION_SPOT, "where the macro's teleport went");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A trail particle's target is a position inside the particle's SNBT, so it is real as typed: a watcher with no
+    // offset is sent exactly that target, while the particle's own spot is read in the op's frame
+    @GameTest(environment = COMMANDS)
+    public void particleTargetReadAsReal(GameTestHelper helper) {
+        ServerPlayer op = OffsetTestKit.join(helper, "cmtrail", GameType.CREATIVE);
+        ServerPlayer watcher = TestPlayers.join(helper, "cmtrailsee", GameType.CREATIVE, new BlockPos(2, 1, 2));
+        String tag = CommandGameTests.uniqueName("yolttrail");
+        Vec3 target = new Vec3(1_000.5, 70.0, -2_000.5);
+        try {
+            TestPlayers.op(op);
+            Offset offset = CoordinateOffsets.offset(op);
+            helper.assertFalse(offset.isZero(), "the op got no offset");
+            helper.assertValueEqual(CoordinateOffsets.offset(watcher), Offset.ZERO, "the watcher's offset");
+            watcher.addTag(tag);
+            int clientX = op.getBlockX() + offset.x();
+            int clientZ = op.getBlockZ() + offset.z();
+            int mark = OffsetTestKit.mark(watcher);
+            OffsetTestKit.type(op, "particle minecraft:trail{target:[" + target.x + "d," + target.y + "d," + target.z + "d],color:16711680,"
+                    + "duration:20} " + clientX + " 100 " + clientZ + " 0 0 0 0 1 force @a[tag=" + tag + "]");
+            ClientboundLevelParticlesPacket sent = OffsetTestKit.last(helper, watcher, mark, ClientboundLevelParticlesPacket.class);
+            helper.assertTrue(sent.particle() instanceof TrailParticleOption, "the watcher was sent " + sent.particle());
+            helper.assertValueEqual(((TrailParticleOption) sent.particle()).target(), target, "the trail's target");
+            helper.assertValueEqual(List.of(sent.x(), sent.z()), List.of(op.getBlockX() + 0.5, op.getBlockZ() + 0.5), "the particle's spot");
+        } finally {
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+            watcher.removeTag(tag);
+            TestPlayers.leave(watcher);
+        }
+        helper.succeed();
+    }
+
+    // A known quirk: a command in clickable chat text is sent by the clicker's game as typed, so real numbers in it are
+    // read as the clicker's own and take an op one offset away. The join is near the world's centre, so that is a few
+    // hundred blocks, not a million.
+    @GameTest(environment = COMMANDS)
+    public void clickedChatCommandReadInTheClickersFrame(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.joinNearTheCentre(helper, "cmclicked", GameType.CREATIVE, new BlockPos(-420, 80, 260));
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            int realX = player.getBlockX();
+            int realZ = player.getBlockZ();
+            OffsetTestKit.type(player, "tp @s " + realX + " 100 " + realZ);
+            helper.assertValueEqual(player.position(), new Vec3(realX + 0.5 - offset.x(), 100.0, realZ + 0.5 - offset.z()),
+                    "where the real numbers took the op");
+        } finally {
+            TestPlayers.deop(player);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Command replies are text, which is never shifted, and they name the real numbers the server used: an op who types
+    // a teleport in their own numbers is told where they really went
+    @GameTest(environment = COMMANDS)
+    public void commandReplyShowsRealNumbers(GameTestHelper helper) {
+        TestPlayers.Recording player = OffsetTestKit.joinRecording(helper, "cmreply", GameType.CREATIVE);
+        try {
+            TestPlayers.op(player);
+            Offset offset = CoordinateOffsets.offset(player);
+            helper.assertFalse(offset.isZero(), "the player got no offset");
+            int clientX = player.getBlockX() + offset.x();
+            int clientZ = player.getBlockZ() + offset.z();
+            player.messages.clear();
+            OffsetTestKit.type(player, "tp @s " + clientX + " 120 " + clientZ);
+            List<String> reply = player.messages.stream()
+                    .filter(message -> message.getContents() instanceof TranslatableContents line
+                            && line.getKey().equals("commands.teleport.success.location.single"))
+                    .map(message -> Arrays.stream(((TranslatableContents) message.getContents()).getArgs()).skip(1)
+                            .map(arg -> arg instanceof Component part ? part.getString() : String.valueOf(arg)).toList().toString())
+                    .toList();
+            helper.assertValueEqual(reply, List.of(List.of(String.format(Locale.ROOT, "%f", player.getX()), String.format(Locale.ROOT, "%f", 120.0),
+                    String.format(Locale.ROOT, "%f", player.getZ())).toString()), "the numbers in the reply");
+            helper.assertValueEqual(player.getX(), clientX + 0.5 - offset.x(), "where the teleport went");
         } finally {
             TestPlayers.deop(player);
             TestPlayers.leave(player);
@@ -465,6 +691,10 @@ public class CoordinateOffsetCommandGameTests {
                 helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             }
         }
+    }
+
+    private static String plain(double value) {
+        return BigDecimal.valueOf(value).toPlainString();
     }
 
     private static void run(CommandSourceStack source, String command) {

@@ -2,6 +2,9 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.coords.CoordinateOffsets;
+import bobbynooby.dev.coords.Frame;
+import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -14,11 +17,13 @@ import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 // Joins with hide.coordinates on and reads back what the player's client was sent, for the coordinate offset tests
@@ -72,6 +77,16 @@ final class OffsetTestKit {
         return withCoordinates(() -> fromEnd
                 ? TestPlayers.respawn(player, true, Entity.RemovalReason.CHANGED_DIMENSION)
                 : TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED));
+    }
+
+    // The player's frame, checked to shift the Overworld, the Nether and the End each by an amount of its own, none of
+    // them zero. A check that reads a spot through the wrong dimension's amount would pass unseen if two were equal.
+    static Frame assertDistinctOffsets(GameTestHelper helper, ServerPlayer player) {
+        Frame frame = CoordinateOffsets.frame(player);
+        List<Offset> amounts = List.of(frame.offsetIn(Level.OVERWORLD), frame.offsetIn(Level.NETHER), frame.offsetIn(Level.END));
+        helper.assertFalse(amounts.contains(Offset.ZERO), "a dimension is not shifted: " + amounts);
+        helper.assertValueEqual(Set.copyOf(amounts).size(), 3, "distinct amounts for the Overworld, the Nether and the End " + amounts);
+        return frame;
     }
 
     // What a real client does once it has joined: it says the world has loaded and accepts the join's teleport. Until it

@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FilterMask;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.LastSeenMessages;
+import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.network.chat.SignedMessageBody;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -362,6 +363,40 @@ public class CoordinateOffsetTextGameTests {
             helper.assertValueEqual(targets(named.get(DataComponents.CUSTOM_NAME)), List.of(TARGET), "the server's own item name");
         } finally {
             TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Text in chat is never changed, so numbers a player writes reach the others as written, though both have offsets.
+    // The line comes as player chat, or as text for a sender the receiver's game doesn't know; either way it is exact.
+    @GameTest(environment = TEXT)
+    public void typedChatNumbersGoOutAsWritten(GameTestHelper helper) {
+        TestPlayers.Recording sender = OffsetTestKit.joinRecording(helper, "ctchatfrom", GameType.CREATIVE);
+        TestPlayers.Recording receiver = OffsetTestKit.joinRecording(helper, "ctchatto", GameType.CREATIVE);
+        YoltConfig.ChatSection chat = Settings.get().chat;
+        YoltConfig.ChatMode modeBefore = chat.mode;
+        try {
+            chat.mode = YoltConfig.ChatMode.GLOBAL;
+            helper.assertFalse(CoordinateOffsets.offset(sender).isZero() || CoordinateOffsets.offset(receiver).isZero(),
+                    "a player got no offset");
+            String text = "I'm at 100 64 -200";
+            int mark = OffsetTestKit.mark(receiver);
+            helper.getLevel().getServer().getPlayerList().broadcastChatMessage(PlayerChatMessage.unsigned(sender.getUUID(), text),
+                    sender, ChatType.bind(ChatType.CHAT, sender));
+            List<String> got = new ArrayList<>();
+            for (ClientboundPlayerChatPacket line : OffsetTestKit.sent(receiver, mark, ClientboundPlayerChatPacket.class)) {
+                got.add(line.body().content());
+            }
+            for (Component message : receiver.messages) {
+                if (message.getContents() instanceof TranslatableContents line && line.getKey().equals("chat.type.text")) {
+                    got.add(((Component) line.getArgs()[1]).getString());
+                }
+            }
+            helper.assertValueEqual(got, List.of(text), "the chat lines the receiver got");
+        } finally {
+            chat.mode = modeBefore;
+            TestPlayers.leave(sender);
+            TestPlayers.leave(receiver);
         }
         helper.succeed();
     }

@@ -11,6 +11,7 @@ import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.PositionAndRotation;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentContents;
@@ -25,6 +26,7 @@ import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
+import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
@@ -41,11 +43,13 @@ import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.Relative;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
@@ -544,6 +548,59 @@ public class CoordinateOffsetCoreGameTests {
             }
             helper.succeed();
         });
+    }
+
+    // The away amounts are drawn for each connection, so every login gives another dimension a new one, and a spot
+    // there can't be matched up from one login to the next. A join and three rejoins of the same player.
+    @GameTest(environment = CORE)
+    public void newConnectionGetsNewAwayAmounts(GameTestHelper helper) {
+        GameProfile profile = TestPlayers.profile("coreaway");
+        BlockPos spot = new BlockPos(1, 1, 1);
+        List<Offset> seen = new ArrayList<>();
+        ServerPlayer online = null;
+        try {
+            for (int login = 0; login < 4; login++) {
+                boolean first = login == 0;
+                online = OffsetTestKit.withCoordinates(() -> first
+                        ? TestPlayers.join(helper, profile, GameType.CREATIVE, spot)
+                        : TestPlayers.rejoin(helper, profile, GameType.CREATIVE, spot));
+                helper.assertFalse(CoordinateOffsets.offset(online).isZero(), "login " + (login + 1) + " got no offset");
+                Offset away = CoordinateOffsets.awayOffset(online, Level.NETHER);
+                helper.assertFalse(seen.contains(away), "login " + (login + 1) + " kept an earlier Nether amount " + away + ": " + seen);
+                seen.add(away);
+                TestPlayers.leave(online);
+                online = null;
+            }
+        } finally {
+            if (online != null) {
+                TestPlayers.leave(online);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A held map tells its holder their real X and Z modulo its size, a known limit: its update goes out as the very
+    // packet, markers and colours as they are
+    @GameTest(environment = CORE)
+    public void mapItemDataGoesOutUnchanged(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "coremap", GameType.CREATIVE);
+        try {
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the player got no offset");
+            ItemStack map = MapGameTests.newMap(helper);
+            MapItemSavedData data = MapGameTests.data(helper, map);
+            player.getInventory().add(map.copy());
+            data.tickCarriedBy(player, map, null);
+            Packet<?> update = data.getUpdatePacket(map.get(DataComponents.MAP_ID), player);
+            helper.assertTrue(update instanceof ClientboundMapItemDataPacket mapUpdate && mapUpdate.decorations().isPresent(),
+                    "the map's update has no markers");
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(update);
+            helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundMapItemDataPacket.class) == update,
+                    "the map's update was changed on the way out");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
     }
 
     // Text whose contents can't be read, as a reason holding a broken item would be
