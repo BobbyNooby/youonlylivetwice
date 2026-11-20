@@ -18,7 +18,10 @@ above 0.
 Grave heads can't get Curse of Vanishing in an anvil, and a grave head or revive paper that has it anyway still goes
 into the grave.
 
-The recipe is `data/you-only-live-twice/recipe/revive.json`, so a datapack can replace it with your own.
+The recipe is `data/you-only-live-twice/recipe/revive.json`, so a datapack can replace it with your own. Keep it
+shapeless (`minecraft:crafting_shapeless`), with a grave head among the ingredients and the result's `custom_data` as
+`{"yolt": {"revive": true}}`. YOLT copies the head's owner onto the paper only when a shapeless recipe makes it, so a
+shaped recipe makes a paper with no owner: it says "This paper has no owner." and revives nobody.
 
 Settings: [`revive`](config.md#revive), [`resourcePack`](config.md#resourcepack).
 
