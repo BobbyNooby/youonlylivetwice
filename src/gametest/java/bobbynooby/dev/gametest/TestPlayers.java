@@ -52,6 +52,16 @@ public final class TestPlayers {
         return join(server.overworld(), uniqueProfile(name), mode, absolutePos);
     }
 
+    // For a player whose name and id have to be known before they join, such as one a packet recorder looks out for
+    public static ServerPlayer join(MinecraftServer server, GameProfile profile, GameType mode, BlockPos absolutePos) {
+        return join(server.overworld(), profile, mode, absolutePos);
+    }
+
+    /** A profile with a name no other test player has, for a player to join later. */
+    public static GameProfile profile(String name) {
+        return uniqueProfile(name);
+    }
+
     // A returning player: like a real login, their save is read before they are placed in the world, and the pearls
     // and vehicle it holds come back once they are (PrepareSpawnTask)
     public static ServerPlayer rejoin(GameTestHelper helper, GameProfile profile, GameType mode, BlockPos relativePos) {

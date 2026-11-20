@@ -42,6 +42,9 @@ public class BodyClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         // The config outlives each test's server, and between servers nothing else reads it
         boolean tabListWas = Settings.get().hide.tabList;
         try {

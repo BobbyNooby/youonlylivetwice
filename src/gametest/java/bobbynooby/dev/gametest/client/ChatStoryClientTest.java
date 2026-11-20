@@ -42,6 +42,9 @@ public class ChatStoryClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             YoltConfig.ChatMode modeWas = server.computeOnServer(s -> Settings.get().chat.mode);
             int radiusWas = server.computeOnServer(s -> Settings.get().chat.radius);

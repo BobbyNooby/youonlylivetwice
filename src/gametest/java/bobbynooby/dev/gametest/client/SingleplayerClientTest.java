@@ -10,6 +10,9 @@ import net.minecraft.world.level.gamerules.GameRules;
 public class SingleplayerClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         try (TestSingleplayerContext world = ctx.worldBuilder().create()) {
             if (world.getServer().computeOnServer(s -> Settings.active())) {
                 throw new AssertionError("YOLT is active in single-player");

@@ -28,6 +28,9 @@ public class VisibilityClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             boolean distantWas = server.computeOnServer(s -> Settings.get().hide.distantPlayers);
             boolean tabListWas = server.computeOnServer(s -> Settings.get().hide.tabList);

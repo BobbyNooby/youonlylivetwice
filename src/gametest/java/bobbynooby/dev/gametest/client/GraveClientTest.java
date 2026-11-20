@@ -88,6 +88,9 @@ public class GraveClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             // The lockout would kick the client the moment it dies
             boolean lockoutWas = server.computeOnServer(s -> Settings.get().deathLockout.enabled);

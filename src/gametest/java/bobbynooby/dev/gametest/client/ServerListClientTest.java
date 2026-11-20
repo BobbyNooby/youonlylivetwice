@@ -2,6 +2,9 @@ package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.gametest.PacketRecorder;
+import bobbynooby.dev.gametest.TestPlayers;
+import bobbynooby.dev.world.RandomSpawn;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
@@ -10,14 +13,21 @@ import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.client.gui.screens.multiplayer.ServerSelectionList;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.ServerList;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.level.GameType;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Field;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-// The multiplayer list's MOTD and its hover over a server's player count, which a player sees before they ever join
+// The multiplayer list's MOTD and its hover over a server's player count, which a player sees before they ever join.
+// Two players are online for the ping, so the count, the sample and the ping's own bytes are checked against real names.
 public class ServerListClientTest implements FabricClientGameTest {
     private static final String SERVER_NAME = "YOLT test server";
     // The list's own layout, as ServerSelectionList.OnlineServerEntry draws it: the count sits left of the ping bars
@@ -37,6 +47,9 @@ public class ServerListClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         try (TestDedicatedServerContext server = ctx.worldBuilder().createServer()) {
             List<String> lines = server.computeOnServer(s -> List.copyOf(Settings.get().serverList.hoverLines));
             if (lines.isEmpty()) {
@@ -46,6 +59,13 @@ public class ServerListClientTest implements FabricClientGameTest {
             List<String> motdLines = new YoltConfig().serverList.motdLines;
             server.runOnServer(s -> Settings.get().serverList.motdLines = motdLines);
             String address = "localhost:" + server.computeOnServer(MinecraftServer::getPort);
+            List<ServerPlayer> online = server.computeOnServer(ServerListClientTest::joinTwo);
+            Map<String, byte[]> needles = new LinkedHashMap<>();
+            for (ServerPlayer player : online) {
+                needles.putAll(PacketRecorder.playerNeedles(player.getScoreboardName(), player.getUUID()));
+            }
+            // Every connection the multiplayer screen opens from here, its pings included, is recorded
+            PacketRecorder.Session session = PacketRecorder.arm(new PacketRecorder.Session(needles, null));
             // The multiplayer screen reads its list from the file each time it opens
             ctx.runOnClient(mc -> {
                 ServerList servers = new ServerList(mc);
@@ -62,17 +82,64 @@ public class ServerListClientTest implements FabricClientGameTest {
                 ClientTests.waitOnClient(ctx, ClientGameTestContext.DEFAULT_TIMEOUT, mc -> hoverLines(hover, entry(mc, address)) != null,
                         mc -> "the server list never took the hover lines: its ping is " + entry(mc, address).getServerData().state());
                 checkMotd(ctx, address, motdLines);
+                checkCountsHideThePlayers(ctx, server, address, online, session);
                 ClientTests.screenshot(ctx, "07-server-list-motd");
                 hoverOverCount(ctx, address);
                 checkHover(ctx, address, lines, hover);
                 ClientTests.screenshot(ctx, "07-server-list-hover");
             } finally {
                 ClientTests.runAll(List.of(
+                        PacketRecorder::disarm,
                         // With no world open, no screen means the title screen, where every client test has to end
                         () -> ctx.setScreen(() -> null),
+                        () -> server.runOnServer(s -> online.forEach(player -> ClientTests.leaveWithoutBody(s, player.getUUID()))),
                         () -> ctx.runOnClient(mc -> removeFromList(mc, address)),
                         () -> server.runOnServer(s -> Settings.get().serverList.motdLines = List.of())));
             }
+        }
+    }
+
+    // At the world spawn, where a client would land: the server has two players on, and a ping must show none of them
+    private static List<ServerPlayer> joinTwo(MinecraftServer s) {
+        BlockPos at = RandomSpawn.spotAt(s.overworld(), 0, 0);
+        if (at == null) {
+            throw new AssertionError("nowhere to stand at 0, 0");
+        }
+        return List.of(TestPlayers.join(s, "Online", GameType.SURVIVAL, at), TestPlayers.join(s, "Pinger", GameType.SURVIVAL, at.east(3)));
+    }
+
+    // The ping says nobody is on, out of the shown slots, with no real name in its sample, and its bytes hold none either
+    private static void checkCountsHideThePlayers(ClientGameTestContext ctx, TestDedicatedServerContext server, String address,
+                                                  List<ServerPlayer> online, PacketRecorder.Session session) {
+        int real = server.computeOnServer(s -> s.getPlayerList().getPlayerCount());
+        if (real != online.size()) {
+            throw new AssertionError("the server has " + real + " players on, not the " + online.size() + " the test joined");
+        }
+        int shownMax = server.computeOnServer(s -> Settings.get().serverList.shownMaxPlayers);
+        List<String> names = online.stream().map(ServerPlayer::getScoreboardName).toList();
+        ctx.runOnClient(mc -> {
+            ServerData data = entry(mc, address).getServerData();
+            if (data.players == null) {
+                throw new AssertionError("the ping brought no player counts");
+            }
+            if (data.players.online() != 0 || data.players.max() != shownMax) {
+                throw new AssertionError("the ping says " + data.players.online() + "/" + data.players.max() + " with " + real
+                        + " players on, not 0/" + shownMax);
+            }
+            List<String> sample = data.players.sample().stream().map(NameAndId::name).toList();
+            if (sample.stream().anyMatch(names::contains)) {
+                throw new AssertionError("the ping's sample " + sample + " names a player who is on");
+            }
+            String count = data.status.getString();
+            if (!count.equals("0/" + shownMax)) {
+                throw new AssertionError("the server list shows the count \"" + count + "\", not 0/" + shownMax);
+            }
+        });
+        if (session.connections() == 0 || session.frames() == 0) {
+            throw new AssertionError("the recording never hooked the ping, so its bytes went unread: " + session.summary());
+        }
+        if (!session.hits().isEmpty() || !session.problems().isEmpty()) {
+            throw new AssertionError("the ping sent a name or id of a player who is on: " + session.summary());
         }
     }
 

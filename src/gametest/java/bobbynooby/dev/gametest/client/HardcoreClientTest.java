@@ -106,6 +106,9 @@ public class HardcoreClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             HardcoreConfig.HardcoreSection was = server.computeOnServer(s -> copy(Settings.get().hardcore));
             boolean textureWas = server.computeOnServer(s -> Settings.get().resourcePack.reviveTexture);

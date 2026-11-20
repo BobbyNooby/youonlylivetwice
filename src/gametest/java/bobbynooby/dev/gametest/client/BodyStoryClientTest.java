@@ -87,6 +87,9 @@ public class BodyStoryClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             boolean enabledWas = server.computeOnServer(s -> Settings.get().bodies.enabled);
             YoltConfig.BodyType typeWas = server.computeOnServer(s -> Settings.get().bodies.type);

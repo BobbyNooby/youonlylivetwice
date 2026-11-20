@@ -51,6 +51,9 @@ public class CoordinateOffsetClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         // The config outlives each test's server, and between servers nothing else reads it
         YoltConfig config = Settings.get();
         boolean coordinatesWas = config.hide.coordinates;

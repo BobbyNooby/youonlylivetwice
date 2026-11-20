@@ -90,7 +90,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * the band's mirror, so that is a band too. The walk goes through the packet as its fields hold it, nested items, NBT,
  * particles and texts included, and keeps note of what it couldn't read.
  */
-final class LeakScanner {
+public final class LeakScanner {
     // Objects deep; a list, map, optional or array on the way doesn't count
     private static final int MAX_DEPTH = 12;
     // How a cut walk is named among the unread parts
@@ -108,44 +108,44 @@ final class LeakScanner {
      * Where no place the client is sent may be. A place is flagged when either of its axes is in the band's span on that
      * axis, so a place with only one axis left real or shifted from a constant shows too.
      */
-    record Band(String name, int minX, int maxX, int minZ, int maxZ) {
-        static Band around(String name, int x, int z, int reach) {
+    public record Band(String name, int minX, int maxX, int minZ, int maxZ) {
+        public static Band around(String name, int x, int z, int reach) {
             return new Band(name, x - reach, x + reach, z - reach, z + reach);
         }
 
-        boolean inX(double x) {
+        public boolean inX(double x) {
             return x >= minX && x <= maxX;
         }
 
-        boolean inZ(double z) {
+        public boolean inZ(double z) {
             return z >= minZ && z <= maxZ;
         }
     }
 
     /** What the packets read so far hold: places in a band, the watched spots among their places, and what was unread. */
-    static final class Scan {
+    public static final class Scan {
         private final List<Band> bands;
         private final Set<BlockPos> watched;
         private final List<String> findings = new ArrayList<>();
         private final Set<BlockPos> seen = new HashSet<>();
         private final Set<String> unread = new TreeSet<>();
 
-        Scan(List<Band> bands, Collection<BlockPos> watched) {
+        public Scan(List<Band> bands, Collection<BlockPos> watched) {
             this.bands = List.copyOf(bands);
             this.watched = Set.copyOf(watched);
         }
 
-        void packet(Object packet) {
+        public void packet(Object packet) {
             new Walk(this).packet(packet);
         }
 
         /** One line per place in a band, naming the band, the packet class and the path to the field. */
-        List<String> findings() {
+        public List<String> findings() {
             return findings;
         }
 
         /** The watched spots that no packet held as a place, by its block. */
-        List<BlockPos> missing() {
+        public List<BlockPos> missing() {
             return watched.stream().filter(spot -> !seen.contains(spot)).sorted().toList();
         }
 
@@ -153,7 +153,7 @@ final class LeakScanner {
          * Each class whose fields couldn't be listed, each field that couldn't be read, by its class's name, and each
          * class the depth limit stopped the walk at.
          */
-        Set<String> unread() {
+        public Set<String> unread() {
             return unread;
         }
 
@@ -161,7 +161,7 @@ final class LeakScanner {
          * What of that fails a scan: every part of Minecraft's own classes, where a position the walk can't see would be,
          * and every walk the depth limit cut short, whatever the class.
          */
-        List<String> unreadThatFails() {
+        public List<String> unreadThatFails() {
             return unread.stream().filter(name -> name.startsWith("net.minecraft.") || name.contains(CUT)).toList();
         }
     }

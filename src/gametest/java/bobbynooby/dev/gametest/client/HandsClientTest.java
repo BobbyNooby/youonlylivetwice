@@ -35,6 +35,9 @@ public class HandsClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         UUID self = ctx.computeOnClient(mc -> mc.getGameProfile().id());
         // Its own server, since the client leaves and joins again in the middle
         try (TestDedicatedServerContext server = ctx.worldBuilder().createServer()) {

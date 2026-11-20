@@ -8,6 +8,9 @@ import net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptio
 public class JoinClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         ClientTests.withServer(ctx, (server, connection) -> {
             if (!server.computeOnServer(s -> Settings.active())) {
                 throw new AssertionError("YOLT is not active on the dedicated server");

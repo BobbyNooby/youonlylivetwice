@@ -61,6 +61,11 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
     // Same folder as Loom's clientGameTest run, so the EULA it accepts covers the in-process server too
     runDir = layout.buildDirectory.dir("run/clientGameTest")
     dependsOn("acceptGameTestEula")
+    // -Dyolt.clientTests=CoordinateLeak,ServerList runs only the client tests whose names start with one of these
+    def only = System.getProperty("yolt.clientTests")
+    if (only) {
+        jvmArgs.add("-Dyolt.clientTests=" + only)
+    }
 }
 
 dependencies {

@@ -40,6 +40,9 @@ public class LockoutClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         UUID self = ctx.computeOnClient(mc -> mc.getGameProfile().id());
         // Its own server, since the client is thrown off it and tries to come back
         try (TestDedicatedServerContext server = ctx.worldBuilder().createServer()) {

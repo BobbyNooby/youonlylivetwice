@@ -19,6 +19,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -32,7 +33,62 @@ public final class ClientTests {
     // The hand's height goes from 0 when lowered to 1 when fully up
     private static final float HAND_UP = 0.99F;
 
+    // -Dyolt.clientTests=CoordinateLeak,ServerList runs only the client tests whose class names start with one of these,
+    // so one test can be tried locally without the whole run; build.gradle hands the property to the client
+    private static final String FILTER = System.getProperty("yolt.clientTests", "");
+
     private ClientTests() {}
+
+    /**
+     * False when a filter is set and leaves this test out, so its runTest returns at once. Fabric runs every client test
+     * the mod lists and has no filter of its own.
+     */
+    public static boolean selected(Class<?> test) {
+        if (FILTER.isBlank()) {
+            return true;
+        }
+        for (String prefix : FILTER.split(",")) {
+            if (!prefix.isBlank() && test.getSimpleName().startsWith(prefix.strip())) {
+                return true;
+            }
+        }
+        Yolt.LOGGER.info("Skipping {}: it isn't in yolt.clientTests={}", test.getSimpleName(), FILTER);
+        return false;
+    }
+
+    // Test players have no client, so each tick the server gets what a client would have sent it, until the client
+    // has what the condition asks. The condition runs on the client thread, where the server can't be driven; a
+    // timeout says what was wrong.
+    public static void waitDriving(ClientGameTestContext ctx, TestServerContext server, List<ServerPlayer> players,
+                                   Predicate<Minecraft> condition, Function<Minecraft, String> failure) {
+        for (int tick = 0; tick < ClientGameTestContext.DEFAULT_TIMEOUT; tick++) {
+            if (ctx.computeOnClient(condition::test)) {
+                return;
+            }
+            server.runOnServer(s -> players.forEach(TestPlayers::driveTracking));
+            ctx.waitTick();
+        }
+        if (!ctx.computeOnClient(condition::test)) {
+            throw explained(new AssertionError("timed out after " + ClientGameTestContext.DEFAULT_TIMEOUT + " driven ticks"),
+                    () -> ctx.computeOnClient(failure::apply));
+        }
+    }
+
+    // The same driving, while the condition has to hold on every one of the ticks
+    public static void holdDriving(ClientGameTestContext ctx, TestServerContext server, List<ServerPlayer> players,
+                                   int ticks, Predicate<Minecraft> condition, Function<Minecraft, String> failure) {
+        for (int tick = 0; tick <= ticks; tick++) {
+            if (!ctx.computeOnClient(condition::test)) {
+                int held = tick;
+                throw explained(new AssertionError("held for " + held + " of " + ticks + " driven ticks"),
+                        () -> ctx.computeOnClient(failure::apply));
+            }
+            if (tick < ticks) {
+                server.runOnServer(s -> players.forEach(TestPlayers::driveTracking));
+                ctx.waitTick();
+            }
+        }
+    }
 
     // The server runs inside the client process, but it is a real dedicated server, so YOLT is active on it
     public static void withServer(ClientGameTestContext ctx, BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
@@ -42,7 +98,14 @@ public final class ClientTests {
     // beforeConnect runs once the server is up and before the client joins, for settings that only count at a join
     public static void withServer(ClientGameTestContext ctx, Consumer<TestDedicatedServerContext> beforeConnect,
                                   BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
-        try (TestDedicatedServerContext server = ctx.worldBuilder().createServer()) {
+        withServer(ctx, new Properties(), beforeConnect, body);
+    }
+
+    // With server.properties lines of its own, such as more player slots than the test server's few, for test players
+    // who are online before the client joins
+    public static void withServer(ClientGameTestContext ctx, Properties properties, Consumer<TestDedicatedServerContext> beforeConnect,
+                                  BiConsumer<TestDedicatedServerContext, TestDedicatedServerConnection> body) {
+        try (TestDedicatedServerContext server = ctx.worldBuilder().createServer(properties)) {
             beforeConnect.accept(server);
             try (TestDedicatedServerConnection connection = server.connect()) {
                 connection.waitForChunksRender();

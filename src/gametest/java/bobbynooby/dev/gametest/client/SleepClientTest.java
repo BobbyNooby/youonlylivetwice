@@ -51,6 +51,9 @@ public class SleepClientTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
+        if (!ClientTests.selected(getClass())) {
+            return;
+        }
         // Before the server, so a rename fails with its own message rather than as a wait that never ended
         Field actionBar = hudField("overlayMessageString");
         Field actionBarTime = hudField("overlayMessageTime");
