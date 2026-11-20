@@ -348,9 +348,14 @@ public final class CoordinateOffsets {
         return ((ServerCommonPacketListenerAccessor) player.connection).yoltConnection();
     }
 
+    /** True when this player is kept from their real coordinates: the switch is on and they aren't in admin view. */
+    static boolean hidesFrom(ServerPlayer player) {
+        return on() && !StandIn.is(player) && !realCoordinates.test(player);
+    }
+
     /** The offset a frame starting now gives the player at this real spot. A random one when there is no spot to go by. */
     static Offset frameOffset(ServerPlayer player, @Nullable Vec3 anchor) {
-        if (!on() || StandIn.is(player) || realCoordinates.test(player)) {
+        if (!hidesFrom(player)) {
             return Offset.ZERO;
         }
         return anchor == null ? Offset.random(ThreadLocalRandom.current()) : Offset.at(anchor.x, anchor.z);

@@ -28,6 +28,7 @@ import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerLookAtPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
@@ -42,6 +43,7 @@ import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.Vec3;
@@ -356,6 +358,29 @@ public class CoordinateOffsetCoreGameTests {
         helper.succeed();
     }
 
+    // The world seed's hash would let a client test guesses at the seed, and a seed gives every coordinate away
+    @GameTest(environment = CORE)
+    public void seedHashSentIsNotTheWorlds(GameTestHelper helper) {
+        long real = BiomeManager.obfuscateSeed(helper.getLevel().getSeed());
+        ServerPlayer player = OffsetTestKit.join(helper, "coseed", GameType.SURVIVAL);
+        ServerPlayer other = OffsetTestKit.join(helper, "coseedtwo", GameType.SURVIVAL);
+        ServerPlayer online = player;
+        try {
+            long atLogin = OffsetTestKit.last(helper, player, 0, ClientboundLoginPacket.class).commonPlayerSpawnInfo().seed();
+            helper.assertTrue(atLogin != real, "the login sent the world's own seed hash");
+            helper.assertTrue(OffsetTestKit.last(helper, other, 0, ClientboundLoginPacket.class).commonPlayerSpawnInfo().seed() != atLogin,
+                    "two connections were sent the same seed hash");
+            int mark = OffsetTestKit.mark(player);
+            online = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(1, 1, 1)), false);
+            helper.assertValueEqual(OffsetTestKit.last(helper, online, mark, ClientboundRespawnPacket.class).commonPlayerSpawnInfo().seed(),
+                    atLogin, "the seed hash the respawn sent, which is the connection's");
+        } finally {
+            TestPlayers.leave(online);
+            TestPlayers.leave(other);
+        }
+        helper.succeed();
+    }
+
     // An admin's frame is real when it starts with admin view on, which a rejoin does
     @GameTest(environment = CORE)
     public void adminViewRejoinGetsRealCoordinates(GameTestHelper helper) {
@@ -376,6 +401,8 @@ public class CoordinateOffsetCoreGameTests {
             helper.assertValueEqual(CoordinateOffsets.offset(online), Offset.ZERO, "offset with admin view on");
             Vec3 sent = OffsetTestKit.last(helper, online, 0, ClientboundPlayerPositionPacket.class).change().position();
             helper.assertValueEqual(sent, online.position(), "the rejoin's teleport");
+            helper.assertValueEqual(OffsetTestKit.last(helper, online, 0, ClientboundLoginPacket.class).commonPlayerSpawnInfo().seed(),
+                    BiomeManager.obfuscateSeed(helper.getLevel().getSeed()), "the seed hash an admin in admin view is sent");
         } finally {
             server.getPlayerList().deop(who);
             if (online != null) {

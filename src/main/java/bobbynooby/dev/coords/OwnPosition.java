@@ -64,8 +64,8 @@ final class OwnPosition {
     }
 
     // The first game packet of every login, re-configuration included, so a new frame starts here, at the exact
-    // point in the stream: everything after it is in the new offset, and other dimensions get new away amounts. The seed
-    // and the rest go out as they are.
+    // point in the stream: everything after it is in the new offset, and other dimensions get new away amounts. The seed's
+    // hash is swapped for the connection's own, but for a player who gets real coordinates; the rest goes out as it is.
     private static Packet<?> login(ClientboundLoginPacket packet, Context context) {
         ServerPlayer player = context.listener().player;
         Offset offset = CoordinateOffsets.frameOffset(player, player.position());
@@ -76,7 +76,7 @@ final class OwnPosition {
         state.forgetAway();
         state.heldChunks.clear();
         state.lastPosition = player.position();
-        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, state.outFrame());
+        CommonPlayerSpawnInfo shifted = forClient(spawn, state, CoordinateOffsets.hidesFrom(player));
         if (shifted == spawn) {
             return packet;
         }
@@ -108,18 +108,22 @@ final class OwnPosition {
         state.lastPosition = anchor != null ? anchor : player.position();
         // What the client sends stays in the old frame until it accepts the teleport that comes next
         state.frames.updateAndGet(frames -> new Frames(offset, frames.in(), Frames.AT_NEXT_TELEPORT, frames.inDimension()));
-        CommonPlayerSpawnInfo shifted = withDeathShifted(spawn, state.outFrame());
+        CommonPlayerSpawnInfo shifted = forClient(spawn, state, CoordinateOffsets.hidesFrom(player));
         return shifted == spawn ? packet : new ClientboundRespawnPacket(shifted, packet.dataToKeep());
     }
 
-    // A death in another dimension is shifted by that dimension's away amount; the needle spins there anyway
-    private static CommonPlayerSpawnInfo withDeathShifted(CommonPlayerSpawnInfo spawn, Frame frame) {
-        if (frame.isZero() || spawn.lastDeathLocation().isEmpty()) {
+    // A death in another dimension is shifted by that dimension's away amount; the needle spins there anyway. A hidden
+    // player gets the connection's seed in place of the world's, even in a frame whose offset happens to be zero.
+    private static CommonPlayerSpawnInfo forClient(CommonPlayerSpawnInfo spawn, OffsetState state, boolean hidden) {
+        Frame frame = state.outFrame();
+        boolean shiftsDeath = !frame.isZero() && spawn.lastDeathLocation().isPresent();
+        if (!hidden && !shiftsDeath) {
             return spawn;
         }
-        return new CommonPlayerSpawnInfo(spawn.dimensionType(), spawn.dimension(), spawn.seed(), spawn.gameType(),
-                spawn.previousGameType(), spawn.isDebug(), spawn.isFlat(),
-                spawn.lastDeathLocation().map(death -> frame.shift(death)), spawn.portalCooldown(), spawn.seaLevel());
+        return new CommonPlayerSpawnInfo(spawn.dimensionType(), spawn.dimension(), hidden ? state.seedShown : spawn.seed(),
+                spawn.gameType(), spawn.previousGameType(), spawn.isDebug(), spawn.isFlat(),
+                shiftsDeath ? spawn.lastDeathLocation().map(death -> frame.shift(death)) : spawn.lastDeathLocation(),
+                spawn.portalCooldown(), spawn.seaLevel());
     }
 
     // A relative axis is a step from where the client is, so it stays as it is. The movement is a velocity.

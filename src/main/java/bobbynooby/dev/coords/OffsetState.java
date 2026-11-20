@@ -38,6 +38,11 @@ public final class OffsetState {
     final Set<PacketType<?>> dropFailed = ConcurrentHashMap.newKeySet();
     final Set<PacketType<?>> noteFailed = ConcurrentHashMap.newKeySet();
 
+    // Sent in place of the world seed's hash, which a client only uses to blur biome edges. The real one would let a
+    // client test guesses at the seed, and a seed gives every real coordinate away through the terrain. One for the
+    // connection, so the blur stays the same from one frame to the next.
+    final long seedShown = ThreadLocalRandom.current().nextLong();
+
     public OffsetState() {}
 
     Offset away(ResourceKey<Level> target) {
