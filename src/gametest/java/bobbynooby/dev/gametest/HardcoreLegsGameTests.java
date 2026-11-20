@@ -80,6 +80,23 @@ public class HardcoreLegsGameTests {
         }
     }
 
+    // In the half second after a hit, vanilla only deals what a new hit adds to it. The fall is still judged whole.
+    @GameTest(environment = LEGS)
+    public void legs1AHitJustBeforeLandingDoesNotSaveThem(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "HitThenFell");
+        try {
+            helper.assertTrue(player.hurtServer(helper.getLevel(), helper.getLevel().damageSources().magic(), 2.0F), "the first hit did nothing");
+            helper.assertFalse(Legs.broken(player), "a magic hit broke the legs");
+            float before = player.getHealth();
+            player.causeFallDamage(9.0, 1.0F, helper.getLevel().damageSources().fall());
+            helper.assertValueEqual(before - player.getHealth(), 4.0F, "what the fall dealt on top of the hit, as vanilla does");
+            helper.assertTrue(Legs.broken(player), "a 9-block fall right after a hit left the legs whole");
+        } finally {
+            leave(player);
+        }
+        helper.succeed();
+    }
+
     // Feather Falling IV takes 12 of the 25 protection points: 6 × 13/25 = 3.12 is left
     @GameTest(environment = LEGS)
     public void legs1FeatherFallingFourSavesThem(GameTestHelper helper) {
