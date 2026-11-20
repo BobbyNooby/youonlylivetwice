@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.chat.CommandRestriction;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
@@ -8,13 +9,16 @@ import bobbynooby.dev.lockout.Cooldown;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.lockout.DeathStore;
+import bobbynooby.dev.offline.OfflinePlayerData;
 import bobbynooby.dev.skins.SkinStore;
 import bobbynooby.dev.world.LiveSettings;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
@@ -22,6 +26,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.synchronization.ArgumentUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -29,9 +34,15 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.entity.decoration.Mannequin;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.storage.LevelResource;
+import org.apache.logging.log4j.core.LogEvent;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -49,6 +60,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.stream.Stream;
@@ -397,6 +409,250 @@ public class CommandGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // A cooldown below zero is refused by the command's own argument, before anything is set or written; zero is
+    // allowed and says so in the plural. Writes the config file, so it runs with the other tests that do.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void respawnCooldownRefusesANegativeDay(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        String fileBefore = Files.readString(Settings.path());
+        int daysBefore = Settings.get().deathLockout.cooldownDays;
+        try {
+            List<String> refused = run(server, "yolt respawncooldown -1");
+            helper.assertTrue(!refused.isEmpty() && refused.get(0).equals("Integer must not be less than 0: found -1"),
+                    "output for -1: " + refused);
+            helper.assertValueEqual(Settings.get().deathLockout.cooldownDays, daysBefore, "cooldown setting after -1");
+            helper.assertValueEqual(Files.readString(Settings.path()), fileBefore, "config file after -1");
+
+            helper.assertValueEqual(run(server, "yolt respawncooldown 0"), List.of("Respawn cooldown set to 0 days."
+                    + " It applies to deaths from now on; use /yolt unkill for the rest."), "output for 0");
+            helper.assertValueEqual(Settings.get().deathLockout.cooldownDays, 0, "cooldown setting after 0");
+        } finally {
+            Files.writeString(Settings.path(), fileBefore);
+            restoreConfig(server);
+        }
+        helper.succeed();
+    }
+
+    // A second kill can't restart a lockout: a player who is dead already, still online in the tick of their death, is
+    // left as they are. Graves are off for the death, which carries nothing, and back in the same tick.
+    @GameTest
+    public void killOfDeadPlayerSaysAlreadyDead(GameTestHelper helper) throws IOException, SQLException {
+        ServerPlayer player = TestPlayers.join(helper, "TwiceKilled", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            TestPlayers.markLoaded(player);
+            graves.enabled = false;
+            try {
+                player.kill(player.level());
+            } finally {
+                graves.enabled = gravesBefore;
+            }
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            helper.assertValueEqual(own.rows(who.id()).size(), 1, "death rows after the first death");
+            helper.assertValueEqual(run(helper.getLevel().getServer(), "yolt kill " + who.name()),
+                    List.of(who.name() + " is already dead."), "command output");
+            helper.assertValueEqual(own.rows(who.id()).size(), 1, "death rows after the second kill");
+        } finally {
+            graves.enabled = gravesBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // Vanilla ignores a kill while the player's client is still loading the world, so the kill says it couldn't, rather
+    // than that it killed them, and records nothing
+    @GameTest
+    public void killOfLoadingPlayerSaysNotRightNow(GameTestHelper helper) throws IOException, SQLException {
+        ServerPlayer player = TestPlayers.join(helper, "StillLoading", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            helper.assertValueEqual(run(helper.getLevel().getServer(), "yolt kill " + who.name()),
+                    List.of("Could not kill " + who.name() + " right now."), "command output");
+            helper.assertFalse(player.isDeadOrDying(), "the loading player died");
+            helper.assertTrue(own.rows(who.id()).isEmpty(), "a death was recorded: " + own.rows(who.id()));
+        } finally {
+            TestPlayers.leave(player);
+            BodyTestKit.removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // The death log knows the name, so it is found, but there is no save to kill: they died and were revived without
+    // ever joining here under this id
+    @GameTest
+    public void killOfLoggedNameWithNoSaveSaysNotFound(GameTestHelper helper) throws IOException, SQLException {
+        String name = uniqueName("Saveless");
+        UUID id = UUID.randomUUID();
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            DeathLockout.recordDeath(id, name);
+            helper.assertValueEqual(DeathLockout.revive(id, name, "console"), DeathLockout.ReviveResult.REVIVED, "the revive");
+            helper.assertValueEqual(run(helper.getLevel().getServer(), "yolt kill " + name), List.of("Player " + name + " not found."),
+                    "command output");
+            helper.assertValueEqual(own.rows(id).size(), 1, "death rows");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, id).isEmpty(), "the kill made a grave");
+        }
+        helper.succeed();
+    }
+
+    // An offline kill whose dead save can't be put in place: a non-empty folder where vanilla moves the old save makes
+    // the swap fail. Everything is taken back, the admin is pointed at the log, which has the one error, and nobody is
+    // locked out.
+    @GameTest
+    public void killWhoseSaveCannotBeReplacedSaysSeeTheLog(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Unreplaced", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            // Leaving saves the player, so the kill is an offline one
+            TestPlayers.leave(player);
+            Path blocker = server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(who.id() + ".dat_old");
+            Path blockerContent = blocker.resolve("blocker");
+            Files.createDirectories(blocker);
+            Files.writeString(blockerContent, "");
+            List<String> output = new ArrayList<>();
+            List<LogEvent> log;
+            try {
+                log = OfflineGameTests.yoltEvents(() -> output.addAll(run(server, "yolt kill " + who.name())));
+            } finally {
+                Files.delete(blockerContent);
+                Files.delete(blocker);
+            }
+            helper.assertValueEqual(output, List.of("Could not kill " + who.name() + "; see the server log."), "command output");
+            List<String> errors = log.stream().filter(event -> event.getLevel() == org.apache.logging.log4j.Level.ERROR)
+                    .map(event -> event.getMessage().getFormattedMessage()).toList();
+            helper.assertValueEqual(errors, List.of("Server could not kill " + who.name()), "error lines");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "the failed kill locked " + who.name() + " out");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, who.id()).isEmpty(), "the failed kill left a grave");
+            CompoundTag saved = OfflinePlayerData.load(server, who).orElseThrow();
+            helper.assertFalse(OfflinePlayerData.isDead(saved), "the save is a dead player's");
+            helper.assertValueEqual(GraveAsserts.count(OfflinePlayerData.takeInventory(saved, server.registryAccess(), who.name()),
+                    Items.DIAMOND), 2, "diamonds in the save");
+        } finally {
+            BodyTestKit.removeGraves(helper, who.id());
+        }
+        helper.succeed();
+    }
+
+    // The player is found through having joined, so the closed store is only met by the revive itself
+    @GameTest
+    public void unkillWithClosedStoreSaysSo(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "ClosedUnkill", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        TestPlayers.leave(player);
+        withOwnDeathStore(true, closed -> helper.assertValueEqual(run(server, "yolt unkill " + name),
+                List.of("Could not revive " + name + "; see the server log."), "command output"));
+        helper.succeed();
+    }
+
+    // The revive keeps who did it: an op's name, and "console" for anything that isn't a player, a command block too
+    @GameTest
+    public void unkillByAnOpRecordsTheirName(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer op = TestPlayers.join(helper, "Reviving", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        BlockPos blockAt = new BlockPos(3, 1, 3);
+        String byOp = uniqueName("ByOp");
+        UUID byOpId = server.services().nameToIdCache().get(byOp).orElseThrow().id();
+        String byBlock = uniqueName("ByBlock");
+        UUID byBlockId = server.services().nameToIdCache().get(byBlock).orElseThrow().id();
+        try {
+            TestPlayers.op(op);
+            withOwnDeathStore(false, store -> {
+                DeathLockout.recordDeath(byOpId, byOp);
+                DeathLockout.recordDeath(byBlockId, byBlock);
+                helper.assertValueEqual(SkinGameTests.console(op.createCommandSourceStack(), "yolt unkill " + byOp),
+                        List.of("Revived " + byOp + "."), "the op's unkill");
+                helper.assertValueEqual(store.latest(byOpId).orElseThrow().revivedBy(), op.nameAndId().name(), "who revived, for the op");
+
+                helper.setBlock(blockAt, Blocks.COMMAND_BLOCK);
+                CommandBlockEntity block = (CommandBlockEntity) helper.getBlockEntity(blockAt, CommandBlockEntity.class);
+                block.getCommandBlock().setCommand("yolt unkill " + byBlock);
+                helper.assertTrue(block.getCommandBlock().performCommand(helper.getLevel()), "the command block did not run");
+                helper.assertValueEqual(block.getCommandBlock().getSuccessCount(), 1, "the command block's success count");
+                helper.assertValueEqual(store.latest(byBlockId).orElseThrow().revivedBy(), "console",
+                        "who revived, for the command block");
+            });
+        } finally {
+            TestPlayers.deop(op);
+            TestPlayers.leave(op);
+            helper.setBlock(blockAt, Blocks.AIR);
+        }
+        helper.succeed();
+    }
+
+    // Another mod that keeps a body alive at its death: the kill can't go through it, so nothing happens to the owner,
+    // and the admin is told it couldn't be done right now. The listener stays registered, so it only refuses while the
+    // flag is up, inside this tick. Bodies are on for this tick only.
+    @GameTest
+    public void killThroughABodyAnotherModSavedSaysNotRightNow(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "BodySaved", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        NameAndId who = player.nameAndId();
+        YoltConfig.BodiesSection before = BodyTestKit.useDefaultBodies();
+        try {
+            Mannequin body = BodyTestKit.leaveBody(helper, player);
+            refuseBodyDeaths();
+            List<String> output;
+            REFUSE_BODY_DEATHS.set(true);
+            try {
+                output = run(server, "yolt kill " + who.name());
+            } finally {
+                REFUSE_BODY_DEATHS.set(false);
+            }
+            helper.assertValueEqual(output, List.of("Could not kill " + who.name() + " right now."), "command output");
+            helper.assertTrue(body.isAlive(), "the body died");
+            helper.assertTrue(BodyTestKit.store(helper).byOwner(who.id()).isPresent(), "the body's record went");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, who.id()).isEmpty(), "the kill made a grave");
+            helper.assertTrue(DeathLockout.refusal(who.id(), "Test") == null, "the kill locked " + who.name() + " out");
+            helper.assertFalse(OfflinePlayerData.isDead(OfflinePlayerData.load(server, who).orElseThrow()), "the save is a dead player's");
+        } finally {
+            REFUSE_BODY_DEATHS.set(false);
+            BodyTestKit.cleanUp(helper, who.id(), before);
+        }
+        helper.succeed();
+    }
+
+    // The names typed after kill and unkill are any string, so nothing suggests the players online, or anyone else
+    @GameTest
+    public void killAndUnkillSuggestNoNames(GameTestHelper helper) throws Exception {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Suggested", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        try {
+            CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+            CommandSourceStack console = server.createCommandSourceStack();
+            for (String typed : List.of("yolt kill ", "yolt unkill ", "yolt kill S")) {
+                Suggestions suggestions = dispatcher.getCompletionSuggestions(dispatcher.parse(typed, console)).get();
+                helper.assertTrue(suggestions.isEmpty(), "suggestions for '" + typed + "': " + suggestions.getList());
+            }
+            // The same parse does suggest the subcommands, so an empty list above isn't a parse that went nowhere
+            Suggestions subcommands = dispatcher.getCompletionSuggestions(dispatcher.parse("yolt ki", console)).get();
+            helper.assertTrue(subcommands.getList().stream().anyMatch(suggestion -> suggestion.getText().equals("kill")),
+                    "no kill suggested for 'yolt ki': " + subcommands.getList());
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static final AtomicBoolean REFUSE_BODY_DEATHS = new AtomicBoolean();
+    private static final AtomicBoolean REFUSER_REGISTERED = new AtomicBoolean();
+
+    // A stand-in for another mod's listener, which keeps a dying body alive the way Fabric asks it to: health back up
+    private static void refuseBodyDeaths() {
+        if (REFUSER_REGISTERED.compareAndSet(false, true)) {
+            ServerLivingEntityEvents.ALLOW_DEATH.register((entity, source, amount) -> {
+                if (REFUSE_BODY_DEATHS.get() && entity.entityTags().contains(Bodies.TAG)) {
+                    entity.setHealth(1.0F);
+                    return false;
+                }
+                return true;
+            });
+        }
     }
 
     // Name lookups go through the death log, so a name another test also records could find that test's player

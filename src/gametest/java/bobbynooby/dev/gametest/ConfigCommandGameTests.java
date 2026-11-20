@@ -501,6 +501,33 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // /yolt respawncooldown writes the file through the same change as /yolt config, so it too says where a file that
+    // couldn't be read went. With no .bak there, the copy is the .bak itself, the name the reply gives.
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void respawnCooldownWithUnreadableConfigTellsTheBackup(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        byte[] fileBefore = Files.readAllBytes(path);
+        CommandGameTests.SavedBackups backups = CommandGameTests.saveBackups(path);
+        try {
+            Files.deleteIfExists(backups.bak());
+            Files.writeString(path, "{");
+            List<Integer> results = new ArrayList<>();
+            List<String> output = CommandGameTests.run(server, "yolt respawncooldown 3", results::add);
+            helper.assertValueEqual(output, List.of(
+                    "Respawn cooldown set to 3 days. It applies to deaths from now on; use /yolt unkill for the rest.",
+                    "Your config file couldn't be read, so it was kept as you-only-live-twice.json.bak and rewritten."),
+                    "command output");
+            helper.assertValueEqual(results, List.of(1), "command result");
+            helper.assertValueEqual(fileValue("deathLockout.cooldownDays").getAsInt(), 3, "cooldownDays in the file");
+            helper.assertValueEqual(Files.readString(backups.bak()), "{", "the kept copy");
+        } finally {
+            restore(server, fileBefore);
+            CommandGameTests.restoreBackups(backups);
+        }
+        helper.succeed();
+    }
+
     // A new whole-number key, as each new key settable in game is checked: shown, set, refused out of range, and read
     // again from the file by a reload
     @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
