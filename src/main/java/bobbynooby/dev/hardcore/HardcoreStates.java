@@ -12,8 +12,10 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -33,11 +35,19 @@ public final class HardcoreStates {
         final HardcoreState state;
         // What the store holds for it; the state is dirty when it encodes to something else
         String saved;
+        // True for a state standing in for one the store couldn't give. It is never saved, since that would put it
+        // over the player's real one, and each use tries the read again.
+        final boolean unread;
 
-        Cached(HardcoreState state, String saved) {
+        Cached(HardcoreState state, String saved, boolean unread) {
             this.state = state;
             this.saved = saved;
+            this.unread = unread;
         }
+    }
+
+    // A state as far as it is known. Unread when the store is there but couldn't give the player's row.
+    private record Loaded(HardcoreState state, boolean unread) {
     }
 
     private static @Nullable Path file;
@@ -47,6 +57,9 @@ public final class HardcoreStates {
     private static final Map<UUID, Cached> ONLINE = new HashMap<>();
     // Writes the store couldn't take, newest first over whatever the store holds
     private static final Map<UUID, String> UNSAVED_PLAYERS = new HashMap<>();
+    // Changes made to a player whose row couldn't be read, in order. They are made again on the real row once it can
+    // be, and until then nothing is written for the player: a fresh state with these changes would wipe the rest.
+    private static final Map<UUID, List<Consumer<HardcoreState>>> UNREAD_CHANGES = new HashMap<>();
     private static final Map<String, Long> UNSAVED_WORLD = new HashMap<>();
 
     private HardcoreStates() {}
@@ -82,17 +95,25 @@ public final class HardcoreStates {
         Cached online = ONLINE.get(uuid);
         if (online != null) {
             change.accept(online.state);
+            if (online.unread) {
+                UNREAD_CHANGES.computeIfAbsent(uuid, id -> new ArrayList<>()).add(change);
+            }
             return;
         }
-        HardcoreState state = load(uuid);
-        change.accept(state);
-        savePlayer(uuid, state.encode());
+        Loaded loaded = load(uuid);
+        change.accept(loaded.state());
+        if (loaded.unread()) {
+            UNREAD_CHANGES.computeIfAbsent(uuid, id -> new ArrayList<>()).add(change);
+            UNSAVED_PLAYERS.put(uuid, loaded.state().encode());
+            return;
+        }
+        savePlayer(uuid, loaded.state().encode());
     }
 
     /** A copy of the player's state, whether or not they are online. */
     public static synchronized HardcoreState read(UUID uuid) {
         Cached online = ONLINE.get(uuid);
-        return online != null ? online.state.copy() : load(uuid);
+        return online != null ? online.state.copy() : load(uuid).state();
     }
 
     static synchronized void flush(ServerPlayer player) {
@@ -155,6 +176,11 @@ public final class HardcoreStates {
         store = null;
         failed = false;
         ONLINE.clear();
+        if (!UNREAD_CHANGES.isEmpty()) {
+            Yolt.LOGGER.error("The hardcore states of {} could never be read, so the changes made to them are lost",
+                    UNREAD_CHANGES.keySet());
+        }
+        UNREAD_CHANGES.clear();
         UNSAVED_PLAYERS.clear();
         UNSAVED_WORLD.clear();
         file = dbFile;
@@ -180,10 +206,16 @@ public final class HardcoreStates {
      */
     static synchronized void flushAll() {
         // Online states over older failed writes of the same player, since they are newer
-        Map<UUID, String> players = new LinkedHashMap<>(UNSAVED_PLAYERS);
+        Map<UUID, String> players = new LinkedHashMap<>();
+        for (UUID uuid : List.copyOf(UNSAVED_PLAYERS.keySet())) {
+            // One whose row couldn't be read is read again first, and waits if it still can't be
+            if (!UNREAD_CHANGES.containsKey(uuid) || !load(uuid).unread()) {
+                players.put(uuid, UNSAVED_PLAYERS.get(uuid));
+            }
+        }
         ONLINE.forEach((uuid, online) -> {
             String now = online.state.encode();
-            if (!now.equals(online.saved)) {
+            if (!online.unread && !now.equals(online.saved)) {
                 players.put(uuid, now);
             }
         });
@@ -215,6 +247,9 @@ public final class HardcoreStates {
     }
 
     private static void save(UUID uuid, Cached online) {
+        if (online.unread) {
+            return;
+        }
         String now = online.state.encode();
         // Left unsaved on a failed write, so the next flush tries again
         if (!now.equals(online.saved) && savePlayer(uuid, now)) {
@@ -224,30 +259,46 @@ public final class HardcoreStates {
 
     private static Cached cached(UUID uuid) {
         Cached online = ONLINE.get(uuid);
-        if (online == null) {
-            HardcoreState state = load(uuid);
-            // Saved as it was loaded, so a state nothing changed is never written
-            online = new Cached(state, state.encode());
-            ONLINE.put(uuid, online);
+        if (online == null || online.unread) {
+            Loaded loaded = load(uuid);
+            if (!loaded.unread() || online == null) {
+                if (online != null) {
+                    Yolt.LOGGER.warn("The hardcore state of {} could be read again; what changed meanwhile is lost, but for"
+                            + " deaths and totems", uuid);
+                }
+                // Saved as it was loaded, so a state nothing changed is never written
+                online = new Cached(loaded.state(), loaded.state().encode(), loaded.unread());
+                ONLINE.put(uuid, online);
+            }
         }
         return online;
     }
 
-    private static HardcoreState load(UUID uuid) {
+    private static Loaded load(UUID uuid) {
+        List<Consumer<HardcoreState>> changes = UNREAD_CHANGES.get(uuid);
         String unsaved = UNSAVED_PLAYERS.get(uuid);
-        if (unsaved != null) {
-            return HardcoreState.decode(unsaved);
+        if (changes == null && unsaved != null) {
+            return new Loaded(HardcoreState.decode(unsaved), false);
         }
         HardcoreStore open = readableStore();
         if (open == null) {
-            return new HardcoreState();
+            // No store at all: nothing is stored that a save could wipe
+            return new Loaded(unsaved != null ? HardcoreState.decode(unsaved) : new HardcoreState(), false);
         }
+        HardcoreState state;
         try {
-            return open.player(uuid).map(HardcoreState::decode).orElseGet(HardcoreState::new);
+            state = open.player(uuid).map(HardcoreState::decode).orElseGet(HardcoreState::new);
         } catch (RuntimeException e) {
-            Yolt.LOGGER.error("Could not read the hardcore state of {}, starting it fresh", uuid, e);
-            return new HardcoreState();
+            Yolt.LOGGER.error("Could not read the hardcore state of {}; nothing is saved over it until it can be read", uuid, e);
+            return new Loaded(unsaved != null ? HardcoreState.decode(unsaved) : new HardcoreState(), true);
         }
+        if (changes != null) {
+            // The row is back: the changes made without it are made on it, and it waits for the next save
+            changes.forEach(change -> change.accept(state));
+            UNREAD_CHANGES.remove(uuid);
+            UNSAVED_PLAYERS.put(uuid, state.encode());
+        }
+        return new Loaded(state, false);
     }
 
     // True when the store took it; otherwise it is kept in memory

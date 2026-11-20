@@ -142,6 +142,39 @@ class HardcoreStoreTest {
         }
     }
 
+    // A read that fails must not start the player fresh for good: the next save would wipe their curse and broken legs
+    @Test
+    void aFailedReadNeverWritesOverTheStoredState() {
+        Path file = dir.resolve("hardcore.db");
+        try (HardcoreStore first = HardcoreStore.open(file)) {
+            HardcoreState stored = new HardcoreState();
+            stored.legsBroken = true;
+            first.savePlayer(uuid, stored.encode());
+        }
+        HardcoreStore broken = HardcoreStore.open(file);
+        broken.close();
+        HardcoreStates.useFileForTesting(null);
+        HardcoreStates.useStoreForTesting(broken);
+        try {
+            HardcoreStates.update(uuid, state -> state.chill = 0.5);
+            HardcoreStates.flushAll();
+            try (HardcoreStore reading = HardcoreStore.open(file)) {
+                assertTrue(HardcoreState.decode(reading.player(uuid).orElseThrow()).legsBroken, "the stored state was written over");
+            }
+
+            // Once the row can be read, the change is made on it
+            HardcoreStates.useStoreForTesting(HardcoreStore.open(file));
+            HardcoreStates.flushAll();
+            try (HardcoreStore reading = HardcoreStore.open(file)) {
+                HardcoreState now = HardcoreState.decode(reading.player(uuid).orElseThrow());
+                assertTrue(now.legsBroken, "the stored state was lost");
+                assertEquals(0.5, now.chill, "the change made while it couldn't be read was lost");
+            }
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+    }
+
     // One transaction: a row the file refuses rolls back the rows before it, and every state waits for the next flush
     @Test
     void flushStopsAtAFailedWriteAndKeepsEveryState() throws SQLException {
