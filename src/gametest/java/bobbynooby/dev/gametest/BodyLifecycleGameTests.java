@@ -7,6 +7,7 @@ import bobbynooby.dev.bodies.BodyLogout;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRestart;
 import bobbynooby.dev.bodies.BodyRules;
+import bobbynooby.dev.bodies.BodySnapshot;
 import bobbynooby.dev.bodies.GearSync;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
@@ -20,12 +21,15 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.PlayerList;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -78,6 +82,10 @@ import static bobbynooby.dev.gametest.BodyTestKit.usePlayerBodies;
 // server's own back in the same tick, before any other test runs. The tests that wait only wait for the
 // check a body load queues, which doesn't read them.
 public class BodyLifecycleGameTests {
+    // A batch of its own: the pose test holds the server's own pose across ticks
+    private static final String BODY_POSE = "you-only-live-twice-gametest:body_pose";
+    private static final SharedHold POSE_HOLD = new SharedHold();
+
     @GameTest
     public void logoutSpawnsProneBodyWithGear(GameTestHelper helper) {
         ServerPlayer player = join(helper, "Body", GameType.SURVIVAL);
@@ -973,6 +981,316 @@ public class BodyLifecycleGameTests {
                 removeBodies(helper, owner);
             }
         }
+    }
+
+    // The race at login: the body is alive when the login check lets the owner in, and dies before they are placed in
+    // the world. The owner must never come back alive holding what the grave holds too: they land dead, with nothing,
+    // and are still locked out, so the join's kick comes. In the login check's batch, so no other test's player fills
+    // the one slot the test server has. All in one tick, and they leave before the kick.
+    @GameTest(environment = LockoutGameTests.LOGIN_CHECK)
+    public void bodyKilledBetweenLoginCheckAndJoinNeverRevivesTheOwner(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "Raced", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 5));
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.IRON_CHESTPLATE));
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(LockoutGameTests.loginRefusal(server, player.nameAndId()) == null,
+                    "the login check refused the owner while the body was alive");
+
+            body.kill(helper.getLevel());
+            helper.assertTrue(body.isDeadOrDying(), "the body did not die");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, owner, Items.DIAMOND), 5, "diamonds in the graves");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.isDeadOrDying(), "the owner landed alive after their body died");
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 0, "diamonds the owner landed with");
+            helper.assertTrue(back.getItemBySlot(EquipmentSlot.CHEST).isEmpty(), "the owner landed wearing the chestplate");
+            helper.assertTrue(LockoutGameTests.refusedForLockout(DeathLockout.refusal(owner, "Test")),
+                    "the owner is not locked out, so the join's kick won't come");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "the dead body's record is still there");
+        } finally {
+            cleanUp(helper, owner, before);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // A second login of the same account: vanilla kicks the first session, whose logout leaves a body holding copies of
+    // the hand, and only then places the second, which takes the body over. The diamonds exist once, on the player,
+    // with no body, record or drop left. Three in the hand, which the body copies, and two in the bag, which it doesn't.
+    @GameTest
+    public void duplicateLoginOfSameUuidMakesNoSecondCopy(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer first = join(helper, "Twin", GameType.SURVIVAL);
+        UUID owner = first.getUUID();
+        AABB around = new AABB(first.blockPosition()).inflate(4.0);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            first.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND, 3));
+            first.getInventory().setItem(9, new ItemStack(Items.DIAMOND, 2));
+            helper.assertTrue(server.getPlayerList().disconnectAllPlayersWithProfile(owner), "no session was kicked");
+            helper.assertTrue(server.getPlayerList().getPlayer(owner) == null, "the first session is still online");
+            helper.assertValueEqual(LockoutGameTests.disconnectReason(first), PlayerList.DUPLICATE_LOGIN_DISCONNECT_MESSAGE.getString(),
+                    "the first session's kick");
+            List<? extends Mannequin> bodies = bodiesOf(helper, owner);
+            helper.assertValueEqual(bodies.size(), 1, "bodies the kick left");
+            helper.assertValueEqual(bodies.get(0).getMainHandItem().getCount(), 3, "diamonds in the body's hand");
+
+            ServerPlayer second = rejoin(helper, first);
+            helper.assertValueEqual(second.getInventory().countItem(Items.DIAMOND), 5, "diamonds the second session has");
+            helper.assertTrue(bodiesOf(helper, owner).isEmpty(), "a body is left");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "a body record is left for the second session");
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, first.blockPosition(), 4.0), 0, "diamonds dropped");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // Only what a body stands for comes from it: health from the body, while hunger and XP stay as the save has them
+    @GameTest
+    public void loginKeepsOwnHungerAndXp(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Peckish", GameType.SURVIVAL);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            player.getFoodData().setFoodLevel(6);
+            player.giveExperienceLevels(12);
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(10.0F);
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.getHealth(), 10.0F, "health after login");
+            helper.assertValueEqual(back.getFoodData().getFoodLevel(), 6, "food after login");
+            helper.assertValueEqual(back.experienceLevel, 12, "XP level after login");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // Switching bodies off stops new ones, but a body already standing is still its owner: the login hands it over
+    // and takes it away, as with the switch on
+    @GameTest
+    public void bodiesTurnedOffWhileAwayStillHandsTheBodyBack(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "SwitchedAway", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(8.0F);
+            body.teleportTo(body.getX() + 3.0, body.getY(), body.getZ());
+            Vec3 moved = body.position();
+            Settings.get().bodies.enabled = false;
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertValueEqual(back.position(), moved, "position after login");
+            helper.assertValueEqual(back.getHealth(), 8.0F, "health after login");
+            helper.assertTrue(body.isRemoved(), "the body is still in the world");
+            helper.assertTrue(store(helper).byOwner(owner).isEmpty(), "the body's record is still there");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // A mod that removes a body without killing it, as a lag clear can: nothing dies, so there is no grave or lockout,
+    // and the owner takes over the state the record last saved. The record waits for a body that will never load.
+    @GameTest
+    public void discardedBodyHandsOverItsLastSavedState(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Cleared", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            body.setHealth(12.0F);
+            // What the autosave and the stop run, so the record has the body's state
+            BodyRestart.snapshotBodies(helper.getLevel().getServer());
+            body.setHealth(5.0F);
+            body.discard();
+            helper.assertTrue(gravesOf(helper, owner).isEmpty(), "the discard made a grave");
+            helper.assertTrue(DeathLockout.refusal(owner, "Test") == null, "the discard locked the owner out");
+            helper.assertValueEqual(store(helper).byOwner(owner).map(record -> record.snapshot().health()), Optional.of(12.0F),
+                    "saved health after the discard");
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertFalse(back.isDeadOrDying(), "the owner logged in dead");
+            helper.assertValueEqual(back.getHealth(), 12.0F, "health after login");
+            Optional<BodyRecord> record = store(helper).byOwner(owner);
+            helper.assertTrue(record.isPresent() && record.get().pendingRemoval(), "the record is not waiting for its body: " + record);
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // bodies.pose is read as a body is made: a prone mannequin and a prone player body stay prone through 40 ticks
+    // with the switch at standing, and only the next logout stands. A player stays near, so the bodies' area ticks. A
+    // batch of its own, since the server's own section holds the pose across ticks: bodies stay off in it, so no other
+    // test's logout makes a body, and copies in a flake hunt share the hold.
+    @GameTest(maxTicks = 80, environment = BODY_POSE)
+    public void poseChangeLeavesStandingBodiesAlone(GameTestHelper helper) {
+        ServerPlayer mannequinOwner = join(helper, "ProneMannequin", GameType.SURVIVAL);
+        ServerPlayer playerOwner = TestPlayers.join(helper, "PronePlayer", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        ServerPlayer later = TestPlayers.join(helper, "StandsLater", GameType.SURVIVAL, new BlockPos(1, 1, 3));
+        ServerPlayer watcher = TestPlayers.join(helper, "PoseWatcher", GameType.SURVIVAL, new BlockPos(3, 1, 3));
+        Runnable cleanUp = once(() -> {
+            POSE_HOLD.release();
+            TestPlayers.leave(watcher);
+            for (ServerPlayer owner : List.of(mannequinOwner, playerOwner, later)) {
+                cleanUp(helper, owner.getUUID());
+            }
+        });
+        POSE_HOLD.take(() -> {
+            YoltConfig.BodiesSection bodies = Settings.get().bodies;
+            YoltConfig.BodyPose pose = bodies.pose;
+            return () -> bodies.pose = pose;
+        });
+        boolean waiting = false;
+        try {
+            YoltConfig.BodiesSection before = useDefaultBodies();
+            Mannequin mannequin;
+            PlayerBody playerBody;
+            try {
+                mannequin = leaveBody(helper, mannequinOwner);
+                Settings.get().bodies.type = YoltConfig.BodyType.PLAYER;
+                playerBody = leavePlayerBody(helper, playerOwner);
+            } finally {
+                Settings.get().bodies = before;
+            }
+            helper.assertValueEqual(mannequin.getPose(), Pose.SWIMMING, "the mannequin's pose at its logout");
+            helper.assertValueEqual(playerBody.getPose(), Pose.SWIMMING, "the player body's pose at its logout");
+            Settings.get().bodies.pose = YoltConfig.BodyPose.STANDING;
+            helper.runAfterDelay(40, () -> {
+                try {
+                    helper.assertValueEqual(mannequin.getPose(), Pose.SWIMMING, "the mannequin's pose 40 ticks after the switch");
+                    helper.assertValueEqual(playerBody.getPose(), Pose.SWIMMING, "the player body's pose 40 ticks after the switch");
+                    YoltConfig.BodiesSection held = Settings.get().bodies;
+                    held.enabled = true;
+                    try {
+                        helper.assertValueEqual(leaveBody(helper, later).getPose(), Pose.STANDING, "the next logout's pose");
+                    } finally {
+                        held.enabled = false;
+                    }
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // bodies.type is read as a body is made too: a mannequin made before the switch to player stays a mannequin and
+    // stays its owner's body, so killing it is still their death
+    @GameTest
+    public void typeSwitchLeavesStandingBodiesAsTheyWere(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "TypeSwitched", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Settings.get().bodies.type = YoltConfig.BodyType.PLAYER;
+            Entity entity = helper.getLevel().getEntity(body.getUUID());
+            helper.assertTrue(entity instanceof Mannequin && !entity.isRemoved(), "the mannequin went with the switch: " + entity);
+            helper.assertTrue(BodyRules.isBody(body), "the mannequin is no longer a body");
+            helper.assertValueEqual(store(helper).byOwner(owner).map(BodyRecord::type), Optional.of(YoltConfig.BodyType.MANNEQUIN),
+                    "the record's type");
+
+            body.kill(helper.getLevel());
+            helper.assertValueEqual(gravesOf(helper, owner).size(), 1, "graves after the mannequin's death");
+            helper.assertTrue(LockoutGameTests.refusedForLockout(DeathLockout.refusal(owner, "Test")),
+                    "the mannequin's death did not lock the owner out");
+        } finally {
+            cleanUp(helper, owner, before);
+            DeathLockout.revive(owner, "Test", "console");
+        }
+        helper.succeed();
+    }
+
+    // Adventure is a survival mode, so its logout leaves a body like survival's; only creative and spectator get none
+    @GameTest
+    public void adventureLogoutLeavesABody(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Wanderer", GameType.ADVENTURE);
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            helper.assertTrue(BodyRules.isBody(body), "the adventure logout's mannequin is not a body");
+        } finally {
+            cleanUp(helper, player.getUUID(), before);
+        }
+        helper.succeed();
+    }
+
+    // A mannequin with the body tag that no record points at, as after a record was dropped, goes once it loads. A
+    // plain mannequin beside it stays: only the tag and a missing record make one go. The check waits for the tick's
+    // end, so a server running behind still runs it within 4 ticks.
+    @GameTest(maxTicks = 20)
+    public void taggedMannequinWithNoRecordIsRemovedWhenItLoads(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Mannequin tagged = new Mannequin(EntityTypes.MANNEQUIN, level);
+        tagged.addTag(Bodies.TAG);
+        Mannequin plain = new Mannequin(EntityTypes.MANNEQUIN, level);
+        BlockPos at = helper.absolutePos(new BlockPos(2, 1, 2));
+        tagged.snapTo(at, 0.0F, 0.0F);
+        plain.snapTo(at.east(), 0.0F, 0.0F);
+        Runnable cleanUp = once(() -> {
+            tagged.discard();
+            plain.discard();
+        });
+        boolean waiting = false;
+        try {
+            helper.assertTrue(level.addFreshEntity(tagged), "the tagged mannequin could not load");
+            helper.assertTrue(level.addFreshEntity(plain), "the plain mannequin could not load");
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertTrue(tagged.isRemoved(), "the tagged mannequin with no record stayed");
+                    helper.assertFalse(plain.isRemoved(), "the plain mannequin went");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A body moved to a dimension that is gone since, as after a datapack's removal: the login can't put the owner
+    // there, so they stay where their save has them, and still take over the body's health
+    @GameTest
+    public void takeoverOfABodyInAGoneDimensionKeepsTheSavePosition(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Stranded", GameType.SURVIVAL);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        try {
+            Mannequin body = leaveBody(helper, player);
+            Vec3 savedAt = body.position();
+            unload(helper, body);
+            BodyRecord record = store(helper).byOwner(owner).orElseThrow();
+            BodySnapshot was = record.snapshot();
+            ResourceKey<Level> gone = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("yolt", "gone"));
+            store(helper).put(record.withSnapshot(new BodySnapshot(gone, was.pos().add(100.0, 0.0, 100.0), was.yRot(), 9.0F,
+                    was.absorption(), was.fallDistance(), was.fireTicks(), was.air(), was.effects(), was.gear())));
+
+            ServerPlayer back = rejoin(helper, player);
+            helper.assertTrue(back.level() == helper.getLevel(), "the owner logged in in " + back.level().dimension().identifier());
+            helper.assertValueEqual(back.position(), savedAt, "position after login");
+            helper.assertValueEqual(back.getHealth(), 9.0F, "health after login");
+        } finally {
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
     }
 
     private static ServerPlayer join(GameTestHelper helper, String name, GameType mode) {
