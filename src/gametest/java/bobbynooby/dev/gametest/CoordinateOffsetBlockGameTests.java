@@ -16,6 +16,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.protocol.game.ClientboundAddTransientBlockPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -47,7 +48,9 @@ import net.minecraft.util.debug.DebugSubscriptions;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.component.MapDecorations;
@@ -64,6 +67,7 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.level.block.entity.JigsawBlockEntity;
 import net.minecraft.world.level.block.entity.ShelfBlockEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
 import net.minecraft.world.level.block.entity.SignTextSlot;
 import net.minecraft.world.level.block.entity.StructureBlockEntity;
 import net.minecraft.world.level.block.entity.TestInstanceBlockEntity;
@@ -218,6 +222,36 @@ public class CoordinateOffsetBlockGameTests {
             helper.assertValueEqual(exitPortal(gateway.getUpdateTag(level.registryAccess())), EXIT, "the gateway's own exit");
             helper.assertValueEqual(campfire.getItems().get(0).get(DataComponents.LODESTONE_TRACKER).target(),
                     Optional.of(GlobalPos.of(Level.OVERWORLD, TARGET)), "the campfire's own compass");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // A sign's text can show an item on hover, and a lodestone compass shown that way has its target in the sign's tag
+    @GameTest(environment = BLOCKS)
+    public void signHoverCompassShifted(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbsignhover", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            BlockPos signPos = new BlockPos(3, 1, 3);
+            helper.setBlock(signPos, Blocks.OAK_SIGN);
+            SignBlockEntity sign = (SignBlockEntity) helper.getLevel().getBlockEntity(helper.absolutePos(signPos));
+            ItemStack compass = compassIn(Level.OVERWORLD, TARGET);
+            Component line = Component.literal("look").withStyle(style -> style.withHoverEvent(
+                    new HoverEvent.ShowItem(ItemStackTemplate.fromNonEmptyStack(compass))));
+            List<Component> lines = List.of(line, Component.empty(), Component.empty(), Component.empty());
+            sign.setText(new SignText(lines, lines, DyeColor.BLACK, false), SignTextSlot.FRONT);
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(ClientboundBlockEntityDataPacket.create(sign));
+
+            CompoundTag tag = OffsetTestKit.last(helper, player, mark, ClientboundBlockEntityDataPacket.class).getTag();
+            int[] pos = tag.getCompoundOrEmpty("front_text").getListOrEmpty("messages").getCompoundOrEmpty(0)
+                    .getCompoundOrEmpty("hover_event").getCompoundOrEmpty("components")
+                    .getCompoundOrEmpty("minecraft:lodestone_tracker").getCompoundOrEmpty("target").getIntArray("pos")
+                    .orElse(new int[3]);
+            helper.assertValueEqual(new BlockPos(pos[0], pos[1], pos[2]), offset.shift(TARGET),
+                    "the target of the compass the sign shows on hover");
         } finally {
             TestPlayers.leave(player);
         }

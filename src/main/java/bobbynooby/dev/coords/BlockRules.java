@@ -100,7 +100,12 @@ public final class BlockRules {
                 BlockEntityTypes.BEACON,
                 // the entity they spawn next, which an op can give any data
                 BlockEntityTypes.MOB_SPAWNER,
-                BlockEntityTypes.TRIAL_SPAWNER);
+                BlockEntityTypes.TRIAL_SPAWNER,
+                // text, which can show an item on hover, such as a lodestone compass with its target
+                BlockEntityTypes.SIGN,
+                BlockEntityTypes.HANGING_SIGN,
+                // its custom name, a text like a sign's
+                BlockEntityTypes.SKULL);
         noPositions(
                 BlockEntityTypes.BARREL,
                 BlockEntityTypes.BEEHIVE,
@@ -125,8 +130,6 @@ public final class BlockRules {
                 BlockEntityTypes.END_PORTAL,
                 BlockEntityTypes.ENDER_CHEST,
                 BlockEntityTypes.FURNACE,
-                // text, which is left as it is, as on a sign
-                BlockEntityTypes.HANGING_SIGN,
                 BlockEntityTypes.HOPPER,
                 BlockEntityTypes.JIGSAW,
                 BlockEntityTypes.JUKEBOX,
@@ -138,8 +141,6 @@ public final class BlockRules {
                 BlockEntityTypes.SCULK_SENSOR,
                 BlockEntityTypes.SCULK_SHRIEKER,
                 BlockEntityTypes.SHULKER_BOX,
-                BlockEntityTypes.SIGN,
-                BlockEntityTypes.SKULL,
                 BlockEntityTypes.SMOKER,
                 // its corner and size are relative to the block
                 BlockEntityTypes.STRUCTURE_BLOCK,
