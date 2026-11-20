@@ -4,6 +4,7 @@ import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyChunks;
 import bobbynooby.dev.bodies.BodyDeath;
 import bobbynooby.dev.bodies.BodyLogout;
+import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.bodies.PlayerBody;
@@ -407,6 +408,46 @@ public class BodyDeathGameTests {
         } finally {
             TestPlayers.leave(player);
             BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // Switching bodies off stops new ones, but a body made before still stands for its owner, so vanilla /kill still
+    // leaves it and says so. The switches are on only for the logout.
+    @GameTest
+    public void vanillaKillSkipsBodiesWithBodiesTurnedOff(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "KillOffBodies");
+        UUID owner = player.getUUID();
+        try {
+            Mannequin body = BodyTestKit.leaveBodyWithDefaults(helper, player);
+            helper.assertFalse(Settings.get().bodies.enabled, "bodies are on for the server");
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill @e[type=mannequin,distance=..0.5]"),
+                    List.of("Killed 0 entities", "Skipped 1 offline player body. Use /yolt kill <player> to kill one."),
+                    "output of /kill");
+            helper.assertFalse(body.isDeadOrDying() || body.isRemoved(), "the body died");
+            helper.assertTrue(LockoutGameTests.refusalText(owner).isEmpty(), "the owner was locked out");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "the body record went");
+        } finally {
+            cleanUp(helper, owner);
+        }
+        helper.succeed();
+    }
+
+    // A mannequin with the body tag that no record points at is nobody's body, so /kill kills it like any mannequin and
+    // gives no hint
+    @GameTest
+    public void vanillaKillKillsATaggedMannequinNoRecordPointsAt(GameTestHelper helper) {
+        Mannequin stray = new Mannequin(EntityTypes.MANNEQUIN, helper.getLevel());
+        stray.addTag(Bodies.TAG);
+        stray.snapTo(helper.absolutePos(new BlockPos(1, 1, 1)), 0.0F, 0.0F);
+        try {
+            helper.assertTrue(helper.getLevel().addFreshEntity(stray), "the stray mannequin was not added");
+            helper.assertFalse(BodyRules.isBody(stray), "the stray mannequin counts as a body");
+            helper.assertValueEqual(killFrom(helper, new BlockPos(1, 1, 1), "kill @e[type=mannequin,distance=..0.5]"),
+                    List.of("Killed " + stray.getDisplayName().getString()), "output of /kill");
+            helper.assertTrue(stray.isDeadOrDying(), "the stray mannequin /kill hit is alive");
+        } finally {
+            stray.discard();
         }
         helper.succeed();
     }
