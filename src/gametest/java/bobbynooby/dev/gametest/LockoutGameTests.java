@@ -23,18 +23,22 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.UserBanList;
 import net.minecraft.server.players.UserBanListEntry;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.AABB;
 
 import java.io.IOException;
@@ -844,6 +848,209 @@ public class LockoutGameTests {
             leaveIfOnline(player);
             BodyTestKit.removeGraves(helper, uuid);
             discardOrbsNear(helper, at);
+        }
+        helper.succeed();
+    }
+
+    // Adventure is a survival mode to the lockout: only creative and spectator deaths are let off. The death counts like
+    // any other: recorded, locking the player out, the items in the grave and no mark left. All in one tick, and the
+    // player leaves before the kick comes.
+    @GameTest
+    public void adventureDeathCountsAndLocksOut(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "Adventurer", GameType.ADVENTURE, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        BlockPos at = player.blockPosition();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the adventure player did not die");
+            helper.assertTrue(DeathLockout.newestDeath(uuid) != null, "the adventure death was not recorded");
+            helper.assertTrue(refusedForLockout(DeathLockout.refusal(uuid, "Test")), "the adventure death did not lock the player out");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, uuid, Items.DIAMOND), 2, "diamonds in the graves");
+            helper.assertFalse(player.entityTags().contains(UncountedDeaths.MARK), "the adventure death was marked as not counting");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+            discardOrbsNear(helper, at);
+        }
+        helper.succeed();
+    }
+
+    // With keepInventory on, vanilla hands the items and XP back itself, and a death that doesn't count must not hand
+    // them over a second time or drop a copy. The rule goes back in the same tick, after the respawn that reads it.
+    @GameTest
+    public void creativeDeathWithKeepInventoryHandsBackOnce(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = TestPlayers.join(helper, "KeptCreative", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        UUID uuid = player.getUUID();
+        BlockPos at = player.blockPosition();
+        boolean keepBefore = server.getGameRules().get(GameRules.KEEP_INVENTORY);
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            player.giveExperienceLevels(10);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            server.getGameRules().set(GameRules.KEEP_INVENTORY, true, server);
+            ServerPlayer back;
+            try {
+                TestPlayers.markLoaded(player);
+                player.kill(player.level());
+                helper.assertTrue(player.isDeadOrDying(), "the creative player did not die");
+                back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
+            } finally {
+                server.getGameRules().set(GameRules.KEEP_INVENTORY, keepBefore, server);
+            }
+            helper.assertValueEqual(back.getInventory().countItem(Items.DIAMOND), 3, "diamonds after the respawn");
+            helper.assertValueEqual(back.experienceLevel, 10, "XP level after the respawn");
+            helper.assertValueEqual(GraveDeathGameTests.itemsNear(helper, Items.DIAMOND, at, 3.0), 0, "diamonds dropped");
+            helper.assertTrue(BodyTestKit.gravesOf(helper, uuid).isEmpty(), "the creative death made a grave");
+            helper.assertFalse(back.entityTags().contains(UncountedDeaths.MARK), "the respawned player still has the death's mark");
+        } finally {
+            server.getGameRules().set(GameRules.KEEP_INVENTORY, keepBefore, server);
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // The game mode at the moment of death decides, not the one at the respawn: an op who sets a dead creative player to
+    // survival still sees them handed everything back, and a dead survival player set to creative gets nothing back and
+    // stays locked out. All in one tick, and both leave before the kick comes.
+    @GameTest
+    public void gameModeChangedBeforeRespawnStillHandsBack(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer creative = TestPlayers.join(helper, "WasCreative", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        ServerPlayer survival = TestPlayers.join(helper, "WasSurvival", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        BlockPos survivalAt = survival.blockPosition();
+        try {
+            creative.getInventory().add(new ItemStack(Items.DIAMOND, 3));
+            creative.giveExperienceLevels(10);
+            creative.setScore(5);
+            survival.getInventory().add(new ItemStack(Items.DIAMOND, 2));
+            survival.giveExperienceLevels(4);
+            for (ServerPlayer dying : List.of(creative, survival)) {
+                GraveDeathGameTests.respawnBesideTest(helper, dying);
+                TestPlayers.markLoaded(dying);
+                dying.kill(dying.level());
+                helper.assertTrue(dying.isDeadOrDying(), dying.nameAndId().name() + " did not die");
+            }
+            creative.setGameMode(GameType.SURVIVAL);
+            survival.setGameMode(GameType.CREATIVE);
+
+            ServerPlayer creativeBack = TestPlayers.respawn(creative, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(creativeBack.getInventory().countItem(Items.DIAMOND), 3, "diamonds after the creative death");
+            helper.assertValueEqual(creativeBack.experienceLevel, 10, "XP level after the creative death");
+            helper.assertValueEqual(creativeBack.getScore(), 5, "score after the creative death");
+            helper.assertTrue(DeathLockout.newestDeath(creative.getUUID()) == null, "the creative death was recorded");
+
+            ServerPlayer survivalBack = TestPlayers.respawn(survival, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(survivalBack.getInventory().countItem(Items.DIAMOND), 0, "diamonds after the survival death");
+            helper.assertValueEqual(survivalBack.experienceLevel, 0, "XP level after the survival death");
+            helper.assertValueEqual(GraveAsserts.countInGraves(server, survival.getUUID(), Items.DIAMOND), 2,
+                    "diamonds in the survival player's graves");
+            helper.assertTrue(refusedForLockout(DeathLockout.refusal(survival.getUUID(), "Test")),
+                    "the survival death no longer locks the player out");
+        } finally {
+            leaveIfOnline(creative);
+            leaveIfOnline(survival);
+            BodyTestKit.removeGraves(helper, creative.getUUID());
+            BodyTestKit.removeGraves(helper, survival.getUUID());
+            discardOrbsNear(helper, survivalAt);
+        }
+        helper.succeed();
+    }
+
+    // The mark is saved with the player, so one who leaves on the death screen and comes back is still owed their
+    // things, and gets them at the respawn. All in one tick.
+    @GameTest
+    public void uncountedMarkSurvivesARejoinBeforeRespawn(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "LeftDead", GameType.CREATIVE, new BlockPos(1, 1, 1));
+        GameProfile profile = player.getGameProfile();
+        UUID uuid = player.getUUID();
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND, 4));
+            player.giveExperienceLevels(6);
+            player.setScore(2);
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            TestPlayers.markLoaded(player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the creative player did not die");
+            helper.assertTrue(player.entityTags().contains(UncountedDeaths.MARK), "the death left no mark");
+            TestPlayers.leave(player);
+
+            ServerPlayer back = TestPlayers.rejoin(helper, profile, GameType.CREATIVE, new BlockPos(1, 1, 1));
+            helper.assertTrue(back.isDeadOrDying(), "the player did not come back dead");
+            helper.assertTrue(back.entityTags().contains(UncountedDeaths.MARK), "the rejoin lost the mark");
+            ServerPlayer respawned = TestPlayers.respawn(back, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(respawned.getInventory().countItem(Items.DIAMOND), 4, "diamonds after the respawn");
+            helper.assertValueEqual(respawned.experienceLevel, 6, "XP level after the respawn");
+            helper.assertValueEqual(respawned.getScore(), 2, "score after the respawn");
+            helper.assertFalse(respawned.entityTags().contains(UncountedDeaths.MARK), "the respawned player still has the mark");
+        } finally {
+            leaveIfOnline(player);
+            BodyTestKit.removeGraves(helper, uuid);
+        }
+        helper.succeed();
+    }
+
+    // /yolt unkill reaches the store with the lockout off, so a death an admin undoes then doesn't come back to keep the
+    // player out once the switch is on again. The switch goes back in this tick.
+    @GameTest
+    public void unkillWhileLockoutOffLetsThemInOnceItIsBackOn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        String name = CommandGameTests.uniqueName("OffUnkill");
+        UUID id = server.services().nameToIdCache().get(name).orElseThrow().id();
+        YoltConfig.DeathLockoutSection lockout = Settings.get().deathLockout;
+        boolean before = lockout.enabled;
+        try {
+            DeathLockout.recordDeath(id, name);
+            helper.assertTrue(refusedForLockout(DeathLockout.refusal(id, name)), "the death did not lock " + name + " out");
+            lockout.enabled = false;
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt unkill " + name), List.of("Revived " + name + "."),
+                    "the unkill with the lockout off");
+            lockout.enabled = true;
+            helper.assertTrue(DeathLockout.refusal(id, name) == null, name + " is locked out again once the lockout is back on");
+        } finally {
+            lockout.enabled = before;
+            DeathLockout.revive(id, name, "console");
+        }
+        helper.succeed();
+    }
+
+    // The death message is turned into text on the server, in English, whatever language the player's client reports:
+    // the refusal is read by the same player in a later session, perhaps in another language. Graves are off for the
+    // death, which carries nothing, and back in the same tick.
+    @GameTest
+    public void deathMessageIsEnglishWhateverTheClientLanguage(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerPlayer player = TestPlayers.join(helper, "Deutsch", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String name = player.nameAndId().name();
+        Zombie zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, new BlockPos(3, 1, 3));
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        try {
+            ClientInformation english = ClientInformation.createDefault();
+            player.updateOptions(new ClientInformation("de_de", english.viewDistance(), english.chatVisibility(),
+                    english.chatColors(), english.modelCustomisation(), english.mainHand(), english.textFilteringEnabled(),
+                    english.allowsListing(), english.particleStatus()));
+            helper.assertValueEqual(player.clientInformation().language(), "de_de", "the client's language");
+            zombie.setCustomName(Component.literal("Slayer"));
+            TestPlayers.markLoaded(player);
+            graves.enabled = false;
+            try {
+                player.hurtServer(level, level.damageSources().mobAttack(zombie), Float.MAX_VALUE);
+            } finally {
+                graves.enabled = gravesBefore;
+            }
+            helper.assertTrue(player.isDeadOrDying(), "the zombie did not kill the player");
+            DeathLog death = DeathLockout.newestDeath(player.getUUID());
+            helper.assertTrue(death != null, "the death was not recorded");
+            helper.assertValueEqual(death.deathMessage(), name + " was slain by Slayer", "the stored death message");
+        } finally {
+            graves.enabled = gravesBefore;
+            zombie.discard();
+            leaveIfOnline(player);
         }
         helper.succeed();
     }
