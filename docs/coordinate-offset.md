@@ -19,7 +19,10 @@ below).
 - Compasses still point north (`hide.compassSpawn`). With that off, they point at the world spawn, shifted, which is a
   point every player shares.
 - Maps are unchanged: a map you hold still tells you your real X and Z, modulo the map's size.
-- The seed fingerprint the server sends is unchanged.
+- The seed fingerprint the server sends is swapped for a random one, new for each connection. A client only uses it to
+  blur biome edges, so those look a little different at each login. A player in admin view gets the real one.
+- Every shifted X and Z is rounded to a grid of 2^-27 of a block, far finer than anything a player can see. Unrounded,
+  the low digits of a position would tell how far from 0, 0 it really is.
 - Admin view gives real coordinates from your next join, respawn or dimension change, and the `/yolt adminview` reply
   says so.
 - Ops without admin view type coordinates in their own shifted numbers, and `~` and `^` work as usual. A particle's
@@ -47,7 +50,7 @@ below).
   terrain.
 - Some terrain is the same in every world, whatever the seed: where snow starts on a mountain, where frozen-ocean
   ice ends, and which flowers grow where in a flower field. A client built for it can match what it sees against
-  that and find its real X and Z. The seed fingerprint the server sends also lets it check where snowy biomes end.
+  that and find its real X and Z.
 - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there, and spots
   in other dimensions are never shown in it.
 - Each stretch puts you in chunk 0, 0 at its start, so a stretch that starts in the real chunk at 0, 0 shows real

@@ -324,7 +324,7 @@ See [Curse of the Undead](hardcore.md#curse-of-the-undead). In hearts.
 | `enabled` | `true` | Every return from death, by dying or by a totem, takes a max heart. | No |
 | `heartsPerDeath` | `1` | Hearts a death takes, 0 or more. | New deaths |
 | `heartsPerTotem` | `1` | Hearts a totem takes, 0 or more. 0 makes totems free. | New deaths |
-| `maxLostHearts` | `4` | The most hearts the curse takes in all, 0 or more. | No |
+| `maxLostHearts` | `4` | The most hearts the curse takes in all, 0 or more. It never takes the last heart. | No |
 | `healHearts` | `1` | Hearts that come back each time, 0 or more. | No |
 | `healEveryDays` | `3.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play in survival or adventure per heal. Decimals work. Above 0. | No |
 | `countAfk` | `true` | Online time counts while the player stands idle. Off: not after 5 minutes without moving or acting. | No |

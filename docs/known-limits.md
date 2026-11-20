@@ -40,6 +40,10 @@
   mode only to people you trust.
 - **Raids** show their boss bar to players near the village, and the raid horn reaches anyone within 64 blocks.
 - **`/bossbar`** bars reach whoever an admin adds to them.
+- **Scoreboards and teams an admin makes** go to every player as vanilla sends them. An objective shown in the
+  sidebar, the tab list or under names lists the players it holds scores for, online or not, and updates as they
+  play, and a team lists its members. YOLT only filters its own nametag team. Don't show an objective if who plays
+  here should stay hidden.
 - **Player sounds.** With `view-distance` under 10, a few loud sounds a player causes (a sculk shrieker, a returning
   trident) reach further than players are shown. Keep `view-distance` at 10 or more.
 - **Lodestone compasses** hold the lodestone's position, so a looted or traded one points at someone's base.

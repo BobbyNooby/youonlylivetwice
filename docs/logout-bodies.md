@@ -29,6 +29,8 @@ While you're offline the body is you:
 - **Bodies move like players:** gravity, knockback, water and fall damage all apply, and you log back in wherever the
   body ended up. The one exception is a body held after a logout on a vehicle (see Riding). They **can't use portals
   yet**; portal travel for bodies is on the [still to come](README.md#still-to-come) list.
+- **A body can be carted off.** A minecart or a boat that runs into a mannequin body picks it up, as it would a mob,
+  a held body included. Whoever drives it takes the body along, and you log back in wherever it was taken.
 - **Riding:** a vehicle you ride alone leaves with you, and you come back on it, where the vehicle is. While you're
   away your body lies on top of where the vehicle was, or lower if there is no room. Over water, lava or in the air
   it is held in place, so it can't sink, burn or fall. A minecart on rails counts as off the ground, so a cart

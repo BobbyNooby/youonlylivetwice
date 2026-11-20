@@ -232,6 +232,7 @@ It is on by default; `/yolt config hardcore.curse.enabled false` turns it off.
 - **Dying:** when you come back (after the lockout, or early with a revive paper), you have 1 fewer heart
   (`heartsPerDeath`). `/yolt unkill` gives it back (see below). The hotbar line tells you when you are back.
 - **A totem** (or anything with death protection) costs 1 max heart at once (`heartsPerTotem`).
+- It never takes your last heart, whatever `maxLostHearts` is set to and whatever else changed your max health.
 - It takes at most 4 hearts in all (`maxLostHearts`). Past that, more deaths and totems cost nothing extra until a
   heart comes back.
 - **Healing:** 1 heart (`healHearts`) comes back after every 3 Minecraft days (`healEveryDays`, decimals allowed) of
