@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.mixin.SectionBlocksUpdatePacketAccessor;
+import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.shorts.ShortArraySet;
 import it.unimi.dsi.fastutil.shorts.ShortSet;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -15,6 +16,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.protocol.game.ClientboundAddTransientBlockPacket;
@@ -82,6 +84,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -188,6 +191,69 @@ public class CoordinateOffsetBlockGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // The copy is made from the packet's fields rather than a trip through its codec, and must come out byte for byte as
+    // the codec's copy did, for a whole section of changes. It shares nothing the original could be changed through.
+    @GameTest(environment = BLOCKS)
+    public void sectionUpdateCopiesAsTheCodecDid(GameTestHelper helper) {
+        ServerPlayer player = OffsetTestKit.join(helper, "cbwhole", GameType.CREATIVE);
+        try {
+            Offset offset = CoordinateOffsets.offset(player);
+            ServerLevel level = helper.getLevel();
+            BlockPos at = helper.absolutePos(new BlockPos(1, 1, 1));
+            helper.setBlock(new BlockPos(1, 1, 1), Blocks.GOLD_BLOCK);
+            ShortSet changes = new ShortArraySet();
+            for (int x = 0; x < 16; x++) {
+                for (int y = 0; y < 16; y++) {
+                    for (int z = 0; z < 16; z++) {
+                        changes.add(SectionPos.sectionRelativePos(new BlockPos(x, y, z)));
+                    }
+                }
+            }
+            LevelChunk chunk = level.getChunkAt(at);
+            ClientboundSectionBlocksUpdatePacket packet = new ClientboundSectionBlocksUpdatePacket(SectionPos.of(at), changes,
+                    chunk.getSection(chunk.getSectionIndex(at.getY())));
+            int mark = OffsetTestKit.mark(player);
+            player.connection.send(packet);
+
+            ClientboundSectionBlocksUpdatePacket sent =
+                    OffsetTestKit.last(helper, player, mark, ClientboundSectionBlocksUpdatePacket.class);
+            ClientboundSectionBlocksUpdatePacket throughCodec = sectionCopy(packet);
+            ((SectionBlocksUpdatePacketAccessor) throughCodec).yoltSetSectionPos(offset.shift(SectionPos.of(at)));
+            helper.assertTrue(Arrays.equals(sectionBytes(sent), sectionBytes(throughCodec)),
+                    "the section update sent is not what the codec's copy was");
+            SectionBlocksUpdatePacketAccessor original = (SectionBlocksUpdatePacketAccessor) packet;
+            SectionBlocksUpdatePacketAccessor copy = (SectionBlocksUpdatePacketAccessor) sent;
+            helper.assertTrue(copy.yoltPositions() != original.yoltPositions() && copy.yoltStates() != original.yoltStates(),
+                    "the copy shares its changes with the original");
+            helper.assertValueEqual(original.yoltSectionPos(), SectionPos.of(at), "the packet's own section after the send");
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static ClientboundSectionBlocksUpdatePacket sectionCopy(ClientboundSectionBlocksUpdatePacket packet) {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ClientboundSectionBlocksUpdatePacket.STREAM_CODEC.encode(buffer, packet);
+            return ClientboundSectionBlocksUpdatePacket.STREAM_CODEC.decode(buffer);
+        } finally {
+            buffer.release();
+        }
+    }
+
+    private static byte[] sectionBytes(ClientboundSectionBlocksUpdatePacket packet) {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ClientboundSectionBlocksUpdatePacket.STREAM_CODEC.encode(buffer, packet);
+            byte[] bytes = new byte[buffer.readableBytes()];
+            buffer.readBytes(bytes);
+            return bytes;
+        } finally {
+            buffer.release();
+        }
     }
 
     @GameTest(environment = BLOCKS)

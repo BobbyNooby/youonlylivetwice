@@ -3,6 +3,7 @@ package bobbynooby.dev.coords;
 import bobbynooby.dev.coords.CoordinateOffsets.Context;
 import bobbynooby.dev.mixin.BlockEntityDataPacketInvoker;
 import bobbynooby.dev.mixin.SectionBlocksUpdatePacketAccessor;
+import it.unimi.dsi.fastutil.shorts.ShortSets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -164,12 +165,16 @@ public final class BlockRules {
         return new ClientboundBlockUpdatePacket(context.offset().shift(packet.getPos()), packet.getBlockState());
     }
 
-    // No field constructor, so the copy goes through the codec. The changed blocks are kept by their spot in the section.
+    // No field constructor. With no changes to read, the constructor never reads the section, so it takes none, and the
+    // copy gets copies of the changes: what a trip through the codec gave, without writing out and reading back every
+    // block for every player. The changed blocks are kept by their spot in the section.
     private static Packet<?> sectionUpdate(ClientboundSectionBlocksUpdatePacket packet, Context context) {
-        ClientboundSectionBlocksUpdatePacket copy =
-                CoordinateOffsets.copy(ClientboundSectionBlocksUpdatePacket.STREAM_CODEC, packet);
+        SectionBlocksUpdatePacketAccessor from = (SectionBlocksUpdatePacketAccessor) packet;
+        ClientboundSectionBlocksUpdatePacket copy = new ClientboundSectionBlocksUpdatePacket(
+                context.offset().shift(from.yoltSectionPos()), ShortSets.EMPTY_SET, null);
         SectionBlocksUpdatePacketAccessor fields = (SectionBlocksUpdatePacketAccessor) copy;
-        fields.yoltSetSectionPos(context.offset().shift(fields.yoltSectionPos()));
+        fields.yoltSetPositions(from.yoltPositions().clone());
+        fields.yoltSetStates(from.yoltStates().clone());
         return copy;
     }
 
