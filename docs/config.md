@@ -250,8 +250,8 @@ Shared by every slowdown: weight, broken legs, the limp, cold and low sugar. See
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `cap` | `0.5` | The most all the slowdowns together can take, 0 to 1. Potions come on top. | No |
-| `step` | `0.05` | The total moves in steps this big, rounded to the nearest, so the speed doesn't flicker. Above 0, and at most `cap`. | No |
+| `cap` | `0.5` | The most all the slowdowns together can take, 0 to 1. 0 takes none, so nothing in the hardcore layer slows anyone. Potions come on top. | No |
+| `step` | `0.05` | The total moves in steps this big, rounded to the nearest, so the speed doesn't flicker. Above 0, and at most `cap` unless `cap` is 0. | No |
 
 ### `hardcore.weight`
 
@@ -590,7 +590,7 @@ log naming the key, and `/yolt config` refuses it. The rest of the file still co
   `cold.damageEverySeconds` and `curse.afkMinutes` 1 or more.
 - **0 or more:** every other number.
 - **Pairs,** where both go back since either could be the typo:
-  - `slow.step` at most `slow.cap`;
+  - `slow.step` at most `slow.cap`, unless `slow.cap` is 0;
   - `weight.freeLoad` below `weight.fullLoad`;
   - `legs.breakAtDamageFullLoad` at most `legs.breakAtDamage`;
   - `limp.belowHearts` below `limp.recoverAtHearts`;

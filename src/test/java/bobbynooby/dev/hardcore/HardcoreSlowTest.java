@@ -26,4 +26,11 @@ class HardcoreSlowTest {
         // A negative part takes nothing off the others
         assertEquals(0.1, SlowBudget.total(0.5, 0.05, -0.3, 0.1), CLOSE);
     }
+
+    // A cap of 0 is a server's way to have no slowdown at all, whatever the step and however much the parts add up to
+    @Test
+    void slow1CapZeroTakesNothing() {
+        assertEquals(0.0, SlowBudget.total(0.0, 0.05, 0.2, 0.2, 0.5), CLOSE);
+        assertEquals(0.0, SlowBudget.total(0.0, 1.0, 0.9), CLOSE);
+    }
 }

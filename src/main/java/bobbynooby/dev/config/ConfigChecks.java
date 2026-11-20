@@ -183,8 +183,8 @@ final class ConfigChecks {
             slow.step = fallback.slow.step;
             fellBack.accept("hardcore.slow.step", "must be above 0");
         }
-        // Both go back, since either one could be the typo
-        if (slow.step > slow.cap) {
+        // Both go back, since either one could be the typo. A cap of 0 takes no speed at all, so no step is too big for it.
+        if (slow.cap > 0 && slow.step > slow.cap) {
             slow.cap = fallback.slow.cap;
             slow.step = fallback.slow.step;
             fellBack.accept("hardcore.slow.step", "must be at most hardcore.slow.cap");

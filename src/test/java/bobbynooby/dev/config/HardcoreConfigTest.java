@@ -207,6 +207,26 @@ class HardcoreConfigTest {
         return ConfigKeys.find(path).orElseThrow(() -> new AssertionError("no key " + path));
     }
 
+    // A cap of 0 is how a server keeps the other hardcore rules without any slowdown, so the step rule doesn't send it
+    // back to 0.5. A cap just above 0 still needs a step that fits under it.
+    @Test
+    void config1SlowCapZeroTurnsTheSlowdownsOff() throws IOException {
+        ConfigLoader.Result r = loadJson("{\"hardcore\":{\"slow\":{\"cap\":0}}}");
+        assertEquals(0.0, r.config().hardcore.slow.cap);
+        assertEquals(0.05, r.config().hardcore.slow.step);
+        assertEquals(List.of(), r.warnings());
+
+        Path file = dir.resolve("config.json");
+        ConfigLoader.Change set = ConfigLoader.setKey(file, new YoltConfig(), key("hardcore.slow.cap"), new JsonPrimitive(0.0));
+        assertNull(set.problem());
+        assertEquals(0.0, set.config().hardcore.slow.cap);
+
+        ConfigLoader.Result tiny = loadJson("{\"hardcore\":{\"slow\":{\"cap\":0.01}}}");
+        assertEquals(0.5, tiny.config().hardcore.slow.cap);
+        assertTrue(tiny.warnings().contains("hardcore.slow.cap: must be at least hardcore.slow.step, using default"),
+                tiny.warnings().toString());
+    }
+
     // Set from a config that was fine, either switch or either number can make the curse outlast the limp. Each set goes
     // through, keeps both features on, and the mix gets a notice instead.
     @Test
