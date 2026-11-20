@@ -3,8 +3,17 @@ package bobbynooby.dev.hardcore;
 /** The Curse of the Undead's sums, on a stored state and nothing else, so they can be checked without a server. */
 public final class CurseMaths {
     private static final int TICKS_PER_MINUTE = 1200;
+    private static final long MILLIS_PER_MINUTE = 60_000L;
 
     private CurseMaths() {}
+
+    /**
+     * With countAfk off, whether a player who last moved, looked or clicked idleMillis ago still earns heal time: only
+     * until afkMinutes have gone by.
+     */
+    public static boolean stillActive(long idleMillis, int afkMinutes) {
+        return idleMillis < afkMinutes * MILLIS_PER_MINUTE;
+    }
 
     /**
      * A return from death, by dying or by a totem: adds up to hearts, never past maxLost in all, and returns what it

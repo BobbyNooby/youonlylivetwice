@@ -555,6 +555,11 @@ final class ConfigChecks {
             curse.healEveryDays = fallback.healEveryDays;
             fellBack.accept("hardcore.curse.healEveryDays", "must be above 0");
         }
+        // At 0 no play time would count with countAfk off, so the curse would never heal
+        if (curse.afkMinutes < 1) {
+            curse.afkMinutes = fallback.afkMinutes;
+            fellBack.accept("hardcore.curse.afkMinutes", "must be 1 or more");
+        }
         if (curse.reviveRefundHearts < 0) {
             curse.reviveRefundHearts = fallback.reviveRefundHearts;
             fellBack.accept("hardcore.curse.reviveRefundHearts", "must be 0 or more");

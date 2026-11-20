@@ -116,6 +116,8 @@ public final class HardcoreConfig {
         public int healHearts = 1;
         public double healEveryDays = 3.0;
         public boolean countAfk = true;
+        // With countAfk off, play time stops counting once the player hasn't moved, looked or clicked for this long
+        public int afkMinutes = 5;
         public int reviveRefundHearts = 0;
         public boolean unkillRefunds = true;
     }

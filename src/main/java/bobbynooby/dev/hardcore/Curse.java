@@ -32,8 +32,6 @@ public final class Curse {
     static final Identifier MODIFIER = Yolt.id("undead_curse");
     private static final int STATUS_ORDER = 40;
     private static final double TICKS_PER_DAY = 24000.0;
-    // 6,000 ticks; vanilla keeps the player's last move or look in milliseconds
-    private static final long AFK_MILLIS = 6000L * 50L;
     private static final String NAME = "Curse of the Undead";
 
     // Hearts a death took, told to the player when they next come back, since a dead or kicked player can't see the
@@ -160,7 +158,7 @@ public final class Curse {
         }
         HardcoreConfig.CurseSection cfg = cfg();
         HardcoreState state = HardcoreStates.of(player);
-        if (state.curseHeartsLost > 0 && !player.isDeadOrDying() && (cfg.countAfk || active(player))) {
+        if (state.curseHeartsLost > 0 && !player.isDeadOrDying() && (cfg.countAfk || active(player, cfg))) {
             int before = CurseMaths.shown(state, cfg.maxLostHearts);
             long perHeal = ticksPerHeal(cfg);
             HardcoreStates.update(player.getUUID(), s -> CurseMaths.onOnlineTick(s, cfg.healHearts, perHeal));
@@ -256,8 +254,9 @@ public final class Curse {
         }
     }
 
-    private static boolean active(ServerPlayer player) {
-        return Util.getMillis() - player.getLastActionTime() < AFK_MILLIS;
+    // Vanilla keeps the player's last move or look in milliseconds
+    private static boolean active(ServerPlayer player, HardcoreConfig.CurseSection cfg) {
+        return CurseMaths.stillActive(Util.getMillis() - player.getLastActionTime(), cfg.afkMinutes);
     }
 
     private static String hearts(int count) {

@@ -238,7 +238,7 @@ It is on by default; `/yolt config hardcore.curse.enabled false` turns it off.
 - **Healing:** 1 heart (`healHearts`) comes back after every 3 Minecraft days (`healEveryDays`, decimals allowed) of
   your own online play in survival or adventure. A day is 24,000 ticks, so that is 60 minutes of play. Only your
   time online counts, never world time. Losing another heart doesn't restart the count.
-- With `countAfk` off, time doesn't count while you haven't moved or acted for 5 minutes.
+- With `countAfk` off, time doesn't count while you haven't moved or acted for 5 minutes (`afkMinutes`).
 - Every counted death counts: dying online, your logout body being killed, and `/yolt kill` while you are offline.
   Deaths in creative or spectator never count, even with `deathLockout.countCreativeAndSpectatorDeaths` on.
 - `/yolt unkill` gives back what the death it undoes took (`unkillRefunds`). A revive paper gives back nothing unless

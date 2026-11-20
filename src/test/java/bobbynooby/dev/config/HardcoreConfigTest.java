@@ -310,6 +310,7 @@ class HardcoreConfigTest {
         d.put("hardcore.curse.healHearts", "1");
         d.put("hardcore.curse.healEveryDays", "3.0");
         d.put("hardcore.curse.countAfk", "true");
+        d.put("hardcore.curse.afkMinutes", "5");
         d.put("hardcore.curse.reviveRefundHearts", "0");
         d.put("hardcore.curse.unkillRefunds", "true");
         d.put("hardcore.nutrients.enabled", "false");
@@ -468,7 +469,7 @@ class HardcoreConfigTest {
                   "limp": {"belowHearts": 0, "recoverAtHearts": 0, "slow": 2},
                   "bedRest": {"healEveryTicks": -1, "exhaustionPerHeal": -1, "legHealSpeed": -1},
                   "curse": {"heartsPerDeath": -1, "heartsPerTotem": -1, "maxLostHearts": -1, "healHearts": -1,
-                            "healEveryDays": 0, "reviveRefundHearts": -1},
+                            "healEveryDays": 0, "afkMinutes": 0, "reviveRefundHearts": -1},
                   "nutrients": {"gainPerPoint": -1, "decayPerPoint": -1, "startLevel": 2, "deficientBelow": 2,
                                 "penalties": {"protein": {"healingMultiplier": -1}, "sugar": {"sprintSlow": 2},
                                               "vitamins": {"miningSlow": 2}},
@@ -523,6 +524,7 @@ class HardcoreConfigTest {
                 "hardcore.curse.maxLostHearts: must be 0 or more",
                 "hardcore.curse.healHearts: must be 0 or more",
                 "hardcore.curse.healEveryDays: must be above 0",
+                "hardcore.curse.afkMinutes: must be 1 or more",
                 "hardcore.curse.reviveRefundHearts: must be 0 or more",
                 "hardcore.nutrients.gainPerPoint: must be 0 or more",
                 "hardcore.nutrients.decayPerPoint: must be 0 or more",

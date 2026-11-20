@@ -430,6 +430,54 @@ public class HardcoreCurseGameTests {
         }
     }
 
+    // With countAfk off, a player idle for three minutes still earns heal time under the 5 minutes that ship, and stops
+    // as soon as afkMinutes is 2, since each tick reads it
+    @GameTest(environment = CURSE_AFK, maxTicks = 60)
+    public void curse6AfkMinutesSetsHowLongIdleTimeCounts(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer idle = join(helper, "CurseAfkMinutes", AT.offset(2, 0, 0));
+        UUID uuid = idle.getUUID();
+        HardcoreConfig.CurseSection cfg = Settings.get().hardcore.curse;
+        int minutesBefore = cfg.afkMinutes;
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cfg.afkMinutes = minutesBefore;
+            Curse.set(uuid, 0);
+            leave(server, uuid);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertValueEqual(cfg.afkMinutes, 5, "afkMinutes as it ships");
+            Curse.set(uuid, 1);
+            ((LastActionAccessor) idle).yoltSetLastActionTime(Util.getMillis() - 180_000L);
+            long[] counted = new long[1];
+            helper.runAfterDelay(10, () -> {
+                try {
+                    counted[0] = HardcoreStates.read(uuid).curseOnlineTicks;
+                    helper.assertTrue(counted[0] > 0, "no time counted for three minutes idle with afkMinutes 5");
+                    cfg.afkMinutes = 2;
+                } catch (RuntimeException e) {
+                    cleanUp.run();
+                    throw e;
+                }
+            });
+            helper.runAfterDelay(30, () -> {
+                try {
+                    helper.assertValueEqual(HardcoreStates.read(uuid).curseOnlineTicks, counted[0],
+                            "ticks counted for three minutes idle once afkMinutes was 2");
+                    assertLost(helper, uuid, 1, "for the idle player");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
     @GameTest(environment = CURSE)
     public void curseCommandSetsAndClears(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();

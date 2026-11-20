@@ -328,7 +328,8 @@ See [Curse of the Undead](hardcore.md#curse-of-the-undead). In hearts.
 | `maxLostHearts` | `4` | The most hearts the curse takes in all, 0 or more. It never takes the last heart. | No |
 | `healHearts` | `1` | Hearts that come back each time, 0 or more. | No |
 | `healEveryDays` | `3.0` | Minecraft days (24,000 ticks, 20 minutes) of the player's own online play in survival or adventure per heal. Decimals work. Above 0. | No |
-| `countAfk` | `true` | Online time counts while the player stands idle. Off: not after 5 minutes without moving or acting. | No |
+| `countAfk` | `true` | Online time counts while the player stands idle. Off: not after `afkMinutes` without moving or acting. | No |
+| `afkMinutes` | `5` | With `countAfk` off, the minutes without moving, looking or acting after which online time stops counting, 1 or more. | No |
 | `reviveRefundHearts` | `0` | Hearts a revive paper gives back, 0 or more. | No |
 | `unkillRefunds` | `true` | `/yolt unkill` gives back what the death it undoes took. | No |
 
@@ -549,7 +550,7 @@ naming the key, and `/yolt config` refuses it. The rest of the file still counts
   `bloodMoon.health`, `limp.belowHearts`, `limp.recoverAtHearts`.
 - **1 to 39:** `anvil.enchantCost`, `anvil.repairCost`, `anvil.renameCost`.
 - **Ranges:** `weight.containerDepth` 0 to 8, `cold.shelteredBelowSkyLight` 0 to 15, `cold.heatRadius` 0 to 8,
-  `cold.damageEverySeconds` 1 or more.
+  `cold.damageEverySeconds` and `curse.afkMinutes` 1 or more.
 - **0 or more:** every other number.
 - **Pairs,** where both go back since either could be the typo:
   - `slow.step` at most `slow.cap`;

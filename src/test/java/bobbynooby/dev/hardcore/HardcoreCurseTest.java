@@ -3,6 +3,8 @@ package bobbynooby.dev.hardcore;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HardcoreCurseTest {
     private static final long PER_HEAL = 120_000;
@@ -114,5 +116,17 @@ class HardcoreCurseTest {
         // A doubling from another mod: 40 health, and each heart the curse takes is worth two
         assertEquals(9, CurseMaths.leavingOneHeart(500, 20.0, 2.0));
         assertEquals(0, CurseMaths.leavingOneHeart(4, 20.0, 0.0));
+    }
+
+    // With countAfk off: the 5 minutes that ship, the 300,000 milliseconds the curse always used, then a shorter wait
+    @Test
+    void anIdlePlayerStopsCountingAfterAfkMinutes() {
+        assertTrue(CurseMaths.stillActive(0, 5));
+        assertTrue(CurseMaths.stillActive(299_999, 5));
+        assertFalse(CurseMaths.stillActive(300_000, 5));
+        assertTrue(CurseMaths.stillActive(119_999, 2));
+        assertFalse(CurseMaths.stillActive(120_000, 2));
+        assertTrue(CurseMaths.stillActive(180_000, 5), "three minutes idle with the default");
+        assertFalse(CurseMaths.stillActive(180_000, 2), "three minutes idle with two");
     }
 }

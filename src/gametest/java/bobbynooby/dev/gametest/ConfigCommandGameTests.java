@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.ConfigKey;
+import bobbynooby.dev.config.ConfigKeys;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.world.LiveSettings;
@@ -493,6 +495,57 @@ public class ConfigCommandGameTests {
             CommandGameTests.restoreBackups(backups);
         }
         helper.succeed();
+    }
+
+    // A new whole-number key, as each new key settable in game is checked: shown, set, refused out of range, and read
+    // again from the file by a reload
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void curseAfkMinutesSetsAndReloads(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        try {
+            setsRefusesAndReloads(helper, server, "hardcore.curse.afkMinutes", "5", "2", "", "0",
+                    "hardcore.curse.afkMinutes must be 1 or more.", "9");
+        } finally {
+            restore(server, fileBefore);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Shows the key at its shipped value, sets it with the command, whose reply ends with the key's note, has a bad value
+     * refused, then writes the file with only that key, with the border kept off as the test server needs, and reloads
+     * it. Each step reads the live config back, the set one the file too.
+     */
+    static void setsRefusesAndReloads(GameTestHelper helper, MinecraftServer server, String path, String shipped, String set,
+                                      String note, String bad, String refusal, String reloaded) throws IOException {
+        ConfigKey key = ConfigKeys.find(path).orElseThrow(() -> new AssertionError("no key " + path));
+        helper.assertValueEqual(run(server, "yolt config " + path), List.of(path + " is " + shipped + "."), path + " shown");
+        helper.assertValueEqual(run(server, "yolt config " + path + " " + set),
+                List.of(path + " changed from " + shipped + " to " + set + note + "."), path + " set");
+        helper.assertValueEqual(key.show(Settings.get()), set, "live " + path + " after the set");
+        helper.assertValueEqual(fileValue(path).getAsString(), set, path + " in the file after the set");
+        assertRefused(helper, server, Files.readAllBytes(Settings.path()), "yolt config " + path + " " + bad, refusal);
+
+        JsonObject file = new JsonObject();
+        JsonObject border = new JsonObject();
+        border.addProperty("enabled", false);
+        file.add("worldBorder", border);
+        String[] parts = path.split("\\.");
+        JsonObject section = file;
+        for (int i = 0; i < parts.length - 1; i++) {
+            JsonObject inner = new JsonObject();
+            section.add(parts[i], inner);
+            section = inner;
+        }
+        try {
+            section.add(parts[parts.length - 1], key.parse(reloaded));
+        } catch (ConfigKey.BadValue e) {
+            throw new AssertionError(e.getMessage(), e);
+        }
+        Files.writeString(Settings.path(), file.toString());
+        helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), path + " reload");
+        helper.assertValueEqual(key.show(Settings.get()), reloaded, "live " + path + " after the reload");
     }
 
     // A failed command's single line and result, with the live config and the file left as they were
