@@ -25,6 +25,10 @@ final class MojangSkinLookup implements SkinLookup {
         return thread;
     });
 
+    // Lookups asked for and not yet answered. Each takes Mojang a while, one at a time, so a flood of logins under new
+    // names would otherwise queue without end and hold every later join up behind it.
+    private static final SkinQueue WAITING = new SkinQueue(SkinQueue.DEFAULT_LIMIT);
+
     private final Services services;
 
     MojangSkinLookup(Services services) {
@@ -33,7 +37,7 @@ final class MojangSkinLookup implements SkinLookup {
 
     @Override
     public CompletableFuture<CachedSkin> find(String name) {
-        return CompletableFuture.supplyAsync(() -> lookUp(name), THREAD);
+        return WAITING.ask(name, () -> CompletableFuture.supplyAsync(() -> lookUp(name), THREAD));
     }
 
     private CachedSkin lookUp(String name) {
