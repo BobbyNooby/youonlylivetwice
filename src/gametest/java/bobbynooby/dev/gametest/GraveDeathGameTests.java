@@ -1281,9 +1281,9 @@ public class GraveDeathGameTests {
             DeathLog death = DeathLockout.newestDeath(owner);
             helper.assertTrue(death != null, "the death was not recorded");
             putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.NETHER, at), death.deathTimeMillis());
-            texts.graveAt = "§7Dig at {x} {y} {z}, {dimension}";
+            texts.graveAt = "\u00a77Dig at {x} {y} {z}, {dimension}";
             texts.graveIn = "Somewhere in {dimension}";
-            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of("§7Dig at 30000 70 30000, the Overworld"),
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.of("\u00a77Dig at 30000 70 30000, the Overworld"),
                     "grave line in the config's words");
             Component hidden = OffsetTestKit.withCoordinates(() -> DeathLockout.refusal(server, owner, name));
             helper.assertTrue(hidden != null && hidden.getString().endsWith("\nSomewhere in the Overworld"),

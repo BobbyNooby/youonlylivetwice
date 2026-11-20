@@ -100,9 +100,9 @@ public class GraveMenuGameTests {
             GraveMenus.open(player, grave);
             helper.assertValueEqual(lastScreenTitle(helper, player), "Ghost's Grave", "title as it ships");
             player.closeContainer();
-            texts.graveTitle = "§8Here lies {name}";
+            texts.graveTitle = "\u00a78Here lies {name}";
             GraveMenus.open(player, grave);
-            helper.assertValueEqual(lastScreenTitle(helper, player), "§8Here lies Ghost", "title in the config's words");
+            helper.assertValueEqual(lastScreenTitle(helper, player), "\u00a78Here lies Ghost", "title in the config's words");
             helper.assertTrue(player.containerMenu instanceof GraveMenu, "the grave's menu is not open");
         } finally {
             texts.graveTitle = before;

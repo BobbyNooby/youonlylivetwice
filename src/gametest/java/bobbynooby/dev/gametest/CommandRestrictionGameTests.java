@@ -84,9 +84,9 @@ public class CommandRestrictionGameTests {
             config.messages.help = "Only the wind.";
             run(player, "help");
             assertHelpReply(helper, player, "Only the wind.", true);
-            config.messages.help = "§aEcho";
+            config.messages.help = "\u00a7aEcho";
             run(player, "help");
-            assertHelpReply(helper, player, "§aEcho", false);
+            assertHelpReply(helper, player, "\u00a7aEcho", false);
         } finally {
             config.restrictCommands = restrictBefore;
             config.messages.help = helpBefore;

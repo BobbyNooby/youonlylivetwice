@@ -102,12 +102,12 @@ public class ReviveGameTests {
         YoltConfig.MessagesSection texts = Settings.get().messages;
         String before = texts.reviveName;
         try {
-            texts.reviveName = "§5Bring back {name}";
+            texts.reviveName = "\u00a75Bring back {name}";
             CraftingInput input = grid(withMaterials(GraveItems.graveHead(Profiles.of(player))));
             Optional<RecipeHolder<CraftingRecipe>> recipe = findRecipe(helper, input);
             helper.assertTrue(recipe.isPresent(), "no recipe for a grave head and its five materials");
             ItemStack result = recipe.get().value().assemble(input);
-            helper.assertValueEqual(result.getHoverName().getString(), "§5Bring back " + player.getGameProfile().name(), "result name");
+            helper.assertValueEqual(result.getHoverName().getString(), "\u00a75Bring back " + player.getGameProfile().name(), "result name");
             helper.assertTrue(GraveItems.isReviveHead(result), "result is not a revive head");
             helper.assertTrue(GraveItems.ownerId(result).filter(player.getUUID()::equals).isPresent(), "result lost the owner");
         } finally {

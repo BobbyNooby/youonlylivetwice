@@ -412,7 +412,7 @@ public class HardcoreBloodMoonGameTests {
         });
         helper.runBeforeTestEnd(cleanUp);
         try {
-            texts.bloodMoonWarningTitle = "§4Look up.";
+            texts.bloodMoonWarningTitle = "\u00a74Look up.";
             texts.bloodMoonWarningLine = "Tonight it bleeds.";
             ServerPlayer player = TestPlayers.join(helper, "MoonWarned", GameType.SURVIVAL, PLAYER_AT);
             players.add(player);
@@ -421,7 +421,7 @@ public class HardcoreBloodMoonGameTests {
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
                     .thenExecute(() -> {
                         List<String> warning = moonPackets(player, mark);
-                        helper.assertTrue(warning.contains("title §4Look up."), "no warning title in the config's words: " + warning);
+                        helper.assertTrue(warning.contains("title \u00a74Look up."), "no warning title in the config's words: " + warning);
                         helper.assertTrue(warning.contains("chat Tonight it bleeds."), "no warning line in the config's words: " + warning);
                         cleanUp.run();
                     })
@@ -444,10 +444,10 @@ public class HardcoreBloodMoonGameTests {
         String barBefore = texts.bloodMoonBarTitle;
         List<ServerPlayer> players = new ArrayList<>();
         try {
-            texts.bloodMoonRisenLine = "§4Red.";
+            texts.bloodMoonRisenLine = "\u00a74Red.";
             texts.bloodMoonUpLine = "Still red.";
             texts.bloodMoonSetLine = "Pale again.";
-            texts.bloodMoonBarTitle = "§cThe Red";
+            texts.bloodMoonBarTitle = "\u00a7cThe Red";
             ServerPlayer first = TestPlayers.join(helper, "MoonWords", GameType.SURVIVAL, PLAYER_AT);
             players.add(first);
             int mark = TestPlayers.sentPackets(first).size();
@@ -456,8 +456,8 @@ public class HardcoreBloodMoonGameTests {
             players.add(late);
             BloodMoon.stop(server);
             List<String> sent = moonPackets(first, mark);
-            helper.assertTrue(sent.contains("chat §4Red."), "no risen line in the config's words: " + sent);
-            helper.assertTrue(sent.stream().anyMatch(line -> line.startsWith("bar add §cThe Red ")), "no bar with the config's title: " + sent);
+            helper.assertTrue(sent.contains("chat \u00a74Red."), "no risen line in the config's words: " + sent);
+            helper.assertTrue(sent.stream().anyMatch(line -> line.startsWith("bar add \u00a7cThe Red ")), "no bar with the config's title: " + sent);
             helper.assertValueEqual(sent.getLast(), "chat Pale again.", "the last line: " + sent);
             helper.assertTrue(chatLines(late, 0).contains("Still red."), "no up line for the late player: " + chatLines(late, 0));
         } finally {

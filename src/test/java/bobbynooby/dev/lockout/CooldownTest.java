@@ -85,13 +85,13 @@ class CooldownTest {
     @Test
     void refusalTakesTheConfigsWords() {
         YoltConfig.MessagesSection texts = new YoltConfig.MessagesSection();
-        texts.lockoutDied = "§4Gone: {death}";
-        texts.lockoutDiedPlain = "§4Gone.";
+        texts.lockoutDied = "\u00a74Gone: {death}";
+        texts.lockoutDiedPlain = "\u00a74Gone.";
         texts.lockoutWait = "Back in {wait}, maybe.";
-        assertEquals("§4Gone: Bob fell from a high place\nBack in 1 week, maybe.",
+        assertEquals("\u00a74Gone: Bob fell from a high place\nBack in 1 week, maybe.",
                 Cooldown.refusal("Bob fell from a high place", 7 * DAY, texts));
-        assertEquals("§4Gone.\nBack in 2 days, maybe.", Cooldown.refusal(null, 2 * DAY, texts));
-        assertEquals("§4Gone.\nBack in 2 days, maybe.", Cooldown.refusal(" ", 2 * DAY, texts));
+        assertEquals("\u00a74Gone.\nBack in 2 days, maybe.", Cooldown.refusal(null, 2 * DAY, texts));
+        assertEquals("\u00a74Gone.\nBack in 2 days, maybe.", Cooldown.refusal(" ", 2 * DAY, texts));
         assertEquals("Wait 1 day, 1 hour, 1 minute, 1 second", Cooldown.message(90_061_000L, "Wait {wait}"));
         // A death message is filled in once: a mob named {wait} stays as named
         assertEquals("You died: Bob was slain by {wait}\nTry again in 1 week.",

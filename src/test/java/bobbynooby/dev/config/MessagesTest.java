@@ -87,14 +87,14 @@ class MessagesTest {
                 "reviveName", "Revive paper",
                 "help", "x".repeat(257),
                 "graveTitle", "{player}'s pile",
-                "lockoutDied", "§4Gone:\n{death}"))));
+                "lockoutDied", "\u00a74Gone:\n{death}"))));
         YoltConfig fresh = new YoltConfig();
         assertEquals(fresh.messages.lockoutWait, r.config().messages.lockoutWait);
         assertEquals(fresh.messages.graveAt, r.config().messages.graveAt);
         assertEquals(fresh.messages.reviveName, r.config().messages.reviveName);
         assertEquals(fresh.messages.help, r.config().messages.help);
         assertEquals("{player}'s pile", r.config().messages.graveTitle);
-        assertEquals("§4Gone:\n{death}", r.config().messages.lockoutDied);
+        assertEquals("\u00a74Gone:\n{death}", r.config().messages.lockoutDied);
         List<String> expected = List.of(
                 "messages.lockoutWait: must keep {wait}, using default",
                 "messages.help: must be at most 256 characters, using default",
