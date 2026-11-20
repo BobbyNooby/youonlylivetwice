@@ -2,6 +2,7 @@ package bobbynooby.dev.config;
 
 import bobbynooby.dev.core.Migrations;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
@@ -80,6 +81,64 @@ class ConfigLoaderTest {
         YoltConfig c = loadJson("{\"chat\":{\"mode\":\"self_only\"},\"graves\":{\"enderChestOnDeath\":\"wipe\"}}").config();
         assertEquals(YoltConfig.ChatMode.SELF_ONLY, c.chat.mode);
         assertEquals(YoltConfig.EnderChestMode.WIPE, c.graves.enderChestOnDeath);
+    }
+
+    // A JSON object holding value at a dotted path, as the file would have it
+    private static JsonObject nested(String path, JsonElement value) {
+        JsonObject root = new JsonObject();
+        JsonObject section = root;
+        String[] parts = path.split("\\.");
+        for (int i = 0; i < parts.length - 1; i++) {
+            JsonObject child = new JsonObject();
+            section.add(parts[i], child);
+            section = child;
+        }
+        section.add(parts[parts.length - 1], value);
+        return root;
+    }
+
+    // Gson on its own also took the Java name, so SELF_ONLY passed for self_only in the file while /yolt config refused
+    // it. Every choice key now takes only the names the docs give, at startup and on a reload, and the rewrite writes
+    // the documented name back.
+    @Test
+    void javaEnumNamesFallBackLikeAnyUnknownName() throws IOException {
+        Path file = dir.resolve("config.json");
+        YoltConfig fresh = new YoltConfig();
+        List<ConfigKey> choiceKeys = ConfigKeys.all().stream().filter(k -> k.kind() == ConfigKey.Kind.ENUM).toList();
+        assertTrue(choiceKeys.size() >= 9, choiceKeys.toString());
+        for (ConfigKey key : choiceKeys) {
+            for (Object constant : key.field().getType().getEnumConstants()) {
+                String javaName = ((Enum<?>) constant).name();
+                if (key.choices().contains(javaName)) {
+                    continue;
+                }
+                String what = key.path() + " " + javaName;
+                ConfigLoader.Result r = loadJson(nested(key.path(), new JsonPrimitive(javaName)).toString());
+                assertEquals(key.show(fresh), key.show(r.config()), what);
+                assertTrue(r.warnings().contains(key.path() + ": unknown value, using default"), what + ": " + r.warnings());
+                JsonElement written = readJson(file);
+                for (String part : key.path().split("\\.")) {
+                    written = written.getAsJsonObject().get(part);
+                }
+                assertEquals(key.show(fresh), written.getAsString(), what + " in the rewritten file");
+            }
+            // Each documented name still reads as itself
+            for (String choice : key.choices()) {
+                ConfigLoader.Result r = loadJson(nested(key.path(), new JsonPrimitive(choice)).toString());
+                assertEquals(choice, key.show(r.config()), key.path() + " " + choice);
+                assertEquals(List.of(), r.warnings(), key.path() + " " + choice);
+            }
+        }
+
+        // A reload keeps the value in use
+        Files.writeString(file, "{\"chat\":{\"mode\":\"SELF_ONLY\"},\"hardcore\":{\"bloodMoon\":{\"barColour\":\"BLUE\"}}}");
+        YoltConfig live = new YoltConfig();
+        live.chat.mode = YoltConfig.ChatMode.GLOBAL;
+        ConfigLoader.Result reloaded = ConfigLoader.load(file, live, false);
+        assertEquals(YoltConfig.ChatMode.GLOBAL, reloaded.config().chat.mode);
+        assertEquals(HardcoreConfig.BarColour.RED, reloaded.config().hardcore.bloodMoon.barColour);
+        assertEquals(List.of("chat.mode: unknown value, using the current value",
+                "hardcore.bloodMoon.barColour: unknown value, using the current value"), reloaded.warnings());
     }
 
     @Test

@@ -5,6 +5,7 @@ import bobbynooby.dev.core.Migrations;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
@@ -527,7 +528,10 @@ public final class ConfigLoader {
             } else {
                 String problem = primitiveProblem(path, def, value);
                 if (problem == null) {
-                    result.add(key, value);
+                    // Gson reads an enum by the name the file is written with and, failing that, by its Java name, so
+                    // "SELF_ONLY" would pass for self_only, a name /yolt config refuses and the docs never give. Any
+                    // other name goes on as no value, which ConfigChecks then refuses as it does an unknown one.
+                    result.add(key, documentedName(path, value) ? value : JsonNull.INSTANCE);
                 } else {
                     result.add(key, def);
                     refused.add(path);
@@ -543,6 +547,14 @@ public final class ConfigLoader {
             }
         }
         return result;
+    }
+
+    // False only for an enum key's text that isn't one of its names in the file, which are the names /yolt config takes
+    private static boolean documentedName(String path, JsonElement value) {
+        return ConfigKeys.find(path)
+                .filter(key -> key.kind() == ConfigKey.Kind.ENUM)
+                .map(key -> key.choices().contains(value.getAsString()))
+                .orElse(true);
     }
 
     // Every value a finite number, so Gson can read it into a map of doubles and write it back

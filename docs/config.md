@@ -40,6 +40,8 @@ How the file is read:
 
 - A bad value (the wrong type, or out of range) falls back on its own, with a warning in the log naming the key. The
   rest of the file still counts.
+- A key with a set of choices, such as `chat.mode`, takes only the names on this page, written exactly as they are
+  here: `self_only`, not `SELF_ONLY`, as `/yolt config` takes them.
 - At startup a bad or missing value takes its default, and the file is rewritten with every key. If anything you
   typed fell back, a copy of your file is kept first as `you-only-live-twice.json.bak`.
 - On `/yolt reload` a bad value keeps the value in use. If the file can't be read (it isn't valid JSON, say, or it is
