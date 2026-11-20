@@ -1,6 +1,10 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.Bodies;
 import bobbynooby.dev.bodies.BodyExpiry;
+import bobbynooby.dev.bodies.BodyRecord;
+import bobbynooby.dev.bodies.BodySnapshot;
+import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.BodyDuration;
 import bobbynooby.dev.config.Settings;
@@ -27,7 +31,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -50,6 +56,7 @@ import net.minecraft.world.level.dimension.end.EnderDragonFight;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -745,6 +752,98 @@ public class VoidGraveGameTests {
             putBack(level, before);
         }
         helper.succeed();
+    }
+
+    // Only the loaded bodies are walked each tick, and the ground noted must be what the old walk over every record
+    // noted: the standing bodies', not one taken over, in the air, gone or never loaded. A body whose tag is gone
+    // still counts, whether it lost it while loaded or loaded without it.
+    @GameTest(maxTicks = 40)
+    public void loadedBodiesNoteTheGroundEveryRecordDid(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BodyStore store = BodyTestKit.store(helper);
+        List<UUID> owners = new ArrayList<>();
+        List<Entity> spawned = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            for (UUID owner : owners) {
+                store.remove(owner);
+                LastGround.forget(owner);
+            }
+            spawned.forEach(Entity::discard);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        Mannequin standing = recordedBody(helper, store, owners, spawned, new BlockPos(1, 0, 1), true);
+        Mannequin takenOver = recordedBody(helper, store, owners, spawned, new BlockPos(3, 0, 1), true);
+        Mannequin untaggedSince = recordedBody(helper, store, owners, spawned, new BlockPos(5, 0, 1), true);
+        Mannequin loadedUntagged = recordedBody(helper, store, owners, spawned, new BlockPos(1, 0, 3), false);
+        Mannequin gone = recordedBody(helper, store, owners, spawned, new BlockPos(3, 0, 3), true);
+        Mannequin inTheAir = recordedBody(helper, store, owners, spawned, new BlockPos(5, 3, 3), true);
+        inTheAir.setNoGravity(true);
+        UUID neverLoaded = UUID.randomUUID();
+        owners.add(neverLoaded);
+        store.put(new BodyRecord(neverLoaded, "Ground", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN,
+                System.currentTimeMillis(), false, BodySnapshot.of(standing)));
+        helper.startSequence()
+                // Long enough for each body to land and pass its load check
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    store.byOwner(ownerOf(store, takenOver)).ifPresent(record -> store.put(record.withPendingRemoval(true)));
+                    untaggedSince.removeTag(Bodies.TAG);
+                    gone.discard();
+                    owners.forEach(LastGround::forget);
+                })
+                // The server tick notes the ground after this one
+                .thenIdle(1)
+                .thenExecute(() -> {
+                    for (UUID owner : owners) {
+                        helper.assertValueEqual(LastGround.in(owner, level.dimension()), groundEveryRecordNotes(level, store, owner),
+                                "last ground of body " + owners.indexOf(owner));
+                    }
+                    // Each case came out as it should, so the comparison can't pass on nothing
+                    for (Mannequin noted : List.of(standing, untaggedSince, loadedUntagged)) {
+                        helper.assertTrue(LastGround.in(ownerOf(store, noted), level.dimension()).isPresent(),
+                                "no ground noted for the body at " + noted.blockPosition());
+                    }
+                    for (UUID owner : List.of(ownerOf(store, takenOver), ownerOf(store, gone), ownerOf(store, inTheAir), neverLoaded)) {
+                        helper.assertTrue(LastGround.in(owner, level.dimension()).isEmpty(),
+                                "ground noted for body " + owners.indexOf(owner));
+                    }
+                })
+                .thenExecute(cleanUp)
+                .thenSucceed();
+    }
+
+    // A mannequin body with a record, put before the body loads so its load check finds it. Untagged, it stands for a
+    // body whose tag an admin took off before its chunk loaded again.
+    private static Mannequin recordedBody(GameTestHelper helper, BodyStore store, List<UUID> owners, List<Entity> spawned,
+                                          BlockPos at, boolean tagged) {
+        ServerLevel level = helper.getLevel();
+        Mannequin body = new Mannequin(EntityTypes.MANNEQUIN, level);
+        if (tagged) {
+            body.addTag(Bodies.TAG);
+        }
+        Vec3 pos = helper.absoluteVec(Vec3.atBottomCenterOf(at));
+        body.snapTo(pos.x, pos.y, pos.z);
+        UUID owner = UUID.randomUUID();
+        owners.add(owner);
+        store.put(new BodyRecord(owner, "Ground", body.getUUID(), YoltConfig.BodyType.MANNEQUIN, System.currentTimeMillis(),
+                false, BodySnapshot.of(body)));
+        level.addFreshEntity(body);
+        spawned.add(body);
+        return body;
+    }
+
+    private static UUID ownerOf(BodyStore store, Entity body) {
+        return store.byEntity(body.getUUID()).orElseThrow().owner();
+    }
+
+    // What the walk over every record, loaded or not, noted for this owner
+    private static Optional<BlockPos> groundEveryRecordNotes(ServerLevel level, BodyStore store, UUID owner) {
+        Optional<BodyRecord> record = store.byOwner(owner).filter(found -> !found.pendingRemoval());
+        if (record.isPresent() && level.getServer().overworld().getEntityInAnyDimension(record.get().bodyEntity()) instanceof LivingEntity body
+                && body.level() == level && body.onGround() && !body.isInLiquid()) {
+            return Optional.of(body.getOnPos().above());
+        }
+        return Optional.empty();
     }
 
     // The body keeps its owner's ledge until the owner comes back and takes it over. They stand where the body stood,

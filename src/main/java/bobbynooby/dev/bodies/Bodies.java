@@ -29,9 +29,12 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** The wiring point for bodies: registers the hooks that leave, hand back and kill for a body. */
@@ -39,9 +42,19 @@ public final class Bodies {
     /** Marks the entities we made, so a decorative mannequin is never taken for a body. */
     public static final String TAG = "yolt_body";
 
+    // Every loaded entity that is or may be a body, so noting where bodies stand doesn't look up the entity of every
+    // record, most of which lie in unloaded chunks. An entity is here from its load event to its unload event, which is
+    // exactly while its level finds it by its UUID. Identity, since an entity's equals is its network id, which a
+    // respawn hands on. Server thread only.
+    private static final Set<LivingEntity> LOADED = Collections.newSetFromMap(new IdentityHashMap<>());
+
     private Bodies() {}
 
     public static void init() {
+        ServerEntityEvents.ENTITY_LOAD.register(Bodies::onLoad);
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> LOADED.remove(entity));
+        // Static, so it would outlive the server in a JVM that starts another one
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> LOADED.clear());
         // LEAVE runs on the server thread before vanilla saves the player, so the save holds what this changes
         ServerPlayerEvents.LEAVE.register(Bodies::leaveBody);
         // JOIN runs on the server thread once the player is in the world
@@ -102,15 +115,37 @@ public final class Bodies {
         }
     }
 
-    private static void noteGround(MinecraftServer server) {
-        // Only a grave reads it
-        if (!Settings.on(c -> c.graves.enabled)) {
+    // A body carries the tag from its spawn on. One whose tag an admin took off is still found by its record, as
+    // entityOf finds it.
+    private static void onLoad(Entity entity, ServerLevel level) {
+        if (!(entity instanceof LivingEntity living)) {
             return;
         }
-        for (BodyRecord record : BodyStore.get(server).all()) {
-            // A pending record's body was taken over already
-            if (!record.pendingRemoval() && entityOf(server, record) instanceof LivingEntity body) {
-                LastGround.update(record.owner(), body);
+        if (entity.entityTags().contains(TAG)) {
+            LOADED.add(living);
+            return;
+        }
+        // Runs for each entity of a chunk in turn, so a throw would break off the rest
+        Guard.run(() -> {
+            if (Settings.active() && BodyStore.get(level.getServer()).byEntity(entity.getUUID()).isPresent()) {
+                LOADED.add(living);
+            }
+        }, "Could not check whether {} is a body as it loaded", entity.getUUID());
+    }
+
+    // Only the loaded bodies: one in an unloaded chunk stands nowhere it could note
+    private static void noteGround(MinecraftServer server) {
+        // Only a grave reads it
+        if (!Settings.on(c -> c.graves.enabled) || LOADED.isEmpty()) {
+            return;
+        }
+        BodyStore store = BodyStore.get(server);
+        for (LivingEntity body : LOADED) {
+            for (BodyRecord record : store.allByEntity(body.getUUID())) {
+                // A pending record's body was taken over already
+                if (!record.pendingRemoval()) {
+                    LastGround.update(record.owner(), body);
+                }
             }
         }
     }
