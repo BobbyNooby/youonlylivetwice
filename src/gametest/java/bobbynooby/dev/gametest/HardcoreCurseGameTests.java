@@ -24,6 +24,8 @@ import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Util;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -123,6 +125,38 @@ public class HardcoreCurseGameTests {
             helper.assertValueEqual(second.curseHeartsLost, cap, "hearts lost in the file after a death at the cap");
             helper.assertValueEqual(second.curseLastDeathAdded, 0, "the latest death's hearts in the file after a death at the cap");
         } finally {
+            Curse.set(uuid, 0);
+            leave(server, uuid);
+        }
+        helper.succeed();
+    }
+
+    // The cap is any number the server sets. One heart always stays, and hearts from anything else count.
+    @GameTest(environment = CURSE)
+    public void curse2NeverTakesTheLastHeart(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseLastHeart");
+        UUID uuid = player.getUUID();
+        HardcoreConfig.CurseSection cfg = Settings.get().hardcore.curse;
+        int cap = cfg.maxLostHearts;
+        try {
+            cfg.maxLostHearts = 50;
+            Curse.set(uuid, 50);
+            Curse.apply(player);
+            assertMaxHealth(helper, player, 2.0F, "with 50 hearts lost of 10");
+            // Health Boost II gives four hearts, and the curse then takes all of those but the last too
+            player.addEffect(new MobEffectInstance(MobEffects.HEALTH_BOOST, 12_000, 1));
+            Curse.apply(player);
+            assertMaxHealth(helper, player, 2.0F, "with 50 hearts lost of 14");
+            Curse.set(uuid, 11);
+            Curse.apply(player);
+            assertMaxHealth(helper, player, 6.0F, "with 11 hearts lost of 14");
+            player.removeEffect(MobEffects.HEALTH_BOOST);
+            Curse.apply(player);
+            assertMaxHealth(helper, player, 2.0F, "with 11 hearts lost of 10");
+        } finally {
+            cfg.maxLostHearts = cap;
+            player.removeEffect(MobEffects.HEALTH_BOOST);
             Curse.set(uuid, 0);
             leave(server, uuid);
         }

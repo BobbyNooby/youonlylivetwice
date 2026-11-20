@@ -59,6 +59,19 @@ public final class CurseMaths {
         return Math.min(Math.max(s.curseHeartsLost, 0), Math.max(maxLost, 0));
     }
 
+    /**
+     * The hearts the curse may take from a max health worked out as vanilla does: (base + every added value) times the
+     * multipliers. One heart always stays, whatever the cap says, and however many hearts something else gave or took.
+     */
+    public static int leavingOneHeart(int hearts, double addedUp, double multiplier) {
+        if (multiplier <= 0.0 || Double.isNaN(multiplier) || Double.isNaN(addedUp)) {
+            return 0;
+        }
+        // (addedUp - 2 * hearts) * multiplier >= 2, with a hair of slack for the arithmetic
+        int room = (int) Math.floor((addedUp - 2.0 / multiplier) / 2.0 + 1.0E-9);
+        return Math.clamp(hearts, 0, Math.max(room, 0));
+    }
+
     /** The max health modifier's amount, two health points a heart. */
     public static double modifier(HardcoreState s, int maxLost) {
         return -2.0 * shown(s, maxLost);

@@ -214,7 +214,7 @@ public final class Curse {
         if (maxHealth == null) {
             return;
         }
-        double amount = CurseMaths.modifier(state, cfg().maxLostHearts);
+        double amount = -2.0 * taken(maxHealth, state);
         AttributeModifier current = maxHealth.getModifier(MODIFIER);
         if (amount == 0.0) {
             maxHealth.removeModifier(MODIFIER);
@@ -225,6 +225,25 @@ public final class Curse {
         }
         // When the maximum drops, vanilla lowers the health to it; when it rises, the health stays and regen fills it
         maxHealth.addOrUpdateTransientModifier(new AttributeModifier(MODIFIER, amount, AttributeModifier.Operation.ADD_VALUE));
+    }
+
+    // The hearts the curse takes now: what is stored, up to the cap, and never the last heart. The max health is worked
+    // out without the curse's own modifier, so hearts from anything else, such as Health Boost, count.
+    private static int taken(AttributeInstance maxHealth, HardcoreState state) {
+        double addedUp = maxHealth.getBaseValue();
+        double ofBase = 1.0;
+        double ofTotal = 1.0;
+        for (AttributeModifier modifier : maxHealth.getModifiers()) {
+            if (modifier.id().equals(MODIFIER)) {
+                continue;
+            }
+            switch (modifier.operation()) {
+                case ADD_VALUE -> addedUp += modifier.amount();
+                case ADD_MULTIPLIED_BASE -> ofBase += modifier.amount();
+                case ADD_MULTIPLIED_TOTAL -> ofTotal *= 1.0 + modifier.amount();
+            }
+        }
+        return CurseMaths.leavingOneHeart(CurseMaths.shown(state, cfg().maxLostHearts), addedUp, ofBase * ofTotal);
     }
 
     // A loss stored over a lowered cap changes nothing the player can see, so it isn't announced
@@ -251,7 +270,9 @@ public final class Curse {
         }
         HardcoreConfig.CurseSection cfg = cfg();
         HardcoreState state = HardcoreStates.of(player);
-        int shown = CurseMaths.shown(state, cfg.maxLostHearts);
+        AttributeInstance maxHealth = player.getAttribute(Attributes.MAX_HEALTH);
+        // What it takes now, which is less than what is stored when that would take the last heart
+        int shown = maxHealth != null ? taken(maxHealth, state) : CurseMaths.shown(state, cfg.maxLostHearts);
         if (shown <= 0) {
             return List.of();
         }

@@ -97,4 +97,22 @@ class HardcoreCurseTest {
         assertEquals("1m", CurseMaths.playTime(1));
         assertEquals("2m", CurseMaths.playTime(1201));
     }
+
+    // The cap is the server's to set, at any number, so the last heart is kept whatever it says
+    @Test
+    void theCurseNeverTakesTheLastHeart() {
+        assertEquals(4, CurseMaths.leavingOneHeart(4, 20.0, 1.0), "four of ten hearts");
+        assertEquals(9, CurseMaths.leavingOneHeart(9, 20.0, 1.0), "nine of ten leaves the one");
+        assertEquals(9, CurseMaths.leavingOneHeart(10, 20.0, 1.0), "ten of ten would leave none");
+        assertEquals(9, CurseMaths.leavingOneHeart(500, 20.0, 1.0));
+        // Health Boost II adds four hearts
+        assertEquals(13, CurseMaths.leavingOneHeart(500, 28.0, 1.0), "of fourteen hearts");
+        // Something else took most of them already
+        assertEquals(1, CurseMaths.leavingOneHeart(4, 4.0, 1.0), "of two hearts");
+        assertEquals(0, CurseMaths.leavingOneHeart(4, 2.0, 1.0), "of one heart");
+        assertEquals(0, CurseMaths.leavingOneHeart(4, 1.0, 1.0), "of half a heart");
+        // A doubling from another mod: 40 health, and each heart the curse takes is worth two
+        assertEquals(9, CurseMaths.leavingOneHeart(500, 20.0, 2.0));
+        assertEquals(0, CurseMaths.leavingOneHeart(4, 20.0, 0.0));
+    }
 }
