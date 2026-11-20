@@ -8,6 +8,7 @@ import bobbynooby.dev.graves.GraveDeath;
 import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveNotice;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.graves.Graves;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathLog;
 import bobbynooby.dev.mixin.PlayerListInvoker;
@@ -44,6 +45,7 @@ import net.minecraft.world.inventory.BeaconMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.inventory.PlayerEnderChestContainer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -58,6 +60,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.SkullBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.RotationSegment;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelData;
@@ -1401,6 +1405,352 @@ public class GraveDeathGameTests {
             helper.assertValueEqual(graveLines(back), List.of(graveLine(grave)), "chat at the death's respawn");
         } finally {
             leaveAndRemoveGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // enderChestOnDeath belongs to the graves: with graves off, wipe and grave both leave the ender chest as it is, and
+    // the inventory drops the vanilla way. Every switch goes back in the same tick.
+    @GameTest
+    public void enderChestModeIgnoredWithGravesOff(GameTestHelper helper) {
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        boolean gravesBefore = graves.enabled;
+        ServerPlayer wiped = TestPlayers.join(helper, "NotWiped", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        ServerPlayer buried = TestPlayers.join(helper, "NotBuried", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        try {
+            Map<ServerPlayer, YoltConfig.EnderChestMode> modes = Map.of(wiped, YoltConfig.EnderChestMode.WIPE,
+                    buried, YoltConfig.EnderChestMode.GRAVE);
+            for (Map.Entry<ServerPlayer, YoltConfig.EnderChestMode> each : modes.entrySet()) {
+                ServerPlayer player = each.getKey();
+                player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD));
+                player.getInventory().add(new ItemStack(Items.DIAMOND));
+                graves.enabled = false;
+                try {
+                    killWithEnderMode(helper, player, each.getValue());
+                } finally {
+                    graves.enabled = gravesBefore;
+                }
+                String mode = each.getValue().name();
+                helper.assertValueEqual(player.getEnderChestInventory().countItem(Items.EMERALD), 1,
+                        "emeralds left in the ender chest with " + mode);
+                helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "a grave was made with graves off and " + mode);
+                helper.assertValueEqual(itemsNear(helper, Items.DIAMOND, player.blockPosition(), 2.0), 1,
+                        "diamonds dropped the vanilla way with " + mode);
+                helper.assertValueEqual(itemsNear(helper, Items.EMERALD, player.blockPosition(), 2.0), 0, "emeralds dropped with " + mode);
+            }
+        } finally {
+            graves.enabled = gravesBefore;
+            helper.getEntities(EntityTypes.ITEM).forEach(Entity::discard);
+            cleanUp(helper, wiped);
+            cleanUp(helper, buried);
+        }
+        helper.succeed();
+    }
+
+    // With keepInventory the inventory stays on the player, but the ender chest mode still applies: grave takes the
+    // ender chest into the grave beside the head, and nothing else goes in. The rule goes back in the same tick.
+    @GameTest
+    public void enderChestGraveWithKeepInventoryBuriesOnlyTheChest(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        GameRules rules = server.getGameRules();
+        boolean keepBefore = rules.get(GameRules.KEEP_INVENTORY);
+        ServerPlayer player = join(helper, "KeptChest");
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            player.getEnderChestInventory().setItem(0, new ItemStack(Items.EMERALD, 3));
+            rules.set(GameRules.KEEP_INVENTORY, true, server);
+            try {
+                killWithEnderMode(helper, player, YoltConfig.EnderChestMode.GRAVE);
+            } finally {
+                rules.set(GameRules.KEEP_INVENTORY, keepBefore, server);
+            }
+            List<ItemStack> items = onlyGrave(helper, player).items();
+            helper.assertValueEqual(items.size(), 2, "stacks in the grave: " + items);
+            helper.assertTrue(GraveItems.isGraveHead(items.get(0)), "the grave does not start with the head: " + items);
+            helper.assertValueEqual(GraveAsserts.count(items, Items.EMERALD), 3, "emeralds in the grave");
+            helper.assertValueEqual(player.getInventory().countItem(Items.DIAMOND), 1, "diamonds kept on the player");
+            helper.assertTrue(player.getEnderChestInventory().isEmpty(), "the ender chest still holds the emeralds");
+        } finally {
+            rules.set(GameRules.KEEP_INVENTORY, keepBefore, server);
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // 64 stacks need two graves. In a one-block column with one free block, the first grave takes it and the second
+    // finds none, so the first is taken back too: no record, the free block as it was, and every stack dropped once
+    // where it lasts, the head with them. What the failed grave never took, the ender chest, stays where it was. The
+    // border and the column are put back in this tick.
+    @GameTest(skyAccess = true)
+    public void secondGraveFailingTakesBackTheFirst(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WorldBorder border = level.getWorldBorder();
+        double size = border.getSize();
+        double centerX = border.getCenterX();
+        double centerZ = border.getCenterZ();
+        BlockPos death = helper.absolutePos(new BlockPos(3, 1, 3));
+        Map<BlockPos, BlockState> before = new HashMap<>();
+        AABB around = new AABB(death).inflate(2);
+        ServerPlayer player = TestPlayers.join(level.getServer(), "HalfBuried", GameType.SURVIVAL, death);
+        String name = player.getGameProfile().name();
+        try {
+            for (int y = level.getMinY(); y <= level.getMaxY(); y++) {
+                if (y != death.getY()) {
+                    VoidGraveGameTests.setRemembered(level, death.atY(y), Blocks.STONE, before);
+                }
+            }
+            VoidGraveGameTests.setRemembered(level, death, Blocks.AIR, before);
+            Inventory inventory = player.getInventory();
+            for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
+                inventory.setItem(i, new ItemStack(Items.COBBLESTONE));
+            }
+            PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
+            for (int i = 0; i < enderChest.getContainerSize(); i++) {
+                enderChest.setItem(i, new ItemStack(Items.EMERALD));
+            }
+            border.setCenter(death.getX() + 0.5, death.getZ() + 0.5);
+            border.setSize(1);
+            List<String> log = OfflineGameTests.yoltLog(() -> killWithEnderMode(helper, player, YoltConfig.EnderChestMode.GRAVE));
+
+            helper.assertValueEqual(log.stream().filter(line -> line.startsWith("Could not make a grave for ")).toList(),
+                    List.of("Could not make a grave for " + name + ", dropping their items instead"), "the failed grave's log lines");
+            helper.assertTrue(gravesOf(helper, player.getUUID()).isEmpty(), "a grave record was kept");
+            helper.assertTrue(level.getBlockState(death).isAir(), "the free block was not put back: " + level.getBlockState(death));
+            List<ItemEntity> drops = level.getEntitiesOfClass(ItemEntity.class, around, Entity::isAlive);
+            helper.assertValueEqual(drops.size(), Inventory.INVENTORY_SIZE + 1, "stacks dropped");
+            helper.assertValueEqual(itemsNear(helper, Items.COBBLESTONE, death, 2.0), Inventory.INVENTORY_SIZE, "cobblestone dropped");
+            assertHeadDropped(helper, drops, player);
+            for (ItemEntity drop : drops) {
+                helper.assertValueEqual(drop.getAge(), (int) Short.MIN_VALUE, drop.getItem() + "'s age");
+            }
+            helper.assertValueEqual(enderChest.countItem(Items.EMERALD), enderChest.getContainerSize(), "emeralds left in the ender chest");
+        } finally {
+            border.setSize(size);
+            border.setCenter(centerX, centerZ);
+            VoidGraveGameTests.putBack(level, before);
+            level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // The second grave of a death goes next to the first, so whoever finds one finds the other
+    @GameTest
+    public void secondGraveSitsNextToTheFirst(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "SideBySide");
+        try {
+            Inventory inventory = player.getInventory();
+            for (int i = 0; i < Inventory.INVENTORY_SIZE; i++) {
+                inventory.setItem(i, new ItemStack(Items.COBBLESTONE));
+            }
+            PlayerEnderChestContainer enderChest = player.getEnderChestInventory();
+            for (int i = 0; i < enderChest.getContainerSize(); i++) {
+                enderChest.setItem(i, new ItemStack(Items.EMERALD));
+            }
+            killWithEnderMode(helper, player, YoltConfig.EnderChestMode.GRAVE);
+            List<Grave> found = gravesOf(helper, player.getUUID());
+            helper.assertValueEqual(found.size(), 2, "graves for the player");
+            BlockPos first = found.get(0).pos();
+            BlockPos second = found.get(1).pos();
+            helper.assertTrue(Math.abs(first.getX() - second.getX()) <= 1 && Math.abs(first.getZ() - second.getZ()) <= 1,
+                    "the second grave at " + second + " is not next to the first at " + first);
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // The head faces the way its owner faced as they died. An offline kill has no one facing anywhere, so its head takes
+    // the default. The offline player leaves before the kill, and the online one before the kick.
+    @GameTest
+    public void graveHeadFacesTheOwnerAndOfflineGraveFacesDefault(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer facing = join(helper, "Facing");
+        ServerPlayer away = TestPlayers.join(helper, "FacingAway", GameType.SURVIVAL, new BlockPos(5, 1, 5));
+        try {
+            facing.setYRot(90.0F);
+            kill(helper, facing);
+            Grave online = onlyGrave(helper, facing);
+            helper.assertValueEqual(helper.getLevel().getBlockState(online.pos()).getValue(BlockStateProperties.ROTATION_16),
+                    RotationSegment.convertToSegment(90.0F), "the online grave head's rotation");
+
+            away.setYRot(90.0F);
+            TestPlayers.leave(away);
+            helper.assertValueEqual(Kills.kill(server, away.nameAndId()), Kills.Result.KILLED_OFFLINE, "the offline kill");
+            Grave offline = onlyGrave(helper, away);
+            helper.assertValueEqual(helper.getLevel().getBlockState(offline.pos()).getValue(BlockStateProperties.ROTATION_16), 0,
+                    "the offline grave head's rotation");
+        } finally {
+            cleanUp(helper, facing);
+            leaveAndRemoveGraves(helper, away.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // A trade's payment slots hand their items back when the menu closes, which the death does first: they go into the
+    // grave, not onto the ground
+    @GameTest
+    public void merchantMenuPaymentGoesInTheGrave(GameTestHelper helper) {
+        ServerPlayer player = join(helper, "Trader");
+        try {
+            player.openMenu(new SimpleMenuProvider((id, inventory, user) -> new MerchantMenu(id, inventory), Component.literal("Trade")));
+            helper.assertTrue(player.containerMenu instanceof MerchantMenu, "no trade menu opened");
+            player.containerMenu.getSlot(0).set(new ItemStack(Items.EMERALD, 4));
+            kill(helper, player);
+            helper.assertValueEqual(GraveAsserts.count(onlyGrave(helper, player).items(), Items.EMERALD), 4, "emeralds in the grave");
+            helper.assertValueEqual(itemsNear(helper, Items.EMERALD, player.blockPosition(), 3.0), 0, "emeralds dropped");
+        } finally {
+            cleanUp(helper, player);
+        }
+        helper.succeed();
+    }
+
+    // Where the grave is, the owner hears and no one else: a player two blocks off is sent no grave line at the owner's
+    // respawn. The switches go back in the same tick.
+    @GameTest
+    public void graveLineGoesOnlyToTheOwner(GameTestHelper helper) {
+        YoltConfig config = Settings.get();
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        ServerPlayer owner = join(helper, "OnlyMe");
+        ServerPlayer watcher = TestPlayers.join(helper, "Bystander", GameType.SURVIVAL, new BlockPos(3, 1, 1));
+        try {
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            config.deathLockout.enabled = false;
+            ServerPlayer back;
+            try {
+                back = dieAndRespawn(helper, owner);
+            } finally {
+                config.graves.tellLocation = tellBefore;
+                config.deathLockout.enabled = lockoutBefore;
+            }
+            helper.assertValueEqual(graveLines(back), List.of(graveLine(onlyGrave(helper, owner))), "the owner's grave lines");
+            helper.assertValueEqual(graveLines(watcher), List.of(), "the watcher's grave lines");
+        } finally {
+            TestPlayers.leave(watcher);
+            leaveAndRemoveGraves(helper, owner.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // "Further than" the distance: a grave exactly 16 blocks from the death isn't told by the default, and one 17 blocks
+    // off is. Records made at the death's time, as in refusalTellsByDimensionAndDistance.
+    @GameTest
+    public void tellLocationDistanceIsExclusiveAtTheBoundary(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID owner = UUID.randomUUID();
+        String name = "Boundary";
+        GraveStore store = GraveStore.get(server);
+        BlockPos at = new BlockPos(30000, 70, 30000);
+        List<Grave> made = new ArrayList<>();
+        try {
+            assertDefaultTelling(helper);
+            DeathLockout.recordDeath(owner, name);
+            long died = DeathLockout.newestDeath(owner).deathTimeMillis();
+            Grave sixteen = putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(16)), died);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(), "grave line for a grave 16 off");
+            store.remove(sixteen.id());
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, GlobalPos.of(Level.OVERWORLD, at.east(17)), died);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name),
+                    Optional.of("Your grave is at 30000, 70, 30000 in the Overworld."), "grave line for a grave 17 off");
+        } finally {
+            made.forEach(grave -> store.remove(grave.id()));
+            DeathLockout.revive(owner, name, "console");
+        }
+        helper.succeed();
+    }
+
+    // A grave emptied and gone before the respawn, as by an admin's removal, has nothing to tell about. The switches go
+    // back in the same tick.
+    @GameTest
+    public void graveEmptiedBeforeRespawnTellsNothing(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        YoltConfig.TellLocation tellBefore = config.graves.tellLocation;
+        boolean lockoutBefore = config.deathLockout.enabled;
+        ServerPlayer player = join(helper, "Robbed");
+        AABB around = new AABB(player.blockPosition()).inflate(4.0);
+        try {
+            player.getInventory().add(new ItemStack(Items.DIAMOND));
+            respawnBesideTest(helper, player);
+            config.graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            config.deathLockout.enabled = false;
+            ServerPlayer back;
+            try {
+                kill(helper, player);
+                helper.assertTrue(Graves.removeAndDrop(server, onlyGrave(helper, player)) instanceof Graves.Removal.Dropped,
+                        "the grave was not removed");
+                back = TestPlayers.respawn(player, false, Entity.RemovalReason.KILLED);
+            } finally {
+                config.graves.tellLocation = tellBefore;
+                config.deathLockout.enabled = lockoutBefore;
+            }
+            helper.assertValueEqual(graveLines(back), List.of(), "chat at the respawn");
+        } finally {
+            helper.getLevel().getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
+            leaveAndRemoveGraves(helper, player.getUUID());
+        }
+        helper.succeed();
+    }
+
+    // A grave from before graves kept their death spot can't say it moved, so the default leaves it untold; always
+    // still tells it. The setting goes back in the same tick.
+    @GameTest
+    public void graveWithoutDeathSpotCountsAsNotMoved(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        YoltConfig.TellLocation tellBefore = graves.tellLocation;
+        UUID owner = UUID.randomUUID();
+        String name = "Spotless";
+        GraveStore store = GraveStore.get(server);
+        BlockPos at = new BlockPos(30000, 70, 30000);
+        Grave grave = null;
+        try {
+            assertDefaultTelling(helper);
+            DeathLockout.recordDeath(owner, name);
+            long died = DeathLockout.newestDeath(owner).deathTimeMillis();
+            grave = new Grave(UUID.randomUUID(), owner, name, ResolvableProfile.createUnresolved(name), Level.OVERWORLD, at,
+                    List.of(new ItemStack(Items.DIAMOND)), died);
+            helper.assertTrue(grave.deathPos() == null, "the old-style grave has a death spot");
+            store.put(grave);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(), "grave line with the default");
+            graves.tellLocation = YoltConfig.TellLocation.ALWAYS;
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name),
+                    Optional.of("Your grave is at 30000, 70, 30000 in the Overworld."), "grave line with always");
+        } finally {
+            graves.tellLocation = tellBefore;
+            if (grave != null) {
+                store.remove(grave.id());
+            }
+            DeathLockout.revive(owner, name, "console");
+        }
+        helper.succeed();
+    }
+
+    // A death's graves are made just before it is recorded, so the grave the refusal names is one made in the minute
+    // before the death. One made 61 seconds before is an earlier death's and isn't named; one made 59 seconds before is.
+    @GameTest
+    public void graveOlderThanAMinuteIsNotTheDeathsGrave(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID owner = UUID.randomUUID();
+        String name = "Earlier";
+        GraveStore store = GraveStore.get(server);
+        BlockPos at = new BlockPos(30000, 70, 30000);
+        GlobalPos inTheNether = GlobalPos.of(Level.NETHER, at);
+        List<Grave> made = new ArrayList<>();
+        try {
+            assertDefaultTelling(helper);
+            DeathLockout.recordDeath(owner, name);
+            long died = DeathLockout.newestDeath(owner).deathTimeMillis();
+            Grave old = putRecord(store, made, owner, name, Level.OVERWORLD, at, inTheNether, died - 61_000L);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name), Optional.empty(), "grave line for a grave 61 s old");
+            store.remove(old.id());
+            putRecord(store, made, owner, name, Level.OVERWORLD, at, inTheNether, died - 59_000L);
+            helper.assertValueEqual(refusalGraveLine(helper, server, owner, name),
+                    Optional.of("Your grave is at 30000, 70, 30000 in the Overworld."), "grave line for a grave 59 s old");
+        } finally {
+            made.forEach(grave -> store.remove(grave.id()));
+            DeathLockout.revive(owner, name, "console");
         }
         helper.succeed();
     }
