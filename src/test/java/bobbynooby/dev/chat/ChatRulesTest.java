@@ -90,6 +90,26 @@ class ChatRulesTest {
         assertTrue(hear(sender, ChatMode.PROXIMITY, admin).contains(admin.id()));
     }
 
+    // Admin view lets an op hear everyone, not be heard by everyone: their own plain chat keeps the radius, as the docs
+    // keep only /say and /tellraw for reaching everyone
+    @Test
+    void adminViewSenderIsHeardOnlyNearby() {
+        Listener admin = at(OVERWORLD, 0, true);
+        Listener far = at(OVERWORLD, 100, false);
+        assertFalse(hear(admin, ChatMode.PROXIMITY, far).contains(far.id()));
+        assertTrue(hear(admin, ChatMode.GLOBAL, far).contains(far.id()));
+    }
+
+    // A whisper's target gets it only within range whoever they are: admin view gives no reach to whispers, which the
+    // docs keep private
+    @Test
+    void whisperIgnoresTargetsAdminView() {
+        Listener sender = at(OVERWORLD, 0, false);
+        Listener admin = at(OVERWORLD, 100, true);
+        assertFalse(ChatRules.whisperArrives(sender, admin, ChatMode.PROXIMITY, 48));
+        assertTrue(ChatRules.whisperArrives(sender, at(OVERWORLD, 20, true), ChatMode.PROXIMITY, 48));
+    }
+
     @Test
     void whisperNeedsRangeAndDimension() {
         Listener sender = at(OVERWORLD, 0, false);
