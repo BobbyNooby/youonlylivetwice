@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.coords.CoordinateOffsets;
+import bobbynooby.dev.coords.Frame;
 import bobbynooby.dev.coords.Offset;
 import bobbynooby.dev.visibility.AdminView;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -10,6 +11,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
@@ -17,6 +19,7 @@ import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
 import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.MinecraftServer;
@@ -28,6 +31,7 @@ import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -205,6 +209,51 @@ public class CoordinateOffsetFrameGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // Every packet sent reads the frame, which is kept until the offset or its dimension changes: a dimension change
+    // makes a new one, in the new dimension, and the other dimensions keep their away amounts. A packet with no
+    // translator goes on as the very packet, while one with a translator is shifted by the frame of the moment.
+    @GameTest(environment = FRAMES)
+    public void sentFrameIsKeptUntilTheFrameChanges(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether to go to");
+        ServerPlayer player = OffsetTestKit.join(helper, "cfkept", GameType.CREATIVE);
+        try {
+            Frame first = CoordinateOffsets.frame(player);
+            helper.assertFalse(first.isZero(), "the join got no offset");
+            helper.assertTrue(CoordinateOffsets.frame(player) == first, "the frame was made again though nothing changed");
+            helper.assertValueEqual(first.dimension(), helper.getLevel().dimension(), "the first frame's dimension");
+            helper.assertValueEqual(first.offsetIn(Level.NETHER), CoordinateOffsets.awayOffset(player, Level.NETHER),
+                    "the nether's away amount in the first frame");
+            assertSentAsFramed(helper, player, first);
+
+            OffsetTestKit.withCoordinates(() -> player.teleportTo(nether, 37.5, 64.0, -50.5, Set.of(), 0.0F, 0.0F, true));
+            helper.assertTrue(player.level() == nether, "the player did not reach the nether");
+            Frame arrived = CoordinateOffsets.frame(player);
+            helper.assertTrue(arrived != first, "the frame was kept across a dimension change");
+            helper.assertValueEqual(arrived.dimension(), Level.NETHER, "the new frame's dimension");
+            helper.assertValueEqual(arrived.offset(), new Offset(-32, 64), "the new frame's offset");
+            helper.assertValueEqual(arrived.offsetIn(Level.OVERWORLD), CoordinateOffsets.awayOffset(player, Level.OVERWORLD),
+                    "the overworld's away amount in the new frame");
+            helper.assertTrue(CoordinateOffsets.frame(player) == arrived, "the new frame was made again though nothing changed");
+            assertSentAsFramed(helper, player, arrived);
+        } finally {
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    private static void assertSentAsFramed(GameTestHelper helper, ServerPlayer player, Frame frame) {
+        int mark = OffsetTestKit.mark(player);
+        ClientboundSetHealthPacket health = new ClientboundSetHealthPacket(7.0F, 3, 1.0F);
+        player.connection.send(health);
+        helper.assertTrue(OffsetTestKit.last(helper, player, mark, ClientboundSetHealthPacket.class) == health,
+                "a packet with nothing to shift was not sent as itself");
+        BlockPos real = new BlockPos(1000, 70, -2000);
+        player.connection.send(new ClientboundBlockUpdatePacket(real, Blocks.STONE.defaultBlockState()));
+        helper.assertValueEqual(OffsetTestKit.last(helper, player, mark, ClientboundBlockUpdatePacket.class).getPos(),
+                frame.offset().shift(real), "the block update's spot");
     }
 
     // A dimension change whose teleport keeps an axis relative, as "/execute in minecraft:the_nether run tp @s ~ ~ ~"

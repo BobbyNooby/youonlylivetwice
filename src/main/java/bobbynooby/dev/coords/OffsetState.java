@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /**
  * One connection's offsets and what the client was told in them. It lives as long as the connection, across respawns.
@@ -43,6 +44,12 @@ public final class OffsetState {
     // connection, so the blur stays the same from one frame to the next.
     final long seedShown = ThreadLocalRandom.current().nextLong();
 
+    // Made once, rather than for every frame
+    private final Function<ResourceKey<Level>, Offset> awayAmounts = this::away;
+    // The out frame last made, which every packet sent reads. Made again only when the offset or the dimension it was
+    // made from changes. A frame never changes, so threads that race here at worst both make an equal one.
+    private volatile @Nullable Frame outFrame;
+
     public OffsetState() {}
 
     Offset away(ResourceKey<Level> target) {
@@ -55,12 +62,20 @@ public final class OffsetState {
 
     /** The frame the client is sent positions in now. */
     Frame outFrame() {
-        return new Frame(frames.get().out(), dimension, this::away);
+        Offset out = frames.get().out();
+        ResourceKey<Level> started = dimension;
+        Frame kept = outFrame;
+        if (kept != null && kept.offset() == out && kept.dimension() == started) {
+            return kept;
+        }
+        Frame made = new Frame(out, started, awayAmounts);
+        outFrame = made;
+        return made;
     }
 
     /** The frame what the client sends is read in now, which lags behind until it accepts the new frame's teleport. */
     Frame inFrame() {
         Frames now = frames.get();
-        return new Frame(now.in(), now.inDimension(), this::away);
+        return new Frame(now.in(), now.inDimension(), awayAmounts);
     }
 }

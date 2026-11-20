@@ -61,8 +61,11 @@ final class Outgoing {
         PacketType<?> type = packet.type();
         boolean asItIs = type != GamePacketTypes.CLIENTBOUND_LOGIN && type != GamePacketTypes.CLIENTBOUND_RESPAWN
                 && frames.out().isZero();
+        // Looked up first: most packets have no translator, and go on as they are without a context made for them
+        Translator<?> translator = asItIs ? null : TRANSLATORS.get(type);
         try {
-            Packet<?> sent = asItIs ? packet : translateOne(packet, new Context(state.outFrame(), state, listener));
+            Packet<?> sent = translator == null ? packet
+                    : run(translator, packet, new Context(state.outFrame(), state, listener));
             ChunkRules.keepHeld(state, packet);
             OwnPosition.keepTeleport(state, packet);
             return sent;
