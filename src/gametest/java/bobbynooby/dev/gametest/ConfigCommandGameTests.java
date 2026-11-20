@@ -589,6 +589,34 @@ public class ConfigCommandGameTests {
         helper.succeed();
     }
 
+    // The value already in place, in the live config and the file, changes nothing, so it doesn't apply the game rule
+    // again after a hand-made /gamerule either; turning the switch on does, and so does a reload (BorderAndReloadGameTests)
+    @GameTest(environment = CommandGameTests.CONFIG_COMMAND)
+    public void alreadySetKeyDoesNotReapplyRules(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        byte[] fileBefore = Files.readAllBytes(Settings.path());
+        GameRules rules = server.getGameRules();
+        boolean ruleBefore = rules.get(GameRules.IMMEDIATE_RESPAWN);
+        try {
+            helper.assertTrue(Settings.get().immediateRespawn && fileValue("immediateRespawn").getAsBoolean(),
+                    "immediateRespawn is not on in the live config and the file");
+            rules.set(GameRules.IMMEDIATE_RESPAWN, false, server);
+            helper.assertValueEqual(run(server, "yolt config immediateRespawn true"), List.of("immediateRespawn is already true."),
+                    "setting the value it has");
+            helper.assertFalse(rules.get(GameRules.IMMEDIATE_RESPAWN), "the value it had already turned the rule on");
+
+            helper.assertValueEqual(run(server, "yolt config immediateRespawn false"),
+                    List.of("immediateRespawn changed from true to false."), "turning it off");
+            helper.assertValueEqual(run(server, "yolt config immediateRespawn true"),
+                    List.of("immediateRespawn changed from false to true."), "turning it on");
+            helper.assertTrue(rules.get(GameRules.IMMEDIATE_RESPAWN), "turning the switch on left the rule off");
+        } finally {
+            restore(server, fileBefore);
+            rules.set(GameRules.IMMEDIATE_RESPAWN, ruleBefore, server);
+        }
+        helper.succeed();
+    }
+
     /**
      * Shows the key at its shipped value, sets it with the command, whose reply ends with the key's note, has a bad value
      * refused, then writes the file with only that key, with the border kept off as the test server needs, and reloads

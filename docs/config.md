@@ -81,7 +81,7 @@ How an upgrade works:
 | `allowedCommands` | `[]` | More commands a non-op keeps while `restrictCommands` is on, such as another mod's `"vote"`: each name as typed, without the slash. A listed command is sent to the player's game, tab-completes and runs, but only the parts of it their permission level allows, so listing an op command gives them nothing. At most 64 names of `a-z`, `0-9`, `_`, `.`, `:` and `-`; one bad name sends the whole list back. A name the server has no command for is warned about at startup and on `/yolt reload`, and `help`, `w`, `msg`, `tell`, `status` and `yolt` follow their own settings. Careful: `list`, `teammsg` (and `tm`) or another mod's private message command, such as `r` or `pm`, show who is online, which is what the restriction hides. File only. | No (on `/yolt reload`) |
 | `netherScaleOneToOne` | `true` | Every dimension's coordinate scale is 1, modded dimensions included, so the Nether matches the Overworld and there is no fast travel. A Nether portal then links only to an Overworld portal within 16 blocks of its exit. | No; it applies at once, and changing it on an existing world breaks portal links |
 | `randomSpawn` | `true` | Players with no spawn point spawn at a random spot inside the border. | No |
-| `immediateRespawn` | `true` | Turns on the `immediate_respawn` game rule at start, on `/yolt reload` and on `/yolt config`. | No |
+| `immediateRespawn` | `true` | Turns on the `immediate_respawn` game rule at start, on `/yolt reload` and when `/yolt config` turns this on. Setting it to the value it already has changes nothing, so after a `/gamerule immediate_respawn false` use `/yolt reload` to turn the rule back on. | No |
 
 ## `worldBorder`
 
