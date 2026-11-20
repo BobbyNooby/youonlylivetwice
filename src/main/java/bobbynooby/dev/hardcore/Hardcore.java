@@ -3,6 +3,7 @@ package bobbynooby.dev.hardcore;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.StandIn;
+import bobbynooby.dev.core.Yolt;
 import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
@@ -123,7 +124,7 @@ public final class Hardcore {
             return;
         }
         for (ServerPlayer player : List.copyOf(server.getPlayerList().getPlayers())) {
-            Guard.run(() -> tickPlayer(player), "Could not run the hardcore tick for {}", player.nameAndId().name());
+            guarded(Hardcore::tickPlayer, player, "Could not run the hardcore tick for {}");
         }
     }
 
@@ -133,7 +134,7 @@ public final class Hardcore {
             return;
         }
         for (Consumer<ServerPlayer> perPlayer : TICKS) {
-            Guard.run(() -> perPlayer.accept(player), "A hardcore tick failed for {}", player.nameAndId().name());
+            guarded(perPlayer, player, "A hardcore tick failed for {}");
         }
         // Last, so it sees what this tick's features changed
         Slowdowns.refresh(player);
@@ -143,7 +144,7 @@ public final class Hardcore {
         if (!Settings.active()) {
             return;
         }
-        Guard.run(() -> refreshPlayer(player), "Could not put the hardcore modifiers back on {}", player.nameAndId().name());
+        guarded(Hardcore::refreshPlayer, player, "Could not put the hardcore modifiers back on {}");
     }
 
     private static void refreshPlayer(ServerPlayer player) {
@@ -152,7 +153,7 @@ public final class Hardcore {
             return;
         }
         for (Consumer<ServerPlayer> reapply : REFRESHES) {
-            Guard.run(() -> reapply.accept(player), "A hardcore refresh failed for {}", player.nameAndId().name());
+            guarded(reapply, player, "A hardcore refresh failed for {}");
         }
         Slowdowns.refresh(player);
     }
@@ -160,7 +161,18 @@ public final class Hardcore {
     private static void leaveRules(ServerPlayer player) {
         Slowdowns.clear(player);
         for (Consumer<ServerPlayer> remove : EXEMPTS) {
-            Guard.run(() -> remove.accept(player), "A hardcore exempt hook failed for {}", player.nameAndId().name());
+            guarded(remove, player, "A hardcore exempt hook failed for {}");
+        }
+    }
+
+    // What Guard.run does, but the player's name for the message is only looked up once a hook has thrown. These run for
+    // every player and every hook each tick, where making the name and a lambda each time cost more than most hooks do.
+    private static void guarded(Consumer<ServerPlayer> hook, ServerPlayer player, String message) {
+        try {
+            hook.accept(player);
+        } catch (RuntimeException e) {
+            // SLF4J takes a trailing Throwable as the exception, not as an argument
+            Yolt.LOGGER.error(message, player.nameAndId().name(), e);
         }
     }
 }

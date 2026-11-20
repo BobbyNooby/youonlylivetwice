@@ -42,7 +42,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -54,6 +56,12 @@ public class HardcoreAllGameTests {
     private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
     // A batch of its own: it changes the switch through the config file
     private static final String COLD_SWITCH = "you-only-live-twice-gametest:hardcore_cold_switch";
+    // A batch of its own, so only its own player's hooks fail
+    private static final String HOOK_FAILS = "you-only-live-twice-gametest:hardcore_hook_fails";
+    // The players the two test hooks below act on; every other player passes through them untouched
+    private static final Set<UUID> FAILING = ConcurrentHashMap.newKeySet();
+    private static final Set<UUID> RAN_AFTER = ConcurrentHashMap.newKeySet();
+    private static final AtomicBoolean HOOKED = new AtomicBoolean();
     private static final BlockPos AT = new BlockPos(1, 0, 1);
     private static final BlockPos MOB_AT = new BlockPos(5, 0, 5);
     // Weight weighs again every 10 ticks, so the full load counts from here on
@@ -249,6 +257,55 @@ public class HardcoreAllGameTests {
     // Every modifier the layer puts on (hardcore_slow, undead_curse, nutrients, elytra_gravity, tougher, relentless,
     // blood_moon) is in YOLT's namespace, and every tag it adds (yolt.tough, yolt.vanilla, yolt.blood_moon,
     // yolt.door_rolled) starts with "yolt.", so this finds any of them and any added later
+    // A tick hook that throws is logged with the player's name and its exception, the way Guard.run logs one, and the
+    // hooks after it still run. The name is only read once a hook has thrown, so it must still come out right then.
+    @GameTest(environment = HOOK_FAILS, maxTicks = 40)
+    public void hook1AFailingTickHookIsLoggedAndTheRestRun(GameTestHelper helper) {
+        // Registered once for the whole run: the hub has no way to take a hook off again
+        if (HOOKED.compareAndSet(false, true)) {
+            Hardcore.onTick(player -> {
+                if (FAILING.contains(player.getUUID())) {
+                    throw new IllegalStateException("a tick hook that fails");
+                }
+            });
+            Hardcore.onTick(player -> {
+                if (FAILING.contains(player.getUUID())) {
+                    RAN_AFTER.add(player.getUUID());
+                }
+            });
+        }
+        ServerPlayer player = TestPlayers.join(helper, "HookFails", GameType.SURVIVAL, AT);
+        UUID uuid = player.getUUID();
+        String name = player.nameAndId().name();
+        LogWatch errors = LogWatch.start();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            FAILING.remove(uuid);
+            RAN_AFTER.remove(uuid);
+            errors.stop();
+            TestPlayers.leave(player);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        FAILING.add(uuid);
+        helper.runAfterDelay(3, () -> {
+            try {
+                List<LogEvent> ours = errors.events().stream()
+                        .filter(event -> event.getMessage().getFormattedMessage().contains(name))
+                        .toList();
+                helper.assertFalse(ours.isEmpty(), "the failing hook was not logged");
+                for (LogEvent event : ours) {
+                    helper.assertValueEqual(event.getMessage().getFormattedMessage(), "A hardcore tick failed for " + name,
+                            "the failing hook's line");
+                    helper.assertTrue(event.getThrown() instanceof IllegalStateException thrown
+                            && thrown.getMessage().equals("a tick hook that fails"), "the line's exception: " + event.getThrown());
+                }
+                helper.assertTrue(RAN_AFTER.contains(uuid), "the hook after the failing one did not run");
+            } finally {
+                cleanUp.run();
+            }
+            helper.succeed();
+        });
+    }
+
     private static void assertNothingOfOurs(GameTestHelper helper, LivingEntity entity) {
         for (Holder<Attribute> attribute : BuiltInRegistries.ATTRIBUTE.listElements().toList()) {
             AttributeInstance instance = entity.getAttribute(attribute);
@@ -286,7 +343,7 @@ public class HardcoreAllGameTests {
     private static final class LogWatch {
         private final LoggerConfig config;
         private final AbstractAppender appender;
-        private final List<String> errors = new CopyOnWriteArrayList<>();
+        private final List<LogEvent> errors = new CopyOnWriteArrayList<>();
 
         private LogWatch() {
             config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
@@ -294,7 +351,8 @@ public class HardcoreAllGameTests {
                 @Override
                 public void append(LogEvent event) {
                     if (Yolt.MOD_ID.equals(event.getLoggerName()) && event.getLevel().isMoreSpecificThan(Level.ERROR)) {
-                        errors.add(event.getMessage().getFormattedMessage());
+                        // Log4j can reuse the event it hands over, so a copy is kept
+                        errors.add(event.toImmutable());
                     }
                 }
             };
@@ -313,6 +371,10 @@ public class HardcoreAllGameTests {
         }
 
         List<String> messages() {
+            return errors.stream().map(event -> event.getMessage().getFormattedMessage()).toList();
+        }
+
+        List<LogEvent> events() {
             return List.copyOf(errors);
         }
     }
