@@ -49,7 +49,8 @@ How the file is read:
   warning. A restart would give it its default.
 - Unknown keys (most likely a misspelling) are warned about and left out when the file is rewritten.
 - `allowedCommands`, `serverList.motdLines`, `serverList.hoverLines` and `hide.tabHeaderLines` are lists, so they can
-  only be changed in the file. So are the hardcore layer's lists and maps, see [file-only settings](#file-only-settings).
+  only be changed in the file. So are the hardcore layer's lists and maps, see
+  [file-only settings](#file-only-settings).
 - `§` colour codes work in the text settings (the client draws them), for example `"§cNo one is coming."`.
 - With no config file at startup (the first start, or a deleted file), YOLT writes the defaults and uses them.
 - The file is rewritten at every start, so comments typed into it aren't kept.
@@ -573,9 +574,9 @@ three, or a dish with the staple it lacks, do.
 
 ## Load checks
 
-The hardcore, `resourcePack` and `messages` values are checked as the file loads, the same way as core's: a value that fails
-falls back on its own (to the default at startup, to the value in use on `/yolt reload`), with a warning in the log
-naming the key, and `/yolt config` refuses it. The rest of the file still counts.
+The hardcore, `resourcePack` and `messages` values are checked as the file loads, the same way as core's: a value that
+fails falls back on its own (to the default at startup, to the value in use on `/yolt reload`), with a warning in the
+log naming the key, and `/yolt config` refuses it. The rest of the file still counts.
 
 - **0 to 1:** `slow.cap`, `weight.maxSlow`, `weight.containerContents`, `legs.slow`, `limp.slow`,
   `nutrients.startLevel`, `nutrients.deficientBelow`, `nutrients.penalties.sugar.sprintSlow`,
