@@ -1,7 +1,12 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.gametest.mixin.FoodDataAccessor;
+import bobbynooby.dev.hardcore.Cold;
+import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.Hardcore;
 import bobbynooby.dev.hardcore.HardcoreState;
 import bobbynooby.dev.hardcore.HardcoreStates;
@@ -13,21 +18,27 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.storage.TagValueOutput;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -58,6 +69,11 @@ public class HardcoreAllGameTests {
     private static final String COLD_SWITCH = "you-only-live-twice-gametest:hardcore_cold_switch";
     // A batch of its own, so only its own player's hooks fail
     private static final String HOOK_FAILS = "you-only-live-twice-gametest:hardcore_hook_fails";
+    // Every switch on, as ALL, each in a batch of its own
+    private static final String ALL_SAVED = "you-only-live-twice-gametest:hardcore_all_saved";
+    private static final String ALL_CREATIVE = "you-only-live-twice-gametest:hardcore_all_creative";
+    // Weight, legs, nutrients and cold on, hunger ×2, in clear weather, for a biome of its own
+    private static final String BODY_RULES = "you-only-live-twice-gametest:hardcore_body_rules";
     // The players the two test hooks below act on; every other player passes through them untouched
     private static final Set<UUID> FAILING = ConcurrentHashMap.newKeySet();
     private static final Set<UUID> RAN_AFTER = ConcurrentHashMap.newKeySet();
@@ -304,6 +320,219 @@ public class HardcoreAllGameTests {
             }
             helper.succeed();
         });
+    }
+
+    // Every modifier the layer puts on a player is transient, so the save holds none of them: the curse, broken legs, a
+    // full load, low vitamins, a limp, the cold and a glide all on at once, each checked live first. Removing YOLT then
+    // leaves nothing behind on a player (docs/known-limits.md).
+    @GameTest(environment = ALL_SAVED, maxTicks = 60)
+    public void all2NothingOfOursIsSavedWithThePlayer(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Unsaved", GameType.SURVIVAL, AT);
+        TestPlayers.markLoaded(player);
+        UUID uuid = player.getUUID();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            Curse.set(uuid, 0);
+            Legs.set(uuid, false);
+            resetState(uuid);
+            player.getInventory().clearContent();
+            TestPlayers.leave(player);
+        });
+        boolean waiting = false;
+        try {
+            for (int i = 0; i < 6; i++) {
+                player.getInventory().add(new ItemStack(Items.IRON_BLOCK, 64));
+            }
+            Curse.set(uuid, 2);
+            Legs.set(uuid, true);
+            player.setHealth(3.0F);
+            HardcoreStates.update(uuid, s -> {
+                s.protein = 0.6;
+                s.vitamins = 0.1;
+                s.sugar = 0.6;
+                s.chill = 0.5;
+            });
+            player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
+            player.startFallFlying();
+            helper.runAfterDelay(WEIGHED, () -> {
+                try {
+                    for (Holder<Attribute> attribute : List.of(Attributes.MAX_HEALTH, Attributes.MOVEMENT_SPEED,
+                            Attributes.BLOCK_BREAK_SPEED, Attributes.GRAVITY)) {
+                        helper.assertTrue(HardcoreMobsGameTests.attribute(player, attribute).getModifiers().stream()
+                                        .anyMatch(modifier -> modifier.id().getNamespace().equals(Yolt.MOD_ID)),
+                                "no modifier of ours on " + attribute.getRegisteredName() + " to leave out of the save");
+                    }
+                    TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING,
+                            helper.getLevel().registryAccess());
+                    player.saveWithoutId(output);
+                    CompoundTag saved = output.buildResult();
+                    helper.assertTrue(saved.contains("attributes"), "the save has no attributes: " + saved.keySet());
+                    helper.assertFalse(String.valueOf(saved.get("attributes")).contains(Yolt.MOD_ID),
+                            "the saved attributes hold a modifier of ours: " + saved.get("attributes"));
+                    helper.assertFalse(saved.toString().contains(Yolt.MOD_ID), "the save holds something of ours: " + saved);
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Creative is outside the rules: the switch takes every modifier and lost heart off at the next tick and lets the
+    // frost thaw under vanilla's own tick, and the switch back puts it all on again at the next. No once-a-second cold
+    // step comes before the end, so the chill stays at 0.5: frozen ticks of 70, and a slowdown of 0.1 with the legs' 0.2.
+    @GameTest(environment = ALL_CREATIVE, maxTicks = 60)
+    public void all2CreativeTakesEverythingOffSurvivalPutsItBack(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "Switcher", GameType.SURVIVAL, AT);
+        TestPlayers.markLoaded(player);
+        UUID uuid = player.getUUID();
+        AtomicBoolean vanillaTicks = new AtomicBoolean();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            vanillaTicks.set(false);
+            Curse.set(uuid, 0);
+            Legs.set(uuid, false);
+            resetState(uuid);
+            TestPlayers.leave(player);
+        });
+        boolean waiting = false;
+        try {
+            Curse.set(uuid, 2);
+            Legs.set(uuid, true);
+            HardcoreStates.update(uuid, s -> {
+                s.protein = 0.6;
+                s.vitamins = 0.1;
+                s.sugar = 0.6;
+                s.chill = 0.5;
+            });
+            helper.onEachTick(() -> {
+                if (vanillaTicks.get() && !player.isRemoved()) {
+                    HardcoreColdGameTests.tickVanilla(player, cleanUp);
+                }
+            });
+            helper.runAfterDelay(WEIGHED, () -> step(cleanUp, () -> {
+                assertInTheRules(helper, player, "in survival");
+                player.setGameMode(GameType.CREATIVE);
+                vanillaTicks.set(true);
+            }));
+            helper.runAfterDelay(WEIGHED + 10, () -> step(cleanUp, () -> {
+                assertNothingOfOurs(helper, player);
+                helper.assertValueEqual(player.getMaxHealth(), 20.0F, "max health in creative");
+                helper.assertTrue(player.getTicksFrozen() < 70, "frozen ticks " + player.getTicksFrozen() + " after 10 ticks in creative");
+                vanillaTicks.set(false);
+                player.setGameMode(GameType.SURVIVAL);
+            }));
+            helper.runAfterDelay(WEIGHED + 12, () -> {
+                try {
+                    assertInTheRules(helper, player, "back in survival");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A player body is its owner standing in for them, but carries none of their body's state: on snow for 100 ticks
+    // with a full load, broken legs, low vitamins and a chill stored, it gets no modifier and no frost, the owner's
+    // stored state doesn't move, and its own hunger isn't taxed
+    @GameTest(environment = BODY_RULES, maxTicks = 140, skyAccess = true)
+    public void all2APlayerBodyCarriesNoHardcoreState(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "BodyRules", GameType.SURVIVAL, AT);
+        TestPlayers.markLoaded(player);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = BodyTestKit.usePlayerBodies();
+        Runnable[] biome = {() -> {}};
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            try {
+                Legs.set(owner, false);
+                resetState(owner);
+                BodyTestKit.cleanUp(helper, owner, before);
+            } finally {
+                biome[0].run();
+            }
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            biome[0] = HardcoreColdGameTests.setBiome(helper, new BlockPos(-2, -2, -2), new BlockPos(9, 8, 9), Biomes.SNOWY_PLAINS);
+            helper.assertTrue(Cold.coldSpot(helper.getLevel(), player.blockPosition()), "the body's spot isn't cold");
+            for (int i = 0; i < 6; i++) {
+                player.getInventory().add(new ItemStack(Items.IRON_BLOCK, 64));
+            }
+            Legs.set(owner, true);
+            HardcoreStates.update(owner, s -> {
+                s.protein = 0.6;
+                s.vitamins = 0.1;
+                s.sugar = 0.6;
+                s.chill = 0.5;
+            });
+            PlayerBody body = BodyTestKit.leavePlayerBody(helper, player);
+            String stored = HardcoreStates.read(owner).encode();
+            helper.runAfterDelay(100, () -> {
+                try {
+                    helper.assertFalse(body.isRemoved(), "the body is gone");
+                    for (Holder<Attribute> attribute : BuiltInRegistries.ATTRIBUTE.listElements().toList()) {
+                        AttributeInstance instance = body.getAttribute(attribute);
+                        if (instance != null) {
+                            for (AttributeModifier modifier : instance.getModifiers()) {
+                                helper.assertFalse(modifier.id().getNamespace().equals(Yolt.MOD_ID),
+                                        "modifier " + modifier.id() + " on the body's " + attribute.getRegisteredName());
+                            }
+                        }
+                    }
+                    helper.assertValueEqual(body.getTicksFrozen(), 0, "the body's frozen ticks");
+                    helper.assertValueEqual(HardcoreStates.read(owner).encode(), stored, "the owner's stored state");
+                    FoodDataAccessor food = (FoodDataAccessor) body.getFoodData();
+                    food.yoltSetExhaustion(0.0F);
+                    body.causeFoodExhaustion(0.1F);
+                    helper.assertTrue(Math.abs(food.yoltExhaustion() - 0.1F) < 1e-6F,
+                            "the body's exhaustion after 0.1 at ×2: " + food.yoltExhaustion());
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // In the rules: two hearts lost, the legs' and the chill's slowdown, low vitamins' mining slowdown and the chill's frost
+    private static void assertInTheRules(GameTestHelper helper, ServerPlayer player, String when) {
+        helper.assertValueEqual(player.getMaxHealth(), 16.0F, "max health " + when);
+        assertSlow(helper, player, 0.3, when);
+        helper.assertTrue(HardcoreMobsGameTests.attribute(player, Attributes.BLOCK_BREAK_SPEED).getModifier(Yolt.id("nutrients")) != null,
+                "no mining slowdown " + when);
+        helper.assertValueEqual(player.getTicksFrozen(), 70, "frozen ticks " + when);
+    }
+
+    // Nothing stored for the player but what a fresh state holds
+    private static void resetState(UUID uuid) {
+        HardcoreStates.update(uuid, s -> {
+            s.chill = 0.0;
+            s.protein = HardcoreState.UNSET;
+            s.vitamins = HardcoreState.UNSET;
+            s.sugar = HardcoreState.UNSET;
+        });
+    }
+
+    // A failed check ends the test at once, so the player isn't left online for the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
+        }
     }
 
     private static void assertNothingOfOurs(GameTestHelper helper, LivingEntity entity) {
