@@ -58,6 +58,15 @@ public final class BodyTargetGoal extends NearestAttackableTargetGoal<Mannequin>
         if (this.mob instanceof Phantom && this.mob.getTarget() != null && this.mob.getTarget().isAlive()) {
             return false;
         }
+        // With no mannequin body loaded in the level the search could only come up empty, so it is skipped. The rest is
+        // what the search does then: the same random draw first, so the mob's other random choices don't shift.
+        if (!BodyMobs.mannequinBodiesIn(this.mob.level())) {
+            if (this.randomInterval > 0 && this.mob.getRandom().nextInt(this.randomInterval) != 0) {
+                return false;
+            }
+            this.target = null;
+            return false;
+        }
         return super.canUse();
     }
 

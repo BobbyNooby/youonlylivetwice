@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -59,6 +60,8 @@ public class BodyMobGameTests {
     // The clock stopped at midnight, so daylight can't decide a hunt: a zombie burns in it, and a spider won't start one
     private static final String MIDNIGHT = "you-only-live-twice-gametest:midnight";
     private static final String DAYLIGHT = "you-only-live-twice-gametest:daylight";
+    // Midnight too, with no other test's body loaded alongside
+    private static final String BODY_AFTER_MOB = "you-only-live-twice-gametest:body_after_mob";
     private static final String BODY_DIFFICULTY = "you-only-live-twice-gametest:body_difficulty";
     // A player body that stays across ticks is a player to every mob, and the piglin is a mob to every player body near
     // it, so this has a batch of its own rather than player_body's
@@ -83,6 +86,38 @@ public class BodyMobGameTests {
             return zombie;
         }, (zombie, body) -> helper.assertTrue(body.getLastHurtByMob() == zombie,
                 "the body was last hurt by " + body.getLastHurtByMob() + ", not the zombie"));
+    }
+
+    // A mob skips its search for bodies while its level has none loaded, so one that was there first must still go
+    // after a body left later, and the count must drop again once the body goes. A batch of its own, so no other
+    // test's body is loaded meanwhile.
+    @GameTest(maxTicks = 300, environment = BODY_AFTER_MOB)
+    public void zombieHuntsBodyLeftAfterIt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<Entity> spawned = new ArrayList<>();
+        AtomicReference<UUID> owner = new AtomicReference<>();
+        AtomicReference<Mannequin> body = new AtomicReference<>();
+        Runnable finish = BodyTestKit.once(() -> cleanUp(helper, owner.get(), spawned));
+        helper.runBeforeTestEnd(finish);
+        helper.assertFalse(BodyMobs.mannequinBodiesIn(level), "a mannequin body is loaded before the test made one");
+        Mob zombie = helper.spawn(EntityTypes.ZOMBIE, FOUR_AWAY);
+        spawned.add(zombie);
+        helper.startSequence()
+                // A few searches skipped while there is no body
+                .thenIdle(20)
+                .thenExecute(() -> {
+                    ServerPlayer player = join(helper, "LeftLater");
+                    owner.set(player.getUUID());
+                    body.set(leaveBodyWithDefaults(helper, player));
+                    helper.assertTrue(BodyMobs.mannequinBodiesIn(level), "the new body is not counted");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(zombie.getTarget() == body.get(),
+                        "the zombie has not gone for the body: " + whereIs(zombie)))
+                .thenExecute(() -> {
+                    finish.run();
+                    helper.assertFalse(BodyMobs.mannequinBodiesIn(level), "the body is still counted once it is gone");
+                })
+                .thenSucceed();
     }
 
     @GameTest(maxTicks = 200, environment = MOBS_IGNORE)

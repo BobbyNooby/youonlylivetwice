@@ -6,15 +6,24 @@ import bobbynooby.dev.hardcore.MobBoosts;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.NearestAttackableTargetGoalAccessor;
 import bobbynooby.dev.mixin.TargetGoalAccessor;
+import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 
 /** Gives hostile mobs the goal that sends them after bodies. */
 public final class BodyMobs {
+    // How many mannequin bodies each level has loaded, counted as Bodies lists and unlists them. In a level with none,
+    // every hostile mob's search for one could only come up empty. Server thread only.
+    private static final Reference2IntOpenHashMap<Level> MANNEQUIN_BODIES = new Reference2IntOpenHashMap<>();
+
     private BodyMobs() {}
 
     static void init() {
@@ -25,6 +34,25 @@ public final class BodyMobs {
                 Guard.run(() -> addBodyGoal(mob), "Could not let {} hunt bodies", mob.getUUID());
             }
         });
+        // Static, so it would outlive the server in a JVM that starts another one
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> MANNEQUIN_BODIES.clear());
+    }
+
+    static void bodyLoaded(Entity body, Level level) {
+        if (body instanceof Mannequin) {
+            MANNEQUIN_BODIES.addTo(level, 1);
+        }
+    }
+
+    static void bodyUnloaded(Entity body, Level level) {
+        if (body instanceof Mannequin && MANNEQUIN_BODIES.addTo(level, -1) <= 1) {
+            MANNEQUIN_BODIES.removeInt(level);
+        }
+    }
+
+    /** True when the level has a mannequin body loaded, the only kind the body goal hunts. Public so a test can read it. */
+    public static boolean mannequinBodiesIn(Level level) {
+        return MANNEQUIN_BODIES.getInt(level) > 0;
     }
 
     /**
