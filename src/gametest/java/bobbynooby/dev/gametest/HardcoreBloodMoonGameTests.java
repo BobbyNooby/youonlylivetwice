@@ -23,14 +23,17 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -38,10 +41,13 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LocalMobCapCalculator;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.UUID;
 
 // One blood moon runs per server, so the tests that start one and stop it again within their first tick share an
@@ -58,7 +64,21 @@ public class HardcoreBloodMoonGameTests {
     private static final String WORDS = "you-only-live-twice-gametest:hardcore_blood_moon_words";
     // The same, with a night of 100 ticks
     private static final String FROZEN = "you-only-live-twice-gametest:hardcore_blood_moon_frozen";
+    // Every night past the grace days rolls, each in a batch of its own for its own stand-in clock
+    private static final String STATUS = "you-only-live-twice-gametest:hardcore_blood_moon_status";
+    private static final String STOPPED = "you-only-live-twice-gametest:hardcore_blood_moon_stopped";
+    private static final String REWARN = "you-only-live-twice-gametest:hardcore_blood_moon_rewarn";
+    private static final String SETBACK = "you-only-live-twice-gametest:hardcore_blood_moon_setback";
+    // The same, with the warning's title and sound off
+    private static final String QUIET_WARNING = "you-only-live-twice-gametest:hardcore_blood_moon_quiet_warning";
+    // Never a night that rolls, in a batch of its own, since its test turns the blood moon off across ticks
+    private static final String OFF_LIVE = "you-only-live-twice-gametest:hardcore_blood_moon_off_live";
+    // Never a night that rolls, with the night skip allowed, for a sleeper on the real clock
+    private static final String SLEEP = "you-only-live-twice-gametest:hardcore_blood_moon_sleep";
+    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
     private static final long DAY = 24000L;
+    // Somewhere in the Nether for a player to be, the same spot the coordinate offset's portal test uses
+    private static final Vec3 NETHER_SPOT = new Vec3(37.5, 64.0, -50.5);
     private static final BlockPos PLAYER_AT = new BlockPos(1, 0, 1);
     private static final BlockPos SECOND_PLAYER_AT = new BlockPos(2, 0, 1);
     private static final BlockPos MOB_AT = new BlockPos(4, 0, 4);
@@ -549,6 +569,592 @@ public class HardcoreBloodMoonGameTests {
             TestPlayers.leave(player);
         }
         helper.succeed();
+    }
+
+    // On a server that lets players sleep the night away, a lone sleeper still can't skip a blood moon: vanilla's own
+    // sleep, driven tick by tick on the real clock at midnight, leaves the clock running. With canSleepThrough on, the
+    // same sleep skips to morning.
+    @GameTest(environment = SLEEP, maxTicks = 200)
+    public void bloodMoonNightCannotBeSleptThrough(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        boolean sleepThroughBefore = config.canSleepThrough;
+        long savedTicks = SleepGameTests.clockTicks(helper);
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer sleeper = TestPlayers.join(helper, "MoonSleeper", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            config.canSleepThrough = sleepThroughBefore;
+            BloodMoon.stop(server);
+            SleepGameTests.wakeAndLeave(sleeper);
+            server.clockManager().setTotalTicks(helper.getLevel().dimensionType().defaultClock().orElseThrow(), savedTicks);
+            helper.getLevel().updateSkyBrightness();
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        long[] asleepAt = new long[1];
+        try {
+            helper.assertFalse(Settings.get().sleep.noNightSkip, "the environment left the night skip blocked");
+            config.canSleepThrough = false;
+            SleepGameTests.toMidnight(helper);
+            BloodMoon.start(server);
+            helper.assertTrue(BloodMoon.active(), "no blood moon after the start");
+            SleepGameTests.useBed(helper, sleeper, head);
+            helper.assertTrue(sleeper.isSleeping(), "the player could not get into bed at midnight");
+            asleepAt[0] = SleepGameTests.clockTicks(helper);
+            helper.onEachTick(() -> {
+                if (!sleeper.isRemoved()) {
+                    sleeper.doTick();
+                }
+            });
+            helper.startSequence()
+                    .thenIdle(120)
+                    .thenExecute(() -> {
+                        long moved = SleepGameTests.clockTicks(helper) - asleepAt[0];
+                        helper.assertTrue(Math.abs(moved - 120) <= 5, "the clock moved " + moved + " ticks in 120 of sleep");
+                        helper.assertTrue(sleeper.isSleepingLongEnough(), "the player hasn't slept long enough to skip");
+                        helper.assertTrue(BloodMoon.active(), "the blood moon ended under the sleeper");
+                        config.canSleepThrough = true;
+                    })
+                    .thenWaitUntil(() -> helper.assertTrue(SleepGameTests.clockTicks(helper) - asleepAt[0] > 1000,
+                            "the night wasn't skipped with canSleepThrough on"))
+                    .thenExecute(cleanUp)
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    @GameTest(environment = ALL_OFF)
+    public void bloodCommandsRefuseWhileOff(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        for (String command : List.of("start", "stop", "status")) {
+            int[] result = {-1};
+            helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon " + command, value -> result[0] = value),
+                    List.of("The blood moon is turned off."), "the reply to " + command);
+            helper.assertValueEqual(result[0], 0, "the result of " + command);
+            helper.assertFalse(BloodMoon.active(), "a blood moon is up after " + command);
+        }
+        helper.succeed();
+    }
+
+    // From the warning the status says one rises tonight; once up it counts down what is left, here from halfway
+    @GameTest(environment = STATUS, maxTicks = 200)
+    public void bloodStatusRisesTonightThenCountsDown(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        long day = freshDay();
+        long[] clock = {day * DAY + config.warnTick + 1};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            BloodMoon.stop(server);
+            realClock.run();
+            BloodMoon.restartForTesting();
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning past warnTick"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon status"),
+                                List.of("A blood moon rises tonight."), "the status after the warning");
+                        clock[0] = day * DAY + config.startTick;
+                    })
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
+                    .thenExecute(() -> clock[0] = day * DAY + (config.startTick + config.endTick) / 2)
+                    .thenWaitUntil(() -> helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon status"),
+                            List.of("A blood moon is up, with 50% of it left."), "the status halfway"))
+                    .thenExecute(cleanUp)
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // armourChance and enchantChance of 1 are floors under vanilla's rolls: a skeleton spawned during one always wears
+    // armour, all of it enchanted, whatever the local difficulty. Outside one, or at a chance of 0, vanilla's multiplier
+    // stands. A skeleton, since a zombie's own spawn can bring a chicken jockey along.
+    @GameTest(environment = MOON)
+    public void blood2GearFloorsArmourAndEnchants(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        double armourBefore = config.armourChance;
+        double enchantBefore = config.enchantChance;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            // Set and put back within this tick
+            config.armourChance = 1.0;
+            config.enchantChance = 1.0;
+            BloodMoon.start(server);
+            Mob skeleton = spawnNaturally(helper, spawned, EntityTypes.SKELETON, MOB_AT);
+            List<ItemStack> armour = new ArrayList<>();
+            for (EquipmentSlot slot : List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)) {
+                if (!skeleton.getItemBySlot(slot).isEmpty()) {
+                    armour.add(skeleton.getItemBySlot(slot));
+                }
+            }
+            helper.assertFalse(armour.isEmpty(), "a skeleton spawned with armourChance 1 wears no armour");
+            for (ItemStack piece : armour) {
+                helper.assertTrue(piece.isEnchanted(), "armour not enchanted with enchantChance 1: " + piece);
+            }
+            // 0.35 of vanilla's 0.15 base, at the lowest local difficulty
+            config.armourChance = 0.35;
+            helper.assertTrue(Math.abs(0.15F * BloodMoon.armourMultiplier(skeleton, 0.0F) - 0.35F) < 1e-6F,
+                    "the armour chance at 0.35: " + 0.15F * BloodMoon.armourMultiplier(skeleton, 0.0F));
+            config.armourChance = 0.0;
+            helper.assertValueEqual(BloodMoon.armourMultiplier(skeleton, 0.5F), 0.5F, "the multiplier at a chance of 0");
+            config.armourChance = 1.0;
+            BloodMoon.stop(server);
+            helper.assertValueEqual(BloodMoon.armourMultiplier(skeleton, 0.5F), 0.5F, "the multiplier with no blood moon up");
+        } finally {
+            BloodMoon.stop(server);
+            config.armourChance = armourBefore;
+            config.enchantChance = enchantBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // A creeper spawned during one is charged with chargedCreeperChance 1, never with 0
+    @GameTest(environment = MOON)
+    public void blood2ChargedCreepersFollowTheirChance(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        double chanceBefore = config.chargedCreeperChance;
+        List<Entity> spawned = new ArrayList<>();
+        try {
+            // Set and put back within this tick
+            BloodMoon.start(server);
+            config.chargedCreeperChance = 1.0;
+            Creeper charged = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.CREEPER, EntitySpawnReason.NATURAL, MOB_AT);
+            helper.assertTrue(charged.isPowered(), "a creeper spawned at a chance of 1 isn't charged");
+            config.chargedCreeperChance = 0.0;
+            Creeper plain = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.CREEPER, EntitySpawnReason.NATURAL, MOB_AT);
+            helper.assertTrue(plain.entityTags().contains(MobBoosts.BLOOD_MOON_MARK), "the second creeper isn't marked");
+            helper.assertFalse(plain.isPowered(), "a creeper spawned at a chance of 0 is charged");
+        } finally {
+            BloodMoon.stop(server);
+            config.chargedCreeperChance = chanceBefore;
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // Off takes the mark's boost off a mob the next time it loads, and its XP goes back to vanilla's, though the mark stays
+    @GameTest(environment = MOON)
+    public void blood2OffTakesTheMarkBoostOffAtTheNextLoad(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        boolean tougherBefore = tougher.enabled;
+        boolean enabledBefore = config.enabled;
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer killer = TestPlayers.join(helper, "MoonUnmarker", GameType.SURVIVAL, PLAYER_AT);
+        try {
+            // Set and put back within this tick
+            tougher.enabled = false;
+            BloodMoon.start(server);
+            Mob marked = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            BloodMoon.stop(server);
+            Mob unmarked = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            assertMarked(helper, marked, 25.0F, "before the switch went off");
+            int vanillaXp = unmarked.getExperienceReward(level, killer);
+            helper.assertValueEqual(marked.getExperienceReward(level, killer), vanillaXp * 2, "XP of the marked zombie while on");
+
+            config.enabled = false;
+            MobBoosts.onLoad(marked, level);
+            helper.assertValueEqual(marked.getMaxHealth(), 20.0F, "max health loaded with the blood moon off");
+            helper.assertTrue(HardcoreMobsGameTests.attribute(marked, Attributes.MAX_HEALTH).getModifier(MobBoosts.BLOOD_MOON) == null,
+                    "the blood moon modifier stayed with it off");
+            helper.assertValueEqual(marked.getExperienceReward(level, killer), vanillaXp, "XP of the marked zombie with it off");
+            helper.assertTrue(marked.entityTags().contains(MobBoosts.BLOOD_MOON_MARK), "the mark itself went");
+        } finally {
+            config.enabled = enabledBefore;
+            BloodMoon.stop(server);
+            tougher.enabled = tougherBefore;
+            spawned.forEach(Entity::discard);
+            TestPlayers.leave(killer);
+        }
+        helper.succeed();
+    }
+
+    // Off means off: the next tick ends it with the bar taken down, no line at dawn, and no day saved as ended, so it
+    // comes back on as it was
+    @GameTest(environment = OFF_LIVE, maxTicks = 40)
+    public void blood4TurningItOffEndsTheNightSilently(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        boolean enabledBefore = config.enabled;
+        ServerPlayer player = TestPlayers.join(helper, "MoonSwitched", GameType.SURVIVAL, PLAYER_AT);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            config.enabled = enabledBefore;
+            BloodMoon.stop(server);
+            TestPlayers.leave(player);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        int[] mark = new int[1];
+        OptionalLong endedBefore = HardcoreStates.world(BloodMoon.ENDED_DAY);
+        try {
+            BloodMoon.start(server);
+            helper.assertTrue(BloodMoon.active(), "no blood moon after the start");
+            mark[0] = TestPlayers.sentPackets(player).size();
+            config.enabled = false;
+            helper.startSequence()
+                    .thenIdle(1)
+                    .thenExecute(() -> {
+                        helper.assertFalse(BloodMoon.active(), "still up a tick after the switch went off");
+                        List<String> sent = moonPackets(player, mark[0]);
+                        helper.assertTrue(sent.contains("bar remove"), "the bar wasn't taken down: " + sent);
+                        helper.assertFalse(sent.contains("chat " + BloodMoon.SET_LINE), "dawn was announced: " + sent);
+                        helper.assertValueEqual(HardcoreStates.world(BloodMoon.ENDED_DAY), endedBefore, "the day saved as ended");
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // /yolt bloodmoon stop ends tonight's for good: with the clock still inside the night, it doesn't rise again
+    @GameTest(environment = STOPPED, maxTicks = 200)
+    public void blood4AStoppedNightDoesNotRiseAgain(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        long day = freshDay();
+        long[] clock = {day * DAY + config.startTick};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            BloodMoon.stop(server);
+            realClock.run();
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon stop"), List.of("Stopped the blood moon."),
+                                "the stop");
+                        clock[0] = day * DAY + config.startTick + 100;
+                    })
+                    .thenIdle(40)
+                    .thenExecute(() -> {
+                        helper.assertFalse(BloodMoon.active(), "it rose again inside the stopped night");
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // A restart after the warning but before dark warns once more, then the night rises as usual
+    @GameTest(environment = REWARN, maxTicks = 200)
+    public void blood4ARestartBeforeDarkWarnsAgain(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        String risen = Settings.get().messages.bloodMoonRisenLine;
+        long day = freshDay();
+        long[] clock = {day * DAY + config.warnTick};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
+        List<ServerPlayer> players = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            BloodMoon.stop(server);
+            realClock.run();
+            players.forEach(TestPlayers::leave);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        int[] mark = new int[1];
+        try {
+            ServerPlayer player = TestPlayers.join(helper, "MoonRewarned", GameType.SURVIVAL, PLAYER_AT);
+            players.add(player);
+            mark[0] = TestPlayers.sentPackets(player).size();
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
+                    .thenExecute(() -> {
+                        helper.assertTrue(chatLines(player, mark[0]).contains(BloodMoon.WARNING_LINE), "no first warning");
+                        mark[0] = TestPlayers.sentPackets(player).size();
+                        BloodMoon.restartForTesting();
+                        clock[0] = day * DAY + config.warnTick + 10;
+                    })
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning after the restart"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(chatLines(player, mark[0]), List.of(BloodMoon.WARNING_LINE), "lines after the restart");
+                        mark[0] = TestPlayers.sentPackets(player).size();
+                        clock[0] = day * DAY + config.startTick;
+                    })
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(chatLines(player, mark[0]), List.of(risen), "lines at startTick");
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // The bar is the overworld's: it comes off a player who leaves for the Nether, and goes back on, with one line, when
+    // they come back
+    @GameTest(environment = MOON)
+    public void info1BarFollowsThePlayerOutAndBack(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel nether = server.getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no Nether to go to");
+        ServerPlayer player = TestPlayers.join(helper, "MoonTraveller", GameType.SURVIVAL, PLAYER_AT);
+        try {
+            BloodMoon.start(server);
+            int mark = TestPlayers.sentPackets(player).size();
+            player.teleport(new TeleportTransition(nether, NETHER_SPOT, Vec3.ZERO, 0.0F, 0.0F, Set.of(), TeleportTransition.DO_NOTHING));
+            helper.assertTrue(player.level() == nether, "the player didn't reach the Nether");
+            helper.assertValueEqual(moonPackets(player, mark), List.of("bar remove"), "packets on leaving for the Nether");
+            mark = TestPlayers.sentPackets(player).size();
+            player.teleport(new TeleportTransition(helper.getLevel(), helper.absoluteVec(Vec3.atBottomCenterOf(PLAYER_AT)), Vec3.ZERO,
+                    0.0F, 0.0F, Set.of(), TeleportTransition.DO_NOTHING));
+            List<String> back = moonPackets(player, mark);
+            helper.assertValueEqual(back.stream().filter(line -> line.startsWith("bar add ")).count(), 1L, "bars added on the way back: " + back);
+            helper.assertValueEqual(chatLines(player, mark), List.of(BloodMoon.UP_LINE), "lines on the way back");
+        } finally {
+            BloodMoon.stop(server);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // With the title and the sound switched off an overworld player gets the chat line alone, and a player in the Nether
+    // gets nothing at all
+    @GameTest(environment = QUIET_WARNING, maxTicks = 100)
+    public void info1WarningSkipsTheNetherAndHonoursItsSwitches(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel nether = server.getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no Nether to go to");
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        long[] clock = {freshDay() * DAY + config.warnTick};
+        List<ServerPlayer> players = new ArrayList<>();
+        Runnable[] realClock = {() -> {}};
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            BloodMoon.stop(server);
+            realClock[0].run();
+            // A warning saves no day, so the next batch would pick this same day and find it warned already
+            BloodMoon.restartForTesting();
+            players.forEach(TestPlayers::leave);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            helper.assertFalse(config.warning.title || config.warning.sound, "the environment left the title or sound on");
+            ServerPlayer here = TestPlayers.join(helper, "MoonQuietHere", GameType.SURVIVAL, PLAYER_AT);
+            players.add(here);
+            ServerPlayer away = TestPlayers.join(helper, "MoonQuietAway", GameType.SURVIVAL, SECOND_PLAYER_AT);
+            players.add(away);
+            away.teleport(new TeleportTransition(nether, NETHER_SPOT, Vec3.ZERO, 0.0F, 0.0F, Set.of(), TeleportTransition.DO_NOTHING));
+            helper.assertTrue(away.level() == nether, "the second player didn't reach the Nether");
+            int[] marks = {TestPlayers.sentPackets(here).size(), TestPlayers.sentPackets(away).size()};
+            realClock[0] = BloodMoon.useClockForTesting(() -> clock[0]);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(moonPackets(here, marks[0]), List.of("chat " + BloodMoon.WARNING_LINE),
+                                "the warning in the overworld");
+                        helper.assertValueEqual(moonPackets(away, marks[1]), List.of(), "the warning in the Nether");
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // darkenSky and fog go on the bar as it is made; with bossBar off there is no bar, but the line still comes
+    @GameTest(environment = MOON)
+    public void info1BarFlagsFollowTheConfig(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        boolean darkenBefore = config.darkenSky;
+        boolean fogBefore = config.fog;
+        boolean barBefore = config.bossBar;
+        String risen = Settings.get().messages.bloodMoonRisenLine;
+        ServerPlayer player = TestPlayers.join(helper, "MoonFlags", GameType.SURVIVAL, PLAYER_AT);
+        try {
+            // Set and put back within this tick
+            config.darkenSky = false;
+            config.fog = true;
+            int mark = TestPlayers.sentPackets(player).size();
+            BloodMoon.start(server);
+            List<String> added = moonPackets(player, mark).stream().filter(line -> line.startsWith("bar add ")).toList();
+            helper.assertValueEqual(added.size(), 1, "bars added: " + added);
+            helper.assertTrue(added.getFirst().contains(" darken false ") && added.getFirst().endsWith(" fog true"),
+                    "the bar's flags: " + added.getFirst());
+            BloodMoon.stop(server);
+
+            config.bossBar = false;
+            mark = TestPlayers.sentPackets(player).size();
+            BloodMoon.start(server);
+            List<String> sent = moonPackets(player, mark);
+            helper.assertTrue(sent.stream().noneMatch(line -> line.startsWith("bar add ")), "a bar with bossBar off: " + sent);
+            helper.assertTrue(BloodMoon.barProgress().isEmpty(), "a bar's progress with bossBar off");
+            helper.assertValueEqual(chatLines(player, mark), List.of(risen), "lines with bossBar off");
+        } finally {
+            BloodMoon.stop(server);
+            config.darkenSky = darkenBefore;
+            config.fog = fogBefore;
+            config.bossBar = barBefore;
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
+    // The cap goes up only for monsters in the overworld: the Nether's monsters and every other category stay vanilla,
+    // while the overworld's monsters double, the check that this isn't vanilla everywhere
+    @GameTest(environment = MOON)
+    public void blood5NetherAndOtherCategoriesStayVanilla(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        ServerLevel nether = server.getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no Nether");
+        try {
+            BloodMoon.start(server);
+            int vanilla = MobCategory.MONSTER.getMaxInstancesPerChunk();
+            helper.assertValueEqual(BloodMoon.monsterCap(nether, vanilla), vanilla, "the Nether's monster cap");
+            BloodMoon.spawning(level);
+            helper.assertValueEqual(BloodMoon.spawnCap(MobCategory.MONSTER, vanilla), vanilla * 2, "the overworld's monster cap");
+            for (MobCategory category : List.of(MobCategory.CREATURE, MobCategory.AMBIENT, MobCategory.WATER_CREATURE)) {
+                int cap = category.getMaxInstancesPerChunk();
+                helper.assertValueEqual(BloodMoon.spawnCap(category, cap), cap, "the overworld's " + category + " cap");
+            }
+            BloodMoon.spawning(nether);
+            helper.assertValueEqual(BloodMoon.spawnCap(MobCategory.MONSTER, vanilla), vanilla, "the Nether's spawning cap");
+        } finally {
+            BloodMoon.spawning(null);
+            BloodMoon.stop(server);
+        }
+        helper.succeed();
+    }
+
+    // damage multiplies a marked mob's hit on top of tougher mobs': 3 × 1.25 × 2 for a marked zombie, 3 × 1.25 for one
+    // spawned after. Hits of 3 on Normal, which leaves a player's damage as dealt.
+    @GameTest(environment = MOON)
+    public void blood2MarkedDamageStacksOnTougher(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        MinecraftServer server = level.getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        boolean tougherBefore = tougher.enabled;
+        double damageBefore = config.damage;
+        List<Entity> spawned = new ArrayList<>();
+        List<ServerPlayer> players = new ArrayList<>();
+        try {
+            // Set and put back within this tick
+            tougher.enabled = true;
+            config.damage = 2.0;
+            BloodMoon.start(server);
+            Mob marked = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            BloodMoon.stop(server);
+            Mob tough = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL, MOB_AT);
+            helper.assertTrue(marked.entityTags().contains(MobBoosts.BLOOD_MOON_MARK) && marked.entityTags().contains(MobBoosts.TOUGH),
+                    "the first zombie isn't both marked and tough: " + marked.entityTags());
+            playerTakes(helper, players, "MoonBitten", level.damageSources().mobAttack(marked), 3.0F, 7.5F);
+            playerTakes(helper, players, "ToughBitten", level.damageSources().mobAttack(tough), 3.0F, 3.75F);
+        } finally {
+            BloodMoon.stop(server);
+            tougher.enabled = tougherBefore;
+            config.damage = damageBefore;
+            players.forEach(TestPlayers::leave);
+            spawned.forEach(Entity::discard);
+        }
+        helper.succeed();
+    }
+
+    // Setting the clock back before the night began ends it, with the line at dawn
+    @GameTest(environment = SETBACK, maxTicks = 200)
+    public void blood4TimeSetBackEndsIt(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        long day = freshDay();
+        long[] clock = {day * DAY + config.startTick};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
+        List<ServerPlayer> players = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            BloodMoon.stop(server);
+            realClock.run();
+            players.forEach(TestPlayers::leave);
+        });
+        helper.runBeforeTestEnd(cleanUp);
+        int[] mark = new int[1];
+        try {
+            ServerPlayer player = TestPlayers.join(helper, "MoonSetBack", GameType.SURVIVAL, PLAYER_AT);
+            players.add(player);
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
+                    .thenExecute(() -> {
+                        mark[0] = TestPlayers.sentPackets(player).size();
+                        clock[0] = day * DAY + config.startTick - 100;
+                    })
+                    .thenWaitUntil(() -> helper.assertFalse(BloodMoon.active(), "still up with the clock set back"))
+                    .thenExecute(() -> {
+                        helper.assertValueEqual(chatLines(player, mark[0]), List.of(BloodMoon.SET_LINE), "lines as it ended");
+                        cleanUp.run();
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
+    }
+
+    // A server that turns capBoostNearPlayerBodies on gets the doubled cap near player bodies too
+    @GameTest(environment = MOON)
+    public void blood5BodiesBoostedWhenAllowed(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
+        boolean boostBefore = config.capBoostNearPlayerBodies;
+        ServerPlayer player = TestPlayers.join(helper, "CapNearBody", GameType.SURVIVAL, PLAYER_AT);
+        UUID owner = player.getUUID();
+        YoltConfig.BodiesSection before = BodyTestKit.usePlayerBodies();
+        try {
+            PlayerBody body = BodyTestKit.leavePlayerBody(helper, player);
+            BloodMoon.start(server);
+            int vanilla = MobCategory.MONSTER.getMaxInstancesPerChunk();
+            helper.assertValueEqual(BloodMoon.monsterCapNear(body, vanilla), vanilla, "the cap near a player body as it ships");
+            // Set and put back within this tick
+            config.capBoostNearPlayerBodies = true;
+            helper.assertValueEqual(BloodMoon.monsterCapNear(body, vanilla), vanilla * 2, "the cap near a player body when allowed");
+        } finally {
+            config.capBoostNearPlayerBodies = boostBefore;
+            BloodMoon.stop(server);
+            BodyTestKit.cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
+    // As a natural spawn makes it: made with its reason, its spawn finished as the spawner finishes it, which rolls its
+    // gear, then added to the world, which loads it
+    private static <T extends Mob> T spawnNaturally(GameTestHelper helper, List<Entity> spawned, EntityType<T> type, BlockPos pos) {
+        ServerLevel level = helper.getLevel();
+        T mob = type.create(level, EntitySpawnReason.NATURAL);
+        helper.assertTrue(mob != null, "no " + type + " made");
+        Vec3 at = helper.absoluteVec(Vec3.atBottomCenterOf(pos));
+        mob.snapTo(at.x, at.y, at.z, 0.0F, 0.0F);
+        mob.setPersistenceRequired();
+        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()), EntitySpawnReason.NATURAL, null);
+        helper.assertTrue(level.addFreshEntity(mob), "the " + type + " was not added");
+        spawned.add(mob);
+        mob.removeFreeWill();
+        return mob;
+    }
+
+    // A fresh player for each hit, so no hurt cooldown cuts it
+    private static void playerTakes(GameTestHelper helper, List<ServerPlayer> players, String name, DamageSource source,
+                                    float dealt, float expected) {
+        ServerPlayer player = TestPlayers.join(helper, name, GameType.SURVIVAL, PLAYER_AT);
+        players.add(player);
+        // A test player is invulnerable until its client would say the world loaded
+        TestPlayers.markLoaded(player);
+        helper.assertTrue(player.hurtServer(helper.getLevel(), source, dealt), "the hit on " + name + " did not land");
+        helper.assertValueEqual(player.getMaxHealth() - player.getHealth(), expected, "damage to " + name);
     }
 
     // Past the grace days, which keep the world's real clock from ever rolling a night, and past any blood moon saved by

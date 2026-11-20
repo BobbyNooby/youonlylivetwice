@@ -1,0 +1,8 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "sleep.noNightSkip": "false",
+    "hardcore.bloodMoon.enabled": "true",
+    "hardcore.bloodMoon.graceDays": "1000000000"
+  }
+}
