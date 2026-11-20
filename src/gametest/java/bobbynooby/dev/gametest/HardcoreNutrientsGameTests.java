@@ -18,7 +18,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Difficulty;
@@ -47,8 +46,9 @@ public class HardcoreNutrientsGameTests {
     private static final String NUTRIENTS = "you-only-live-twice-gametest:hardcore_nutrients";
     // A death turns the lockout and graves off, so the dead player is neither kicked nor leaves a grave behind
     private static final String NUTRIENTS_DEATH = "you-only-live-twice-gametest:hardcore_nutrients_death";
-    // Nutrients on, each in a batch of its own: its test changes the switch or the difficulty across ticks
+    // Nutrients on, in a batch of its own, since its test changes the switch across ticks
     private static final String NUTRIENTS_SWITCH = "you-only-live-twice-gametest:hardcore_nutrients_switch";
+    // Nutrients on, on Peaceful
     private static final String NUTRIENTS_PEACEFUL = "you-only-live-twice-gametest:hardcore_nutrients_peaceful";
     // Low protein stops healing outright
     private static final String NUTRIENTS_NO_HEAL = "you-only-live-twice-gametest:hardcore_nutrients_no_heal";
@@ -400,20 +400,14 @@ public class HardcoreNutrientsGameTests {
     }
 
     // On Peaceful the levels don't move, but a group that is low already still costs: here the mining slowdown, and the
-    // slower healing from low protein
+    // slower healing from low protein. The environment holds Peaceful for the batch.
     @GameTest(environment = NUTRIENTS_PEACEFUL, maxTicks = 20)
     public void nut2PeacefulFreezesEatingButLowStillCosts(GameTestHelper helper) {
-        MinecraftServer server = helper.getLevel().getServer();
         ServerPlayer player = join(helper, "NutPeaceful");
-        Difficulty before = helper.getLevel().getDifficulty();
-        Runnable cleanUp = BodyTestKit.once(() -> {
-            server.setDifficulty(before, true);
-            leave(player);
-        });
+        Runnable cleanUp = BodyTestKit.once(() -> leave(player));
         boolean waiting = false;
         try {
-            helper.assertFalse(before == Difficulty.PEACEFUL, "the test world is on Peaceful already");
-            server.setDifficulty(Difficulty.PEACEFUL, true);
+            helper.assertValueEqual(helper.getLevel().getDifficulty(), Difficulty.PEACEFUL, "difficulty");
             levels(player, 0.2, 0.2, 0.6);
             feed(player, 0, 0.0F);
             eat(helper, player, Items.COOKED_BEEF);

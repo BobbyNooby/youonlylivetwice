@@ -1,6 +1,15 @@
 {
-  "type": "you-only-live-twice-gametest:config",
-  "values": {
-    "hardcore.nutrients.enabled": "true"
-  }
+  "type": "minecraft:all_of",
+  "definitions": [
+    {
+      "type": "you-only-live-twice-gametest:config",
+      "values": {
+        "hardcore.nutrients.enabled": "true"
+      }
+    },
+    {
+      "type": "minecraft:difficulty",
+      "difficulty": "peaceful"
+    }
+  ]
 }
