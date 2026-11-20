@@ -38,8 +38,10 @@ import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.component.LodestoneTracker;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -48,6 +50,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 // Each test flips the compass switch, the lockout, keepInventory or the ender chest mode, so each runs in an environment
@@ -517,6 +520,135 @@ public class GraveCompassGameTests {
     }
 
     // The switches these tests flip, as they are now, and how to put them back
+    // Carried into the Nether, the compass keeps pointing at its Overworld grave, as vanilla's client spins a compass
+    // whose target is in another dimension: the target stays, untracked, and the compass stays a grave compass. No
+    // death and no switch, so this needs no batch of its own.
+    @GameTest
+    public void compassInAnotherDimensionKeepsItsOverworldTarget(GameTestHelper helper) {
+        ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
+        helper.assertTrue(nether != null, "no nether");
+        Grave grave = makeGrave(helper, "Wanderer");
+        ServerPlayer player = join(helper, "CompassAbroad");
+        try {
+            ItemStack compass = GraveCompass.compassFor(grave);
+            holdOnly(player, compass);
+            BlockPos away = helper.absolutePos(new BlockPos(1, 1, 1));
+            player.teleportTo(nether, away.getX() + 0.5, 64.0, away.getZ() + 0.5, Set.of(), 0.0F, 0.0F, true);
+            helper.assertTrue(player.level() == nether, "the player is not in the Nether");
+            compass.inventoryTick(nether, player, null);
+            helper.assertValueEqual(trackerOf(compass), pointingAt(grave), "the tracker in the Nether");
+            helper.assertTrue(isGraveCompass(compass), "the compass stopped being a grave compass in the Nether");
+        } finally {
+            TestPlayers.leave(player);
+            removeGrave(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // Once its grave is gone the compass spins and is an ordinary compass, but the name it was given stays, through
+    // later ticks too
+    @GameTest
+    public void spunCompassKeepsItsName(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, "Remembered");
+        ServerPlayer player = join(helper, "CompassName");
+        try {
+            ItemStack compass = GraveCompass.compassFor(grave);
+            holdOnly(player, compass);
+            Component name = compass.get(DataComponents.CUSTOM_NAME);
+            helper.assertValueEqual(name == null ? null : name.getString(), "Remembered's grave", "the compass's name");
+            helper.assertTrue(Graves.removeAndDrop(level.getServer(), grave) instanceof Graves.Removal.Dropped, "the grave was not removed");
+            compass.inventoryTick(level, player, null);
+            helper.assertValueEqual(trackerOf(compass), new LodestoneTracker(Optional.empty(), false), "the tracker once the grave is gone");
+            compass.inventoryTick(level, player, null);
+            helper.assertValueEqual(compass.get(DataComponents.CUSTOM_NAME), name, "the name after the spin and another tick");
+        } finally {
+            TestPlayers.leave(player);
+            itemsInTest(helper).forEach(Entity::discard);
+            removeGrave(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // The switch only stops new compasses: one given before it went off still follows its grave when the grave moves.
+    // The switch goes back in this tick.
+    @GameTest
+    public void compassFollowsMovedGraveWithSwitchOff(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Runnable restore = keepSwitches(helper);
+        Grave grave = makeGrave(helper, "Moving");
+        ServerPlayer player = join(helper, "CompassOffMove");
+        List<BlockPos> stone = new ArrayList<>();
+        try {
+            ItemStack compass = GraveCompass.compassFor(grave);
+            holdOnly(player, compass);
+            config().graves.compass = false;
+            stone.add(grave.pos());
+            level.setBlock(grave.pos(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            GraveBlocks.restoreChunk(level, level.getChunkAt(grave.pos()));
+            Grave moved = current(helper, grave);
+            helper.assertFalse(moved.pos().equals(grave.pos()), "the grave did not move off " + grave.pos());
+            compass.inventoryTick(level, player, null);
+            helper.assertValueEqual(trackerOf(compass), pointingAt(moved), "the tracker after the move with the switch off");
+        } finally {
+            restore.run();
+            stone.forEach(pos -> level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL));
+            TestPlayers.leave(player);
+            removeGrave(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // A compass only follows its grave as it ticks, which an item in a chest never does: left in one while the grave
+    // moves, it points at the old spot until someone carries it again (docs/known-limits.md)
+    @GameTest
+    public void compassInChestUpdatesOnlyOnceCarried(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Grave grave = makeGrave(helper, "Shelved");
+        ServerPlayer player = join(helper, "CompassChest");
+        BlockPos chestAt = new BlockPos(4, 1, 4);
+        List<BlockPos> stone = new ArrayList<>();
+        try {
+            helper.setBlock(chestAt, Blocks.CHEST);
+            ChestBlockEntity chest = (ChestBlockEntity) helper.getBlockEntity(chestAt, ChestBlockEntity.class);
+            chest.setItem(0, GraveCompass.compassFor(grave));
+            stone.add(grave.pos());
+            level.setBlock(grave.pos(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            GraveBlocks.restoreChunk(level, level.getChunkAt(grave.pos()));
+            Grave moved = current(helper, grave);
+            helper.assertFalse(moved.pos().equals(grave.pos()), "the grave did not move off " + grave.pos());
+            helper.assertValueEqual(trackerOf(chest.getItem(0)), pointingAt(grave), "the tracker of the compass in the chest");
+
+            ItemStack carried = chest.removeItemNoUpdate(0);
+            holdOnly(player, carried);
+            carried.inventoryTick(level, player, null);
+            helper.assertValueEqual(trackerOf(carried), pointingAt(moved), "the tracker once carried");
+        } finally {
+            helper.setBlock(chestAt, Blocks.AIR);
+            stone.forEach(pos -> level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL));
+            TestPlayers.leave(player);
+            removeGrave(helper, grave);
+        }
+        helper.succeed();
+    }
+
+    // A grave with its head and a diamond, made where a death beside the test would put it
+    private static Grave makeGrave(GameTestHelper helper, String owner) {
+        ResolvableProfile profile = ResolvableProfile.createUnresolved(owner);
+        List<Grave> made = Graves.create(helper.getLevel(), helper.absolutePos(new BlockPos(2, 1, 2)), profile, UUID.randomUUID(),
+                owner, List.of(GraveItems.graveHead(profile), new ItemStack(Items.DIAMOND)));
+        helper.assertValueEqual(made.size(), 1, "graves made");
+        return made.get(0);
+    }
+
+    // Wherever the grave is now, in case the test moved it
+    private static void removeGrave(GameTestHelper helper, Grave grave) {
+        GraveStore store = GraveStore.get(helper.getLevel().getServer());
+        Grave now = store.byId(grave.id()).orElse(grave);
+        store.remove(grave.id());
+        helper.getLevel().setBlock(now.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+    }
+
     private static Runnable keepSwitches(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
         YoltConfig config = config();
