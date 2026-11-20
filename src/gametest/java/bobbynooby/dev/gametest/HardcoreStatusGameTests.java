@@ -53,8 +53,8 @@ import java.util.regex.Pattern;
 // Each test flips its switches and puts them back inside one tick, so no other test sees them. A test line answers
 // only for the test's own player, since every test shares the one server.
 public class HardcoreStatusGameTests {
-    // Every switch off, said out loud
-    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
+    // Every switch off, said out loud, apart from the batch that checks the whole layer off leaves the store's file alone
+    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off_commands";
     // The limp on, which needs a tick to see a player's health
     private static final String LIMP = "you-only-live-twice-gametest:hardcore_limp";
     private static final BlockPos AT = new BlockPos(1, 1, 1);

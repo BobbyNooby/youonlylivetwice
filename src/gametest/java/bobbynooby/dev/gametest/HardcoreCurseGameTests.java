@@ -69,7 +69,8 @@ public class HardcoreCurseGameTests {
     // The curse on, each in a batch of its own: its test changes a curse key across ticks
     private static final String CURSE_SWITCH = "you-only-live-twice-gametest:hardcore_curse_switch";
     private static final String CURSE_CAP = "you-only-live-twice-gametest:hardcore_curse_cap";
-    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
+    // Every switch off, apart from the batch that checks the whole layer off leaves the store's file alone
+    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off_commands";
     private static final String LEGS = "you-only-live-twice-gametest:hardcore_legs";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     // The hub's tick may come just before or just after a test's own in the same server tick

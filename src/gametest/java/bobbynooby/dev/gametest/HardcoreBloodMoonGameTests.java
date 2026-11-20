@@ -75,7 +75,8 @@ public class HardcoreBloodMoonGameTests {
     private static final String OFF_LIVE = "you-only-live-twice-gametest:hardcore_blood_moon_off_live";
     // Never a night that rolls, with the night skip allowed, for a sleeper on the real clock
     private static final String SLEEP = "you-only-live-twice-gametest:hardcore_blood_moon_sleep";
-    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off";
+    // Every switch off, apart from the batch that checks the whole layer off leaves the store's file alone
+    private static final String ALL_OFF = "you-only-live-twice-gametest:hardcore_all_off_commands";
     private static final long DAY = 24000L;
     // Somewhere in the Nether for a player to be, the same spot the coordinate offset's portal test uses
     private static final Vec3 NETHER_SPOT = new Vec3(37.5, 64.0, -50.5);
@@ -607,13 +608,13 @@ public class HardcoreBloodMoonGameTests {
             });
             helper.startSequence()
                     .thenIdle(120)
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         long moved = SleepGameTests.clockTicks(helper) - asleepAt[0];
                         helper.assertTrue(Math.abs(moved - 120) <= 5, "the clock moved " + moved + " ticks in 120 of sleep");
                         helper.assertTrue(sleeper.isSleepingLongEnough(), "the player hasn't slept long enough to skip");
                         helper.assertTrue(BloodMoon.active(), "the blood moon ended under the sleeper");
                         config.canSleepThrough = true;
-                    })
+                    }))
                     .thenWaitUntil(() -> helper.assertTrue(SleepGameTests.clockTicks(helper) - asleepAt[0] > 1000,
                             "the night wasn't skipped with canSleepThrough on"))
                     .thenExecute(cleanUp)
@@ -654,11 +655,11 @@ public class HardcoreBloodMoonGameTests {
         try {
             helper.startSequence()
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning past warnTick"))
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon status"),
                                 List.of("A blood moon rises tonight."), "the status after the warning");
                         clock[0] = day * DAY + config.startTick;
-                    })
+                    }))
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
                     .thenExecute(() -> clock[0] = day * DAY + (config.startTick + config.endTick) / 2)
                     .thenWaitUntil(() -> helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon status"),
@@ -786,8 +787,14 @@ public class HardcoreBloodMoonGameTests {
         MinecraftServer server = helper.getLevel().getServer();
         HardcoreConfig.BloodMoonSection config = Settings.get().hardcore.bloodMoon;
         boolean enabledBefore = config.enabled;
+        // A day of its own on a stand-in clock: a night started on the real clock's day and never ended would be picked
+        // up again as a restart's, by any later batch with the blood moon on while the real clock is still on that day
+        long[] clock = {freshDay() * DAY + config.startTick};
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
         ServerPlayer player = TestPlayers.join(helper, "MoonSwitched", GameType.SURVIVAL, PLAYER_AT);
         Runnable cleanUp = BodyTestKit.once(() -> {
+            // The real clock first, so the stand-in night isn't taken up again as the switch comes back on
+            realClock.run();
             config.enabled = enabledBefore;
             BloodMoon.stop(server);
             TestPlayers.leave(player);
@@ -802,14 +809,14 @@ public class HardcoreBloodMoonGameTests {
             config.enabled = false;
             helper.startSequence()
                     .thenIdle(1)
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertFalse(BloodMoon.active(), "still up a tick after the switch went off");
                         List<String> sent = moonPackets(player, mark[0]);
                         helper.assertTrue(sent.contains("bar remove"), "the bar wasn't taken down: " + sent);
                         helper.assertFalse(sent.contains("chat " + BloodMoon.SET_LINE), "dawn was announced: " + sent);
                         helper.assertValueEqual(HardcoreStates.world(BloodMoon.ENDED_DAY), endedBefore, "the day saved as ended");
                         cleanUp.run();
-                    })
+                    }))
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
             cleanUp.run();
@@ -833,16 +840,16 @@ public class HardcoreBloodMoonGameTests {
         try {
             helper.startSequence()
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(CommandGameTests.run(server, "yolt bloodmoon stop"), List.of("Stopped the blood moon."),
                                 "the stop");
                         clock[0] = day * DAY + config.startTick + 100;
-                    })
+                    }))
                     .thenIdle(40)
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertFalse(BloodMoon.active(), "it rose again inside the stopped night");
                         cleanUp.run();
-                    })
+                    }))
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
             cleanUp.run();
@@ -872,24 +879,25 @@ public class HardcoreBloodMoonGameTests {
             players.add(player);
             mark[0] = TestPlayers.sentPackets(player).size();
             helper.startSequence()
-                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
-                    .thenExecute(() -> {
-                        helper.assertTrue(chatLines(player, mark[0]).contains(BloodMoon.WARNING_LINE), "no first warning");
+                    .thenWaitUntil(() -> helper.assertTrue(chatLines(player, mark[0]).contains(BloodMoon.WARNING_LINE),
+                            "no warning at warnTick"))
+                    .thenExecute(guarded(cleanUp, () -> {
+                        helper.assertTrue(BloodMoon.tonight(), "the warning didn't make it tonight");
                         mark[0] = TestPlayers.sentPackets(player).size();
                         BloodMoon.restartForTesting();
                         clock[0] = day * DAY + config.warnTick + 10;
-                    })
+                    }))
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning after the restart"))
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(chatLines(player, mark[0]), List.of(BloodMoon.WARNING_LINE), "lines after the restart");
                         mark[0] = TestPlayers.sentPackets(player).size();
                         clock[0] = day * DAY + config.startTick;
-                    })
+                    }))
                     .thenWaitUntil(() -> helper.assertTrue(BloodMoon.active(), "no blood moon at startTick"))
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(chatLines(player, mark[0]), List.of(risen), "lines at startTick");
                         cleanUp.run();
-                    })
+                    }))
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
             cleanUp.run();
@@ -954,13 +962,14 @@ public class HardcoreBloodMoonGameTests {
             int[] marks = {TestPlayers.sentPackets(here).size(), TestPlayers.sentPackets(away).size()};
             realClock[0] = BloodMoon.useClockForTesting(() -> clock[0]);
             helper.startSequence()
-                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning at warnTick"))
-                    .thenExecute(() -> {
+                    .thenWaitUntil(() -> helper.assertTrue(chatLines(here, marks[0]).contains(BloodMoon.WARNING_LINE),
+                            "no warning at warnTick"))
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(moonPackets(here, marks[0]), List.of("chat " + BloodMoon.WARNING_LINE),
                                 "the warning in the overworld");
                         helper.assertValueEqual(moonPackets(away, marks[1]), List.of(), "the warning in the Nether");
                         cleanUp.run();
-                    })
+                    }))
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
             cleanUp.run();
@@ -1094,10 +1103,10 @@ public class HardcoreBloodMoonGameTests {
                         clock[0] = day * DAY + config.startTick - 100;
                     })
                     .thenWaitUntil(() -> helper.assertFalse(BloodMoon.active(), "still up with the clock set back"))
-                    .thenExecute(() -> {
+                    .thenExecute(guarded(cleanUp, () -> {
                         helper.assertValueEqual(chatLines(player, mark[0]), List.of(BloodMoon.SET_LINE), "lines as it ended");
                         cleanUp.run();
-                    })
+                    }))
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
             cleanUp.run();
@@ -1144,6 +1153,18 @@ public class HardcoreBloodMoonGameTests {
         spawned.add(mob);
         mob.removeFreeWill();
         return mob;
+    }
+
+    // A step that fails ends the test there, before runBeforeTestEnd's turn would come, so it cleans up first
+    private static Runnable guarded(Runnable cleanUp, Runnable step) {
+        return () -> {
+            try {
+                step.run();
+            } catch (RuntimeException | Error e) {
+                cleanUp.run();
+                throw e;
+            }
+        };
     }
 
     // A fresh player for each hit, so no hurt cooldown cuts it
