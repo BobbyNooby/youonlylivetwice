@@ -10,7 +10,9 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.TargetGoalAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -31,12 +33,14 @@ import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.entity.decoration.Mannequin;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Phantom;
+import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.ArrayList;
@@ -564,6 +568,172 @@ public class BodyMobGameTests {
             cleanUp(helper, owner.getUUID(), spawned);
         }
         helper.succeed();
+    }
+
+    // The control for drownedIgnoresBodyOnLand, in the same daylight batch with the same wait: the same rule lets a
+    // drowned go after a body in water in broad day, so the rig can't pass by leaving the drowned blind
+    @GameTest(maxTicks = 320, environment = DAYLIGHT)
+    public void drownedHuntsBodyInWater(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(level.getRainLevel(1.0F) == 0 && level.getThunderLevel(1.0F) == 0,
+                        "the last storm's rain and thunder haven't faded"))
+                .thenExecute(() -> {
+                    helper.setBlock(BODY_POS, Blocks.WATER);
+                    helper.setBlock(BODY_POS.above(), Blocks.WATER);
+                    huntsWithin(helper, "Soaked", EntityTypes.DROWNED, NEXT_TO_BODY, () -> {
+                        helper.setBlock(BODY_POS, Blocks.AIR);
+                        helper.setBlock(BODY_POS.above(), Blocks.AIR);
+                    }, (drowned, body) -> {
+                        helper.assertTrue(level.isBrightOutside(), "it is not bright outside");
+                        helper.assertTrue(body.isInWater(), "the body is not in water");
+                    });
+                });
+    }
+
+    // The control for endermanIgnoresBody, with the same mob and wait: a player who stares at the enderman is gone after,
+    // so the rig can't pass by leaving the enderman unable to pick anyone
+    @GameTest(maxTicks = 200)
+    public void endermanIgnoresBodyHasAPlayerControl(GameTestHelper helper) {
+        playerControl(helper, "Starer", EntityTypes.ENDERMAN, (enderman, player) ->
+                player.lookAt(EntityAnchorArgument.Anchor.EYES, enderman.getEyePosition()));
+    }
+
+    // The control for zombifiedPiglinIgnoresBody: hit by a player, the zombified piglin goes after them
+    @GameTest(maxTicks = 200)
+    public void zombifiedPiglinIgnoresBodyHasAPlayerControl(GameTestHelper helper) {
+        playerControl(helper, "Provoker", EntityTypes.ZOMBIFIED_PIGLIN, (piglin, player) ->
+                piglin.hurtServer(helper.getLevel(), helper.getLevel().damageSources().playerAttack(player), 1.0F));
+    }
+
+    // The other control for chasingPhantomIgnoresBody, through a real logout rather than a target set by hand: the
+    // player it chases leaves, and the body goal takes over
+    @GameTest
+    public void chasingPhantomTakesBodyOncePlayerIsGone(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = join(helper, "Unwatched");
+        ServerPlayer awake = null;
+        try {
+            Mannequin body = leaveBodyWithDefaults(helper, owner);
+            awake = join(helper, "Escaped");
+            Phantom phantom = helper.spawnWithNoFreeWill(EntityTypes.PHANTOM, ABOVE_BODY);
+            spawned.add(phantom);
+            BodyTargetGoal goal = bodyGoal(phantom);
+            phantom.setTarget(awake);
+            helper.assertFalse(canUseWithin(goal), "the body goal would take the phantom off the player it chases");
+            TestPlayers.leave(awake);
+            helper.assertTrue(canUseWithin(goal), "the phantom never went for the body once its player was gone");
+            goal.start();
+            helper.assertTrue(phantom.getTarget() == body, "the phantom went for " + phantom.getTarget() + ", not the body");
+        } finally {
+            if (awake != null && helper.getLevel().getServer().getPlayerList().getPlayer(awake.getUUID()) != null) {
+                TestPlayers.leave(awake);
+            }
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    // The shulker's own player search reaches only 4 blocks along the axis of the face it sits on, so a shulker on the
+    // floor leaves a body 6 blocks above alone, and finds it once it is 3 above
+    @GameTest
+    public void shulkerOnlySeesBodiesAlongItsFaceAxis(GameTestHelper helper) {
+        List<Entity> spawned = new ArrayList<>();
+        ServerPlayer owner = TestPlayers.join(helper, "Shelled", GameType.SURVIVAL, BODY_POS.above(6));
+        try {
+            Mannequin body = leaveBodyWithDefaults(helper, owner);
+            Shulker shulker = helper.spawnWithNoFreeWill(EntityTypes.SHULKER, BODY_POS);
+            spawned.add(shulker);
+            helper.assertValueEqual(shulker.getAttachFace(), Direction.DOWN, "the shulker's face");
+            BodyTargetGoal goal = bodyGoal(shulker);
+            helper.assertFalse(canUseWithin(goal), "a floor shulker went for a body 6 blocks above it");
+            body.teleportTo(body.getX(), body.getY() - 3.0, body.getZ());
+            helper.assertTrue(canUseWithin(goal), "a floor shulker never went for a body 3 blocks above it");
+        } finally {
+            cleanUp(helper, owner.getUUID(), spawned);
+        }
+        helper.succeed();
+    }
+
+    // The ignoring rig with a player beside the body: provoke makes the mob want the player, which must happen within
+    // the same wait the ignoring test gives the body. A tick after the spawn: a hurt in the mob's first tick has the
+    // same timestamp the hurt-by goal starts with, so the goal would never see it.
+    private static void playerControl(GameTestHelper helper, String name, EntityType<? extends Mob> type,
+                                      BiConsumer<Mob, ServerPlayer> provoke) {
+        List<Entity> spawned = new ArrayList<>();
+        UUID owner = null;
+        ServerPlayer[] watcher = new ServerPlayer[1];
+        Runnable finish = BodyTestKit.once(() -> {
+            if (watcher[0] != null) {
+                TestPlayers.leave(watcher[0]);
+            }
+        });
+        boolean waiting = false;
+        try {
+            ServerPlayer player = join(helper, name);
+            owner = player.getUUID();
+            Mannequin body = leaveBodyWithDefaults(helper, player);
+            Mob mob = helper.spawn(type, NEXT_TO_BODY);
+            spawned.add(mob);
+            watcher[0] = TestPlayers.join(helper, name + "Seen", GameType.SURVIVAL, FOUR_AWAY);
+            helper.runAfterDelay(2, () -> provoke.accept(mob, watcher[0]));
+            UUID bodyOwner = owner;
+            Runnable cleanUp = BodyTestKit.once(() -> {
+                finish.run();
+                cleanUp(helper, bodyOwner, spawned);
+            });
+            helper.runBeforeTestEnd(cleanUp);
+            long start = helper.getTick();
+            helper.succeedWhen(() -> {
+                helper.assertTrue(helper.getTick() - start <= WAIT_TICKS, "the " + name + " mob did not go for the player within "
+                        + WAIT_TICKS + " ticks: " + whereIs(mob));
+                helper.assertTrue(mob.getTarget() == watcher[0], "the mob has not gone for the player: " + whereIs(mob));
+                helper.assertFalse(mob.getTarget() == body, "the mob went for the body");
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                finish.run();
+                cleanUp(helper, owner, spawned);
+            }
+        }
+    }
+
+    // The mob stands near a fresh body until it goes for it, within the ignoring tests' wait. scene checks the scene
+    // as it does; restore puts back what the test set up first.
+    private static void huntsWithin(GameTestHelper helper, String name, EntityType<? extends Mob> type, BlockPos at,
+                                    Runnable restore, BiConsumer<Mob, Mannequin> scene) {
+        List<Entity> spawned = new ArrayList<>();
+        UUID owner = null;
+        boolean waiting = false;
+        try {
+            ServerPlayer player = join(helper, name);
+            owner = player.getUUID();
+            Mannequin body = leaveBodyWithDefaults(helper, player);
+            Mob mob = helper.spawn(type, at);
+            spawned.add(mob);
+            UUID bodyOwner = owner;
+            Runnable cleanUp = BodyTestKit.once(() -> {
+                restore.run();
+                cleanUp(helper, bodyOwner, spawned);
+            });
+            helper.runBeforeTestEnd(cleanUp);
+            long start = helper.getTick();
+            helper.succeedWhen(() -> {
+                helper.assertTrue(helper.getTick() - start <= WAIT_TICKS, "the " + name + " mob did not go for the body within "
+                        + WAIT_TICKS + " ticks: " + whereIs(mob));
+                helper.assertTrue(mob.getTarget() == body, "the mob has not gone for the body: " + whereIs(mob));
+                scene.accept(mob, body);
+                cleanUp.run();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                restore.run();
+                cleanUp(helper, owner, spawned);
+            }
+        }
     }
 
     // canUse only looks for a target one try in five, so a check gets plenty of tries
