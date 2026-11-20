@@ -1,0 +1,6 @@
+{
+  "type": "you-only-live-twice-gametest:config",
+  "values": {
+    "hardcore.limp.enabled": "true"
+  }
+}

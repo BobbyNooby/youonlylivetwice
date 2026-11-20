@@ -1,5 +1,7 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.config.HardcoreConfig;
+import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.hardcore.Elytra;
 import bobbynooby.dev.mixin.FireworkRocketInvoker;
@@ -27,6 +29,8 @@ public class HardcoreElytraGameTests {
     private static final String ELYTRA = "you-only-live-twice-gametest:hardcore_elytra";
     // Another number for the cut-off, so a batch of its own
     private static final String ELYTRA_CUTOFF_ZERO = "you-only-live-twice-gametest:hardcore_elytra_cutoff_zero";
+    // The nerf on, in a batch of its own, since its test turns it off mid-glide
+    private static final String ELYTRA_SWITCH = "you-only-live-twice-gametest:hardcore_elytra_switch";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final double CLOSE = 1e-9;
     // Blocks per tick: 30 m/s and 10 m/s, either side of the 20 m/s cut-off
@@ -158,6 +162,124 @@ public class HardcoreElytraGameTests {
             if (!waiting) {
                 cleanUp.run();
             }
+        }
+    }
+
+    // The switch is read every tick: off mid-glide takes the gravity off at the next tick while the glide goes on, and a
+    // rocket past the cut-off is left to boost
+    @GameTest(environment = ELYTRA_SWITCH, maxTicks = 20)
+    public void elytraSwitchedOffMidGlideDropsGravityModifier(GameTestHelper helper) {
+        ServerPlayer glider = glider(helper, "GlideSwitched", GameType.SURVIVAL, FAST);
+        HardcoreConfig.ElytraSection cfg = Settings.get().hardcore.elytra;
+        boolean before = cfg.enabled;
+        List<FireworkRocketEntity> fired = new ArrayList<>();
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            cfg.enabled = before;
+            fired.forEach(FireworkRocketEntity::discard);
+            leave(glider);
+        });
+        boolean waiting = false;
+        try {
+            helper.runAfterDelay(2, () -> step(cleanUp, () -> {
+                assertGravity(helper, glider, -0.4, "while gliding with the nerf on");
+                helper.assertTrue(Elytra.refusesRocket(glider), "a rocket isn't refused at 30 m/s with the nerf on");
+                cfg.enabled = false;
+            }));
+            helper.runAfterDelay(3, () -> step(cleanUp, () -> {
+                helper.assertTrue(glider.isFallFlying(), "the glide ended");
+                assertGravity(helper, glider, null, "a tick after the nerf went off mid-glide");
+                helper.assertFalse(Elytra.refusesRocket(glider), "a rocket is refused at 30 m/s with the nerf off");
+                fired.add(attachRocket(helper, glider));
+            }));
+            helper.runAfterDelay(5, () -> {
+                try {
+                    helper.assertFalse(fired.getFirst().isRemoved(), "the rocket ended past the cut-off with the nerf off");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // Only rockets boosting the fast glider end: not another glider's rocket beside them, nor a rocket the fast glider
+    // shot that flies free
+    @GameTest(environment = ELYTRA, maxTicks = 20)
+    public void elytra2SomeoneElsesRocketIsLeftAlone(GameTestHelper helper) {
+        ServerPlayer fast = glider(helper, "RocketOwnFast", GameType.SURVIVAL, FAST);
+        ServerPlayer other = glider(helper, "RocketOther", GameType.SURVIVAL, SLOW);
+        FireworkRocketEntity boosting = attachRocket(helper, fast);
+        FireworkRocketEntity othersRocket = attachRocket(helper, other);
+        FireworkRocketEntity shot = new FireworkRocketEntity(helper.getLevel(), new ItemStack(Items.FIREWORK_ROCKET), fast,
+                fast.getX() + 2.0, fast.getY(), fast.getZ(), true);
+        helper.getLevel().addFreshEntity(shot);
+        Runnable cleanUp = BodyTestKit.once(() -> {
+            boosting.discard();
+            othersRocket.discard();
+            shot.discard();
+            leave(fast, other);
+        });
+        boolean waiting = false;
+        try {
+            helper.assertTrue(othersRocket.distanceTo(fast) < ROCKET_REACH, "the other rocket is out of the fast glider's reach");
+            helper.runAfterDelay(2, () -> {
+                try {
+                    helper.assertTrue(boosting.isRemoved(), "the fast glider's own rocket still boosts at 30 m/s");
+                    helper.assertFalse(othersRocket.isRemoved(), "the other glider's rocket ended");
+                    helper.assertFalse(shot.isRemoved(), "the rocket the fast glider shot ended");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A creative glider keeps vanilla's gravity until it plays by the rules again, mid-glide
+    @GameTest(environment = ELYTRA, maxTicks = 20)
+    public void elytra1CreativeGliderKeepsVanillaGravity(GameTestHelper helper) {
+        ServerPlayer glider = glider(helper, "GlideCreative", GameType.CREATIVE, SLOW);
+        Runnable cleanUp = BodyTestKit.once(() -> leave(glider));
+        boolean waiting = false;
+        try {
+            helper.runAfterDelay(2, () -> step(cleanUp, () -> {
+                assertGravity(helper, glider, null, "on a creative glider");
+                glider.setGameMode(GameType.SURVIVAL);
+                helper.assertTrue(glider.isFallFlying(), "the switch to survival ended the glide");
+            }));
+            helper.runAfterDelay(4, () -> {
+                try {
+                    assertGravity(helper, glider, -0.4, "after the switch to survival mid-glide");
+                } finally {
+                    cleanUp.run();
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                cleanUp.run();
+            }
+        }
+    }
+
+    // A failed check ends the test at once, so the switch goes back and the player isn't left online for the batch
+    private static void step(Runnable cleanUp, Runnable check) {
+        try {
+            check.run();
+        } catch (RuntimeException e) {
+            cleanUp.run();
+            throw e;
         }
     }
 
