@@ -42,6 +42,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -173,6 +175,54 @@ public class BodyStoreGameTests {
         helper.assertTrue(store.byOwner(body.owner()).isEmpty(), "still found by owner");
         helper.assertTrue(store.byEntity(body.bodyEntity()).isEmpty(), "still found by entity");
         helper.succeed();
+    }
+
+    // The lookup by body goes through a map. Hundreds of records are put, replaced, pointed at another body and
+    // removed, and a few share a body as only a file edited by hand can, and every lookup must still give what a scan
+    // of the store, in its order, gives. So must the same store read back from its file.
+    @GameTest
+    public void entityMapMatchesScan(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        BodyStore store = BodyStore.TYPE.codec().parse(ops, storeData()).getOrThrow();
+        Random random = new Random(26);
+        List<UUID> owners = Stream.generate(UUID::randomUUID).limit(200).toList();
+        List<UUID> bodies = Stream.generate(UUID::randomUUID).limit(40).toList();
+        BodySnapshot snapshot = record(Map.of()).snapshot();
+        for (int i = 0; i < 600; i++) {
+            UUID owner = owners.get(random.nextInt(owners.size()));
+            Optional<BodyRecord> had = store.byOwner(owner);
+            switch (random.nextInt(5)) {
+                // A body of its own, as every logout makes
+                case 0, 1 -> store.put(new BodyRecord(owner, "Alex", UUID.randomUUID(), YoltConfig.BodyType.MANNEQUIN, i,
+                        false, snapshot));
+                // One from the pool, so some are shared and some records move from one body to another
+                case 2 -> store.put(new BodyRecord(owner, "Alex", bodies.get(random.nextInt(bodies.size())),
+                        YoltConfig.BodyType.MANNEQUIN, i, false, snapshot));
+                // Changed where it stands, as a chunk unload or a takeover does
+                case 3 -> had.ifPresent(record -> store.put(record.withPendingRemoval(!record.pendingRemoval())));
+                default -> store.remove(owner);
+            }
+        }
+        helper.assertTrue(store.all().size() > 100, "too few records left to test: " + store.all().size());
+        helper.assertTrue(store.all().stream().map(BodyRecord::bodyEntity).distinct().count() < store.all().size(),
+                "no two records share a body, so the scan's order is never tested");
+        assertEntityMapMatchesScan(helper, store, bodies, "store");
+        BodyStore loaded = BodyStore.TYPE.codec().parse(ops, BodyStore.TYPE.codec().encodeStart(ops, store).getOrThrow()).getOrThrow();
+        assertEntityMapMatchesScan(helper, loaded, bodies, "store read back");
+        helper.succeed();
+    }
+
+    private static void assertEntityMapMatchesScan(GameTestHelper helper, BodyStore store, List<UUID> pool, String which) {
+        List<BodyRecord> all = List.copyOf(store.all());
+        List<UUID> bodies = new ArrayList<>(pool);
+        all.forEach(record -> bodies.add(record.bodyEntity()));
+        bodies.add(UUID.randomUUID());
+        for (UUID body : bodies) {
+            List<BodyRecord> scanned = all.stream().filter(record -> record.bodyEntity().equals(body)).toList();
+            helper.assertValueEqual(store.byEntity(body), scanned.stream().findFirst(), which + ": record of body " + body);
+            helper.assertValueEqual(Set.copyOf(store.allByEntity(body)), Set.copyOf(scanned), which + ": records of body " + body);
+            helper.assertValueEqual(store.allByEntity(body).size(), scanned.size(), which + ": record count of body " + body);
+        }
     }
 
     @GameTest

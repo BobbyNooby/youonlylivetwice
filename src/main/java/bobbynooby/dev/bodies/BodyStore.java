@@ -15,14 +15,19 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.SavedDataStorage;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Every logged-out player's body record, saved with the world's data. Bodies are few, so lookups just scan. */
+/**
+ * Every logged-out player's body record, saved with the world's data. Records are found by owner or by their body's
+ * entity, which a mob's target check and every hit on a body look up.
+ */
 public final class BodyStore extends SavedData {
     /** The layout of the body file's own fields. */
     public static final int FORMAT = 1;
@@ -45,6 +50,9 @@ public final class BodyStore extends SavedData {
             Yolt.id("bodies"), BodyStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Map<UUID, BodyRecord> bodies = new LinkedHashMap<>();
+    // The same records by their body's entity. Every body is a new entity, so only a file edited by hand can have two
+    // records share one.
+    private final Map<UUID, List<BodyRecord>> byBody = new HashMap<>();
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
     // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
@@ -64,7 +72,7 @@ public final class BodyStore extends SavedData {
         this.fromNewer = fromNewer;
         this.partlyRead = partlyRead;
         for (BodyRecord record : loaded) {
-            bodies.put(record.owner(), record);
+            index(record);
         }
     }
 
@@ -122,8 +130,24 @@ public final class BodyStore extends SavedData {
     }
 
     public void put(BodyRecord record) {
-        bodies.put(record.owner(), record);
+        index(record);
         setDirty();
+    }
+
+    private void index(BodyRecord record) {
+        BodyRecord old = bodies.put(record.owner(), record);
+        if (old != null) {
+            unindex(old);
+        }
+        byBody.computeIfAbsent(record.bodyEntity(), body -> new ArrayList<>(1)).add(record);
+    }
+
+    private void unindex(BodyRecord record) {
+        List<BodyRecord> sharing = byBody.get(record.bodyEntity());
+        sharing.removeIf(indexed -> indexed.owner().equals(record.owner()));
+        if (sharing.isEmpty()) {
+            byBody.remove(record.bodyEntity());
+        }
     }
 
     public Optional<BodyRecord> byOwner(UUID owner) {
@@ -131,11 +155,27 @@ public final class BodyStore extends SavedData {
     }
 
     public Optional<BodyRecord> byEntity(UUID bodyEntity) {
+        List<BodyRecord> found = byBody.get(bodyEntity);
+        if (found == null) {
+            return Optional.empty();
+        }
+        if (found.size() == 1) {
+            return Optional.of(found.getFirst());
+        }
+        // Records sharing a body: the first in the store counts, as it always has
         return bodies.values().stream().filter(r -> r.bodyEntity().equals(bodyEntity)).findFirst();
     }
 
+    /** Every record whose body is this entity: at most one, unless the file was edited by hand. */
+    public List<BodyRecord> allByEntity(UUID bodyEntity) {
+        List<BodyRecord> found = byBody.get(bodyEntity);
+        return found == null ? List.of() : List.copyOf(found);
+    }
+
     public void remove(UUID owner) {
-        if (bodies.remove(owner) != null) {
+        BodyRecord removed = bodies.remove(owner);
+        if (removed != null) {
+            unindex(removed);
             setDirty();
         }
     }
