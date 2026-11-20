@@ -1,5 +1,6 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.bodies.BodyStore;
 import bobbynooby.dev.core.StoreVersions;
 import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.graves.Grave;
@@ -16,6 +17,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
@@ -28,6 +30,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.SavedDataStorage;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -36,7 +40,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
@@ -350,6 +356,108 @@ public class GraveStoreGameTests {
             store.saveNow(server);
         }
         helper.succeed();
+    }
+
+    // A grave file from a newer YOLT, its format one past this one's, as the grave file of a data storage of the test's
+    // own. get reads what it can and keeps a copy of the file before anything saves over it, as a newer copy, not as an
+    // unreadable one.
+    @GameTest
+    public void newerGraveFileCopiedThroughGet(GameTestHelper helper) throws IOException {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        Grave grave = grave(new BlockPos(5, 64, 5), List.of(new ItemStack(Items.DIAMOND)));
+        CompoundTag data = storeData(Grave.CODEC.encodeStart(ops, grave).getOrThrow());
+        data.putInt("format", GraveStore.FORMAT + 1);
+        CompoundTag root = new CompoundTag();
+        root.put("data", data);
+        NbtUtils.addCurrentDataVersion(root);
+        Path folder = Files.createTempDirectory("yolt-store-test-");
+        Path file = GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(folder);
+        try {
+            Files.createDirectories(file.getParent());
+            NbtIo.writeCompressed(root, file);
+            byte[] written = Files.readAllBytes(file);
+            SavedDataStorage storage = freshStorage(helper, folder);
+            List<GraveStore> got = new ArrayList<>();
+            List<String> log = OfflineGameTests.yoltLog(() -> got.add(GraveStore.get(storage, folder)));
+            GraveStore store = got.get(0);
+            helper.assertTrue(store.fromNewer(), "the newer file did not read as newer");
+            helper.assertTrue(store.byId(grave.id()).filter(read -> GraveAsserts.count(read.items(), Items.DIAMOND) == 1).isPresent(),
+                    "the newer file's grave was not read");
+            List<Path> copies = copiesOf(file, ".newer-");
+            helper.assertValueEqual(copies.size(), 1, "copies of the newer file");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(copies.get(0)), written), "the copy differs from the file");
+            helper.assertTrue(copiesOf(file).isEmpty(), "the newer file was also kept as unreadable");
+            String line = "The grave file " + file + " is from a newer version, so a copy of it is kept at " + copies.get(0)
+                    + " before it is saved over";
+            helper.assertValueEqual(log.stream().filter(entry -> entry.startsWith("The grave file ")).toList(), List.of(line),
+                    "the copy's log lines");
+        } finally {
+            deleteFolder(folder);
+        }
+        helper.succeed();
+    }
+
+    // YOLT's three stores are written to a temp file that then takes the old file's place, so a crash mid-save can't cut
+    // one short. The file's inode changing at each save shows the swap; vanilla's scoreboard file, written in place,
+    // keeps its inode, so the check can tell the two apart. Nothing is left beside the files.
+    @GameTest
+    public void yoltStoresAreSavedThroughATempFile(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path data = server.getWorldPath(LevelResource.DATA);
+        GraveStore graves = GraveStore.get(server);
+        BodyStore bodies = BodyStore.get(server);
+        SkinStore skins = SkinStore.get(server);
+        Map<String, Path> files = new LinkedHashMap<>();
+        files.put("grave", GraveStore.TYPE.id().withSuffix(".dat").resolveAgainst(data));
+        files.put("body", BodyStore.TYPE.id().withSuffix(".dat").resolveAgainst(data));
+        files.put("skin", SkinStore.TYPE.id().withSuffix(".dat").resolveAgainst(data));
+        Path scoreboardFile = data.resolve("minecraft").resolve("scoreboard.dat");
+        Scoreboard scoreboard = server.getScoreboard();
+        String teamName = "yolt_inode_" + UUID.randomUUID().toString().substring(0, 6);
+        Grave grave = grave(new BlockPos(29_000_000, 70, 29_000_000), List.of(new ItemStack(Items.DIAMOND)));
+        try {
+            graves.put(grave);
+            bodies.setDirty();
+            skins.setDirty();
+            PlayerTeam team = scoreboard.addPlayerTeam(teamName);
+            server.getDataStorage().saveAndJoin();
+            Map<String, Object> first = new LinkedHashMap<>();
+            for (Map.Entry<String, Path> each : files.entrySet()) {
+                helper.assertTrue(Files.exists(each.getValue()), "no " + each.getKey() + " file after the first save");
+                first.put(each.getKey(), Files.getAttribute(each.getValue(), "unix:ino"));
+            }
+            helper.assertTrue(Files.exists(scoreboardFile), "no scoreboard file after the first save");
+            Object scoreboardFirst = Files.getAttribute(scoreboardFile, "unix:ino");
+
+            graves.setDirty();
+            bodies.setDirty();
+            skins.setDirty();
+            scoreboard.removePlayerTeam(team);
+            server.getDataStorage().saveAndJoin();
+            for (Map.Entry<String, Path> each : files.entrySet()) {
+                helper.assertFalse(Files.getAttribute(each.getValue(), "unix:ino").equals(first.get(each.getKey())),
+                        "the " + each.getKey() + " file was written in place");
+                helper.assertFalse(Files.exists(each.getValue().resolveSibling(each.getValue().getFileName() + ".tmp")),
+                        "a temp file sits beside the " + each.getKey() + " file");
+            }
+            helper.assertValueEqual(Files.getAttribute(scoreboardFile, "unix:ino"), scoreboardFirst,
+                    "the scoreboard file's inode, which vanilla writes in place");
+        } finally {
+            PlayerTeam left = scoreboard.getPlayerTeam(teamName);
+            if (left != null) {
+                scoreboard.removePlayerTeam(left);
+            }
+            graves.remove(grave.id());
+            graves.saveNow(server);
+        }
+        helper.succeed();
+    }
+
+    private static List<Path> copiesOf(Path file, String kind) throws IOException {
+        String prefix = file.getFileName() + kind;
+        try (Stream<Path> files = Files.list(file.getParent())) {
+            return files.filter(path -> path.getFileName().toString().startsWith(prefix)).toList();
+        }
     }
 
     // The second grave has no position, so it can't be read at all
