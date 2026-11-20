@@ -143,6 +143,7 @@ public class HardcoreBedGameTests {
         Runnable cleanUp = BodyTestKit.once(() -> SleepGameTests.wakeAndLeave(napper));
         boolean waiting = false;
         try {
+            clearSky(level);
             helper.assertFalse(level.isDarkOutside(), "it is dark, so vanilla would let anyone sleep");
             SleepGameTests.useBed(helper, napper, head);
             helper.assertTrue(napper.isSleeping(), "the napper could not lie down at noon: " + keys(napper.messages, 0));
@@ -182,7 +183,7 @@ public class HardcoreBedGameTests {
         try {
             Holder<WorldClock> clock = level.dimensionType().defaultClock().orElseThrow();
             level.getServer().clockManager().moveToTimeMarker(clock, ClockTimeMarkers.NOON);
-            level.updateSkyBrightness();
+            clearSky(level);
             helper.assertFalse(level.isDarkOutside(), "it is not day after moving the clock to noon");
             SleepGameTests.useBed(helper, napper, head);
             helper.assertTrue(napper.isSleeping(), "the napper could not lie down at noon: " + keys(napper.messages, 0));
@@ -271,5 +272,13 @@ public class HardcoreBedGameTests {
         return messages.subList(from, messages.size()).stream()
                 .map(line -> line.getContents() instanceof TranslatableContents text ? text.getKey() : line.getString())
                 .toList();
+    }
+
+    // The environment asks for clear weather, but a storm the batch before left fades over a few seconds, and a
+    // thunderstorm's sky counts as dark at noon. So the fade is finished here, and the sky's brightness worked out anew.
+    private static void clearSky(ServerLevel level) {
+        level.setRainLevel(0.0F);
+        level.setThunderLevel(0.0F);
+        level.updateSkyBrightness();
     }
 }
