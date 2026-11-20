@@ -30,6 +30,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.border.BorderStatus;
 import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.phys.Vec3;
 
@@ -38,6 +39,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1144,6 +1147,363 @@ public class BorderAndReloadGameTests {
         helper.succeed();
     }
 
+    // The save fails after the stranding check let the change through: the write goes through a temp file, which can't
+    // be made where a folder is. The reply is the save's own failure, and the world, the live config and the file stay
+    // as they were, so a border is never applied that the next reload would read back as something else.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderThatCantBeSavedChangesNoBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
+        Path inTmp = tmp.resolve("inside");
+        try {
+            Settings.get().worldBorder.enabled = true;
+            YoltConfig live = Settings.get();
+            int diameterBefore = live.worldBorder.diameter;
+            Files.createDirectories(inTmp);
+            int[] result = {-1};
+            List<String> output = run(server, "yolt border 3000 confirm", value -> result[0] = value);
+            helper.assertTrue(output.size() == 1 && output.get(0).startsWith("The config file could not be saved (")
+                    && output.get(0).endsWith(")."), "command output: " + output);
+            helper.assertValueEqual(result[0], 0, "command result");
+            helper.assertTrue(Settings.get() == live, "the live config was replaced");
+            helper.assertValueEqual(Settings.get().worldBorder.diameter, diameterBefore, "live diameter");
+            helper.assertValueEqual(Files.readString(path), fileBefore, "config file");
+            for (ServerLevel level : server.getAllLevels()) {
+                helper.assertValueEqual(level.getWorldBorder().getSize(), bordersBefore.get(level)[2], level.dimension().identifier()
+                        + " border size");
+            }
+        } finally {
+            // Before the restore, whose reload writes through the temp file
+            Files.deleteIfExists(inTmp);
+            Files.deleteIfExists(tmp);
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // The value the config already holds, in the live config and the file alike, writes nothing, but the command still
+    // means "now": a border a vanilla /worldborder moved, and held since, takes the config's size again and is let go
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderWithTheSameValueStillAppliesIt(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        boolean heldBefore = Settings.borderHeld();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        try {
+            centreAll(server);
+            border.enabled = true;
+            border.diameter = WIDE;
+            border.endScale = 1.0;
+            ConfigLoader.write(path, Settings.get());
+            byte[] written = Files.readAllBytes(path);
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(2000));
+            Settings.holdBorder();
+
+            helper.assertValueEqual(run(server, "yolt border " + WIDE), List.of("World border diameter set to " + WIDE + "." + OFFLINE_NOTE),
+                    "command output");
+            for (ServerLevel level : server.getAllLevels()) {
+                helper.assertValueEqual(level.getWorldBorder().getSize(), (double) WIDE, level.dimension().identifier() + " border size");
+            }
+            helper.assertFalse(Settings.borderHeld(), "the border is still held");
+            helper.assertTrue(Arrays.equals(Files.readAllBytes(path), written), "the config file was written");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+            if (heldBefore) {
+                Settings.holdBorder();
+            } else {
+                Settings.releaseBorder();
+            }
+        }
+        helper.succeed();
+    }
+
+    // Like /yolt border, endscaling means "now", so a timed vanilla /worldborder in the End stops at the new size. The
+    // scale is the one the config has, so this is the command's apply alone. confirm, because the test structures sit far
+    // outside the 10,000 block overworld border that comes with it.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void endScalingEndsAMovingEndBorder(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        ServerLevel endLevel = level(helper, Level.END);
+        WorldBorder end = endLevel.getWorldBorder();
+        try {
+            YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+            border.enabled = true;
+            helper.assertTrue(border.diameter == 10000 && border.endScale == 2.0, "the test server's border values");
+            end.lerpSizeBetween(30000, 40000, 1_000_000L, endLevel.getGameTime());
+            helper.assertValueEqual(end.getStatus(), BorderStatus.GROWING, "end border status before the command");
+
+            List<String> output = run(server, "yolt endscaling 2.0 confirm");
+            helper.assertTrue(!output.isEmpty() && output.get(0).startsWith("End world border scaling factor set to 2.0."),
+                    "command output: " + output);
+            helper.assertValueEqual(end.getStatus(), BorderStatus.STATIONARY, "end border status");
+            helper.assertValueEqual(end.getSize(), 20000.0, "end border size");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // In adventure mode vanilla puts a first join on the world spawn itself without searching, so random spawn can't
+    // move them inside the border and a spawn left outside needs confirm, as with random spawn off. In survival the
+    // same border only gets the note. The border holds every test; only the moved spawn is outside it.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void adventureDefaultMakesStrandedSpawnNeedConfirm(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+        GameType modeBefore = server.getWorldData().getGameType();
+
+        config.randomSpawn = true;
+        config.worldBorder.enabled = true;
+        config.worldBorder.endScale = 1.0;
+        try {
+            centreAll(server);
+            moveSpawn(server, BEYOND);
+            server.getWorldData().setGameType(GameType.ADVENTURE);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("This would leave the world spawn outside the world border. Add confirm to the command to do it anyway."),
+                    "refusal with adventure as the default mode");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), bordersBefore.get(server.overworld())[2],
+                    "overworld border size after the refusal");
+
+            server.getWorldData().setGameType(GameType.SURVIVAL);
+            helper.assertValueEqual(run(server, "yolt border " + WIDE),
+                    List.of("World border diameter set to " + WIDE + "." + SPAWN_NOTE + OFFLINE_NOTE), "output with survival as the default mode");
+            helper.assertValueEqual(server.overworld().getWorldBorder().getSize(), (double) WIDE, "overworld border size");
+        } finally {
+            server.getWorldData().setGameType(modeBefore);
+            Files.writeString(Settings.path(), fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
+        }
+        helper.succeed();
+    }
+
+    // A file that isn't JSON is kept before the command writes the whole config over it, and the border command's reply
+    // says where, as /yolt config's does. With no .bak there, the copy is the .bak itself. The border feature stays off,
+    // so only the value is saved.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void borderCommandSaysWhereAnUnreadableFileWent(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        SavedBackups backups = saveBackups(path);
+        try {
+            Files.deleteIfExists(backups.bak());
+            Files.writeString(path, "{");
+            helper.assertValueEqual(run(server, "yolt border 3000"), List.of(
+                    "World border diameter set to 3000. The world border feature is off, so YOLT sizes no border.",
+                    "Your config file couldn't be read, so it was kept as you-only-live-twice.json.bak and rewritten."), "command output");
+            helper.assertValueEqual(Files.readString(backups.bak()), "{", "the kept copy");
+            helper.assertValueEqual(ConfigCommandGameTests.fileValue("worldBorder.diameter").getAsInt(), 3000, "diameter in the file");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBackups(backups);
+        }
+        helper.succeed();
+    }
+
+    // Thirteen things left outside: the world spawn, always first, then twelve graves. Ten are named, and the rest
+    // counted, so a long list can't flood the chat. Random spawn is off, so the spawn is one of them.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void longStrandedListPutsSpawnFirstAndCountsTheRest(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig config = Settings.get();
+        String fileBefore = Files.readString(Settings.path());
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+        GraveStore store = GraveStore.get(server);
+        List<Grave> graves = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            String owner = uniqueName("FarGrave");
+            graves.add(new Grave(UUID.randomUUID(), UUID.randomUUID(), owner, ResolvableProfile.createUnresolved(owner),
+                    Level.OVERWORLD, new BlockPos(BEYOND + i, 64, 0), List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis()));
+        }
+
+        config.randomSpawn = false;
+        config.worldBorder.enabled = true;
+        config.worldBorder.endScale = 1.0;
+        try {
+            centreAll(server);
+            moveSpawn(server, BEYOND);
+            graves.forEach(store::put);
+            List<String> refused = run(server, "yolt border " + WIDE);
+            helper.assertTrue(refused.size() == 1 && refused.get(0).startsWith("This would leave the world spawn, ")
+                    && refused.get(0).endsWith("'s grave and 3 more outside the world border. Add confirm to the command to do it anyway."),
+                    "refusal: " + refused);
+            // The world spawn and nine graves
+            String listed = refused.get(0).substring(0, refused.get(0).indexOf(" and 3 more"));
+            helper.assertValueEqual(listed.split(", ").length, 10, "names listed in " + refused.get(0));
+        } finally {
+            graves.forEach(grave -> store.remove(grave.id()));
+            Files.writeString(Settings.path(), fileBefore);
+            restoreConfig(server);
+            restoreBorders(bordersBefore);
+            server.setRespawnData(spawnBefore);
+        }
+        helper.succeed();
+    }
+
+    // /yolt center keeps each border's size, so moving a WIDE border's centre 2 million blocks east leaves a grave 100
+    // blocks past its new edge, while one 100 blocks inside it, and everything the tests have, stays in. The refusal
+    // names only that grave; confirm moves the centre anyway.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void centerStrandingAGraveNeedsConfirm(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.WorldBorderSection border = Settings.get().worldBorder;
+        boolean enabledBefore = border.enabled;
+        Map<ServerLevel, double[]> bordersBefore = saveBorders(server);
+        GraveStore store = GraveStore.get(server);
+        int centre = 2_000_000;
+        int edge = centre + WIDE / 2;
+        String outside = uniqueName("PastEdge");
+        String inside = uniqueName("InsideEdge");
+        Grave past = new Grave(UUID.randomUUID(), UUID.randomUUID(), outside, ResolvableProfile.createUnresolved(outside),
+                Level.OVERWORLD, new BlockPos(edge + 100, 64, 0), List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis());
+        Grave within = new Grave(UUID.randomUUID(), UUID.randomUUID(), inside, ResolvableProfile.createUnresolved(inside),
+                Level.OVERWORLD, new BlockPos(edge - 100, 64, 0), List.of(new ItemStack(Items.DIAMOND)), System.currentTimeMillis());
+
+        border.enabled = true;
+        try {
+            centreAll(server);
+            server.getAllLevels().forEach(level -> level.getWorldBorder().setSize(WIDE));
+            store.put(past);
+            store.put(within);
+            helper.assertValueEqual(run(server, "yolt center " + centre + " 0"), List.of("This would leave " + outside
+                    + "'s grave outside the world border. Add confirm to the command to do it anyway."), "refusal");
+            assertCentre(helper, server.overworld(), 0, 0);
+
+            helper.assertValueEqual(run(server, "yolt center " + centre + " 0 confirm"),
+                    List.of("World border center set to " + centre + ", 0." + OFFLINE_NOTE), "output with confirm");
+            assertCentre(helper, server.overworld(), centre, 0);
+            assertCentre(helper, level(helper, Level.NETHER), centre, 0);
+        } finally {
+            store.remove(past.id());
+            store.remove(within.id());
+            border.enabled = enabledBefore;
+            restoreBorders(bordersBefore);
+        }
+        helper.succeed();
+    }
+
+    // An admin turned the three rules back by hand. The switches are on in the file, so a reload sets each rule as the
+    // switch wants it again, as a restart would.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadRestoresHandChangedGameRules(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        GameRules rules = server.getGameRules();
+        boolean respawnBefore = rules.get(GameRules.IMMEDIATE_RESPAWN);
+        boolean locatorBefore = rules.get(GameRules.LOCATOR_BAR);
+        boolean soundsBefore = rules.get(GameRules.GLOBAL_SOUND_EVENTS);
+        try {
+            rules.set(GameRules.IMMEDIATE_RESPAWN, false, server);
+            rules.set(GameRules.LOCATOR_BAR, true, server);
+            rules.set(GameRules.GLOBAL_SOUND_EVENTS, true, server);
+            // The border stays off, as the test server needs
+            Files.writeString(path, "{\"immediateRespawn\": true, \"hide\": {\"locatorBar\": true, \"globalSounds\": true},"
+                    + " \"worldBorder\": {\"enabled\": false}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded."), "command output");
+            helper.assertTrue(rules.get(GameRules.IMMEDIATE_RESPAWN), "immediate_respawn is still off");
+            helper.assertFalse(rules.get(GameRules.LOCATOR_BAR), "locator_bar is still on");
+            helper.assertFalse(rules.get(GameRules.GLOBAL_SOUND_EVENTS), "global_sound_events is still on");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            rules.set(GameRules.IMMEDIATE_RESPAWN, respawnBefore, server);
+            rules.set(GameRules.LOCATOR_BAR, locatorBefore, server);
+            rules.set(GameRules.GLOBAL_SOUND_EVENTS, soundsBefore, server);
+        }
+        helper.succeed();
+    }
+
+    // One bad value keeps the live one and is named in the reply, and every other value in the file still applies. The
+    // file is then rewritten with the value in use, so it can't fail the same way at the next start.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadReportsEachBadValueAndAppliesTheRest(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        try {
+            Settings.get().randomSpawn = true;
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "the test server's chat radius");
+            // The border stays off, as the test server needs
+            Files.writeString(path, "{\"randomSpawn\": false, \"chat\": {\"radius\": 0}, \"worldBorder\": {\"enabled\": false}}");
+            helper.assertValueEqual(run(server, "yolt reload"),
+                    List.of("Config reloaded.", "chat.radius: must be 1 or more, using the current value"), "command output");
+            helper.assertFalse(Settings.get().randomSpawn, "randomSpawn is still on");
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertValueEqual(ConfigCommandGameTests.fileValue("chat.radius").getAsInt(), 48, "chat.radius in the file");
+            helper.assertValueEqual(ConfigCommandGameTests.fileValue("randomSpawn").getAsBoolean(), false, "randomSpawn in the file");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+        }
+        helper.succeed();
+    }
+
+    // A file from 1.0.0 is copied, then upgraded by a reload as by a startup. Its false for whispers is that version's
+    // default, so the upgrade turns whispers on and the reply says how to keep them off. The reload resends every
+    // command tree, so a non-op's game has /w at once. The comment makes these bytes new, so the copy is made here
+    // rather than found from an earlier run.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadOfAV1FileUpgradesAndSaysHowToTurnBack(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        List<Path> copiesBefore = olderCopies(path);
+        ServerPlayer player = TestPlayers.join(helper, "Upgraded", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        String older = "{/* " + UUID.randomUUID() + " */ \"configVersion\": 1, \"chat\": {\"allowWhispers\": false},"
+                + " \"worldBorder\": {\"enabled\": false}}";
+        try {
+            helper.assertTrue(Settings.get().restrictCommands && !Settings.get().chat.allowWhispers,
+                    "the test server's restrictCommands and allowWhispers");
+            server.getCommands().sendCommands(player);
+            helper.assertTrue(CommandRestrictionGameTests.lastTree(helper, player).getChild("w") == null,
+                    "the non-op had /w before the reload");
+            Files.writeString(path, older);
+
+            List<String> output = run(server, "yolt reload");
+            String saved = "config was v1 and is upgraded to v" + ConfigLoader.CURRENT_VERSION + ", old file saved as ";
+            helper.assertTrue(output.size() == 3 && output.get(0).equals("Config reloaded.") && output.get(1).startsWith(saved)
+                    && output.get(2).equals("chat.allowWhispers was false, the old default, and is now true, the new one. To keep it"
+                            + " off, run /yolt config chat.allowWhispers false"), "command output: " + output);
+            String copy = output.get(1).substring(saved.length());
+            helper.assertTrue(copy.startsWith("you-only-live-twice.json.v1.bak"), "the copy's name: " + copy);
+            helper.assertValueEqual(Files.readString(path.resolveSibling(copy)), older, "the copy of the old file");
+            helper.assertTrue(Settings.get().chat.allowWhispers, "whispers are still off");
+            helper.assertValueEqual(ConfigCommandGameTests.fileValue("configVersion").getAsInt(), ConfigLoader.CURRENT_VERSION,
+                    "configVersion in the file");
+            helper.assertTrue(CommandRestrictionGameTests.lastTree(helper, player).getChild("w") != null,
+                    "the reload sent the non-op no tree with /w");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            removeNewCopies(path, copiesBefore);
+            TestPlayers.leave(player);
+        }
+        helper.succeed();
+    }
+
     // An older file is upgraded only once a copy of it is kept. In a read-only config folder that copy can't be made, so
     // the reload reads nothing: one line says why, the command fails, and the live config, the world and the file are as
     // they were. Where the folder can't be made read-only, as for root, there is nothing to check, as in the loader's
@@ -1188,6 +1548,31 @@ public class BorderAndReloadGameTests {
             if (Settings.get() != configBefore) {
                 restoreConfig(server);
             }
+        }
+        helper.succeed();
+    }
+
+    // A misspelt key is named and ignored, and the rewrite leaves it out, so the file says what is used. A reload keeps
+    // no copy of the file for it.
+    @GameTest(environment = CONFIG_COMMAND)
+    public void reloadWarnsUnknownKeyAndDropsItFromTheFile(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        Path path = Settings.path();
+        String fileBefore = Files.readString(path);
+        SavedBackups backups = saveBackups(path);
+        try {
+            Files.writeString(path, "{\"chat\": {\"radus\": 30}, \"worldBorder\": {\"enabled\": false}}");
+            helper.assertValueEqual(run(server, "yolt reload"), List.of("Config reloaded.", "chat.radus: unknown key, ignored"),
+                    "command output");
+            helper.assertValueEqual(Settings.get().chat.radius, 48, "live chat.radius");
+            helper.assertTrue(ConfigCommandGameTests.fileValue("chat.radus") == null, "the rewritten file still has chat.radus");
+            helper.assertValueEqual(ConfigCommandGameTests.fileValue("chat.radius").getAsInt(), 48, "chat.radius in the file");
+            byte[] bak = Files.exists(backups.bak()) ? Files.readAllBytes(backups.bak()) : null;
+            helper.assertTrue(Arrays.equals(bak, backups.bytes()), "the reload wrote a .bak");
+        } finally {
+            Files.writeString(path, fileBefore);
+            restoreConfig(server);
+            restoreBackups(backups);
         }
         helper.succeed();
     }
