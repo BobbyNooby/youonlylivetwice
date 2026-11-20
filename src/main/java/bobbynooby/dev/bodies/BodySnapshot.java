@@ -55,7 +55,9 @@ public record BodySnapshot(
             Codec.INT.optionalFieldOf("air", Entity.TOTAL_AIR_SUPPLY).forGetter(BodySnapshot::air),
             // An effect a removed mod or datapack brought is left out on its own, and the record stays
             LenientCodecs.list(MobEffectInstance.CODEC, "body effect").fieldOf("effects").forGetter(BodySnapshot::effects),
-            Codec.unboundedMap(EquipmentSlot.CODEC, ItemStack.CODEC).fieldOf("gear").forGetter(BodySnapshot::gear)
+            // A piece that can't be written is left out, so it can't stop every save of the body file
+            LenientCodecs.writingMap(EquipmentSlot.CODEC, ItemStack.CODEC, "piece of body gear").fieldOf("gear")
+                    .forGetter(BodySnapshot::gear)
     ).apply(i, BodySnapshot::new));
 
     /**

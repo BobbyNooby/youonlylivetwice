@@ -1,6 +1,7 @@
 package bobbynooby.dev.graves;
 
 import bobbynooby.dev.core.Stacks;
+import bobbynooby.dev.core.LenientCodecs;
 import bobbynooby.dev.core.Yolt;
 import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
@@ -63,7 +64,8 @@ public record Grave(
             ResolvableProfile.CODEC.fieldOf("profile").forGetter(Grave::profile),
             Level.RESOURCE_KEY_CODEC.fieldOf("dimension").forGetter(Grave::dimension),
             BlockPos.CODEC.fieldOf("pos").forGetter(Grave::pos),
-            ItemStack.CODEC.listOf().fieldOf("items").forGetter(Grave::items),
+            // One stack that can't be written is left out, so it can't stop every save of the grave file
+            LenientCodecs.writing(ItemStack.CODEC, "grave item").fieldOf("items").forGetter(Grave::items),
             Codec.LONG.fieldOf("created_at").forGetter(Grave::createdAt),
             // Optional, so a grave saved before it was kept still reads
             GlobalPos.CODEC.optionalFieldOf("death_pos").forGetter(grave -> Optional.ofNullable(grave.deathPos())),
