@@ -30,6 +30,41 @@ public class HardcoreSlowGameTests {
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final Identifier SLOW = Yolt.id("hardcore_slow");
 
+    // One part that throws must not leave the player without the slowdowns of the others
+    @GameTest
+    public void slow2AThrowingPartLeavesTheOthers(GameTestHelper helper) {
+        ServerPlayer player = TestPlayers.join(helper, "SlowedTwice", GameType.SURVIVAL, AT);
+        UUID id = player.getUUID();
+        Runnable unregister = Slowdowns.registerForTesting("test", only(id, 0.5));
+        Runnable unregisterBroken = Slowdowns.registerForTesting("broken", other -> {
+            if (other.getUUID().equals(id)) {
+                throw new IllegalStateException("a slowdown part that fails");
+            }
+            return 0.0;
+        });
+        boolean waiting = false;
+        try {
+            helper.runAfterDelay(2, () -> {
+                try {
+                    helper.assertTrue(Math.abs(Slowdowns.applied(player) - 0.5) < 1e-6,
+                            "the slowdown applied is " + Slowdowns.applied(player) + ", not the working part's 0.5");
+                } finally {
+                    unregisterBroken.run();
+                    unregister.run();
+                    TestPlayers.leave(player);
+                }
+                helper.succeed();
+            });
+            waiting = true;
+        } finally {
+            if (!waiting) {
+                unregisterBroken.run();
+                unregister.run();
+                TestPlayers.leave(player);
+            }
+        }
+    }
+
     @GameTest
     public void slow2SlownessPotionStacksOnTop(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "Slowed", GameType.SURVIVAL, AT);

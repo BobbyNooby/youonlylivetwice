@@ -1,5 +1,7 @@
 package bobbynooby.dev.hardcore;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
@@ -40,6 +42,9 @@ public final class Slowdowns {
         PARTS.add(added);
         return () -> PARTS.remove(added);
     }
+
+    // Parts that have thrown, so each is only logged the first time
+    private static final Set<Object> FAILED = ConcurrentHashMap.newKeySet();
 
     /** The stepped total now on the player, 0 when they have none. */
     public static double applied(ServerPlayer player) {
@@ -85,8 +90,18 @@ public final class Slowdowns {
         }
     }
 
-    // The stream walks one snapshot of the list
+    // The stream walks one snapshot of the list. A part that throws counts as nothing, so one broken part can't stop
+    // the others from slowing the player; it is logged once for each part, since this runs every tick.
     private static double[] shares(ServerPlayer player) {
-        return PARTS.stream().mapToDouble(part -> part.share().applyAsDouble(player)).toArray();
+        return PARTS.stream().mapToDouble(part -> {
+            try {
+                return part.share().applyAsDouble(player);
+            } catch (RuntimeException e) {
+                if (FAILED.add(part)) {
+                    Yolt.LOGGER.error("A slowdown could not be worked out, so it counts as none", e);
+                }
+                return 0.0;
+            }
+        }).toArray();
     }
 }
