@@ -21,12 +21,15 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -48,6 +51,7 @@ import net.minecraft.world.level.levelgen.feature.EndPodiumFeature;
 import net.minecraft.world.level.levelgen.feature.EndSpikeFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
@@ -668,6 +672,168 @@ public class PlacementGameTests {
             helper.setBlock(ground, Blocks.AIR);
         }
         helper.succeed();
+    }
+
+    // A death up on the Nether's bedrock roof keeps its grave up there, in the death's own column: the owner was up there
+    // and can get back. Only a death under the roof keeps its grave under it. The roof and the air over it are put back.
+    @GameTest(dimension = "minecraft:the_nether", skyAccess = true)
+    public void netherRoofDeathKeepsTheGraveOnTheRoof(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        int roofY = level.getMinY() + level.getLogicalHeight() - 1;
+        BlockPos roof = helper.absolutePos(new BlockPos(2, 0, 2)).atY(roofY);
+        BlockPos death = roof.above();
+        Map<BlockPos, BlockState> before = remembered(level, List.of(roof, death, death.above()));
+        try {
+            level.setBlock(roof, Blocks.BEDROCK.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(death, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            level.setBlock(death.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            BlockPos result = GravePlacement.find(level, death, store(helper));
+            helper.assertValueEqual(result, death, "grave for a death on the roof");
+        } finally {
+            before.forEach((pos, state) -> level.setBlock(pos, state, Block.UPDATE_ALL));
+        }
+        helper.succeed();
+    }
+
+    // Fire at the death spot and all round it: the grave goes neither into the fire nor over it, where dropped items
+    // would burn. Netherrack keeps the fire from going out.
+    @GameTest
+    public void deathInFireGraveNotInFire(GameTestHelper helper) {
+        List<BlockPos> placed = new ArrayList<>();
+        BlockPos centre = new BlockPos(3, 1, 3);
+        try {
+            for (int x = 1; x <= 5; x++) {
+                for (int z = 1; z <= 5; z++) {
+                    place(helper, placed, new BlockPos(x, 0, z), Blocks.NETHERRACK);
+                }
+            }
+            for (int x = 2; x <= 4; x++) {
+                for (int z = 2; z <= 4; z++) {
+                    place(helper, placed, new BlockPos(x, 1, z), Blocks.FIRE);
+                }
+            }
+            BlockPos result = GravePlacement.find(helper.getLevel(), helper.absolutePos(centre), store(helper));
+            helper.assertFalse(helper.getLevel().getBlockState(result).is(BlockTags.FIRE), "grave in fire at " + result);
+            assertNothingBelowDestroysItems(helper, result);
+        } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // A head right on a chest could be in its way, so a death on top of a chest has its grave elsewhere, and the chest
+    // still opens
+    @GameTest
+    public void graveNotPlacedOnTopOfAChest(GameTestHelper helper) {
+        BlockPos chest = new BlockPos(2, 0, 2);
+        ServerPlayer player = TestPlayers.join(helper, "ChestOpener", GameType.SURVIVAL, new BlockPos(1, 1, 1));
+        Grave grave = null;
+        try {
+            helper.setBlock(chest, Blocks.CHEST);
+            BlockPos above = helper.absolutePos(chest.above());
+            ResolvableProfile profile = ResolvableProfile.createUnresolved("Ghost");
+            List<Grave> made = Graves.create(helper.getLevel(), above, profile, UUID.randomUUID(), "Ghost",
+                    List.of(GraveItems.graveHead(profile)));
+            grave = made.get(0);
+            helper.assertFalse(grave.pos().equals(above), "grave placed on the chest");
+            BlockPos at = helper.absolutePos(chest);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(at), Direction.UP, at, false);
+            player.gameMode.useItemOn(player, player.level(), ItemStack.EMPTY, InteractionHand.MAIN_HAND, hit);
+            helper.assertTrue(player.containerMenu instanceof ChestMenu, "the chest did not open: " + player.containerMenu);
+        } finally {
+            TestPlayers.leave(player);
+            if (grave != null) {
+                store(helper).remove(grave.id());
+                helper.getLevel().setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+            helper.setBlock(chest, Blocks.AIR);
+        }
+        helper.succeed();
+    }
+
+    // The last resort over the lava says so once, naming where the search started, where the grave went and why that
+    // spot is wrong
+    @GameTest(skyAccess = true)
+    public void wideLavaLakeLogsTheWarning(GameTestHelper helper) {
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        int before = graves.searchRadius;
+        List<BlockPos> placed = new ArrayList<>();
+        try {
+            graves.searchRadius = 3;
+            List<BlockPos> found = new ArrayList<>(1);
+            List<String> log = OfflineGameTests.yoltLog(() -> found.add(findInWideLavaPool(helper, placed)));
+            BlockPos death = helper.absolutePos(LAVA_DEATH);
+            helper.assertValueEqual(log.stream().filter(line -> line.startsWith("No spot near ")).toList(),
+                    List.of("No spot near " + helper.getLevel().dimension().identifier() + " " + death + " suits a grave, so it goes at "
+                            + found.getFirst() + ", which is over something that would destroy its items if they were dropped"),
+                    "the last resort's log lines");
+        } finally {
+            graves.searchRadius = before;
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // A cactus breaks items that land on it, so a death in the air just over one has its grave somewhere else, where
+    // dropped items land on something that keeps them. A stone floor round it and no ceiling, so the nearest such spot
+    // is beside the cactus.
+    @GameTest(skyAccess = true)
+    public void cactusUnderDeathSpotIsRefused(GameTestHelper helper) {
+        List<BlockPos> placed = new ArrayList<>();
+        BlockPos cactus = new BlockPos(2, 1, 2);
+        try {
+            for (int x = 0; x <= 4; x++) {
+                for (int z = 0; z <= 4; z++) {
+                    place(helper, placed, new BlockPos(x, 0, z), Blocks.STONE);
+                }
+            }
+            place(helper, placed, cactus.below(), Blocks.SAND);
+            place(helper, placed, cactus, Blocks.CACTUS);
+            BlockPos column = helper.absolutePos(cactus);
+            BlockPos result = GravePlacement.find(helper.getLevel(), column.above(), store(helper));
+            helper.assertFalse(result.getX() == column.getX() && result.getZ() == column.getZ(), "grave over the cactus at " + result);
+            assertNothingBelowDestroysItems(helper, result);
+        } finally {
+            clear(helper, placed);
+        }
+        helper.succeed();
+    }
+
+    // As with leaf litter: each of these drops itself, or sticks, when broken by hand, so a head set over it would
+    // delete that item, and the grave goes somewhere else
+    @GameTest
+    public void itemDroppingPlantsAreNotReplaced(GameTestHelper helper) {
+        BlockPos ground = new BlockPos(1, 0, 1);
+        for (Block plant : List.of(Blocks.RESIN_CLUMP, Blocks.CRIMSON_ROOTS, Blocks.WARPED_ROOTS, Blocks.DEAD_BUSH, Blocks.RED_SHRUB)) {
+            try {
+                helper.setBlock(ground, Blocks.STONE);
+                helper.setBlock(ground.above(), plant);
+                BlockPos death = helper.absolutePos(ground.above());
+                BlockPos result = GravePlacement.find(helper.getLevel(), death, store(helper));
+                helper.assertFalse(result.equals(death), "grave placed over " + plant);
+                helper.assertTrue(helper.getLevel().getBlockState(death).is(plant), plant + " is gone");
+            } finally {
+                helper.setBlock(ground.above(), Blocks.AIR);
+                helper.setBlock(ground, Blocks.AIR);
+            }
+        }
+        helper.succeed();
+    }
+
+    // Items dropped at the spot fall onto the first block below that holds them, through nothing that destroys them
+    private static void assertNothingBelowDestroysItems(GameTestHelper helper, BlockPos result) {
+        ServerLevel level = helper.getLevel();
+        BlockPos.MutableBlockPos at = result.mutable();
+        while (at.getY() > level.getMinY()) {
+            BlockState state = level.getBlockState(at);
+            helper.assertFalse(state.is(BlockTags.FIRE) || state.getFluidState().is(FluidTags.LAVA) || state.is(Blocks.CACTUS),
+                    "items dropped at " + result + " would meet " + state + " at " + at);
+            if (at.getY() < result.getY() && !state.getCollisionShape(level, at).isEmpty()) {
+                return;
+            }
+            at.move(Direction.DOWN);
+        }
+        helper.fail("nothing under " + result + " would hold dropped items");
     }
 
     // A 7 by 7 lava pool, held by a stone rim on the open sides and the barrier walls on the others. Every spot the first
