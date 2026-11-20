@@ -18,6 +18,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -37,6 +38,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -96,6 +98,82 @@ public class GraveStoreGameTests {
         helper.assertTrue(store.at(Level.OVERWORLD, pos).isEmpty(), "grave still there after remove");
         helper.assertTrue(store.all().stream().noneMatch(g -> g.id().equals(grave.id())), "grave still listed after remove");
         helper.succeed();
+    }
+
+    // The lookups by spot go through an index by chunk. Hundreds of graves crowd a few chunks of three dimensions, some
+    // share a spot, some move within or out of their chunk and some go and come back, and every lookup must still give
+    // what a scan of every grave, in the store's order, gives. So must the same store read back from its file.
+    @GameTest
+    public void chunkIndexMatchesScan(GameTestHelper helper) {
+        RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
+        GraveStore store = GraveStore.TYPE.codec().parse(ops, storeData()).getOrThrow();
+        Random random = new Random(26);
+        List<UUID> ids = new ArrayList<>();
+        for (int i = 0; i < 300; i++) {
+            Grave grave = new Grave(UUID.randomUUID(), UUID.randomUUID(), "Alex", ResolvableProfile.createUnresolved("Alex"),
+                    INDEX_DIMENSIONS.get(random.nextInt(INDEX_DIMENSIONS.size())), indexSpot(random), List.of(), i);
+            store.put(grave);
+            ids.add(grave.id());
+        }
+        for (int i = 0; i < 200; i++) {
+            UUID id = ids.get(random.nextInt(ids.size()));
+            switch (random.nextInt(4)) {
+                case 0 -> store.byId(id).ifPresent(grave -> store.put(grave.withPos(indexSpot(random))));
+                // Within its own chunk, so the grave's place among the chunk's others must hold
+                case 1 -> store.byId(id).ifPresent(grave -> store.put(grave.withPos(grave.pos().above())));
+                // Changed where it stands, as handing out its compass does
+                case 2 -> store.byId(id).ifPresent(grave -> store.put(grave.withCompassPending(!grave.compassPending())));
+                default -> {
+                    Optional<Grave> gone = store.byId(id);
+                    store.remove(id);
+                    // Half come back, last in the store's order like a new grave
+                    if (random.nextBoolean()) {
+                        gone.ifPresent(store::put);
+                    }
+                }
+            }
+        }
+        helper.assertTrue(store.all().size() > 200, "too few graves left to test: " + store.all().size());
+        assertIndexMatchesScan(helper, store, "store");
+        GraveStore loaded = GraveStore.TYPE.codec().parse(ops, GraveStore.TYPE.codec().encodeStart(ops, store).getOrThrow()).getOrThrow();
+        assertIndexMatchesScan(helper, loaded, "store read back");
+        helper.succeed();
+    }
+
+    private static final List<ResourceKey<Level>> INDEX_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
+
+    // Four chunks a side with few heights, so spots are shared now and then
+    private static BlockPos indexSpot(Random random) {
+        return new BlockPos(random.nextInt(64) - 32, 60 + random.nextInt(3), random.nextInt(64) - 32);
+    }
+
+    private static void assertIndexMatchesScan(GameTestHelper helper, GraveStore store, String which) {
+        List<Grave> all = List.copyOf(store.all());
+        for (ResourceKey<Level> dim : INDEX_DIMENSIONS) {
+            helper.assertValueEqual(store.inDimension(dim), all.stream().filter(g -> g.dimension().equals(dim)).toList(),
+                    which + ": graves in " + dim.identifier());
+            helper.assertValueEqual(store.inChunks(dim, chunk -> ChunkPos.getX(chunk) % 2 == 0),
+                    all.stream().filter(g -> g.dimension().equals(dim) && ChunkPos.containing(g.pos()).x() % 2 == 0).toList(),
+                    which + ": graves in even chunks of " + dim.identifier());
+            for (int x = -3; x <= 2; x++) {
+                for (int z = -3; z <= 2; z++) {
+                    ChunkPos chunk = new ChunkPos(x, z);
+                    helper.assertValueEqual(store.inChunk(dim, chunk),
+                            all.stream().filter(g -> g.dimension().equals(dim) && ChunkPos.containing(g.pos()).equals(chunk)).toList(),
+                            which + ": graves in chunk " + chunk + " of " + dim.identifier());
+                }
+            }
+            for (int x = -33; x <= 32; x++) {
+                for (int z = -33; z <= 32; z++) {
+                    for (int y = 59; y <= 63; y++) {
+                        BlockPos pos = new BlockPos(x, y, z);
+                        helper.assertValueEqual(store.at(dim, pos),
+                                all.stream().filter(g -> g.dimension().equals(dim) && g.pos().equals(pos)).findFirst(),
+                                which + ": grave at " + pos + " in " + dim.identifier());
+                    }
+                }
+            }
+        }
     }
 
     @GameTest

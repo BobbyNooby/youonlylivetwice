@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -67,10 +68,16 @@ public final class GraveRecheck {
     private static void pass(MinecraftServer server) {
         GraveStore store = GraveStore.get(server);
         for (ServerLevel level : server.getAllLevels()) {
-            for (Grave grave : store.inDimension(level.dimension())) {
+            for (Grave grave : store.inChunks(level.dimension(), chunk -> loaded(level, chunk))) {
                 recheck(level, store, grave);
             }
         }
+    }
+
+    // A grave whose own chunk isn't loaded fails loadedAround in recheck anyway, so the pass doesn't read it at all.
+    // The same test loadedAround makes.
+    static boolean loaded(ServerLevel level, long chunk) {
+        return level.getChunkSource().getChunkNow(ChunkPos.getX(chunk), ChunkPos.getZ(chunk)) != null;
     }
 
     /**

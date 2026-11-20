@@ -7,6 +7,8 @@ import bobbynooby.dev.core.UnreadableFiles;
 import bobbynooby.dev.core.Yolt;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
@@ -27,13 +29,19 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.LongPredicate;
 
-/** Every grave in the world, saved with the world's data. Graves are few, so lookups just scan. */
+/**
+ * Every grave in the world, saved with the world's data. Lookups by spot go through an index by chunk, since they run
+ * on every chunk load and for every spot a placement tries.
+ */
 public final class GraveStore extends SavedData {
     /** The layout of the grave file's own fields. */
     public static final int FORMAT = 1;
@@ -53,6 +61,12 @@ public final class GraveStore extends SavedData {
             Yolt.id("graves"), GraveStore::new, CODEC, DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Map<UUID, Grave> graves = new LinkedHashMap<>();
+    // The same graves by dimension and chunk (ChunkPos.pack). Each list keeps the order of graves above, so a lookup
+    // finds the same grave first that a scan of every grave would.
+    private final Map<ResourceKey<Level>, Long2ObjectMap<List<Grave>>> byChunk = new HashMap<>();
+    // Each grave's place in that order. Putting a grave again keeps its place, as the LinkedHashMap does.
+    private final Map<UUID, Long> order = new HashMap<>();
+    private long added;
     // False when the storage started this store empty, because there was no file or it couldn't be read
     private final boolean fromDisk;
     // True when the file came from a newer YOLT or Minecraft, so the next save would drop what this one can't read
@@ -72,7 +86,7 @@ public final class GraveStore extends SavedData {
         this.fromNewer = fromNewer;
         this.partlyRead = partlyRead;
         for (Grave grave : loaded) {
-            graves.put(grave.id(), grave);
+            index(grave);
         }
     }
 
@@ -154,12 +168,55 @@ public final class GraveStore extends SavedData {
     }
 
     public void put(Grave grave) {
-        graves.put(grave.id(), grave);
+        index(grave);
         setDirty();
     }
 
+    // A grave put again can have moved (withPos), so its old spot's entry goes first
+    private void index(Grave grave) {
+        Grave old = graves.put(grave.id(), grave);
+        if (old != null) {
+            unindex(old);
+        } else {
+            order.put(grave.id(), added++);
+        }
+        List<Grave> chunk = byChunk.computeIfAbsent(grave.dimension(), dim -> new Long2ObjectOpenHashMap<>())
+                .computeIfAbsent(ChunkPos.pack(grave.pos()), key -> new ArrayList<>());
+        long place = order.get(grave.id());
+        int at = chunk.size();
+        while (at > 0 && order.get(chunk.get(at - 1).id()) > place) {
+            at--;
+        }
+        chunk.add(at, grave);
+    }
+
+    private void unindex(Grave grave) {
+        Long2ObjectMap<List<Grave>> chunks = byChunk.get(grave.dimension());
+        long key = ChunkPos.pack(grave.pos());
+        List<Grave> chunk = chunks.get(key);
+        chunk.removeIf(indexed -> indexed.id().equals(grave.id()));
+        // An emptied chunk goes, so the index only ever holds chunks with a grave in them
+        if (chunk.isEmpty()) {
+            chunks.remove(key);
+            if (chunks.isEmpty()) {
+                byChunk.remove(grave.dimension());
+            }
+        }
+    }
+
+    private List<Grave> chunk(ResourceKey<Level> dim, long chunk) {
+        Long2ObjectMap<List<Grave>> chunks = byChunk.get(dim);
+        List<Grave> found = chunks == null ? null : chunks.get(chunk);
+        return found == null ? List.of() : found;
+    }
+
     public Optional<Grave> at(ResourceKey<Level> dim, BlockPos pos) {
-        return graves.values().stream().filter(g -> g.dimension().equals(dim) && g.pos().equals(pos)).findFirst();
+        for (Grave grave : chunk(dim, ChunkPos.pack(pos))) {
+            if (grave.pos().equals(pos)) {
+                return Optional.of(grave);
+            }
+        }
+        return Optional.empty();
     }
 
     public Optional<Grave> byId(UUID id) {
@@ -167,7 +224,10 @@ public final class GraveStore extends SavedData {
     }
 
     public void remove(UUID id) {
-        if (graves.remove(id) != null) {
+        Grave removed = graves.remove(id);
+        if (removed != null) {
+            unindex(removed);
+            order.remove(id);
             setDirty();
         }
     }
@@ -177,22 +237,29 @@ public final class GraveStore extends SavedData {
     }
 
     public List<Grave> inDimension(ResourceKey<Level> dim) {
+        return inChunks(dim, chunk -> true);
+    }
+
+    /**
+     * The graves in this dimension whose chunk (ChunkPos.pack) passes the test, in the order of all(). Only chunks that
+     * hold a grave are tested.
+     */
+    public List<Grave> inChunks(ResourceKey<Level> dim, LongPredicate test) {
         List<Grave> found = new ArrayList<>();
-        for (Grave grave : graves.values()) {
-            if (grave.dimension().equals(dim)) {
-                found.add(grave);
+        Long2ObjectMap<List<Grave>> chunks = byChunk.get(dim);
+        if (chunks != null) {
+            for (Long2ObjectMap.Entry<List<Grave>> chunk : chunks.long2ObjectEntrySet()) {
+                if (test.test(chunk.getLongKey())) {
+                    found.addAll(chunk.getValue());
+                }
             }
         }
+        found.sort(Comparator.comparingLong(grave -> order.get(grave.id())));
         return found;
     }
 
+    // A copy, since restoring a chunk's graves can move them
     public List<Grave> inChunk(ResourceKey<Level> dim, ChunkPos chunk) {
-        List<Grave> found = new ArrayList<>();
-        for (Grave grave : graves.values()) {
-            if (grave.dimension().equals(dim) && ChunkPos.containing(grave.pos()).equals(chunk)) {
-                found.add(grave);
-            }
-        }
-        return found;
+        return new ArrayList<>(chunk(dim, chunk.pack()));
     }
 }
