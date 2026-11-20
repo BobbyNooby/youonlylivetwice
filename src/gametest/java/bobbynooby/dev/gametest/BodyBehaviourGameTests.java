@@ -976,6 +976,43 @@ public class BodyBehaviourGameTests {
         helper.succeed();
     }
 
+    // A pass with the duration "offline" and nothing to retry returns at once. One with a failed try waiting must still
+    // forget it once the body is done with, and keep it while the body stands.
+    @GameTest(environment = BODY_RETRY)
+    public void offlineDurationStillForgetsADoneRetry(GameTestHelper helper) throws IOException {
+        ServerPlayer player = join(helper, "OfflineRetry", new BlockPos(1, 1, 1));
+        UUID owner = player.getUUID();
+        MinecraftServer server = helper.getLevel().getServer();
+        YoltConfig.BodiesSection before = useDefaultBodies();
+        Path file = saveFile(helper, owner);
+        byte[] save = null;
+        try {
+            Settings.get().bodies.duration = new BodyDuration(1);
+            Mannequin body = leaveBody(helper, player);
+            expiredLogout(helper, owner);
+            save = Files.readAllBytes(file);
+            Files.delete(file);
+            Files.deleteIfExists(file.resolveSibling(owner + ".dat_old"));
+            OfflineGameTests.yoltLog(() -> BodyExpiry.tick(server));
+            helper.assertTrue(BodyExpiry.retrying(body.getUUID()), "the failed expiry is not waiting to be tried again");
+
+            Settings.get().bodies.duration = BodyDuration.OFFLINE;
+            BodyExpiry.tick(server);
+            helper.assertTrue(BodyExpiry.retrying(body.getUUID()), "the retry of a standing body was forgotten");
+            helper.assertTrue(store(helper).byOwner(owner).isPresent(), "an offline pass removed the body record");
+
+            store(helper).remove(owner);
+            BodyExpiry.tick(server);
+            helper.assertFalse(BodyExpiry.retrying(body.getUUID()), "the retry of a body with no record was kept");
+        } finally {
+            if (save != null && !Files.exists(file)) {
+                Files.write(file, save);
+            }
+            cleanUp(helper, owner, before);
+        }
+        helper.succeed();
+    }
+
     private static List<AttributeInstance.Packed> attributes(GameTestHelper helper, CompoundTag saved) {
         RegistryOps<Tag> ops = helper.getLevel().registryAccess().createSerializationContext(NbtOps.INSTANCE);
         return saved.read("attributes", AttributeInstance.Packed.LIST_CODEC, ops).orElse(List.of());

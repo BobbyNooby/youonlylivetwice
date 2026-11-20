@@ -70,6 +70,10 @@ public final class BodyExpiry {
         if (!Settings.active()) {
             return;
         }
+        // Bodies that never expire, with no retry to forget, leave the pass nothing to do
+        if (Settings.get().bodies.duration.isOffline() && RETRIES.isEmpty()) {
+            return;
+        }
         Collection<BodyRecord> records = BodyStore.get(server).all();
         // A body taken over, killed or replaced by a new logout since it failed is done with
         Set<UUID> standing = records.stream().filter(record -> !record.pendingRemoval())
@@ -122,6 +126,11 @@ public final class BodyExpiry {
                 }
             }
         }
+    }
+
+    /** True while a failed expiry of this body waits for its next try. Public so a test can read it. */
+    public static boolean retrying(UUID bodyEntity) {
+        return RETRIES.containsKey(bodyEntity);
     }
 
     /** True when a body has stood for the duration. Never with the duration "offline". */
