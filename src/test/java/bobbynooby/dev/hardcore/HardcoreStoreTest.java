@@ -4,12 +4,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -69,6 +72,107 @@ class HardcoreStoreTest {
         // A field this build doesn't know is skipped, and the ones it does are still read
         HardcoreState newer = HardcoreState.decode("{\"version\": 2, \"chill\": 0.25, \"thirst\": 3}");
         assertEquals(0.25, newer.chill);
+    }
+
+    // A NaN that slipped into one value is written as it is, so the row still reads back with the curse in it rather than
+    // starting the player fresh
+    @Test
+    void aNaNValueSurvivesARoundTrip() {
+        HardcoreState state = new HardcoreState();
+        state.chill = Double.NaN;
+        state.curseHeartsLost = 3;
+        HardcoreState decoded = HardcoreState.decode(state.encode());
+        assertEquals(3, decoded.curseHeartsLost);
+        assertTrue(Double.isNaN(decoded.chill));
+
+        Path file = dir.resolve("hardcore.db");
+        try (HardcoreStore store = HardcoreStore.open(file)) {
+            store.savePlayer(uuid, state.encode());
+        }
+        try (HardcoreStore store = HardcoreStore.open(file)) {
+            assertEquals(3, HardcoreState.decode(store.player(uuid).orElseThrow()).curseHeartsLost);
+        }
+    }
+
+    // Whatever sits at the database's path, if it isn't a database, is never written over: states live in memory instead
+    @Test
+    void aFileThatIsNotADatabaseIsLeftAsItIs() throws IOException {
+        Path file = dir.resolve("hardcore.db");
+        byte[] garbage = "not a database, but someone's file all the same".repeat(40).getBytes(StandardCharsets.UTF_8);
+        Files.write(file, garbage);
+        HardcoreStates.useFileForTesting(file);
+        try {
+            assertDoesNotThrow(() -> HardcoreStates.update(uuid, state -> state.curseHeartsLost = 2));
+            assertEquals(2, HardcoreStates.read(uuid).curseHeartsLost);
+            HardcoreStates.setWorld("lastBloodMoonDay", 12);
+            HardcoreStates.flushAll();
+            assertEquals(2, HardcoreStates.read(uuid).curseHeartsLost);
+            assertEquals(12, HardcoreStates.world("lastBloodMoonDay").orElseThrow());
+            assertArrayEquals(garbage, Files.readAllBytes(file));
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+        assertArrayEquals(garbage, Files.readAllBytes(file), "the file changed at the stop");
+        try (var beside = Files.list(dir)) {
+            assertEquals(List.of(file), beside.toList(), "something was made beside the file");
+        }
+    }
+
+    // A file from a newer YOLT is read and written by nobody: the session runs from memory and the file keeps its version
+    // and has no table of ours
+    @Test
+    void aNewerStoreRunsFromMemoryUntouched() throws SQLException {
+        Path file = dir.resolve("hardcore.db");
+        String url = "jdbc:sqlite:" + file.toAbsolutePath();
+        int newer = HardcoreStore.SCHEMA_VERSION + 1;
+        try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA user_version = " + newer);
+        }
+        HardcoreStates.useFileForTesting(file);
+        try {
+            HardcoreStates.update(uuid, state -> state.legsBroken = true);
+            assertTrue(HardcoreStates.read(uuid).legsBroken);
+            HardcoreStates.flushAll();
+            assertTrue(HardcoreStates.read(uuid).legsBroken);
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+        try (Connection connection = DriverManager.getConnection(url); Statement statement = connection.createStatement()) {
+            try (ResultSet version = statement.executeQuery("PRAGMA user_version")) {
+                assertEquals(newer, version.getInt(1));
+            }
+            try (ResultSet tables = statement.executeQuery("SELECT count(*) FROM sqlite_master")) {
+                assertEquals(0, tables.getInt(1), "a table was made in the newer file");
+            }
+        }
+    }
+
+    // Another program holding the write lock past the wait leaves the change in memory, and the next flush once the lock
+    // is gone writes it. Reads still work under that lock. Takes the write wait, about 3 seconds.
+    @Test
+    void aWriteLockPastTheWaitIsRetriedLater() throws SQLException {
+        Path file = dir.resolve("hardcore.db");
+        String url = "jdbc:sqlite:" + file.toAbsolutePath();
+        HardcoreStates.useFileForTesting(file);
+        try {
+            // The store is open before the lock, as on a running server
+            HardcoreStates.setWorld("lastBloodMoonDay", 1);
+            try (Connection holder = DriverManager.getConnection(url); Statement statement = holder.createStatement()) {
+                statement.execute("BEGIN IMMEDIATE");
+                HardcoreStates.update(uuid, state -> state.legsBroken = true);
+                assertTrue(HardcoreStates.read(uuid).legsBroken, "the change wasn't kept in memory");
+                try (ResultSet rows = statement.executeQuery("SELECT count(*) FROM player")) {
+                    assertEquals(0, rows.getInt(1), "the write went through the lock");
+                }
+                statement.execute("ROLLBACK");
+            }
+            HardcoreStates.flushAll();
+            try (HardcoreStore reading = HardcoreStore.open(file)) {
+                assertTrue(HardcoreState.decode(reading.player(uuid).orElseThrow()).legsBroken, "the next flush didn't write it");
+            }
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
     }
 
     @Test

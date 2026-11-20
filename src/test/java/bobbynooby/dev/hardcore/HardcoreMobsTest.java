@@ -37,6 +37,16 @@ class HardcoreMobsTest {
         assertEquals(MobMaths.Boost.NONE, tougher("minecraft:warden"));
     }
 
+    // A mob on the exclude list gets nothing even with an override of its own, and an override's misspelt key changes
+    // nothing
+    @Test
+    void mobs1ExcludeBeatsOverrideUnknownKeysIgnored() {
+        Map<String, Map<String, Double>> ghastOverride = Map.of("minecraft:ghast", Map.of("health", 2.0));
+        assertEquals(MobMaths.Boost.NONE, MobMaths.tougher("minecraft:ghast", 1.5, 1.25, 1.1, Set.of("minecraft:ghast"), ghastOverride));
+        Map<String, Map<String, Double>> misspelt = Map.of("minecraft:zombie", Map.of("helth", 2.0));
+        assertBoost(1.5, 1.25, 1.1, MobMaths.tougher("minecraft:zombie", 1.5, 1.25, 1.1, Set.of(), misspelt));
+    }
+
     @Test
     void mobs1TougherTimesBloodMoon() {
         MobMaths.Boost bloodMoon = MobMaths.bloodMoon(1.25, 1.0, 1.1);

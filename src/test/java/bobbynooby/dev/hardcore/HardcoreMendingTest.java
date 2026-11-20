@@ -31,6 +31,15 @@ class HardcoreMendingTest {
         assertResult(MendingMaths.repair(10, 0.0, 50, 0.3), 0, 0, 0.3);
     }
 
+    // Five times 0.4 sums to a hair off 2, which must still repair 2 with nothing carried; nothing to repair uses no XP;
+    // a rate that isn't a number repairs nothing and keeps what was carried
+    @Test
+    void mend1FiveXpRepairsExactlyTwo() {
+        assertResult(MendingMaths.repair(5, RATE, 100, 0.0), 2, 5, 0.0);
+        assertResult(MendingMaths.repair(3, RATE, 0, 0.0), 0, 0, 0.0);
+        assertResult(MendingMaths.repair(10, Double.NaN, 5, 0.2), 0, 0, 0.2);
+    }
+
     private static void assertResult(MendingMaths.Result result, int repaired, int xpUsed, double carried) {
         assertEquals(repaired, result.repaired(), "repaired");
         assertEquals(xpUsed, result.xpUsed(), "XP used");

@@ -39,6 +39,17 @@ class HardcoreBloodMoonTest {
         assertFalse(BloodMoonRoll.rolls(SEED, 17, NONE_YET, 1.0, 5, 8, true), "day 17, the night after one");
     }
 
+    // A night never follows a blood moon on the same day, even with no break asked for. The full-moon check counts back
+    // through day 0 the same way (day -8 is a full moon, day -1 isn't), and grace days of 0 let day 0 roll.
+    @Test
+    void blood1SameDayNeverTwiceAndNegativeDays() {
+        assertFalse(BloodMoonRoll.rolls(SEED, 10, 10, 1.0, 0, 0, false), "day 10 again after a blood moon on day 10");
+        assertTrue(BloodMoonRoll.rolls(SEED, 11, 10, 1.0, 0, 0, false), "day 11 after day 10, with no break asked for");
+        assertTrue(BloodMoonRoll.rolls(SEED, -8, NONE_YET, 1.0, 0, Integer.MIN_VALUE, true), "day -8, a full moon");
+        assertFalse(BloodMoonRoll.rolls(SEED, -1, NONE_YET, 1.0, 0, Integer.MIN_VALUE, true), "day -1, the night before day 0");
+        assertTrue(BloodMoonRoll.rolls(SEED, 0, NONE_YET, 1.0, 5, 0, false), "day 0 with no grace days");
+    }
+
     @Test
     void blood1ChanceIsRoughlyTheShare() {
         int rolled = 0;

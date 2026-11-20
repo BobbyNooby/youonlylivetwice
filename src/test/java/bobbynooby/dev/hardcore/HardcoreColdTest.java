@@ -56,6 +56,16 @@ class HardcoreColdTest {
         assertEquals(0.2, ColdMaths.slow(1.0, 0.2), CLOSE);
     }
 
+    // A broken chill goes to 0 rather than sticking; a fifth leather piece leaves nothing to gain, so it warms; the
+    // smallest chill there is still shows as 1%
+    @Test
+    void cold1NaNAndOddInputs() {
+        assertEquals(0.0, ColdMaths.next(Double.NaN, 0.01));
+        assertEquals(0, ColdMaths.frozenTicks(Double.NaN));
+        assertEquals(-0.03, exposed(false, false, 5), CLOSE);
+        assertEquals(1, ColdMaths.percent(1e-9));
+    }
+
     @Test
     void cold1StatusWordFollowsThePercentShown() {
         assertEquals(1, ColdMaths.percent(0.001));

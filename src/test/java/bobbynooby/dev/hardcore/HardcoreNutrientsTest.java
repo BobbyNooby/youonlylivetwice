@@ -140,6 +140,19 @@ class HardcoreNutrientsTest {
         assertDiet(List.of("rabbit_stew"), List.of(10), false, false, false);
     }
 
+    // The other diets the hardcore page names: pumpkin pie with your meat, and golden apples on their own, cover all
+    // three. Raw meat has half the protein of cooked meat, per point.
+    @Test
+    void nut1PumpkinPieWithMeatAndGoldenApples() {
+        assertDiet(List.of("cooked_beef", "pumpkin_pie"), List.of(8, 8), false, false, false);
+        assertDiet(List.of("golden_apple"), List.of(4), false, false, false);
+        Map<String, Map<String, Double>> foods = new HardcoreConfig.NutrientsSection().foods;
+        for (String meat : List.of("beef", "porkchop", "mutton", "chicken", "rabbit")) {
+            assertEquals(foods.get("minecraft:cooked_" + meat).get("protein") / 2, foods.get("minecraft:" + meat).get("protein"),
+                    CLOSE, meat);
+        }
+    }
+
     private static void assertDiet(List<String> foods, List<Integer> nutrition, boolean proteinLow, boolean vitaminsLow,
                                    boolean sugarLow) {
         HardcoreConfig.NutrientsSection cfg = new HardcoreConfig.NutrientsSection();

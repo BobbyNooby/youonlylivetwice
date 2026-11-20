@@ -118,6 +118,35 @@ class HardcoreCurseTest {
         assertEquals(0, CurseMaths.leavingOneHeart(4, 20.0, 0.0));
     }
 
+    // A death worth less than nothing adds nothing; a loss stored over a lowered cap has no room left rather than a
+    // negative amount; a heal of 2 with 1 lost gives back 1 and starts the timer over; play time never shows under a
+    // minute; a max health that isn't a number lets the curse take nothing
+    @Test
+    void curse1EdgesOfTheSums() {
+        HardcoreState s = new HardcoreState();
+        assertEquals(0, CurseMaths.onReturn(s, -1, 4, true));
+        assertEquals(0, s.curseHeartsLost);
+        assertEquals(0, s.curseLastDeathAdded);
+
+        HardcoreState over = new HardcoreState();
+        over.curseHeartsLost = 6;
+        assertEquals(0, CurseMaths.onReturn(over, 1, 4, true));
+        assertEquals(6, over.curseHeartsLost);
+        assertEquals(0, over.curseLastDeathAdded);
+
+        HardcoreState healing = new HardcoreState();
+        healing.curseHeartsLost = 1;
+        healing.curseOnlineTicks = 9;
+        assertEquals(1, CurseMaths.onOnlineTick(healing, 2, 10));
+        assertEquals(0, healing.curseHeartsLost);
+        assertEquals(0, healing.curseOnlineTicks);
+
+        assertEquals("1m", CurseMaths.playTime(0));
+        assertEquals("1m", CurseMaths.playTime(-5));
+        assertEquals("2h", CurseMaths.playTime(144_000));
+        assertEquals(0, CurseMaths.leavingOneHeart(4, Double.NaN, 1.0));
+    }
+
     // With countAfk off: the 5 minutes that ship, the 300,000 milliseconds the curse always used, then a shorter wait
     @Test
     void anIdlePlayerStopsCountingAfterAfkMinutes() {
