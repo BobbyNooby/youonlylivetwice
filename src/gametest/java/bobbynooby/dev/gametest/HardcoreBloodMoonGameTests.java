@@ -86,6 +86,8 @@ public class HardcoreBloodMoonGameTests {
     private static final BlockPos PLAYER_KILL_AT = new BlockPos(1, 0, 6);
     private static final BlockPos FALL_KILL_AT = new BlockPos(5, 0, 6);
     private static final BlockPos UNMARKED_AT = new BlockPos(6, 0, 3);
+    // The last day freshDay handed out, read and written on the server thread only, as the tests run
+    private static long lastFreshDay = Long.MIN_VALUE;
 
     // A zombie's 20 health times 1.25, and times 1.5 as well with tougher mobs on
     @GameTest(environment = MOON)
@@ -357,6 +359,8 @@ public class HardcoreBloodMoonGameTests {
         Runnable cleanUp = BodyTestKit.once(() -> {
             BloodMoon.stop(server);
             realClock.run();
+            // The day stays warned past the stop, and a later batch handed it would find the warning gone out already
+            BloodMoon.restartForTesting();
             players.forEach(TestPlayers::leave);
         });
         helper.runBeforeTestEnd(cleanUp);
@@ -870,6 +874,8 @@ public class HardcoreBloodMoonGameTests {
         Runnable cleanUp = BodyTestKit.once(() -> {
             BloodMoon.stop(server);
             realClock.run();
+            // The day stays warned past the stop, and a later batch handed it would find the warning gone out already
+            BloodMoon.restartForTesting();
             players.forEach(TestPlayers::leave);
         });
         helper.runBeforeTestEnd(cleanUp);
@@ -1139,6 +1145,27 @@ public class HardcoreBloodMoonGameTests {
         helper.succeed();
     }
 
+    // freshDay's own check: a night started and stopped on the world's real clock, as this environment's tests do,
+    // saves the real clock's day over both saved days, and the next day handed out must still come after the last
+    @GameTest(environment = MOON)
+    public void freshDayNeverHandsOutADayTwice(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        long first = freshDay();
+        try {
+            BloodMoon.start(server);
+            helper.assertTrue(BloodMoon.active(), "no blood moon after the start");
+        } finally {
+            BloodMoon.stop(server);
+        }
+        helper.assertTrue(HardcoreStates.world(BloodMoon.LAST_DAY).orElse(0L) < first
+                        && HardcoreStates.world(BloodMoon.ENDED_DAY).orElse(0L) < first,
+                "the real clock's night didn't save a day below " + first + ": " + HardcoreStates.world(BloodMoon.LAST_DAY)
+                        + ", " + HardcoreStates.world(BloodMoon.ENDED_DAY));
+        long second = freshDay();
+        helper.assertTrue(second > first, "freshDay handed out " + second + " after " + first);
+        helper.succeed();
+    }
+
     // As a natural spawn makes it: made with its reason, its spawn finished as the spawner finishes it, which rolls its
     // gear, then added to the world, which loads it
     private static <T extends Mob> T spawnNaturally(GameTestHelper helper, List<Entity> spawned, EntityType<T> type, BlockPos pos) {
@@ -1179,12 +1206,16 @@ public class HardcoreBloodMoonGameTests {
     }
 
     // Past the grace days, which keep the world's real clock from ever rolling a night, and past any blood moon saved by
-    // an earlier test, begun or ended, so the minimum break never stops the roll and no night counts as over already
+    // an earlier test, begun or ended, so the minimum break never stops the roll and no night counts as over already.
+    // Also past every day handed out before in this run: a night started and stopped on the real clock saves the real
+    // clock's day over both saved days, after which they alone would give out an earlier test's day again.
     private static long freshDay() {
         long last = HardcoreStates.world(BloodMoon.LAST_DAY).orElse(0L);
         long ended = HardcoreStates.world(BloodMoon.ENDED_DAY).orElse(0L);
         long grace = Settings.get().hardcore.bloodMoon.graceDays;
-        return Math.max(Math.max(last, ended), grace) + 100L;
+        long day = Math.max(Math.max(Math.max(last, ended), grace), lastFreshDay) + 100L;
+        lastFreshDay = day;
+        return day;
     }
 
     private static void assertMarked(GameTestHelper helper, Mob mob, float maxHealth, String when) {
