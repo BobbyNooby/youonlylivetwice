@@ -1,4 +1,4 @@
-# Builds the jar and runs every test, but only for a push to release, whose tested jar becomes the draft release, and
+# Builds the jars and runs every test, but only for a push to release, whose tested jars become the draft release, and
 # for a run started by hand. Day-to-day work is tested locally instead: docs/contributing.md says how.
 
 name: build
@@ -71,18 +71,21 @@ jobs:
           if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
           # --continue keeps JUnit running after a GameTest failure
           ./gradlew build --continue "${args[@]}"
-      # The optional revive paper texture, zipped next to the jar so it travels with it to the release
-      - name: zip the resource pack
+      # The optional revive paper texture, zipped next to the jar so it travels with it to the release, and each module's
+      # own jar beside YOLT's, which already holds a copy of it
+      - name: gather the release files
         run: |
           version=$(sed -n 's/^mod_version=//p' gradle.properties)
           (cd pack/revive-paper && zip -r "../../build/libs/you-only-live-twice-revive-pack-$version.zip" .)
+          cp "anvil/build/libs/yolt-anvils-$version.jar" build/libs/
       - name: summarise failed tests
         if: always()
         # A fork's pull request gets a read-only token; the summary must never turn a build red
         continue-on-error: true
         uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
         with:
-          report_paths: build/test-results/**/*.xml
+          # The root project's and each module's
+          report_paths: '**/build/test-results/**/*.xml'
           # The check belongs to the commit, so a manual run on the same commit gets its own rather than replacing the push's
           check_name: server tests${{ github.event_name == 'workflow_dispatch' && ' (manual)' || '' }}
           include_passed: false
@@ -95,7 +98,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results
-          path: build/test-results/
+          path: |
+            build/test-results/
+            anvil/build/test-results/
           retention-days: 14
       - name: store test reports
         if: failure()
@@ -105,6 +110,8 @@ jobs:
           path: |
             build/reports/
             build/test-results/
+            anvil/build/reports/
+            anvil/build/test-results/
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -160,9 +167,9 @@ jobs:
             build/run/clientGameTest/logs
             build/run/clientGameTest/crash-reports
 
-  # A push to release whose tests all pass makes a draft release of its jar, tagged v<mod_version>, with
+  # A push to release whose tests all pass makes a draft release of its jars, tagged v<mod_version>, with
   # .github/release-notes.md as its text. A draft stays private until it is published on GitHub, and until then each
-  # push gives it the new jar and text. A published version gets nothing new, so raise mod_version and rewrite the
+  # push gives it the new jars and text. A published version gets nothing new, so raise mod_version and rewrite the
   # notes for the next release.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/release'
@@ -189,13 +196,15 @@ jobs:
           title="You Only Live Twice $version for Minecraft $minecraft"
           jar="build/libs/you-only-live-twice-$version.jar"
           pack="build/libs/you-only-live-twice-revive-pack-$version.zip"
+          # Each module on its own, for a server that wants only that part
+          anvils="build/libs/yolt-anvils-$version.jar"
           # A draft has no tag yet, so the release list is read rather than the tag: true for a draft, false once published
           draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .draft")
           if [ "$draft" = "false" ]; then
             echo "$tag is published already; raise mod_version in gradle.properties for a new release"
           elif [ "$draft" = "true" ]; then
-            gh release upload "$tag" "$jar" "$pack" --clobber
+            gh release upload "$tag" "$jar" "$pack" "$anvils" --clobber
             gh release edit "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           else
-            gh release create "$tag" "$jar" "$pack" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
+            gh release create "$tag" "$jar" "$pack" "$anvils" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           fi
