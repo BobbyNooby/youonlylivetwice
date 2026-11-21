@@ -11,6 +11,6 @@ pluginManagement {
 
 // The tiny mods, each a mod of its own that YOLT also ships inside its jar
 ['anvil', 'mending', 'elytra'].each { name ->
-    include name
-    project(":$name").projectDir = file("extras/$name")
+	include name
+	project(":$name").projectDir = file("extras/$name")
 }
