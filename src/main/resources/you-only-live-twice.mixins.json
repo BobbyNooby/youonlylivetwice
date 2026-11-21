@@ -56,7 +56,6 @@
     "HardcoreFoodDataMixin",
     "HardcoreFreezeMixin",
     "HardcoreJumpMixin",
-    "HardcoreMendingMixin",
     "HardcoreMobDamageMixin",
     "HardcoreMobGearMixin",
     "HardcoreMobLootMixin",

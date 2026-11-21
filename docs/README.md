@@ -60,7 +60,7 @@ feature, its settings and its limits.
   - [Curse of the Undead](hardcore.md#curse-of-the-undead)
   - [Nutrients](hardcore.md#nutrients)
   - [Hunger tax](hardcore.md#hunger-tax)
-  - [Mending nerf](hardcore.md#mending-nerf)
+  - [Mending nerf](hardcore.md#mending-nerf), also a mod of its own: [YOLT Mending](../extras/mending/README.md)
   - [Flat anvil prices](hardcore.md#flat-anvil-prices), also a mod of its own: [YOLT Anvils](../extras/anvil/README.md)
   - [Elytra nerf](hardcore.md#elytra-nerf)
   - [Tougher mobs](hardcore.md#tougher-mobs)

@@ -368,7 +368,9 @@ See [hunger tax](hardcore.md#hunger-tax).
 
 ### `hardcore.mending`
 
-See [Mending nerf](hardcore.md#mending-nerf).
+See [Mending nerf](hardcore.md#mending-nerf). These set the YOLT Mending mod that YOLT ships.
+[YOLT Mending](../extras/mending/README.md) installed on its own has the same keys in `config/yolt-mending.json`
+instead.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|

@@ -297,6 +297,8 @@ Settings: [`hardcore.hungerTax`](config.md#hardcorehungertax).
 ## Mending nerf
 
 Mending repairs 0.4 durability per XP point (`durabilityPerXp`) instead of vanilla's 2.
+This part is also a mod of its own, [YOLT Mending](../extras/mending/README.md), for a server that wants only this.
+YOLT's jar ships it, so YOLT needs nothing extra.
 
 - XP you pick up still goes to damaged Mending gear first, but repairs a fifth as much.
 - No XP is lost. A part of a point too small to repair anything yet is kept for your next pickup (until you log out),

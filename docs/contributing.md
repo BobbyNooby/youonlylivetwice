@@ -22,6 +22,9 @@ Contents:
   `src/main`, `src/test` and `src/gametest`. Its GameTests run it alone, with no YOLT on the server. YOLT's jar ships
   its jar inside (`include`) and hands it YOLT's config through `YoltAnvils.hostedBy`, from `hardcore/Anvils.java`;
   YOLT's anvil GameTests check it hosted.
+- `extras/mending/` is [YOLT Mending](../extras/mending/README.md), the Mending nerf as a mod of its own, laid out the
+  same way. YOLT's jar ships it too and hands it YOLT's config through `YoltMending.hostedBy`, from
+  `hardcore/Mending.java`; YOLT's Mending GameTests check it hosted.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
 
 To add a tiny mod:
