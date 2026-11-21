@@ -6,6 +6,8 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The elytra nerf: lighter gravity while gliding, which makes the glide slower and floatier over the same distance, and
@@ -19,7 +21,23 @@ final class Glide {
     private static final double ROCKET_REACH = 8.0;
     private static final double SAME = 1e-9;
 
+    // The name TinyMod logs this mod's own lines under
+    private static final Logger LOGGER = LoggerFactory.getLogger("YOLT Elytra");
+
     private Glide() {}
+
+    // Every player, one tick. A player whose tick throws is logged and skipped, so the others still glide by the rules
+    // and the throw never reaches the server's own tick.
+    static void tickAll(Iterable<ServerPlayer> players) {
+        for (ServerPlayer player : players) {
+            try {
+                tick(player);
+            } catch (RuntimeException e) {
+                // SLF4J takes a trailing Throwable as the exception, not as an argument
+                LOGGER.error("Could not run the elytra tick for {}", player.nameAndId().name(), e);
+            }
+        }
+    }
 
     /**
      * One player, one tick: the gravity modifier comes off when the mod is off, the player is left out or isn't gliding,

@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The mod on its own, with You Only Live Twice nowhere on the server: its own config file, its own command, and creative
@@ -131,6 +132,34 @@ public class ElytraGameTests {
             assertGravity(helper, creative, null, "on a glider in creative from the start");
         } finally {
             land(glider, creative);
+            YoltElytra.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
+    // A tick that throws, ahead of a glider in the loop the server's tick runs: the throw stays in the loop, and the glider
+    // after it still gets its gravity. The error this logs is expected.
+    @GameTest
+    public void oneFailingTickLeavesTheNextPlayerGliding(GameTestHelper helper) {
+        ElytraSettings before = YoltElytra.swapForTesting(ElytraSettings.DEFAULTS);
+        AtomicInteger thrown = new AtomicInteger();
+        String name = "AloneBroken";
+        ServerPlayer broken = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), name)) {
+            @Override
+            public boolean isFallFlying() {
+                thrown.incrementAndGet();
+                throw new IllegalStateException("a glide tick that fails, for the test");
+            }
+        };
+        broken.setGameMode(GameType.SURVIVAL);
+        ServerPlayer glider = glider(helper, "AloneAfterBroken", GameType.SURVIVAL, SLOW);
+        try {
+            Glide.tickAll(List.of(broken, glider));
+            helper.assertValueEqual(thrown.get(), 1, "times the broken player's tick threw");
+            assertGravity(helper, glider, -0.4, "on the player after one whose tick threw");
+        } finally {
+            land(glider);
             YoltElytra.swapForTesting(before);
         }
         helper.succeed();

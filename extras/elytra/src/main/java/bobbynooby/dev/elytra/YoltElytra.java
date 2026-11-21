@@ -32,7 +32,7 @@ public final class YoltElytra implements ModInitializer {
     @Override
     public void onInitialize() {
         MOD.init();
-        ServerTickEvents.END_SERVER_TICK.register(server -> server.getPlayerList().getPlayers().forEach(Glide::tick));
+        ServerTickEvents.END_SERVER_TICK.register(server -> Glide.tickAll(server.getPlayerList().getPlayers()));
     }
 
     /**
