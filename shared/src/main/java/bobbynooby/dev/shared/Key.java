@@ -48,13 +48,14 @@ public final class Key<S> {
 
     /**
      * A key that is a number, which allowed must pass. rule puts allowed into words for the refusal line: "a number from
-     * 0 to 1" gives {@code must be a number from 0 to 1}. A value that isn't a number reaches allowed as NaN, which a
-     * range check refuses.
+     * 0 to 1" gives {@code must be a number from 0 to 1}. A value that isn't a number, or isn't finite (1e999 reads as
+     * infinity), is refused before allowed is asked, with that same line, so allowed only ever sees a finite number. An
+     * infinity would pass a rule such as "0 or more", and then neither print nor be written back to the file.
      */
     public static <S> Key<S> number(String name, DoublePredicate allowed, String rule, ToDoubleFunction<S> get) {
         return new Key<>(name, rule, value -> {
             double number = value.isNumber() ? value.getAsDouble() : Double.NaN;
-            return allowed.test(number) ? Double.valueOf(number) : null;
+            return Double.isFinite(number) && allowed.test(number) ? Double.valueOf(number) : null;
         }, get::applyAsDouble);
     }
 

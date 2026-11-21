@@ -29,10 +29,10 @@ class ElytraConfigTest {
         assertTrue(parsed.refused().isEmpty() && parsed.missing().isEmpty() && parsed.unknown().isEmpty(), parsed.toString());
     }
 
-    // Text, a flag and a list aren't numbers, and NaN passes no check
+    // Text, a flag and a list aren't numbers, NaN passes no check, and 1e999 reads as infinity, which no file can hold
     @Test
     void numbersBelowZeroOrNotNumbersAreRefused() {
-        for (String bad : List.of("-1", "\"1\"", "true", "[]", "NaN")) {
+        for (String bad : List.of("-1", "\"1\"", "true", "[]", "NaN", "1e999", "-1e999")) {
             SettingsFile.Parsed<ElytraSettings> gravity = parse("{\"glideGravityMultiplier\": " + bad + "}");
             assertEquals(ElytraSettings.DEFAULTS, gravity.settings(), bad);
             assertEquals(List.of("glideGravityMultiplier must be 0 or more, kept 0.6"), gravity.refused(), bad);

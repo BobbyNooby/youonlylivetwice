@@ -27,10 +27,10 @@ class MendingConfigTest {
         assertTrue(parsed.refused().isEmpty() && parsed.missing().isEmpty() && parsed.unknown().isEmpty(), parsed.toString());
     }
 
-    // Text, a flag and a list aren't numbers, and NaN passes no check
+    // Text, a flag and a list aren't numbers, NaN passes no check, and 1e999 reads as infinity, which no file can hold
     @Test
     void aRateBelowZeroOrNotANumberIsRefused() {
-        for (String bad : List.of("-1", "\"0.4\"", "true", "[]", "NaN")) {
+        for (String bad : List.of("-1", "\"0.4\"", "true", "[]", "NaN", "1e999", "-1e999")) {
             SettingsFile.Parsed<MendingSettings> parsed = parse("{\"durabilityPerXp\": " + bad + "}");
             assertEquals(0.4, parsed.settings().durabilityPerXp(), bad);
             assertEquals(List.of("durabilityPerXp must be 0 or more, kept 0.4"), parsed.refused(), bad);
