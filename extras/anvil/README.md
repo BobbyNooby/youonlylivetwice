@@ -62,9 +62,11 @@ The first server start writes `config/yolt-anvils.json`:
 Prices are XP levels. 0 can't be paid, and the client shows "Too Expensive!" for 40 or more.
 
 - Each key is read on its own, so one bad value only keeps that value: the default at a server start, the value in use
-  at a reload. The server log names it.
+  at a reload. The server log names it at a start, and `/yolt-anvils reload` names it at a reload.
 - A key missing from the file is added to it. A file with a refused value is left as you typed it, so the mistake stays
   where you made it, until you fix it.
+- Adding a key writes the whole file again with the mod's own keys only. A misspelt key and any comment in the file are
+  gone after that, and the log says which key wasn't a setting.
 - A file that isn't valid JSON is never written over. The defaults are used at a start, and a reload changes nothing.
 
 ## Commands

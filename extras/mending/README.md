@@ -46,6 +46,8 @@ The first server start writes `config/yolt-mending.json`:
   at a reload. The server log names it at a start, and `/yolt-mending reload` names it at a reload.
 - A key missing from the file is added to it. A file with a refused value is left as you typed it, so the mistake stays
   where you made it, until you fix it.
+- Adding a key writes the whole file again with the mod's own keys only. A misspelt key and any comment in the file are
+  gone after that, and the log says which key wasn't a setting.
 - A file that isn't valid JSON is never written over. The defaults are used at a start, and a reload changes nothing.
 
 ## Commands
