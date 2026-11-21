@@ -15,8 +15,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -48,13 +50,21 @@ public final class SettingsFile<S> {
 
     /**
      * name is the file's name in the config folder. keys are read and written in the order given, and build makes the
-     * settings record from the value each key read.
+     * settings record from the value each key read. Two keys may not share a name.
      */
     public SettingsFile(String name, List<Key<S>> keys, Function<Values, S> build) {
         this.name = name;
         this.keys = List.copyOf(keys);
         this.names = this.keys.stream().map(Key::name).toList();
         this.build = build;
+        // Two keys of one name would share one entry in the file, and one of their values would win without a word. That
+        // is a mistake in the mod, not in the file, so it stops the mod loudly.
+        Set<String> seen = new HashSet<>();
+        for (String key : names) {
+            if (!seen.add(key)) {
+                throw new IllegalArgumentException(name + " has two keys called " + key);
+            }
+        }
     }
 
     public String name() {
@@ -75,7 +85,7 @@ public final class SettingsFile<S> {
             return new Result<>(fallback, List.of("couldn't read " + file.getFileName() + ": " + e), true);
         }
         // Some editors start a UTF-8 file with a byte order mark, which isn't JSON
-        if (text.startsWith("﻿")) {
+        if (text.startsWith("\uFEFF")) {
             text = text.substring(1);
         }
         JsonElement root;

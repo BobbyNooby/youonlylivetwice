@@ -21,6 +21,8 @@ def copyShared = tasks.register("copyShared", Sync) {
     into layout.buildDirectory.dir("generated/sources/shared/java")
     eachFile { it.path = it.path.replace("bobbynooby/dev/shared", sharedPackage.replace('.', '/')) }
     filter { String line -> line.replace("bobbynooby.dev.shared", sharedPackage) }
+    // The filter reads and writes text, so the charset is pinned rather than left to the machine's default
+    filteringCharset = 'UTF-8'
     includeEmptyDirs = false
     inputs.property("sharedPackage", sharedPackage)
 }
