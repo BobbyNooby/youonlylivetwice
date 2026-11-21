@@ -1,0 +1,7 @@
+// YOLT Anvils: the flat anvil price as a mod of its own. extras/extra.gradle has the build every tiny mod shares.
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+ext.modId = 'yolt-anvils'
+apply from: rootProject.file('extras/extra.gradle')

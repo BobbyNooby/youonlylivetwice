@@ -59,7 +59,7 @@ details.
 The flat anvil price is now also `yolt-anvils-1.2.1.jar`, for a Fabric server that wants only that part. On its own
 it reads `config/yolt-anvils.json` and gives ops `/yolt-anvils reload`. YOLT's own jar already holds it and sets it from
 `hardcore.anvil`, so a YOLT server needs nothing extra. Its
-[readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/anvil/README.md) has the rest.
+[readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/anvil/README.md) has the rest.
 
 ## What it does
 

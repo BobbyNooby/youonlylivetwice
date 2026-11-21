@@ -1,19 +1,20 @@
-// YOLT Anvils: the flat anvil price as a mod of its own. It builds its own jar for servers that want only this, and
-// You Only Live Twice ships the same jar inside its own. The versions all come from the root gradle.properties.
-plugins {
-    id 'net.fabricmc.fabric-loom'
-}
+// The build every tiny mod shares. A tiny mod's build.gradle sets ext.modId and applies this file. Each tiny mod builds
+// its own jar for servers that want only it, and You Only Live Twice ships the same jar inside its own. The versions
+// all come from the root gradle.properties.
+
+// Not called modId: the modId line in configureTests below would then set this variable, not the test mod's id
+def id = project.ext.modId
 
 version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName = "yolt-anvils"
+    archivesName = id
 }
 
 loom {
     mods {
-        "yolt-anvils" {
+        "$id" {
             sourceSet sourceSets.main
         }
     }
@@ -22,8 +23,9 @@ loom {
 fabricApi {
     configureTests {
         createSourceSet = true
-        modId = "yolt-anvils-gametest"
-        // Nothing here is drawn: the price reaches the client as data, which the root project's client tests check
+        modId = "${id}-gametest"
+        // Nothing here is drawn: what a tiny mod changes reaches the client as data, which the root project's client
+        // tests check
         enableClientGameTests = false
         eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)
     }
@@ -74,6 +76,6 @@ java {
 
 jar {
     from(rootProject.file("LICENSE")) {
-        rename { "${it}_yolt-anvils" }
+        rename { "${it}_$id" }
     }
 }

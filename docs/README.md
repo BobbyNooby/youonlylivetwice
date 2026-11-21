@@ -61,7 +61,7 @@ feature, its settings and its limits.
   - [Nutrients](hardcore.md#nutrients)
   - [Hunger tax](hardcore.md#hunger-tax)
   - [Mending nerf](hardcore.md#mending-nerf)
-  - [Flat anvil prices](hardcore.md#flat-anvil-prices), also a mod of its own: [YOLT Anvils](../anvil/README.md)
+  - [Flat anvil prices](hardcore.md#flat-anvil-prices), also a mod of its own: [YOLT Anvils](../extras/anvil/README.md)
   - [Elytra nerf](hardcore.md#elytra-nerf)
   - [Tougher mobs](hardcore.md#tougher-mobs)
   - [Relentless mobs](hardcore.md#relentless-mobs)

@@ -11,10 +11,12 @@ Contents:
 
 - The root project is You Only Live Twice itself: `src/main` the mod, `src/test` its JUnit tests, `src/gametest` its
   GameTests, server and client.
-- `anvil/` is [YOLT Anvils](../anvil/README.md), the flat anvil price as a mod of its own, with its own `src/main`,
-  `src/test` and `src/gametest`. Its GameTests run it alone, with no YOLT on the server. YOLT's jar ships its jar inside
-  (`include`) and hands it YOLT's config through `YoltAnvils.hostedBy`, from `hardcore/Anvils.java`; YOLT's anvil
-  GameTests check it hosted.
+- The tiny mods live under `extras/` and share one build, `extras/extra.gradle`. Each tiny mod's own `build.gradle`
+  sets its mod id and applies that file.
+- `extras/anvil/` is [YOLT Anvils](../extras/anvil/README.md), the flat anvil price as a mod of its own, with its own
+  `src/main`, `src/test` and `src/gametest`. Its GameTests run it alone, with no YOLT on the server. YOLT's jar ships
+  its jar inside (`include`) and hands it YOLT's config through `YoltAnvils.hostedBy`, from `hardcore/Anvils.java`;
+  YOLT's anvil GameTests check it hosted.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
 
 ## Testing
@@ -22,8 +24,8 @@ Contents:
 Everything runs locally, with Java 25:
 
 - `./gradlew build --continue`: every jar, the JUnit tests and the server GameTests of YOLT and of each module, about
-  5 minutes. Results are in `build/test-results/` and `anvil/build/test-results/`; the jars in `build/libs/` and
-  `anvil/build/libs/`.
+  5 minutes. Results are in `build/test-results/` and `extras/anvil/build/test-results/`; the jars in `build/libs/`
+  and `extras/anvil/build/libs/`.
 - `./gradlew :anvil:test :anvil:runGameTest`: the anvil module's tests alone, in under a minute.
 - `./gradlew test`: the JUnit tests alone, in seconds.
 - `./gradlew runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
@@ -36,8 +38,10 @@ Everything runs locally, with Java 25:
 GitHub Actions only runs for a push to `release`, where the tested jars become the draft release, and for runs started
 by hand, where the `client` option adds the client tests. A run's results are in the `test-results` artifact, kept for
 14 days, the client screenshots in `client-screenshots`, and the jars and the revive paper's resource pack zip in
-`Artifacts`. A new module's jar has to be added to the workflow's `gather the release files` step and release job. Real skins aren't checked: test players have no skins, and the tests never ask Mojang. These tests haven't
-replaced a hands-on session in a real client, which I haven't done yet.
+`Artifacts`. A new tiny mod needs no change to the workflow while its mod id starts with `yolt-`: the
+`gather the release files` step and the release job pick up every `yolt-*` jar by pattern. Real skins aren't checked:
+test players have no skins, and the tests never ask Mojang. These tests haven't replaced a hands-on session in a real
+client, which I haven't done yet.
 
 Two client tests record everything the client is sent, from inside its own connection (`PacketRecorder`):
 `PresenceLeakClientTest` searches every byte for the names and UUIDs of players the client mustn't know about, and

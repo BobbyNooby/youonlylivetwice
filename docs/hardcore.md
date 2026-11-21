@@ -310,8 +310,8 @@ Settings: [`hardcore.mending`](config.md#hardcoremending).
 ## Flat anvil prices
 
 Every anvil use costs one fixed price, set by the biggest kind of job in it, and nothing ever becomes "Too Expensive!".
-This part is also a mod of its own, [YOLT Anvils](../anvil/README.md), for a server that wants only this. YOLT's jar
-ships it, so YOLT needs nothing extra.
+This part is also a mod of its own, [YOLT Anvils](../extras/anvil/README.md), for a server that wants only this.
+YOLT's jar ships it, so YOLT needs nothing extra.
 
 | The use includes | Price |
 |---|---|

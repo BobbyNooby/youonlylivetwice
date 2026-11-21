@@ -9,5 +9,8 @@ pluginManagement {
 	}
 }
 
-// YOLT Anvils, a mod of its own that YOLT also ships inside its jar
-include 'anvil'
+// The tiny mods, each a mod of its own that YOLT also ships inside its jar
+['anvil'].each { name ->
+    include name
+    project(":$name").projectDir = file("extras/$name")
+}

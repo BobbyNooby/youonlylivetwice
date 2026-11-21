@@ -71,13 +71,13 @@ jobs:
           if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
           # --continue keeps JUnit running after a GameTest failure
           ./gradlew build --continue "${args[@]}"
-      # The optional revive paper texture, zipped next to the jar so it travels with it to the release, and each module's
-      # own jar beside YOLT's, which already holds a copy of it
+      # The optional revive paper texture, zipped next to the jar so it travels with it to the release, and each tiny
+      # mod's own jar beside YOLT's, which already holds a copy of it. The pattern leaves out the -sources jars.
       - name: gather the release files
         run: |
           version=$(sed -n 's/^mod_version=//p' gradle.properties)
           (cd pack/revive-paper && zip -r "../../build/libs/you-only-live-twice-revive-pack-$version.zip" .)
-          cp "anvil/build/libs/yolt-anvils-$version.jar" build/libs/
+          cp extras/*/build/libs/yolt-*-"$version".jar build/libs/
       - name: summarise failed tests
         if: always()
         # A fork's pull request gets a read-only token; the summary must never turn a build red
@@ -100,7 +100,7 @@ jobs:
           name: test-results
           path: |
             build/test-results/
-            anvil/build/test-results/
+            extras/*/build/test-results/
           retention-days: 14
       - name: store test reports
         if: failure()
@@ -110,8 +110,8 @@ jobs:
           path: |
             build/reports/
             build/test-results/
-            anvil/build/reports/
-            anvil/build/test-results/
+            extras/*/build/reports/
+            extras/*/build/test-results/
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -196,15 +196,15 @@ jobs:
           title="You Only Live Twice $version for Minecraft $minecraft"
           jar="build/libs/you-only-live-twice-$version.jar"
           pack="build/libs/you-only-live-twice-revive-pack-$version.zip"
-          # Each module on its own, for a server that wants only that part
-          anvils="build/libs/yolt-anvils-$version.jar"
+          # Each tiny mod on its own, for a server that wants only that part
+          tiny=(build/libs/yolt-*-"$version".jar)
           # A draft has no tag yet, so the release list is read rather than the tag: true for a draft, false once published
           draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .draft")
           if [ "$draft" = "false" ]; then
             echo "$tag is published already; raise mod_version in gradle.properties for a new release"
           elif [ "$draft" = "true" ]; then
-            gh release upload "$tag" "$jar" "$pack" "$anvils" --clobber
+            gh release upload "$tag" "$jar" "$pack" "${tiny[@]}" --clobber
             gh release edit "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           else
-            gh release create "$tag" "$jar" "$pack" "$anvils" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
+            gh release create "$tag" "$jar" "$pack" "${tiny[@]}" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           fi

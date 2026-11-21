@@ -18,14 +18,19 @@ repositories {
     // for more information about repositories.
 }
 
+// The tiny mods under extras/, Gradle project name to mod id
+def tinyMods = [anvil: 'yolt-anvils']
+
 loom {
     mods {
         "you-only-live-twice" {
             sourceSet sourceSets.main
         }
-        // The anvil module, so a dev run loads it as the mod of its own that a server would
-        "yolt-anvils" {
-            sourceSet("main", ":anvil")
+        // The tiny mods, so a dev run loads each as the mod of its own that a server would
+        tinyMods.each { name, modId ->
+            "$modId" {
+                sourceSet("main", ":$name")
+            }
         }
     }
 }
@@ -80,8 +85,10 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
-    // The flat anvil price is its own mod, shipped inside this jar so one download still has everything
-    implementation include(project(":anvil"))
+    // Each tiny mod is a mod of its own, shipped inside this jar so one download still has everything
+    tinyMods.keySet().each { name ->
+        implementation include(project(":$name"))
+    }
     productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     testImplementation platform("org.junit:junit-bom:5.13.4")

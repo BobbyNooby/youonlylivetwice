@@ -37,8 +37,8 @@ paper's texture.
 
 Every feature has a switch in the config.
 
-The flat anvil prices are also a mod of their own, [YOLT Anvils](anvil/README.md), for a server that wants only that
-part. YOLT's jar already holds it.
+The flat anvil prices are also a mod of their own, [YOLT Anvils](extras/anvil/README.md), for a server that wants only
+that part. YOLT's jar already holds it.
 
 ## Install
 

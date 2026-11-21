@@ -1,7 +1,7 @@
 # YOLT Anvils
 
 YOLT Anvils is a server-side Fabric mod for Minecraft 26.3 that gives anvils flat prices. It is the anvil part of
-[You Only Live Twice](../README.md), as a mod of its own for servers that want only this. Players join with a plain
+[You Only Live Twice](../../README.md), as a mod of its own for servers that want only this. Players join with a plain
 vanilla client.
 
 ## What it does
@@ -76,7 +76,7 @@ Ops only.
 | `/yolt-anvils reload` | Reads `config/yolt-anvils.json` again. It applies at the next anvil use, no restart needed. |
 
 Inside You Only Live Twice there is no `/yolt-anvils`: the settings are YOLT's
-[`hardcore.anvil`](../docs/config.md#hardcoreanvil), changed with `/yolt config` or `/yolt reload`.
+[`hardcore.anvil`](../../docs/config.md#hardcoreanvil), changed with `/yolt config` or `/yolt reload`.
 
 ## For mod authors
 
