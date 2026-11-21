@@ -31,6 +31,8 @@ Contents:
 - `extras/elytra/` is [YOLT Elytra](../extras/elytra/README.md), the elytra nerf as a mod of its own, laid out the
   same way. YOLT's jar ships it too and hands it YOLT's config through `YoltElytra.hostedBy`, from
   `hardcore/Elytra.java`; YOLT's Elytra GameTests check it hosted.
+- `anvil/` holds only a readme that points at `extras/anvil/`. The 1.2.1 release notes and the 1.2.1 anvil jar link
+  to that folder, so it stays.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
 
 To add a tiny mod that works both on its own and inside YOLT (`extras/mending/` is the smallest one to copy):
