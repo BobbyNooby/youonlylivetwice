@@ -1,7 +1,10 @@
 package bobbynooby.dev.gametest;
 
+import bobbynooby.dev.anvils.AnvilConfig;
 import bobbynooby.dev.anvils.YoltAnvils;
+import bobbynooby.dev.elytra.ElytraConfig;
 import bobbynooby.dev.elytra.YoltElytra;
+import bobbynooby.dev.mending.MendingConfig;
 import bobbynooby.dev.mending.YoltMending;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.loader.api.FabricLoader;
@@ -19,16 +22,16 @@ import java.nio.file.Path;
 public class HostedModsGameTests {
     @GameTest
     public void hostedModsHaveNoFileAndNoCommand(GameTestHelper helper) throws IOException {
-        hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, YoltAnvils.hosted(), YoltAnvils::reload);
-        hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, YoltMending.hosted(), YoltMending::reload);
-        hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, YoltElytra.hosted(), YoltElytra::reload);
+        hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, AnvilConfig.FILE, YoltAnvils.hosted(), YoltAnvils::reload);
+        hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, MendingConfig.FILE, YoltMending.hosted(), YoltMending::reload);
+        hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, ElytraConfig.FILE, YoltElytra.hosted(), YoltElytra::reload);
         helper.succeed();
     }
 
-    private static void hasNoFileAndNoCommand(GameTestHelper helper, String id, boolean hosted, Runnable reload)
-            throws IOException {
+    private static void hasNoFileAndNoCommand(GameTestHelper helper, String id, String fileName, boolean hosted,
+            Runnable reload) throws IOException {
         helper.assertTrue(hosted, id + " isn't hosted");
-        Path file = FabricLoader.getInstance().getConfigDir().resolve(id + ".json");
+        Path file = FabricLoader.getInstance().getConfigDir().resolve(fileName);
         if (Files.exists(file)) {
             long started = ManagementFactory.getRuntimeMXBean().getStartTime();
             long changed = Files.getLastModifiedTime(file).toMillis();

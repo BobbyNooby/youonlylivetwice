@@ -1,5 +1,6 @@
 package bobbynooby.dev.anvils;
 
+import bobbynooby.dev.anvils.shared.Key;
 import bobbynooby.dev.anvils.shared.SettingsFile;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -14,6 +15,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnvilConfigTest {
@@ -197,5 +199,17 @@ class AnvilConfigTest {
         assertTrue(d.enabled() && AnvilSettings.isPrice(d.enchantCost()) && AnvilSettings.isPrice(d.repairCost())
                 && AnvilSettings.isPrice(d.renameCost()) && AnvilSettings.isChance(d.breakChance()));
         assertEquals("rename 1, repair 5, enchant 6", d.prices());
+    }
+
+    // Two keys of one name would share one entry in the file, so a mod built that way stops before any file is read
+    @Test
+    void twoKeysOfTheSameNameAreRefused() {
+        List<Key<AnvilSettings>> keys = List.of(
+                Key.flag(AnvilConfig.ENABLED, AnvilSettings::enabled),
+                Key.whole(AnvilConfig.REPAIR_COST, 1, AnvilSettings.MAX_PRICE, AnvilSettings::repairCost),
+                Key.whole(AnvilConfig.REPAIR_COST, 1, AnvilSettings.MAX_PRICE, AnvilSettings::renameCost));
+        IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class,
+                () -> new SettingsFile<>(AnvilConfig.FILE, keys, values -> AnvilSettings.DEFAULTS));
+        assertEquals("yolt-anvils.json has two keys called repairCost", thrown.getMessage());
     }
 }
