@@ -14,8 +14,9 @@ You need:
 - Java 25
 
 Get the mod jar from the [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest), or from
-the `Artifacts` download on a successful run of the `build` workflow on GitHub (the jar in `build/libs` without
-`-sources` in its name). Put it in the server's `mods` folder, next to Fabric API.
+the `Artifacts` download on a successful run of the `build` workflow on GitHub (`you-only-live-twice-<version>.jar`;
+the `yolt-` jars beside it are the small mods on their own, which a YOLT server doesn't need). Put it in the server's
+`mods` folder, next to Fabric API.
 
 The mod is server-side. It loads in single-player but does nothing there.
 
