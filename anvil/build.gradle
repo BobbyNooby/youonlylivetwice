@@ -1,0 +1,79 @@
+// YOLT Anvils: the flat anvil price as a mod of its own. It builds its own jar for servers that want only this, and
+// You Only Live Twice ships the same jar inside its own. The versions all come from the root gradle.properties.
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = "yolt-anvils"
+}
+
+loom {
+    mods {
+        "yolt-anvils" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "yolt-anvils-gametest"
+        // Nothing here is drawn: the price reaches the client as data, which the root project's client tests check
+        enableClientGameTests = false
+        eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)
+    }
+}
+
+loom.runs.named("gameTest") { run ->
+    // Without a report file the GameTest results only exist in the console log
+    run.systemProperties.put("fabric-api.gametest.report-file",
+            layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": inputs.properties.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+    it.options.compilerArgs.add("-Xlint:deprecation")
+}
+
+java {
+    withSourcesJar()
+
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+jar {
+    from(rootProject.file("LICENSE")) {
+        rename { "${it}_yolt-anvils" }
+    }
+}

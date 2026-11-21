@@ -8,3 +8,6 @@ pluginManagement {
 		gradlePluginPortal()
 	}
 }
+
+// YOLT Anvils, a mod of its own that YOLT also ships inside its jar
+include 'anvil'

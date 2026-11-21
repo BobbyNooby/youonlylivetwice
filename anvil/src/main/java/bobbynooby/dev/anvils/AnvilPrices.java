@@ -1,4 +1,4 @@
-package bobbynooby.dev.hardcore;
+package bobbynooby.dev.anvils;
 
 /** The flat anvil price: one use pays for its biggest kind of job only, however much it does. */
 public final class AnvilPrices {

@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "bobbynooby.dev.anvils.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "ContainerMenuAccessor",
+    "FlatAnvilMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

@@ -1,6 +1,6 @@
-package bobbynooby.dev.mixin;
+package bobbynooby.dev.anvils.mixin;
 
-import bobbynooby.dev.hardcore.Anvils;
+import bobbynooby.dev.anvils.FlatAnvils;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -27,7 +27,7 @@ import java.util.function.BiConsumer;
 
 // Extends the anvil's parent only to reach the menu's player
 @Mixin(AnvilMenu.class)
-public abstract class HardcoreAnvilMixin extends ItemCombinerMenu {
+public abstract class FlatAnvilMixin extends ItemCombinerMenu {
     @Shadow
     @Final
     private DataSlot cost;
@@ -35,7 +35,7 @@ public abstract class HardcoreAnvilMixin extends ItemCombinerMenu {
     @Shadow
     private boolean onlyRenaming;
 
-    private HardcoreAnvilMixin(MenuType<?> menuType, int containerId, Inventory inventory, ContainerLevelAccess access,
+    private FlatAnvilMixin(MenuType<?> menuType, int containerId, Inventory inventory, ContainerLevelAccess access,
                                ItemCombinerMenuSlotDefinition slots) {
         super(menuType, containerId, inventory, access, slots);
     }
@@ -43,20 +43,20 @@ public abstract class HardcoreAnvilMixin extends ItemCombinerMenu {
     // The one long in createResult is the tax: both inputs' prior-work counters, added to every price
     @ModifyVariable(method = "createResult", at = @At("STORE"), ordinal = 0)
     private long ignorePriorWork(long tax) {
-        return Anvils.priorWork(this.player, tax);
+        return FlatAnvils.priorWork(this.player, tax);
     }
 
     // The third 40 is the "Too Expensive!" refusal. The first prices a book on a stack, which the flat price blocks itself.
     @ModifyExpressionValue(method = "createResult", at = @At(value = "CONSTANT", args = "intValue=40", ordinal = 2))
     private int neverTooExpensive(int limit) {
-        return Anvils.tooExpensiveAt(this.player, limit);
+        return FlatAnvils.tooExpensiveAt(this.player, limit);
     }
 
-    // Before the sync that sends vanilla's result, so the flat price goes out with it. Core's refusal of Curse of
-    // Vanishing on grave items runs at the tail, after this, so it still has the last word.
+    // Before the sync that sends vanilla's result, so the flat price goes out with it. Another mod's change at the tail,
+    // such as You Only Live Twice refusing Curse of Vanishing on its grave items, runs after this and has the last word.
     @Inject(method = "createResult", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/inventory/AnvilMenu;broadcastChanges()V"))
     private void flatPrice(CallbackInfo ci) {
-        if (Anvils.finish((AnvilMenu) (Object) this, this.player, this.cost)) {
+        if (FlatAnvils.finish((AnvilMenu) (Object) this, this.player, this.cost)) {
             this.onlyRenaming = true;
         }
     }
@@ -66,6 +66,6 @@ public abstract class HardcoreAnvilMixin extends ItemCombinerMenu {
             target = "Lnet/minecraft/world/inventory/ContainerLevelAccess;execute(Ljava/util/function/BiConsumer;)V"))
     private void wearAtOurChance(ContainerLevelAccess access, BiConsumer<Level, BlockPos> wear, Operation<Void> original,
                                  @Local(argsOnly = true) Player player) {
-        original.call(access, Anvils.wear(player, wear));
+        original.call(access, FlatAnvils.wear(player, wear));
     }
 }

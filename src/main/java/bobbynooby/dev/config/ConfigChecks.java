@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.anvils.AnvilSettings;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
@@ -40,7 +41,7 @@ final class ConfigChecks {
     // A day is 24,000 ticks, so a time of day runs 0 to this
     static final int LAST_TICK_OF_DAY = 23999;
     // An anvil price of 40 or more shows "Too Expensive!"
-    static final int MAX_ANVIL_PRICE = 39;
+    static final int MAX_ANVIL_PRICE = AnvilSettings.MAX_PRICE;
     // Sky light runs 0 to 15
     static final int MAX_SKY_LIGHT = 15;
     // The heat scan covers a cube this far out every second for each player, so it stays small
@@ -455,7 +456,7 @@ final class ConfigChecks {
     }
 
     private static boolean isAnvilPrice(int price) {
-        return price >= 1 && price <= MAX_ANVIL_PRICE;
+        return AnvilSettings.isPrice(price);
     }
 
     private static void legs(HardcoreConfig.LegsSection legs, HardcoreConfig.LegsSection fallback, BiConsumer<String, String> fellBack) {

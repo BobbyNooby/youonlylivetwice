@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "yolt-anvils",
+	"version": "${version}",
+	"name": "YOLT Anvils",
+	"description": "Server-side flat anvil prices: each use costs the price of its biggest job, using an item again never makes it dearer, and nothing is ever too expensive. Set the prices in config/yolt-anvils.json. Also part of You Only Live Twice.",
+	"authors": [
+		"BobbyNooby"
+	],
+	"contact": {
+		"homepage": "https://github.com/BobbyNooby/youonlylivetwice/tree/release/anvil",
+		"sources": "https://github.com/BobbyNooby/youonlylivetwice"
+	},
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"bobbynooby.dev.anvils.YoltAnvils"
+		]
+	},
+	"mixins": [
+		"yolt-anvils.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": ">=0.165.2+26.3"
+	}
+}

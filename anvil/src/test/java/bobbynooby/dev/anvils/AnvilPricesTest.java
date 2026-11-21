@@ -1,10 +1,10 @@
-package bobbynooby.dev.hardcore;
+package bobbynooby.dev.anvils;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class HardcoreAnvilTest {
+class AnvilPricesTest {
     private static final int ENCHANT = 6;
     private static final int REPAIR = 5;
     private static final int RENAME = 1;
