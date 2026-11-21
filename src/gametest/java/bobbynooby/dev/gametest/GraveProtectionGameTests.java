@@ -1046,8 +1046,16 @@ public class GraveProtectionGameTests {
             helper.assertValueEqual(graves.recheckSeconds, 5, "the shipped re-check interval");
             LiveSettings.applyAll(server);
             level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            helper.runAfterDelay(98, () -> helper.assertTrue(level.getBlockState(grave.pos()).isAir(),
-                    "the head came back before 99 ticks"));
+            // A failure here ends the test there, before runBeforeTestEnd's turn would come, so it cleans up first: the
+            // hold left taken would keep the shipped interval on for the re-check tests of later batches
+            helper.runAfterDelay(98, () -> {
+                try {
+                    helper.assertTrue(level.getBlockState(grave.pos()).isAir(), "the head came back before 99 ticks");
+                } catch (RuntimeException e) {
+                    cleanUp.run();
+                    throw e;
+                }
+            });
             helper.runAfterDelay(101, () -> {
                 try {
                     assertGraveIntact(helper, grave);
