@@ -33,15 +33,30 @@ Contents:
   `hardcore/Elytra.java`; YOLT's Elytra GameTests check it hosted.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
 
-To add a tiny mod:
+To add a tiny mod that works both on its own and inside YOLT (`extras/mending/` is the smallest one to copy):
 
-1. Make a folder under `extras/` with a `build.gradle` like the anvil one: it sets `ext.modId`, which starts with
-   `yolt-`, and `ext.sharedPackage`, the mod's own package with `.shared` on the end, and then applies
-   `extras/extra.gradle`. Its GameTests go in `src/gametest`, with a `fabric.mod.json` whose id is the mod id with
-   `-gametest` on the end.
-2. Add the folder's name to the list in `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the
-   root `build.gradle`. That ships its jar inside YOLT's and loads it in a dev run.
-3. Add the mod id to `depends` in YOLT's `src/main/resources/fabric.mod.json`, at `>=${version}`.
+1. Make a folder under `extras/` with the mod's own files, copied from the mending ones:
+   `src/main/resources/fabric.mod.json`, whose id starts with `yolt-`, with its `breaks` line on an older
+   `you-only-live-twice`; its mixins file beside it, named after the mod id; and
+   `src/gametest/resources/fabric.mod.json`, whose id is the mod id with `-gametest` on the end.
+2. Write its settings, as in `extras/mending/src/main/java/bobbynooby/dev/mending/`: a settings record with `DEFAULTS`
+   and a rule method for each number (`MendingSettings`), a `SettingsFile` of `Key`s that use those rules
+   (`MendingConfig`), and a `TinyMod` in its `ModInitializer`, which the rest of the mod asks for its settings and for
+   who is left out (`YoltMending`, with its `hostedBy`).
+3. Wire up the build. Its `build.gradle`, like the mending one, sets `ext.modId` and `ext.sharedPackage`, the mod's own
+   package with `.shared` on the end, and then applies `extras/extra.gradle`. Add the folder's name to the list in
+   `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the root `build.gradle`: that ships its jar
+   inside YOLT's and loads it in a dev run. Add the mod id to `depends` in YOLT's `src/main/resources/fabric.mod.json`,
+   at `>=${version}`.
+4. Write a bridge in `src/main/java/bobbynooby/dev/hardcore/`, like `Mending.java`. Its `init()` calls the mod's
+   `hostedBy("You Only Live Twice", ...)` with settings read live from the mod's section of YOLT's config
+   (`HardcoreConfig`) and the players YOLT leaves out, and `Hardcore.init()` calls that `init()`. Without a bridge the
+   mod runs inside YOLT as if on its own: a YOLT server gets its `/<mod id>` command and its own file in `config/`.
+5. Check the mod's section in YOLT's `ConfigChecks` with the mod's own rule methods, as `MendingSettings.isRate` is
+   used there, so YOLT's config and the mod's file refuse the same values.
+6. Add it to the tests that list every tiny mod: `TinyModDefaultsTest` (YOLT ships the mod's numbers),
+   `HostedModsGameTests` (inside YOLT it has no file and no command), and, if it adds attribute modifiers or anything
+   saved with a player, `Ours` in the gametest package.
 
 ## Testing
 
