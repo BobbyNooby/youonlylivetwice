@@ -2,7 +2,7 @@ YOLT 1.3.0 for Minecraft 26.3. It's a server-side Fabric mod: players join with 
 mod.
 
 This release makes two more of YOLT's rules mods of their own, the Mending nerf and the Elytra nerf, beside YOLT
-Anvils. Nothing changes for a YOLT server: no setting, default or message.
+Anvils. Nothing changes in the game for a YOLT server: no setting, default, command or message.
 
 ## Two more mods of their own
 
@@ -17,7 +17,8 @@ Each is for a Fabric server that wants only that part, with no YOLT on it.
 - **YOLT Anvils** (`yolt-anvils-1.3.0.jar`) does what it did in 1.2.1.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/anvil/README.md).
 
-In each, a bad value in the config file keeps the value it had, and players in creative or spectator keep vanilla.
+In each, a bad value in the config file is refused: the default is used at a server start, and the value in use at a
+reload. Players in creative or spectator keep vanilla.
 
 ## For a YOLT server
 
@@ -27,6 +28,10 @@ In each, a bad value in the config file keeps the value it had, and players in c
 - Putting one of the three jars next to YOLT does no harm: Fabric loads one copy.
 - Each of the three jars refuses to start beside a You Only Live Twice from before it shipped that mod, such as 1.2.1
   for Mending and Elytra. That YOLT has the rule itself, and it would otherwise run twice.
+- The server log has a line for each of the three at a start, such as `YOLT Mending takes its settings from You Only
+  Live Twice`.
+- The gravity change on a glider now has the id `yolt-elytra:glide_gravity`. It was
+  `you-only-live-twice:elytra_gravity`, which matters only to someone who reads it with `/attribute`.
 
 ## What it does
 
@@ -54,8 +59,9 @@ Put `you-only-live-twice-1.3.0.jar` in the server's `mods` folder next to Fabric
 writes the config and, with the world border on (the default), sets the border to 10,000 blocks across. The other
 three jars are only for servers without YOLT.
 
-Updating from 1.2.1 needs nothing else: there are no new settings and no changed defaults. Going back to 1.2.1 is
-safe too.
+Updating from 1.2.1 needs nothing else: there are no new settings and no changed defaults. Going back to 1.2.1 works
+too, and leaves the config file as it is. Take a `yolt-mending` or `yolt-elytra` jar out of `mods` first if you added
+one.
 
 Updating from 1.2.0 or older works as it did for 1.2.1: the
 [1.2.1 notes](https://github.com/BobbyNooby/youonlylivetwice/releases/tag/v1.2.1) say what happens.
