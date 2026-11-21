@@ -23,7 +23,8 @@ Mending repairs 0.4 durability per XP point (`durabilityPerXp`) instead of vanil
   [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
   folder, next to Fabric API. The client doesn't need it.
 - Running You Only Live Twice? Then you have this already: YOLT's jar ships it, set from YOLT's own config. Installing
-  both does no harm; Fabric loads one copy, the newer. This jar refuses to start beside an older You Only Live Twice.
+  both does no harm: Fabric loads one copy, this jar when it has YOLT's version and the one inside YOLT's jar when it
+  doesn't. Beside a You Only Live Twice from before it shipped this mod, the server won't start, and the log says why.
 
 ## Config
 
