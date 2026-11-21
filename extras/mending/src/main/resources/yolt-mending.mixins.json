@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "bobbynooby.dev.mending.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "MendingRateMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

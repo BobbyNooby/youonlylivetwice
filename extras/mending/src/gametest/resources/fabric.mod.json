@@ -1,0 +1,12 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-mending-gametest",
+    "version": "1.0.0",
+    "name": "YOLT Mending GameTests",
+    "environment": "*",
+    "entrypoints": {
+        "fabric-gametest": [
+            "bobbynooby.dev.mending.MendingGameTests"
+        ]
+    }
+}

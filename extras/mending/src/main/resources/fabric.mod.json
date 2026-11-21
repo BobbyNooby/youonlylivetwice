@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-mending",
+    "version": "${version}",
+    "name": "YOLT Mending",
+    "description": "Server-side Mending nerf: each XP point repairs 0.4 durability instead of vanilla's 2, a part of a point too small to repair anything is kept for the next pickup, and XP the gear doesn't need goes to the XP bar. Set the rate in config/yolt-mending.json. Also part of You Only Live Twice.",
+    "authors": [
+        "BobbyNooby"
+    ],
+    "contact": {
+        "homepage": "https://github.com/BobbyNooby/youonlylivetwice/tree/release/extras/mending",
+        "sources": "https://github.com/BobbyNooby/youonlylivetwice"
+    },
+    "license": "MIT",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "bobbynooby.dev.mending.YoltMending"
+        ]
+    },
+    "mixins": [
+        "yolt-mending.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.20.1",
+        "minecraft": "~26.3",
+        "java": ">=25",
+        "fabric-api": ">=0.165.2+26.3"
+    }
+}
