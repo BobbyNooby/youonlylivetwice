@@ -1,0 +1,12 @@
+{
+	"schemaVersion": 1,
+	"id": "yolt-anvils-gametest",
+	"version": "1.0.0",
+	"name": "YOLT Anvils GameTests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-gametest": [
+			"bobbynooby.dev.anvils.AnvilGameTests"
+		]
+	}
+}
