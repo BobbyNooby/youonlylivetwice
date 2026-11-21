@@ -463,20 +463,16 @@ public class GraveProtectionGameTests {
         MinecraftServer server = level.getServer();
         Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         ChunkPos chunk = ChunkPos.containing(grave.pos());
-        YoltConfig.GravesSection graves = Settings.get().graves;
-        RECHECK_HOLD.take(() -> {
-            int seconds = graves.recheckSeconds;
-            return () -> graves.recheckSeconds = seconds;
-        });
+        boolean first = holdRecheck(server);
         Runnable cleanUp = BodyTestKit.once(() -> {
             RECHECK_HOLD.release();
-            LiveSettings.applyAll(server);
             removeGraves(helper, List.of(grave));
         });
         boolean waiting = false;
         try {
-            graves.recheckSeconds = 1;
-            LiveSettings.applyAll(server);
+            if (first) {
+                recheckEverySecond(server);
+            }
             level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             helper.runAfterDelay(30, () -> {
                 try {
@@ -505,21 +501,17 @@ public class GraveProtectionGameTests {
         MinecraftServer server = level.getServer();
         Grave grave = makeGrave(helper, new BlockPos(3, 0, 3));
         ServerPlayer looter = TestPlayers.join(helper, "HeadlessLooter", GameType.SURVIVAL, new BlockPos(1, 1, 1));
-        YoltConfig.GravesSection graves = Settings.get().graves;
-        RECHECK_HOLD.take(() -> {
-            int seconds = graves.recheckSeconds;
-            return () -> graves.recheckSeconds = seconds;
-        });
+        boolean first = holdRecheck(server);
         Runnable cleanUp = BodyTestKit.once(() -> {
             TestPlayers.leave(looter);
             RECHECK_HOLD.release();
-            LiveSettings.applyAll(server);
             removeGraves(helper, List.of(grave));
         });
         boolean waiting = false;
         try {
-            graves.recheckSeconds = 1;
-            LiveSettings.applyAll(server);
+            if (first) {
+                recheckEverySecond(server);
+            }
             GraveMenus.open(looter, grave);
             AbstractContainerMenu menu = looter.containerMenu;
             helper.assertTrue(menu instanceof GraveMenu, "the grave did not open");
@@ -556,22 +548,18 @@ public class GraveProtectionGameTests {
         Grave emptied = makeGrave(helper, new BlockPos(1, 0, 3));
         ServerPlayer looter = TestPlayers.join(helper, "Emptier", GameType.SURVIVAL, new BlockPos(2, 1, 1));
         AABB around = new AABB(removed.pos()).inflate(3.0);
-        YoltConfig.GravesSection graves = Settings.get().graves;
-        RECHECK_HOLD.take(() -> {
-            int seconds = graves.recheckSeconds;
-            return () -> graves.recheckSeconds = seconds;
-        });
+        boolean first = holdRecheck(server);
         Runnable cleanUp = BodyTestKit.once(() -> {
             TestPlayers.leave(looter);
             RECHECK_HOLD.release();
-            LiveSettings.applyAll(server);
             removeGraves(helper, List.of(removed, emptied));
             level.getEntitiesOfClass(ItemEntity.class, around).forEach(Entity::discard);
         });
         boolean waiting = false;
         try {
-            graves.recheckSeconds = 1;
-            LiveSettings.applyAll(server);
+            if (first) {
+                recheckEverySecond(server);
+            }
             helper.assertTrue(Graves.removeAndDrop(server, removed) instanceof Graves.Removal.Dropped, "the removal did not go through");
             GraveMenus.open(looter, emptied);
             AbstractContainerMenu menu = looter.containerMenu;
@@ -599,6 +587,27 @@ public class GraveProtectionGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // The batch's tests share one wait for the next pass, and applying the interval starts that wait again, so a test
+    // that applied it as it began or ended would push the pass of one that began earlier past that one's check. So
+    // only the first to take the hold sets the interval, and only the last to let go puts it back; each applies it.
+    // True for the first.
+    private static boolean holdRecheck(MinecraftServer server) {
+        YoltConfig.GravesSection graves = Settings.get().graves;
+        return RECHECK_HOLD.take(() -> {
+            int seconds = graves.recheckSeconds;
+            return () -> {
+                graves.recheckSeconds = seconds;
+                LiveSettings.applyAll(server);
+            };
+        });
+    }
+
+    // A second, set the way a reload sets it
+    private static void recheckEverySecond(MinecraftServer server) {
+        Settings.get().graves.recheckSeconds = 1;
+        LiveSettings.applyAll(server);
     }
 
     // A grave the re-check can't put back: its spot is taken, and the border, moved far off in this tick, leaves no

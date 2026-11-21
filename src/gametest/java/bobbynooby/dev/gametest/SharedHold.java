@@ -10,11 +10,14 @@ final class SharedHold {
     private int holders;
     private Runnable putBack = () -> {};
 
-    // keep reads what is there now and returns how to put it back
-    void take(Supplier<Runnable> keep) {
+    // keep reads what is there now and returns how to put it back. True for the first to take it, for values that only
+    // the first should set.
+    boolean take(Supplier<Runnable> keep) {
         if (holders++ == 0) {
             putBack = keep.get();
+            return true;
         }
+        return false;
     }
 
     void release() {
