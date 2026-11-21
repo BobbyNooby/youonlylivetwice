@@ -16,8 +16,11 @@ Contents:
 - `shared/` is source, not a mod and never a jar: the settings file, its kinds of key, the switch between hosted and
   on its own, and the command that every tiny mod has. At each build a tiny mod copies it into its own `build/` folder,
   with the package `bobbynooby.dev.shared` rewritten to its own, such as `bobbynooby.dev.anvils.shared`, and compiles
-  it into itself. So no two jars hold a class of the same name, and a server can mix jars from two releases. Change it
-  in `shared/`: the copies are written over at the next build.
+  it into itself. So no two jars hold a class of the same name, and each tiny jar is complete on its own, with its own
+  copy. Next to YOLT a tiny mod always has YOLT's version: YOLT asks for at least its own version of each, and each
+  tiny mod refuses an older YOLT (`breaks` in its `fabric.mod.json`). `shared/` has no Gradle project of its own, so an
+  editor shows no errors there. Change it in `shared/`, never in the copy under a mod's `build/`, which the next build
+  writes over, and build a tiny mod to check it.
 - `extras/anvil/` is [YOLT Anvils](../extras/anvil/README.md), the flat anvil price as a mod of its own, with its own
   `src/main`, `src/test` and `src/gametest`. Its GameTests run it alone, with no YOLT on the server. YOLT's jar ships
   its jar inside (`include`) and hands it YOLT's config through `YoltAnvils.hostedBy`, from `hardcore/Anvils.java`;
