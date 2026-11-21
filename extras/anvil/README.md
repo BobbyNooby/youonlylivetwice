@@ -34,7 +34,7 @@ Every anvil use costs one fixed price, set by the biggest kind of job in it, and
   [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
   folder, next to Fabric API. The client doesn't need it.
 - Running You Only Live Twice? Then you have this already: YOLT's jar ships it, set from YOLT's own config. Installing
-  both does no harm; Fabric loads one copy, the newer.
+  both does no harm; Fabric loads one copy, the newer. This jar refuses to start beside an older You Only Live Twice.
 
 ## Config
 
