@@ -37,12 +37,16 @@ paper's texture.
 
 Every feature has a switch in the config.
 
+The flat anvil prices are also a mod of their own, [YOLT Anvils](anvil/README.md), for a server that wants only that
+part. YOLT's jar already holds it.
+
 ## Install
 
 - You need Minecraft 26.3, Fabric Loader 0.20.1 or newer, [Fabric API](https://modrinth.com/mod/fabric-api)
   0.165.2+26.3 or newer, and Java 25.
-- Get the jar from the [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in
-  the server's `mods` folder, next to Fabric API.
+- Get `you-only-live-twice-<version>.jar` from the
+  [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
+  folder, next to Fabric API. It has every feature; the release's other jars are single parts of it, for other servers.
 - Start the server once. It writes `config/you-only-live-twice.json` and sets the border to 10,000 blocks across.
 - Set `spawn-protection=0` in `server.properties`, and pre-generate the world with Chunky.
   [Installing](docs/install.md) says why, and lists the companion mods I recommend.

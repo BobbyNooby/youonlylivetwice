@@ -378,7 +378,8 @@ See [Mending nerf](hardcore.md#mending-nerf).
 ### `hardcore.anvil`
 
 See [flat anvil prices](hardcore.md#flat-anvil-prices). Prices are XP levels, 1 to 39: 0 can't be paid, and 40 or more
-shows "Too Expensive!".
+shows "Too Expensive!". These set the YOLT Anvils mod that YOLT ships. [YOLT Anvils](../anvil/README.md) installed on
+its own has the same keys in `config/yolt-anvils.json` instead.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
