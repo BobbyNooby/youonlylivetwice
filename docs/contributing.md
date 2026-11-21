@@ -25,6 +25,9 @@ Contents:
 - `extras/mending/` is [YOLT Mending](../extras/mending/README.md), the Mending nerf as a mod of its own, laid out the
   same way. YOLT's jar ships it too and hands it YOLT's config through `YoltMending.hostedBy`, from
   `hardcore/Mending.java`; YOLT's Mending GameTests check it hosted.
+- `extras/elytra/` is [YOLT Elytra](../extras/elytra/README.md), the elytra nerf as a mod of its own, laid out the
+  same way. YOLT's jar ships it too and hands it YOLT's config through `YoltElytra.hostedBy`, from
+  `hardcore/Elytra.java`; YOLT's Elytra GameTests check it hosted.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
 
 To add a tiny mod:
@@ -42,9 +45,10 @@ To add a tiny mod:
 Everything runs locally, with Java 25:
 
 - `./gradlew build --continue`: every jar, the JUnit tests and the server GameTests of YOLT and of each module, about
-  5 minutes. Results are in `build/test-results/` and `extras/anvil/build/test-results/`; the jars in `build/libs/`
-  and `extras/anvil/build/libs/`.
-- `./gradlew :anvil:test :anvil:runGameTest`: the anvil module's tests alone, in under a minute.
+  5 minutes. Results are in `build/test-results/` and, for each tiny mod, `extras/<name>/build/test-results/`; the
+  jars in `build/libs/` and `extras/<name>/build/libs/`.
+- `./gradlew :anvil:test :anvil:runGameTest`: the anvil module's tests alone, in under a minute. The same works for
+  `:mending` and `:elytra`.
 - `./gradlew test`: the JUnit tests alone, in seconds.
 - `./gradlew runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
   the server GameTests. Add `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.

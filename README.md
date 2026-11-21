@@ -37,8 +37,9 @@ paper's texture.
 
 Every feature has a switch in the config.
 
-The flat anvil prices and the Mending nerf are also mods of their own, [YOLT Anvils](extras/anvil/README.md) and
-[YOLT Mending](extras/mending/README.md), for a server that wants only one part. YOLT's jar already holds them.
+The flat anvil prices, the Mending nerf and the elytra nerf are also mods of their own,
+[YOLT Anvils](extras/anvil/README.md), [YOLT Mending](extras/mending/README.md) and
+[YOLT Elytra](extras/elytra/README.md), for a server that wants only one part. YOLT's jar already holds them.
 
 ## Install
 

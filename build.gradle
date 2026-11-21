@@ -19,7 +19,7 @@ repositories {
 }
 
 // The tiny mods under extras/, Gradle project name to mod id
-def tinyMods = [anvil: 'yolt-anvils', mending: 'yolt-mending']
+def tinyMods = [anvil: 'yolt-anvils', mending: 'yolt-mending', elytra: 'yolt-elytra']
 
 loom {
     mods {

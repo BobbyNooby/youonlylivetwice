@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.anvils.YoltAnvils;
+import bobbynooby.dev.elytra.YoltElytra;
 import bobbynooby.dev.mending.YoltMending;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.fabricmc.loader.api.FabricLoader;
@@ -20,6 +21,7 @@ public class HostedModsGameTests {
     public void hostedModsHaveNoFileAndNoCommand(GameTestHelper helper) throws IOException {
         hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, YoltAnvils.hosted(), YoltAnvils::reload);
         hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, YoltMending.hosted(), YoltMending::reload);
+        hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, YoltElytra.hosted(), YoltElytra::reload);
         helper.succeed();
     }
 

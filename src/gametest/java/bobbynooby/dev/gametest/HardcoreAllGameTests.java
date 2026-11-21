@@ -270,9 +270,9 @@ public class HardcoreAllGameTests {
         }
     }
 
-    // Every modifier the layer puts on (hardcore_slow, undead_curse, nutrients, elytra_gravity, tougher, relentless,
-    // blood_moon) is in YOLT's namespace, and every tag it adds (yolt.tough, yolt.vanilla, yolt.blood_moon,
-    // yolt.door_rolled) starts with "yolt.", so this finds any of them and any added later
+    // Every modifier the layer puts on (hardcore_slow, undead_curse, nutrients, tougher, relentless, blood_moon) is in
+    // YOLT's namespace, the glide's (glide_gravity) in yolt-elytra's, and every tag it adds (yolt.tough, yolt.vanilla,
+    // yolt.blood_moon, yolt.door_rolled) starts with "yolt.", so this finds any of them and any added later
     // A tick hook that throws is logged with the player's name and its exception, the way Guard.run logs one, and the
     // hooks after it still run. The name is only read once a hook has thrown, so it must still come out right then.
     @GameTest(environment = HOOK_FAILS, maxTicks = 40)
@@ -358,7 +358,7 @@ public class HardcoreAllGameTests {
                     for (Holder<Attribute> attribute : List.of(Attributes.MAX_HEALTH, Attributes.MOVEMENT_SPEED,
                             Attributes.BLOCK_BREAK_SPEED, Attributes.GRAVITY)) {
                         helper.assertTrue(HardcoreMobsGameTests.attribute(player, attribute).getModifiers().stream()
-                                        .anyMatch(modifier -> modifier.id().getNamespace().equals(Yolt.MOD_ID)),
+                                        .anyMatch(modifier -> Ours.is(modifier.id())),
                                 "no modifier of ours on " + attribute.getRegisteredName() + " to leave out of the save");
                     }
                     TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING,
@@ -366,9 +366,9 @@ public class HardcoreAllGameTests {
                     player.saveWithoutId(output);
                     CompoundTag saved = output.buildResult();
                     helper.assertTrue(saved.contains("attributes"), "the save has no attributes: " + saved.keySet());
-                    helper.assertFalse(String.valueOf(saved.get("attributes")).contains(Yolt.MOD_ID),
+                    helper.assertFalse(Ours.named(String.valueOf(saved.get("attributes"))),
                             "the saved attributes hold a modifier of ours: " + saved.get("attributes"));
-                    helper.assertFalse(saved.toString().contains(Yolt.MOD_ID), "the save holds something of ours: " + saved);
+                    helper.assertFalse(Ours.named(saved.toString()), "the save holds something of ours: " + saved);
                 } finally {
                     cleanUp.run();
                 }
@@ -483,7 +483,7 @@ public class HardcoreAllGameTests {
                         AttributeInstance instance = body.getAttribute(attribute);
                         if (instance != null) {
                             for (AttributeModifier modifier : instance.getModifiers()) {
-                                helper.assertFalse(modifier.id().getNamespace().equals(Yolt.MOD_ID),
+                                helper.assertFalse(Ours.is(modifier.id()),
                                         "modifier " + modifier.id() + " on the body's " + attribute.getRegisteredName());
                             }
                         }
@@ -542,7 +542,7 @@ public class HardcoreAllGameTests {
                 continue;
             }
             for (AttributeModifier modifier : instance.getModifiers()) {
-                helper.assertFalse(modifier.id().getNamespace().equals(Yolt.MOD_ID),
+                helper.assertFalse(Ours.is(modifier.id()),
                         "modifier " + modifier.id() + " on " + attribute.getRegisteredName() + " of " + entity.getType());
             }
         }

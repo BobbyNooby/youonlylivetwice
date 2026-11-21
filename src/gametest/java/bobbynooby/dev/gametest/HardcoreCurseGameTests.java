@@ -1006,7 +1006,7 @@ public class HardcoreCurseGameTests {
     private static List<Identifier> ourMaxHealthModifiers(ServerPlayer player) {
         return player.getAttribute(Attributes.MAX_HEALTH).getModifiers().stream()
                 .map(AttributeModifier::id)
-                .filter(id -> id.getNamespace().equals(Yolt.MOD_ID))
+                .filter(Ours::is)
                 .toList();
     }
 

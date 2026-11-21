@@ -2,9 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
-import bobbynooby.dev.core.Yolt;
-import bobbynooby.dev.hardcore.Elytra;
-import bobbynooby.dev.mixin.FireworkRocketInvoker;
+import bobbynooby.dev.elytra.YoltElytra;
+import bobbynooby.dev.elytra.mixin.FireworkRocketInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -117,12 +116,12 @@ public class HardcoreElytraGameTests {
         ServerPlayer fast = glider(helper, "UseFast", GameType.SURVIVAL, FAST);
         ServerPlayer slow = glider(helper, "UseSlow", GameType.SURVIVAL, SLOW);
         try {
-            helper.assertTrue(Elytra.refusesRocket(fast), "a rocket isn't refused at 30 m/s");
+            helper.assertTrue(YoltElytra.refusesRocket(fast), "a rocket isn't refused at 30 m/s");
             ItemStack fastRockets = useRocket(helper, fast);
             helper.assertValueEqual(fastRockets.getCount(), 5, "rockets left after one was refused");
             helper.assertTrue(rockets(helper, fast).isEmpty(), "a refused rocket was launched");
 
-            helper.assertFalse(Elytra.refusesRocket(slow), "a rocket is refused at 10 m/s");
+            helper.assertFalse(YoltElytra.refusesRocket(slow), "a rocket is refused at 10 m/s");
             ItemStack slowRockets = useRocket(helper, slow);
             helper.assertValueEqual(slowRockets.getCount(), 4, "rockets left after one was fired");
             helper.assertTrue(rockets(helper, slow).stream().anyMatch(HardcoreElytraGameTests::attached), "no rocket attached at 10 m/s");
@@ -144,7 +143,7 @@ public class HardcoreElytraGameTests {
         });
         boolean waiting = false;
         try {
-            helper.assertFalse(Elytra.pastCutoff(fast), "past a cut-off of 0");
+            helper.assertFalse(YoltElytra.pastCutoff(fast), "past a cut-off of 0");
             ItemStack rockets = useRocket(helper, fast);
             helper.assertValueEqual(rockets.getCount(), 4, "rockets left after one was fired");
             fired.addAll(rockets(helper, fast));
@@ -182,13 +181,13 @@ public class HardcoreElytraGameTests {
         try {
             helper.runAfterDelay(2, () -> step(cleanUp, () -> {
                 assertGravity(helper, glider, -0.4, "while gliding with the nerf on");
-                helper.assertTrue(Elytra.refusesRocket(glider), "a rocket isn't refused at 30 m/s with the nerf on");
+                helper.assertTrue(YoltElytra.refusesRocket(glider), "a rocket isn't refused at 30 m/s with the nerf on");
                 cfg.enabled = false;
             }));
             helper.runAfterDelay(3, () -> step(cleanUp, () -> {
                 helper.assertTrue(glider.isFallFlying(), "the glide ended");
                 assertGravity(helper, glider, null, "a tick after the nerf went off mid-glide");
-                helper.assertFalse(Elytra.refusesRocket(glider), "a rocket is refused at 30 m/s with the nerf off");
+                helper.assertFalse(YoltElytra.refusesRocket(glider), "a rocket is refused at 30 m/s with the nerf off");
                 fired.add(attachRocket(helper, glider));
             }));
             helper.runAfterDelay(5, () -> {
@@ -318,11 +317,11 @@ public class HardcoreElytraGameTests {
     }
 
     private static boolean attached(FireworkRocketEntity rocket) {
-        return ((FireworkRocketInvoker) rocket).yoltIsAttachedToEntity();
+        return ((FireworkRocketInvoker) rocket).yoltElytraIsAttachedToEntity();
     }
 
     private static void assertGravity(GameTestHelper helper, ServerPlayer player, Double expected, String when) {
-        AttributeModifier modifier = player.getAttribute(Attributes.GRAVITY).getModifier(Yolt.id("elytra_gravity"));
+        AttributeModifier modifier = player.getAttribute(Attributes.GRAVITY).getModifier(YoltElytra.GRAVITY_MODIFIER);
         if (expected == null) {
             helper.assertTrue(modifier == null, "the gravity modifier is on " + when);
             return;

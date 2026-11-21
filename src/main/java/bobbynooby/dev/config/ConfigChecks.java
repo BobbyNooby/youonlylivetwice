@@ -1,6 +1,7 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.anvils.AnvilSettings;
+import bobbynooby.dev.elytra.ElytraSettings;
 import bobbynooby.dev.mending.MendingSettings;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
@@ -268,11 +269,11 @@ final class ConfigChecks {
             fellBack.accept("hardcore.mending.durabilityPerXp", "must be 0 or more");
         }
         anvil(c.anvil, fallback.anvil, fellBack);
-        if (!(c.elytra.glideGravityMultiplier >= 0)) {
+        if (!ElytraSettings.isMultiplier(c.elytra.glideGravityMultiplier)) {
             c.elytra.glideGravityMultiplier = fallback.elytra.glideGravityMultiplier;
             fellBack.accept("hardcore.elytra.glideGravityMultiplier", "must be 0 or more");
         }
-        if (!(c.elytra.rocketCutoffSpeed >= 0)) {
+        if (!ElytraSettings.isSpeed(c.elytra.rocketCutoffSpeed)) {
             c.elytra.rocketCutoffSpeed = fallback.elytra.rocketCutoffSpeed;
             fellBack.accept("hardcore.elytra.rocketCutoffSpeed", "must be 0 or more");
         }

@@ -339,6 +339,8 @@ Settings: [`hardcore.anvil`](config.md#hardcoreanvil).
 ## Elytra nerf
 
 Gliding is slower and floatier, and rockets can't push you past 20 m/s.
+This part is also a mod of its own, [YOLT Elytra](../extras/elytra/README.md), for a server that wants only this.
+YOLT's jar ships it, so YOLT needs nothing extra. It is on by default as a mod of its own, and off by default in YOLT.
 
 - While you glide, gravity is 0.6 times vanilla's (`glideGravityMultiplier`). Lighter gravity makes the glide slower,
   and you sink slower too, so you cover about the same ground for each block of height. Walking, jumping and falling

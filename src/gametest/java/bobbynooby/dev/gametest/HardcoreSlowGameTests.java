@@ -199,7 +199,7 @@ public class HardcoreSlowGameTests {
                             continue;
                         }
                         for (AttributeModifier modifier : instance.getModifiers()) {
-                            helper.assertFalse(modifier.id().getNamespace().equals(Yolt.MOD_ID),
+                            helper.assertFalse(Ours.is(modifier.id()),
                                     "modifier " + modifier.id() + " on " + attribute.getRegisteredName());
                         }
                     }

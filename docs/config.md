@@ -393,7 +393,9 @@ installed on its own has the same keys in `config/yolt-anvils.json` instead.
 
 ### `hardcore.elytra`
 
-See [elytra nerf](hardcore.md#elytra-nerf).
+See [elytra nerf](hardcore.md#elytra-nerf). These set the YOLT Elytra mod that YOLT ships.
+[YOLT Elytra](../extras/elytra/README.md) installed on its own has the same keys in `config/yolt-elytra.json`
+instead. It is on by default as a mod of its own, and off by default in YOLT.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|

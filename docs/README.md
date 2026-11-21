@@ -62,7 +62,7 @@ feature, its settings and its limits.
   - [Hunger tax](hardcore.md#hunger-tax)
   - [Mending nerf](hardcore.md#mending-nerf), also a mod of its own: [YOLT Mending](../extras/mending/README.md)
   - [Flat anvil prices](hardcore.md#flat-anvil-prices), also a mod of its own: [YOLT Anvils](../extras/anvil/README.md)
-  - [Elytra nerf](hardcore.md#elytra-nerf)
+  - [Elytra nerf](hardcore.md#elytra-nerf), also a mod of its own: [YOLT Elytra](../extras/elytra/README.md)
   - [Tougher mobs](hardcore.md#tougher-mobs)
   - [Relentless mobs](hardcore.md#relentless-mobs)
   - [Blood moon](hardcore.md#blood-moon)
