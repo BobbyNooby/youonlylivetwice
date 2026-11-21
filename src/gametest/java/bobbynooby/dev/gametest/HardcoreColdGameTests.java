@@ -672,16 +672,24 @@ public class HardcoreColdGameTests {
                 .thenSucceed();
     }
 
-    // Out of the cold the status line says only that it warms. No snow anywhere near, since the blur at a biome's edge
-    // reaches a few blocks past it.
+    // Out of the cold the status line says only that it warms, unless heat is near: the status looks for heat even
+    // where it isn't cold, and names the fire. The campfire is 2 blocks from the player beside it and 7 from the warm
+    // player, past the heat's reach of 4. No snow anywhere near, since the blur at a biome's edge reaches a few blocks
+    // past it.
     @GameTest(environment = WARM, skyAccess = true)
     public void cold3StatusNamesAWarmBiome(GameTestHelper helper) {
         Scene scene = new Scene(helper);
         try {
+            helper.setBlock(new BlockPos(7, 0, 7), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true));
             ServerPlayer warm = scene.join("ReasonWarm", new BlockPos(6, 0, 0));
+            ServerPlayer fire = scene.join("ReasonFire", new BlockPos(7, 0, 5));
             assertCold(helper, warm, false);
-            setChill(warm, 0.35);
+            assertCold(helper, fire, false);
+            for (ServerPlayer player : List.of(warm, fire)) {
+                setChill(player, 0.35);
+            }
             assertReason(helper, warm, "warming");
+            assertReason(helper, fire, "warming (fire)");
         } finally {
             scene.cleanUp.run();
         }
