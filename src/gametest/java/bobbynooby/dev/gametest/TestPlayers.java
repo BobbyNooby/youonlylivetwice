@@ -17,6 +17,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.util.StringUtil;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -35,6 +36,11 @@ import java.util.function.BiFunction;
 public final class TestPlayers {
     // Tests share one server, so names get a suffix to stay unique
     private static final AtomicInteger COUNTER = new AtomicInteger();
+    // Vanilla refuses a longer name at login, and a profile with one can't be stored on an item or in a save
+    // (StringUtil.isValidPlayerName)
+    private static final int NAME_LIMIT = 16;
+    // Leaves room for a four-digit count, which a full run stays within
+    private static final int BASE_LIMIT = 12;
     // The fake client end of each test player's connection, which keeps every packet the server sent
     private static final Map<UUID, EmbeddedChannel> CHANNELS = new ConcurrentHashMap<>();
 
@@ -174,7 +180,22 @@ public final class TestPlayers {
     }
 
     private static GameProfile uniqueProfile(String name) {
-        return new GameProfile(UUID.randomUUID(), name + COUNTER.incrementAndGet());
+        return new GameProfile(UUID.randomUUID(), uniqueName(name, COUNTER));
+    }
+
+    // The base and the next count of the counter. A base longer than BASE_LIMIT is always cut to it, whatever the
+    // count, so a name's shape doesn't hang on how many players joined before, which follows the order batches run
+    // in and changes every run. Only a count too long for the room left, past 9,999, cuts the base further. No count
+    // is used twice, so two names can only meet where a base's own digits run into the count, as Ab1 at count 2 and
+    // Ab at count 12 would.
+    static String uniqueName(String base, AtomicInteger counter) {
+        String count = Integer.toString(counter.incrementAndGet());
+        int room = Math.min(BASE_LIMIT, NAME_LIMIT - count.length());
+        String name = (base.length() > room ? base.substring(0, room) : base) + count;
+        if (!StringUtil.isValidPlayerName(name)) {
+            throw new IllegalStateException("No valid player name from the base " + base + ": " + name);
+        }
+        return name;
     }
 
     private static ServerPlayer join(ServerLevel level, GameProfile profile, GameType mode, BlockPos pos) {
