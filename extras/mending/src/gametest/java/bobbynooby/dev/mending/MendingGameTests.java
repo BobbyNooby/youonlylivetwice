@@ -13,6 +13,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.item.ItemStack;
@@ -179,6 +181,35 @@ public class MendingGameTests {
         helper.succeed();
     }
 
+    // The same source with the permissions the server gives a player who isn't an op. The file that would turn the mod
+    // off proves the refused reload read nothing, and the op's reload of it proves it would have.
+    @GameTest
+    public void theCommandIsForOpsOnly(GameTestHelper helper) {
+        MendingSettings before = YoltMending.swapForTesting(MendingSettings.DEFAULTS);
+        Path file = YoltMending.configFile();
+        String original = read(file);
+        try {
+            List<String> said = new ArrayList<>();
+            CommandSourceStack op = source(helper.getLevel().getServer(), said);
+            CommandSourceStack player = op.withPermission(LevelBasedPermissionSet.forLevel(PermissionLevel.ALL));
+            refused(helper, player, "yolt-mending");
+            String off = MendingConfig.json(new MendingSettings(false, 0.4));
+            write(file, off);
+            refused(helper, player, "yolt-mending reload");
+            helper.assertTrue(said.isEmpty(), "it said " + said);
+            helper.assertValueEqual(YoltMending.settings(), MendingSettings.DEFAULTS, "the settings after a refused reload");
+            helper.assertValueEqual(read(file), off, "the file after a refused reload");
+
+            helper.assertValueEqual(run(helper, op, "yolt-mending"), 1, "/yolt-mending as an op");
+            helper.assertValueEqual(run(helper, op, "yolt-mending reload"), 1, "/yolt-mending reload as an op");
+            helper.assertFalse(YoltMending.settings().enabled(), "still on after an op reloaded a file that turns it off");
+        } finally {
+            write(file, original);
+            YoltMending.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
     // A fake player for each name, in the game mode asked for
     private static ServerPlayer player(GameTestHelper helper, String name, GameType mode) {
         FakePlayer player = FakePlayer.get(helper.getLevel(),
@@ -233,6 +264,18 @@ public class MendingGameTests {
             return helper.getLevel().getServer().getCommands().getDispatcher().execute(command, source);
         } catch (CommandSyntaxException e) {
             throw helper.assertionException("/" + command + " didn't parse: " + e.getMessage());
+        }
+    }
+
+    // The dispatcher skips a node the source may not use, so the command is unknown to it, as vanilla answers any
+    // command a player may not use
+    private static void refused(GameTestHelper helper, CommandSourceStack source, String command) {
+        try {
+            int result = helper.getLevel().getServer().getCommands().getDispatcher().execute(command, source);
+            throw helper.assertionException("/" + command + " ran without op permission and returned " + result);
+        } catch (CommandSyntaxException e) {
+            helper.assertTrue(e.getType() == CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand(),
+                    "/" + command + " was refused as " + e.getMessage() + ", not as an unknown command");
         }
     }
 
