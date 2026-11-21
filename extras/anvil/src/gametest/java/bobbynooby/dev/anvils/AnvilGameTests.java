@@ -1,5 +1,6 @@
 package bobbynooby.dev.anvils;
 
+import bobbynooby.dev.anvils.shared.SettingsFile;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.fabric.api.entity.FakePlayer;
@@ -52,7 +53,7 @@ public class AnvilGameTests {
         helper.assertFalse(YoltAnvils.hosted(), "the mod is hosted, but nothing here hosts it");
         Path file = YoltAnvils.configFile();
         helper.assertTrue(Files.isRegularFile(file), "no " + file + " after the server started");
-        AnvilConfig.Result read = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        SettingsFile.Result<AnvilSettings> read = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
         helper.assertFalse(read.failed(), "the file can't be read: " + read.notes());
         helper.assertValueEqual(read.settings(), YoltAnvils.settings(), "the settings in use");
         helper.assertTrue(helper.getLevel().getServer().getCommands().getDispatcher().getRoot().getChild("yolt-anvils") != null,
@@ -239,7 +240,7 @@ public class AnvilGameTests {
             String typed = """
                     {"enabled": true, "enchantCost": 7, "repairCost": 40, "renameCost": 2, "breakChance": 0.3}""";
             write(file, typed);
-            AnvilConfig.Result result = YoltAnvils.reload();
+            SettingsFile.Result<AnvilSettings> result = YoltAnvils.reload();
             helper.assertFalse(result.failed(), "the reload failed: " + result.notes());
             helper.assertValueEqual(YoltAnvils.settings(), new AnvilSettings(true, 7, 5, 2, 0.3), "the settings after the reload");
             helper.assertTrue(result.notes().stream().anyMatch(note -> note.startsWith("repairCost")), "notes: " + result.notes());
@@ -265,7 +266,7 @@ public class AnvilGameTests {
         String original = read(file);
         try {
             write(file, "{ \"enchantCost\": ");
-            AnvilConfig.Result result = YoltAnvils.reload();
+            SettingsFile.Result<AnvilSettings> result = YoltAnvils.reload();
             helper.assertTrue(result.failed(), "a broken file was read: " + result.notes());
             helper.assertValueEqual(YoltAnvils.settings(), custom, "the settings after a failed reload");
             helper.assertValueEqual(read(file), "{ \"enchantCost\": ", "the broken file after the reload");

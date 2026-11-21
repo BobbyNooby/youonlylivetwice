@@ -12,12 +12,27 @@ Contents:
 - The root project is You Only Live Twice itself: `src/main` the mod, `src/test` its JUnit tests, `src/gametest` its
   GameTests, server and client.
 - The tiny mods live under `extras/` and share one build, `extras/extra.gradle`. Each tiny mod's own `build.gradle`
-  sets its mod id and applies that file.
+  sets its mod id and the package for its copy of `shared/`, and applies that file.
+- `shared/` is source, not a mod and never a jar: the settings file, its kinds of key, the switch between hosted and
+  on its own, and the command that every tiny mod has. At each build a tiny mod copies it into its own `build/` folder,
+  with the package `bobbynooby.dev.shared` rewritten to its own, such as `bobbynooby.dev.anvils.shared`, and compiles
+  it into itself. So no two jars hold a class of the same name, and a server can mix jars from two releases. Change it
+  in `shared/`: the copies are written over at the next build.
 - `extras/anvil/` is [YOLT Anvils](../extras/anvil/README.md), the flat anvil price as a mod of its own, with its own
   `src/main`, `src/test` and `src/gametest`. Its GameTests run it alone, with no YOLT on the server. YOLT's jar ships
   its jar inside (`include`) and hands it YOLT's config through `YoltAnvils.hostedBy`, from `hardcore/Anvils.java`;
   YOLT's anvil GameTests check it hosted.
 - Every project takes its versions from the root `gradle.properties`, so one `mod_version` covers every jar.
+
+To add a tiny mod:
+
+1. Make a folder under `extras/` with a `build.gradle` like the anvil one: it sets `ext.modId`, which starts with
+   `yolt-`, and `ext.sharedPackage`, the mod's own package with `.shared` on the end, and then applies
+   `extras/extra.gradle`. Its GameTests go in `src/gametest`, with a `fabric.mod.json` whose id is the mod id with
+   `-gametest` on the end.
+2. Add the folder's name to the list in `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the
+   root `build.gradle`. That ships its jar inside YOLT's and loads it in a dev run.
+3. Add the mod id to `depends` in YOLT's `src/main/resources/fabric.mod.json`, at `>=${version}`.
 
 ## Testing
 

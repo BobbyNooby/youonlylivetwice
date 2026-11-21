@@ -1,5 +1,6 @@
 package bobbynooby.dev.anvils;
 
+import bobbynooby.dev.anvils.shared.SettingsFile;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class AnvilConfigTest {
     @TempDir
     Path folder;
 
-    private static AnvilConfig.Parsed parse(String json, AnvilSettings fallback) {
+    private static SettingsFile.Parsed<AnvilSettings> parse(String json, AnvilSettings fallback) {
         return AnvilConfig.parse(JsonParser.parseString(json).getAsJsonObject(), fallback);
     }
 
@@ -31,7 +32,7 @@ class AnvilConfigTest {
 
     @Test
     void aWholeFileIsReadAsWritten() {
-        AnvilConfig.Parsed parsed = parse("""
+        SettingsFile.Parsed<AnvilSettings> parsed = parse("""
                 {"enabled": false, "enchantCost": 39, "repairCost": 2, "renameCost": 1, "breakChance": 0}""",
                 AnvilSettings.DEFAULTS);
         assertEquals(new AnvilSettings(false, 39, 2, 1, 0.0), parsed.settings());
@@ -40,7 +41,7 @@ class AnvilConfigTest {
 
     @Test
     void anEmptyObjectKeepsEveryFallbackAndMissesEveryKey() {
-        AnvilConfig.Parsed parsed = parse("{}", CURRENT);
+        SettingsFile.Parsed<AnvilSettings> parsed = parse("{}", CURRENT);
         assertEquals(CURRENT, parsed.settings());
         assertEquals(List.of("enabled", "enchantCost", "repairCost", "renameCost", "breakChance"), parsed.missing());
         assertTrue(parsed.refused().isEmpty());
@@ -50,7 +51,7 @@ class AnvilConfigTest {
     @Test
     void pricesOutsideOneToThirtyNineAreRefused() {
         for (String bad : List.of("0", "40", "-1", "1000", "2147483648", "5.5", "\"5\"", "true", "[5]", "{}")) {
-            AnvilConfig.Parsed parsed = parse("{\"repairCost\": " + bad + "}", CURRENT);
+            SettingsFile.Parsed<AnvilSettings> parsed = parse("{\"repairCost\": " + bad + "}", CURRENT);
             assertEquals(CURRENT.repairCost(), parsed.settings().repairCost(), bad);
             assertTrue(mentions(parsed.refused(), "repairCost"), bad + ": " + parsed.refused());
         }
@@ -63,7 +64,7 @@ class AnvilConfigTest {
     @Test
     void breakChanceOutsideZeroToOneIsRefused() {
         for (String bad : List.of("-0.01", "1.01", "2", "\"0.5\"", "false", "NaN")) {
-            AnvilConfig.Parsed parsed = parse("{\"breakChance\": " + bad + "}", CURRENT);
+            SettingsFile.Parsed<AnvilSettings> parsed = parse("{\"breakChance\": " + bad + "}", CURRENT);
             assertEquals(CURRENT.breakChance(), parsed.settings().breakChance(), bad);
             assertTrue(mentions(parsed.refused(), "breakChance"), bad + ": " + parsed.refused());
         }
@@ -74,7 +75,7 @@ class AnvilConfigTest {
     @Test
     void enabledMustBeABoolean() {
         for (String bad : List.of("1", "\"true\"", "\"yes\"", "{}")) {
-            AnvilConfig.Parsed parsed = parse("{\"enabled\": " + bad + "}", CURRENT);
+            SettingsFile.Parsed<AnvilSettings> parsed = parse("{\"enabled\": " + bad + "}", CURRENT);
             assertFalse(parsed.settings().enabled(), bad);
             assertTrue(mentions(parsed.refused(), "enabled"), bad);
         }
@@ -83,7 +84,7 @@ class AnvilConfigTest {
     // One bad value doesn't take the good ones with it
     @Test
     void oneRefusedKeyLeavesTheOthersRead() {
-        AnvilConfig.Parsed parsed = parse("""
+        SettingsFile.Parsed<AnvilSettings> parsed = parse("""
                 {"enabled": true, "enchantCost": 40, "repairCost": 3, "renameCost": 2, "breakChance": 0.25}""", CURRENT);
         assertEquals(new AnvilSettings(true, CURRENT.enchantCost(), 3, 2, 0.25), parsed.settings());
         assertEquals(1, parsed.refused().size(), parsed.refused().toString());
@@ -91,14 +92,14 @@ class AnvilConfigTest {
 
     @Test
     void aNullValueCountsAsMissing() {
-        AnvilConfig.Parsed parsed = parse("{\"repairCost\": null}", CURRENT);
+        SettingsFile.Parsed<AnvilSettings> parsed = parse("{\"repairCost\": null}", CURRENT);
         assertTrue(parsed.missing().contains("repairCost"));
         assertTrue(parsed.refused().isEmpty());
     }
 
     @Test
     void unknownKeysAreNotedAndChangeNothing() {
-        AnvilConfig.Parsed parsed = parse("{\"enchantcost\": 3, \"tooExpensive\": false}", CURRENT);
+        SettingsFile.Parsed<AnvilSettings> parsed = parse("{\"enchantcost\": 3, \"tooExpensive\": false}", CURRENT);
         assertEquals(CURRENT, parsed.settings());
         assertTrue(mentions(parsed.unknown(), "enchantcost") && mentions(parsed.unknown(), "tooExpensive"), parsed.unknown().toString());
     }
@@ -107,7 +108,7 @@ class AnvilConfigTest {
     void writtenJsonReadsBackTheSame() {
         AnvilSettings settings = new AnvilSettings(false, 12, 3, 2, 0.05);
         JsonObject json = JsonParser.parseString(AnvilConfig.json(settings)).getAsJsonObject();
-        AnvilConfig.Parsed parsed = AnvilConfig.parse(json, AnvilSettings.DEFAULTS);
+        SettingsFile.Parsed<AnvilSettings> parsed = AnvilConfig.parse(json, AnvilSettings.DEFAULTS);
         assertEquals(settings, parsed.settings());
         assertTrue(parsed.missing().isEmpty());
         assertEquals(List.of("enabled", "enchantCost", "repairCost", "renameCost", "breakChance"), List.copyOf(json.keySet()));
@@ -116,7 +117,7 @@ class AnvilConfigTest {
     @Test
     void aMissingFileIsWrittenWithTheFallback() throws IOException {
         Path file = folder.resolve("config").resolve(AnvilConfig.FILE);
-        AnvilConfig.Result result = AnvilConfig.load(file, CURRENT);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, CURRENT);
         assertFalse(result.failed());
         assertEquals(CURRENT, result.settings());
         assertTrue(Files.exists(file));
@@ -130,7 +131,7 @@ class AnvilConfigTest {
     void missingKeysAreAddedToTheFile() throws IOException {
         Path file = folder.resolve(AnvilConfig.FILE);
         Files.writeString(file, "{\"repairCost\": 3}");
-        AnvilConfig.Result result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
         AnvilSettings expected = new AnvilSettings(true, 6, 3, 1, 0.12);
         assertEquals(expected, result.settings());
         assertEquals(AnvilConfig.json(expected), Files.readString(file));
@@ -144,7 +145,7 @@ class AnvilConfigTest {
         Path file = folder.resolve(AnvilConfig.FILE);
         String typed = "{\"enchantCost\": 50}";
         Files.writeString(file, typed);
-        AnvilConfig.Result result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
         assertEquals(AnvilSettings.DEFAULTS, result.settings());
         assertEquals(typed, Files.readString(file));
         assertTrue(mentions(result.notes(), "enchantCost"), result.notes().toString());
@@ -156,7 +157,7 @@ class AnvilConfigTest {
         Path file = folder.resolve(AnvilConfig.FILE);
         for (String bad : List.of("{ \"enabled\": ", "[1, 2]", "", "5", "\"text\"")) {
             Files.writeString(file, bad);
-            AnvilConfig.Result result = AnvilConfig.load(file, CURRENT);
+            SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, CURRENT);
             assertTrue(result.failed(), "'" + bad + "' was read");
             assertEquals(CURRENT, result.settings(), bad);
             assertEquals(bad, Files.readString(file), "'" + bad + "' was written over");
@@ -167,7 +168,7 @@ class AnvilConfigTest {
     void aFileThatIsntTextChangesNothing() throws IOException {
         Path file = folder.resolve(AnvilConfig.FILE);
         Files.write(file, new byte[] {(byte) 0xC3, (byte) 0x28, '{', '}'});
-        AnvilConfig.Result result = AnvilConfig.load(file, CURRENT);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, CURRENT);
         assertTrue(result.failed());
         assertEquals(CURRENT, result.settings());
     }
@@ -176,7 +177,7 @@ class AnvilConfigTest {
     void aFolderWhereTheFileShouldBeChangesNothing() throws IOException {
         Path file = folder.resolve(AnvilConfig.FILE);
         Files.createDirectories(file);
-        AnvilConfig.Result result = AnvilConfig.load(file, CURRENT);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, CURRENT);
         assertTrue(result.failed(), result.notes().toString());
         assertEquals(CURRENT, result.settings());
     }
@@ -185,7 +186,7 @@ class AnvilConfigTest {
     void aFileWithAByteOrderMarkStillReads() throws IOException {
         Path file = folder.resolve(AnvilConfig.FILE);
         Files.writeString(file, "﻿" + AnvilConfig.json(CURRENT), StandardCharsets.UTF_8);
-        AnvilConfig.Result result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
         assertFalse(result.failed(), result.notes().toString());
         assertEquals(CURRENT, result.settings());
     }

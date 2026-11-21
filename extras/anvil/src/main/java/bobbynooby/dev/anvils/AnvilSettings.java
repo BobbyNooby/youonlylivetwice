@@ -22,4 +22,12 @@ public record AnvilSettings(boolean enabled, int enchantCost, int repairCost, in
     public String prices() {
         return "rename " + renameCost + ", repair " + repairCost + ", enchant " + enchantCost;
     }
+
+    /** The line /yolt-anvils shows, and /yolt-anvils reload after it reads the file. */
+    public String describe() {
+        if (!enabled) {
+            return "Flat anvil prices are off";
+        }
+        return "Anvil prices: " + prices() + "; break chance " + breakChance;
+    }
 }

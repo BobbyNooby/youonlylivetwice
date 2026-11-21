@@ -4,4 +4,5 @@ plugins {
 }
 
 ext.modId = 'yolt-anvils'
+ext.sharedPackage = 'bobbynooby.dev.anvils.shared'
 apply from: rootProject.file('extras/extra.gradle')
