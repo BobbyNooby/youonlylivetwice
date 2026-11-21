@@ -6,11 +6,12 @@ on:
   push:
     branches: [release]
   # Manual run for hunting flaky tests: filter picks GameTests by name,
-  # verify repeats each of them 100 times per rotation, and client adds the client tests
+  # verify repeats each of them 100 times per rotation, and client adds the client tests.
+  # filter and verify reach YOLT's own GameTests only: each tiny mod's always run once, in full
   workflow_dispatch:
     inputs:
       filter:
-        description: GameTest id pattern, e.g. you-only-live-twice-gametest:lockout_game_tests_* (empty runs everything)
+        description: YOLT GameTest id pattern, e.g. you-only-live-twice-gametest:lockout_game_tests_* (empty runs everything)
         type: string
         required: false
       verify:
