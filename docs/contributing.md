@@ -47,14 +47,15 @@ To add a tiny mod:
 
 Everything runs locally, with Java 25:
 
-- `./gradlew build --continue`: every jar, the JUnit tests and the server GameTests of YOLT and of each module, about
+- `./gradlew build --continue`: every jar, the JUnit tests and the server GameTests of YOLT and of each tiny mod, about
   5 minutes. Results are in `build/test-results/` and, for each tiny mod, `extras/<name>/build/test-results/`; the
   jars in `build/libs/` and `extras/<name>/build/libs/`.
-- `./gradlew :anvil:test :anvil:runGameTest`: the anvil module's tests alone, in under a minute. The same works for
-  `:mending` and `:elytra`.
+- `./gradlew :anvil:test :anvil:runGameTest`: the tests of the anvil tiny mod alone, in under a minute. The same works
+  for `:mending` and `:elytra`.
 - `./gradlew test`: the JUnit tests alone, in seconds.
-- `./gradlew runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
-  the server GameTests. Add `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
+- `./gradlew :runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
+  YOLT's server GameTests. Without the `:` every tiny mod's GameTests run too, unfiltered. Add
+  `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
 - `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 5 minutes. Screenshots land in
   `build/run/clientGameTest/screenshots/`. `scripts/client-tests.sh PresenceLeak,ServerList` runs only the tests whose
   class names start with those. On NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on
