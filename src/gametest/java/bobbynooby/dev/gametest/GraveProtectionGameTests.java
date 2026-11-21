@@ -1047,12 +1047,17 @@ public class GraveProtectionGameTests {
             LiveSettings.applyAll(server);
             level.setBlock(grave.pos(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
             // A failure here ends the test there, before runBeforeTestEnd's turn would come, so it cleans up first: the
-            // hold left taken would keep the shipped interval on for the re-check tests of later batches
+            // hold left taken would keep the shipped interval on for the re-check tests of later batches. The check's
+            // own failure is the one reported, with any failure of the clean-up attached to it.
             helper.runAfterDelay(98, () -> {
                 try {
                     helper.assertTrue(level.getBlockState(grave.pos()).isAir(), "the head came back before 99 ticks");
                 } catch (RuntimeException e) {
-                    cleanUp.run();
+                    try {
+                        cleanUp.run();
+                    } catch (RuntimeException | Error cleanUpFailure) {
+                        e.addSuppressed(cleanUpFailure);
+                    }
                     throw e;
                 }
             });
