@@ -1,0 +1,12 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-elytra-gametest",
+    "version": "1.0.0",
+    "name": "YOLT Elytra GameTests",
+    "environment": "*",
+    "entrypoints": {
+        "fabric-gametest": [
+            "bobbynooby.dev.elytra.ElytraGameTests"
+        ]
+    }
+}

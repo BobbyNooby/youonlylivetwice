@@ -1,0 +1,8 @@
+// YOLT Elytra: the elytra nerf as a mod of its own. extras/extra.gradle has the build every tiny mod shares.
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+ext.modId = 'yolt-elytra'
+ext.sharedPackage = 'bobbynooby.dev.elytra.shared'
+apply from: rootProject.file('extras/extra.gradle')

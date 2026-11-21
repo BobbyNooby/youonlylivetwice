@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-elytra",
+    "version": "${version}",
+    "name": "YOLT Elytra",
+    "description": "Server-side elytra nerf: lighter gravity while gliding makes the glide slower and floatier, and rockets stop pushing past 20 m/s. Set both in config/yolt-elytra.json. Also part of You Only Live Twice.",
+    "authors": [
+        "BobbyNooby"
+    ],
+    "contact": {
+        "homepage": "https://github.com/BobbyNooby/youonlylivetwice/tree/release/extras/elytra",
+        "sources": "https://github.com/BobbyNooby/youonlylivetwice"
+    },
+    "license": "MIT",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "bobbynooby.dev.elytra.YoltElytra"
+        ]
+    },
+    "mixins": [
+        "yolt-elytra.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.20.1",
+        "minecraft": "~26.3",
+        "java": ">=25",
+        "fabric-api": ">=0.165.2+26.3"
+    }
+}
