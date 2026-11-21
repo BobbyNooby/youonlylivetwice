@@ -71,6 +71,7 @@ public class HardcoreColdGameTests {
     private static final String ABSORPTION = "you-only-live-twice-gametest:hardcore_cold_absorption";
     private static final String FIRE = "you-only-live-twice-gametest:hardcore_cold_fire";
     private static final String RADIUS = "you-only-live-twice-gametest:hardcore_cold_radius";
+    private static final String WARM = "you-only-live-twice-gametest:hardcore_cold_warm";
     // The structure and two blocks round it, so the biome blur at its edges still reads the new biome
     private static final BlockPos AREA_FROM = new BlockPos(-2, -2, -2);
     private static final BlockPos AREA_TO = new BlockPos(9, 8, 9);
@@ -619,9 +620,9 @@ public class HardcoreColdGameTests {
     }
 
     // The status line says why the chill moves, for the same chill: out in the open it gets colder; a torch, a lit
-    // campfire, a roof, a warm biome and a full leather set each warm, and each says which. Snow covers the low-x side;
-    // the campfire and the warm player stand on the other. The roofed player joins once the light engine has darkened
-    // the hut, as cold2RisesUnderOpenSkyNotUnderARoof explains.
+    // campfire, a roof and a full leather set each warm, and each says which. Snow covers the whole area, so every
+    // player stands in it however the cells' edges fall; a warm biome has a test of its own, with no snow near it. The
+    // roofed player joins once the light engine has darkened the hut, as cold2RisesUnderOpenSkyNotUnderARoof explains.
     @GameTest(environment = REASONS, maxTicks = 2400, skyAccess = true)
     public void cold3StatusNamesWhyItMoves(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -630,7 +631,7 @@ public class HardcoreColdGameTests {
         BlockPos eyes = helper.absolutePos(roofed.above());
         helper.startSequence()
                 .thenExecute(() -> guarded(scene, () -> {
-                    scene.snow(AREA_FROM, new BlockPos(1, 8, 9));
+                    scene.snow(AREA_FROM, AREA_TO);
                     buildHut(helper, roofed);
                     helper.setBlock(new BlockPos(7, 0, 7), Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true));
                 }))
@@ -643,7 +644,6 @@ public class HardcoreColdGameTests {
                         ServerPlayer leather = scene.join("ReasonLeather", new BlockPos(0, 0, 3));
                         ServerPlayer inside = scene.join("ReasonRoof", roofed);
                         ServerPlayer fire = scene.join("ReasonFire", new BlockPos(7, 0, 5));
-                        ServerPlayer warm = scene.join("ReasonWarm", new BlockPos(6, 0, 0));
                         torch.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.TORCH));
                         for (EquipmentSlot slot : List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)) {
                             leather.setItemSlot(slot, new ItemStack(switch (slot) {
@@ -656,8 +656,7 @@ public class HardcoreColdGameTests {
                         for (ServerPlayer player : List.of(open, torch, leather, inside)) {
                             assertCold(helper, player, true);
                         }
-                        assertCold(helper, warm, false);
-                        List<ServerPlayer> all = List.of(open, torch, leather, inside, fire, warm);
+                        List<ServerPlayer> all = List.of(open, torch, leather, inside, fire);
                         for (ServerPlayer player : all) {
                             setChill(player, 0.35);
                         }
@@ -665,13 +664,28 @@ public class HardcoreColdGameTests {
                         assertReason(helper, torch, "warming (torch)");
                         assertReason(helper, fire, "warming (fire)");
                         assertReason(helper, inside, "warming (shelter)");
-                        assertReason(helper, warm, "warming");
                         assertReason(helper, leather, "warming (leather)");
                     } finally {
                         scene.cleanUp.run();
                     }
                 })
                 .thenSucceed();
+    }
+
+    // Out of the cold the status line says only that it warms. No snow anywhere near, since the blur at a biome's edge
+    // reaches a few blocks past it.
+    @GameTest(environment = WARM, skyAccess = true)
+    public void cold3StatusNamesAWarmBiome(GameTestHelper helper) {
+        Scene scene = new Scene(helper);
+        try {
+            ServerPlayer warm = scene.join("ReasonWarm", new BlockPos(6, 0, 0));
+            assertCold(helper, warm, false);
+            setChill(warm, 0.35);
+            assertReason(helper, warm, "warming");
+        } finally {
+            scene.cleanUp.run();
+        }
+        helper.succeed();
     }
 
     // Chill is stored, so a relog keeps it, and nothing moves it while the player is away
