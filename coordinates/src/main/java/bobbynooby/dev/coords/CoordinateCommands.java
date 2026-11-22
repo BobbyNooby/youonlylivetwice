@@ -46,7 +46,7 @@ final class CoordinateCommands {
             return 0;
         }
         boolean on = YoltCoordinates.toggleReal(player);
-        CommandSource caller = ((CommandSourceStackAccessor) source).yoltSource();
+        CommandSource caller = ((CommandSourceStackAccessor) source).yoltCoordinatesSource();
         boolean own = caller == player.commandSource();
         String name = player.getPlainTextName();
         if (own) {

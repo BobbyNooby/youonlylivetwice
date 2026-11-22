@@ -11,5 +11,5 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface CommandSourceStackAccessor {
 
     @Accessor("source")
-    CommandSource yoltSource();
+    CommandSource yoltCoordinatesSource();
 }
