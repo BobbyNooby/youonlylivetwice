@@ -27,10 +27,10 @@
 		"minecraft": "~26.3",
 		"java": ">=25",
 		"fabric-api": ">=0.165.2+26.3",
-		"yolt-anvils": ">=${version}",
-		"yolt-mending": ">=${version}",
-		"yolt-elytra": ">=${version}",
 		"yolt-coordinates": ">=${version}",
 		"yolt-hardcore": ">=${version}"
+	},
+	"custom": {
+		"yolt-hardcore:host": true
 	}
 }

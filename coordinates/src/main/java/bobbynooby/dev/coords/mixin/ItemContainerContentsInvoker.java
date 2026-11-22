@@ -10,8 +10,8 @@ import java.util.List;
 import java.util.Optional;
 
 // A container item's slots, empty ones included, which the coordinate offset copies slot for slot when an item in one
-// holds a position. Nothing public builds the contents from such a list. YOLT's jar has an accessor of its own on this
-// class, so the methods' names are this mod's own.
+// holds a position. Nothing public builds the contents from such a list. YOLT Hardcore, which YOLT's jar also ships,
+// has an accessor of its own on this class, so the methods' names are this mod's own.
 @Mixin(ItemContainerContents.class)
 public interface ItemContainerContentsInvoker {
 

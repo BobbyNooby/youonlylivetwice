@@ -11,12 +11,12 @@ import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.GraveCompass;
 import bobbynooby.dev.graves.GraveNotice;
 import bobbynooby.dev.graves.Graves;
-import bobbynooby.dev.hardcore.Hardcore;
+import bobbynooby.dev.hosted.CoordinateOffset;
+import bobbynooby.dev.hosted.HardcoreLayer;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import bobbynooby.dev.skins.Skins;
 import bobbynooby.dev.visibility.AdminView;
-import bobbynooby.dev.visibility.CoordinateOffset;
 import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.NorthCompass;
@@ -73,8 +73,9 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         Bodies.init();
         // Grave compass: after Bodies, so a body taken over at the join has set the player's gear before the compass goes in
         GraveCompass.init();
-        // Hardcore: last, so its join hook sees the health and gear the body handover gave the player
-        Hardcore.init();
+        // Hardcore: the YOLT Hardcore mod, which registers every hook of its own inside this call. Last, so its join hook
+        // sees the health and gear the body handover gave the player.
+        HardcoreLayer.init();
 
         Yolt.LOGGER.info("You Only Live Twice started");
     }

@@ -4,6 +4,7 @@ import bobbynooby.dev.anvils.YoltAnvils;
 import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.elytra.YoltElytra;
+import bobbynooby.dev.hardcore.YoltHardcore;
 import bobbynooby.dev.mending.YoltMending;
 import net.minecraft.resources.Identifier;
 
@@ -13,8 +14,8 @@ import java.util.List;
 final class Ours {
     // The mods YOLT's jar holds use their own namespaces for what they add, such as a tiny mod's modifiers, so a check
     // for YOLT's alone would miss them
-    private static final List<String> IDS =
-            List.of(Yolt.MOD_ID, YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID, YoltCoordinates.MOD_ID);
+    private static final List<String> IDS = List.of(Yolt.MOD_ID, YoltAnvils.MOD_ID, YoltMending.MOD_ID,
+            YoltElytra.MOD_ID, YoltCoordinates.MOD_ID, YoltHardcore.MOD_ID);
 
     private Ours() {}
 

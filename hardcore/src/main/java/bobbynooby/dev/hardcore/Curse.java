@@ -1,0 +1,287 @@
+package bobbynooby.dev.hardcore;
+
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.level.GameType;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * The Curse of the Undead: every return from death, by dying or by a totem, takes a max heart, up to a cap, and the
+ * hearts come back one at a time with the player's own online play. The hearts lost live in the hardcore store, so a
+ * body's death or an offline kill reaches a player who isn't online; the modifier itself is transient and is put back
+ * on every join, respawn and change.
+ */
+public final class Curse {
+    static final Identifier MODIFIER = Hardcore.id("undead_curse");
+    private static final int STATUS_ORDER = 40;
+    private static final double TICKS_PER_DAY = 24000.0;
+    private static final String NAME = "Curse of the Undead";
+
+    // Hearts a death took, told to the player when they next come back, since a dead or kicked player can't see the
+    // action bar. Server thread only.
+    private static final Map<UUID, Integer> TELL_ON_RETURN = new HashMap<>();
+
+    private Curse() {}
+
+    static void init() {
+        Hardcore.onTick(Curse::tick);
+        Hardcore.onRefresh(Curse::refresh);
+        Hardcore.onExempt(Curse::clear);
+        Hardcore.onDeath(Curse::onDeath);
+        Status.register(STATUS_ORDER, Curse::statusLine);
+        // A notice belongs to this server's deaths, not to the next server started in the same process
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> TELL_ON_RETURN.clear());
+    }
+
+    /** A death, online or not. Only one in survival or adventure counts, whatever the lockout counts. */
+    public static void onDeath(UUID uuid, GameType modeAtDeath) {
+        if (!on()) {
+            return;
+        }
+        if (!modeAtDeath.isSurvival()) {
+            // Still the latest death, so an unkill of it gives back nothing an older one added
+            if (HardcoreStates.read(uuid).curseLastDeathAdded != 0) {
+                HardcoreStates.update(uuid, s -> s.curseLastDeathAdded = 0);
+            }
+            return;
+        }
+        HardcoreConfig.CurseSection cfg = cfg();
+        int[] added = new int[1];
+        HardcoreStates.update(uuid, s -> added[0] = CurseMaths.onReturn(s, cfg.heartsPerDeath, cfg.maxLostHearts, true));
+        if (added[0] > 0) {
+            TELL_ON_RETURN.merge(uuid, added[0], Integer::sum);
+        }
+        // On disk now, so a crash can't hand the heart back. A death at the cap still changes what an unkill gives back.
+        // Under YOLT the lockout's kick saves it as well, but not every death is kicked; when one is, the kick's save
+        // finds nothing left to write, and an unchanged state writes nothing here either.
+        HardcoreStates.flush(uuid);
+    }
+
+    /** A totem, or anything with death protection, has just saved this entity: a player, or a body for its owner. */
+    public static void onTotem(LivingEntity saved) {
+        if (!on()) {
+            return;
+        }
+        Guard.run(() -> totem(saved), "Could not add the Curse of the Undead for a totem on {}", saved.getStringUUID());
+    }
+
+    /** Puts the owner's curse on their logout body, so it never has more hearts than they do. */
+    public static void applyTo(LivingEntity body, UUID owner) {
+        if (!on()) {
+            return;
+        }
+        apply(body, HardcoreStates.read(owner));
+    }
+
+    /** Gives back what the latest death added, online or not, and returns how many hearts came back. */
+    public static int refund(UUID uuid) {
+        int[] given = new int[1];
+        HardcoreStates.update(uuid, s -> given[0] = CurseMaths.refundLatestDeath(s));
+        if (given[0] > 0) {
+            TELL_ON_RETURN.remove(uuid);
+        }
+        return given[0];
+    }
+
+    /** A revive paper's share back, only when the server sets one. Returns how many hearts came back. */
+    public static int refundRevivePaper(UUID uuid) {
+        if (!on() || cfg().reviveRefundHearts <= 0) {
+            return 0;
+        }
+        int hearts = cfg().reviveRefundHearts;
+        int[] given = new int[1];
+        HardcoreStates.update(uuid, s -> given[0] = CurseMaths.giveBack(s, hearts));
+        return given[0];
+    }
+
+    /** Sets the hearts lost, online or not, with nothing left for an unkill to give back. The heal timer carries on. */
+    public static void set(UUID uuid, int hearts) {
+        TELL_ON_RETURN.remove(uuid);
+        HardcoreStates.update(uuid, s -> {
+            s.curseHeartsLost = Math.max(hearts, 0);
+            s.curseLastDeathAdded = 0;
+            if (s.curseHeartsLost == 0) {
+                s.curseOnlineTicks = 0;
+            }
+        });
+    }
+
+    /** Puts the stored curse on an online player now, or takes it off while the curse is off or they are exempt. */
+    public static void apply(ServerPlayer player) {
+        if (Host.isStandIn(player)) {
+            return;
+        }
+        if (!on() || Hardcore.exempt(player)) {
+            clear(player);
+            return;
+        }
+        apply(player, HardcoreStates.of(player));
+    }
+
+    private static boolean on() {
+        return Host.on(c -> c.curse.enabled);
+    }
+
+    private static HardcoreConfig.CurseSection cfg() {
+        return Host.settings().curse;
+    }
+
+    private static long ticksPerHeal(HardcoreConfig.CurseSection cfg) {
+        return Math.max(1L, Math.round(cfg.healEveryDays * TICKS_PER_DAY));
+    }
+
+    private static void tick(ServerPlayer player) {
+        // A player body's curse is set when it is made, from its owner's
+        if (Host.isStandIn(player)) {
+            return;
+        }
+        if (!on()) {
+            clear(player);
+            return;
+        }
+        HardcoreConfig.CurseSection cfg = cfg();
+        HardcoreState state = HardcoreStates.of(player);
+        if (state.curseHeartsLost > 0 && !player.isDeadOrDying() && (cfg.countAfk || active(player, cfg))) {
+            int before = CurseMaths.shown(state, cfg.maxLostHearts);
+            long perHeal = ticksPerHeal(cfg);
+            HardcoreStates.update(player.getUUID(), s -> CurseMaths.onOnlineTick(s, cfg.healHearts, perHeal));
+            tellChange(player, before);
+        }
+        // Every tick, so a change to the cap or the switch shows at once; it only touches the attribute on a change
+        apply(player, HardcoreStates.of(player));
+    }
+
+    private static void refresh(ServerPlayer player) {
+        apply(player);
+        Integer lost = TELL_ON_RETURN.remove(player.getUUID());
+        if (lost != null && on()) {
+            Hardcore.actionBar(player, NAME + ": −" + hearts(lost) + ".");
+        }
+    }
+
+    private static void clear(ServerPlayer player) {
+        if (Host.isStandIn(player)) {
+            return;
+        }
+        AttributeInstance maxHealth = player.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.removeModifier(MODIFIER);
+        }
+    }
+
+    private static void totem(LivingEntity saved) {
+        HardcoreConfig.CurseSection cfg = cfg();
+        if (saved instanceof ServerPlayer player && !Host.isStandIn(player)) {
+            if (Hardcore.exempt(player)) {
+                return;
+            }
+            int before = CurseMaths.shown(HardcoreStates.of(player), cfg.maxLostHearts);
+            HardcoreStates.update(player.getUUID(), s -> CurseMaths.onReturn(s, cfg.heartsPerTotem, cfg.maxLostHearts, false));
+            // Vanilla set the health to 1 already, so the lower maximum can't kill
+            apply(player, HardcoreStates.of(player));
+            tellChange(player, before);
+            return;
+        }
+        // The body is its owner, so the owner pays for its totem
+        Host.bodyOwner(saved).ifPresent(owner -> {
+            HardcoreStates.update(owner, s -> CurseMaths.onReturn(s, cfg.heartsPerTotem, cfg.maxLostHearts, false));
+            applyTo(saved, owner);
+        });
+    }
+
+    // Only touches the attribute when the amount changes, since every change is sent to the client
+    private static void apply(LivingEntity entity, HardcoreState state) {
+        AttributeInstance maxHealth = entity.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth == null) {
+            return;
+        }
+        double amount = -2.0 * taken(maxHealth, state);
+        AttributeModifier current = maxHealth.getModifier(MODIFIER);
+        if (amount == 0.0) {
+            maxHealth.removeModifier(MODIFIER);
+            return;
+        }
+        if (current != null && current.amount() == amount) {
+            return;
+        }
+        // When the maximum drops, vanilla lowers the health to it; when it rises, the health stays and regen fills it
+        maxHealth.addOrUpdateTransientModifier(new AttributeModifier(MODIFIER, amount, AttributeModifier.Operation.ADD_VALUE));
+    }
+
+    // The hearts the curse takes now: what is stored, up to the cap, and never the last heart. The max health is worked
+    // out without the curse's own modifier, so hearts from anything else, such as Health Boost, count.
+    private static int taken(AttributeInstance maxHealth, HardcoreState state) {
+        double addedUp = maxHealth.getBaseValue();
+        double ofBase = 1.0;
+        double ofTotal = 1.0;
+        for (AttributeModifier modifier : maxHealth.getModifiers()) {
+            if (modifier.id().equals(MODIFIER)) {
+                continue;
+            }
+            switch (modifier.operation()) {
+                case ADD_VALUE -> addedUp += modifier.amount();
+                case ADD_MULTIPLIED_BASE -> ofBase += modifier.amount();
+                case ADD_MULTIPLIED_TOTAL -> ofTotal *= 1.0 + modifier.amount();
+            }
+        }
+        return CurseMaths.leavingOneHeart(CurseMaths.shown(state, cfg().maxLostHearts), addedUp, ofBase * ofTotal);
+    }
+
+    // A loss stored over a lowered cap changes nothing the player can see, so it isn't announced
+    private static void tellChange(ServerPlayer player, int before) {
+        int now = CurseMaths.shown(HardcoreStates.of(player), cfg().maxLostHearts);
+        if (now > before) {
+            Hardcore.actionBar(player, NAME + ": −" + hearts(now - before) + ".");
+        } else if (now < before) {
+            Hardcore.actionBar(player, NAME + ": +" + hearts(before - now) + ".");
+        }
+    }
+
+    // Vanilla keeps the player's last move or look in milliseconds
+    private static boolean active(ServerPlayer player, HardcoreConfig.CurseSection cfg) {
+        return CurseMaths.stillActive(Util.getMillis() - player.getLastActionTime(), cfg.afkMinutes);
+    }
+
+    private static String hearts(int count) {
+        return count == 1 ? "1 max heart" : count + " max hearts";
+    }
+
+    private static List<Component> statusLine(ServerPlayer player) {
+        if (!on() || Hardcore.exempt(player) || Host.isStandIn(player)) {
+            return List.of();
+        }
+        HardcoreConfig.CurseSection cfg = cfg();
+        HardcoreState state = HardcoreStates.of(player);
+        AttributeInstance maxHealth = player.getAttribute(Attributes.MAX_HEALTH);
+        // What it takes now, which is less than what is stored when that would take the last heart
+        int shown = maxHealth != null ? taken(maxHealth, state) : CurseMaths.shown(state, cfg.maxLostHearts);
+        if (shown <= 0) {
+            return List.of();
+        }
+        String hover = NAME + ": every return from death, by dying or by a totem, takes a max heart, up to "
+                + hearts(cfg.maxLostHearts) + " in all. They come back one at a time as you play; only your own time"
+                + " online counts.";
+        List<Component> lines = new ArrayList<>();
+        lines.add(shown >= cfg.maxLostHearts
+                ? Status.line(hover, Status.label("Curse"), Status.bad("−" + hearts(shown)), Status.note(" (the most)"))
+                : Status.line(hover, Status.label("Curse"), Status.bad("−" + hearts(shown))));
+        if (cfg.healHearts > 0) {
+            long left = ticksPerHeal(cfg) - state.curseOnlineTicks;
+            lines.add(Status.detail(hover, "next " + (cfg.healHearts == 1 ? "heart" : cfg.healHearts + " hearts") + " back in "
+                    + CurseMaths.playTime(left) + " of play"));
+        }
+        return lines;
+    }
+}

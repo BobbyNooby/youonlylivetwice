@@ -13,6 +13,7 @@ import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Legs;
 import bobbynooby.dev.hardcore.Slowdowns;
 import bobbynooby.dev.hardcore.Status;
+import bobbynooby.dev.hardcore.YoltHardcore;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -567,19 +568,21 @@ public class HardcoreAllGameTests {
         }
     }
 
-    // Every error YOLT logs from start to stop, across ticks. It joins the config YOLT's logger already uses, as
-    // OfflineGameTests.yoltEvents does.
+    // Every error YOLT and the hardcore layer, the YOLT Hardcore mod YOLT ships, which logs under its own name, log from
+    // start to stop, across ticks. It joins the configs their loggers already use, as OfflineGameTests.yoltEvents does.
     private static final class LogWatch {
-        private final LoggerConfig config;
+        private static final List<String> LOGGERS = List.of(Yolt.MOD_ID, YoltHardcore.LOGGER.getName());
+        // Both loggers may use the same config, which takes the appender once
+        private final List<LoggerConfig> configs;
         private final AbstractAppender appender;
         private final List<LogEvent> errors = new CopyOnWriteArrayList<>();
 
         private LogWatch() {
-            config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
+            configs = LOGGERS.stream().map(name -> ((Logger) LogManager.getLogger(name)).get()).distinct().toList();
             appender = new AbstractAppender("yolt-gametest-errors", null, null, false, Property.EMPTY_ARRAY) {
                 @Override
                 public void append(LogEvent event) {
-                    if (Yolt.MOD_ID.equals(event.getLoggerName()) && event.getLevel().isMoreSpecificThan(Level.ERROR)) {
+                    if (LOGGERS.contains(event.getLoggerName()) && event.getLevel().isMoreSpecificThan(Level.ERROR)) {
                         // Log4j can reuse the event it hands over, so a copy is kept
                         errors.add(event.toImmutable());
                     }
@@ -590,12 +593,16 @@ public class HardcoreAllGameTests {
         static LogWatch start() {
             LogWatch watch = new LogWatch();
             watch.appender.start();
-            watch.config.addAppender(watch.appender, null, null);
+            for (LoggerConfig config : watch.configs) {
+                config.addAppender(watch.appender, null, null);
+            }
             return watch;
         }
 
         void stop() {
-            config.removeAppender(appender.getName());
+            for (LoggerConfig config : configs) {
+                config.removeAppender(appender.getName());
+            }
             appender.stop();
         }
 

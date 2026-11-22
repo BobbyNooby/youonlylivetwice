@@ -49,14 +49,15 @@ To add a tiny mod that works both on its own and inside YOLT (`extras/mending/` 
    package with `.shared` on the end, and then applies `gradle/mod.gradle`. Add the folder's name to the list in
    `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the root `build.gradle`: that loads it in a
    dev run. Add an `implementation include(project(':<folder>'))` line to `hardcore/build.gradle`: that ships its jar
-   inside YOLT Hardcore's, which YOLT's jar holds. Add the mod id to `depends` in YOLT's
-   `src/main/resources/fabric.mod.json` and in `hardcore/src/main/resources/fabric.mod.json`, at `>=${version}`.
-4. Write a bridge in `src/main/java/bobbynooby/dev/hardcore/`, like `Mending.java`. Its `init()` calls the mod's
-   `hostedBy("You Only Live Twice", ...)` with settings read live from the mod's section of YOLT's config
-   (`HardcoreConfig`) and the players YOLT leaves out, and `Hardcore.init()` calls that `init()`. Without a bridge the
-   mod runs inside YOLT as if on its own: a YOLT server gets its `/<mod id>` command and its own file in `config/`.
-5. Check the mod's section in YOLT's `ConfigChecks` with the mod's own rule methods, as `MendingSettings.isRate` is
-   used there, so YOLT's config and the mod's file refuse the same values.
+   inside YOLT Hardcore's, which YOLT's jar holds. Add the mod id to `depends` in
+   `hardcore/src/main/resources/fabric.mod.json`, at `>=${version}`.
+4. Write a bridge in `hardcore/src/main/java/bobbynooby/dev/hardcore/`, like `Mending.java`. Its `init()` calls the
+   mod's `hostedBy(Host.name(), ...)` with settings read live from the mod's section of the hardcore settings
+   (`HardcoreConfig`, through `Host`) and the players the hardcore layer leaves out, and `Hardcore.init()` calls that
+   `init()`. Without a bridge the mod runs inside YOLT as if on its own: a YOLT server gets its `/<mod id>` command and
+   its own file in `config/`.
+5. Check the mod's section in `HardcoreChecks` with the mod's own rule methods, as `MendingSettings.isRate` is used
+   there, so YOLT's config and the mod's file refuse the same values.
 6. Add it to the tests that list every tiny mod: `TinyModDefaultsTest` (YOLT ships the mod's numbers),
    `HostedModsGameTests` (inside YOLT it has no file and no command), and, if it adds attribute modifiers or anything
    saved with a player, `Ours` in the gametest package.
