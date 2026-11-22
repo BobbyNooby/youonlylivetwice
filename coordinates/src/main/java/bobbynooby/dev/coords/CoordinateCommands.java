@@ -62,14 +62,15 @@ final class CoordinateCommands {
 
     /**
      * What /yolt-coordinates real says: to the player it is for, or, when someone else ran it as them, naming them.
-     * With the offset off nobody is shifted at all, so then it says the offset is off as well.
+     * With the offset off nobody is shifted at all, so then it says the command changes nothing until the offset is
+     * on.
      */
     static String reply(@Nullable String someoneElse, boolean on, boolean offsetOn) {
         String sees = on ? " real coordinates" : " shifted coordinates again";
         String text = someoneElse == null
                 ? "You see" + sees + " from your next join, respawn or dimension change."
                 : someoneElse + " sees" + sees + " from their next join, respawn or dimension change.";
-        return offsetOn ? text : text + " The coordinate offset is off.";
+        return offsetOn ? text : text + " The coordinate offset is off, so this changes nothing until it is on.";
     }
 
     // For the log: a player by name, and the console as vanilla names it. Anything else, such as a command block, has

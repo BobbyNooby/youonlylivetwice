@@ -51,6 +51,7 @@ public class CoordinateGameTests {
     private static final CoordinateSettings OFF = new CoordinateSettings(false);
     private static final String REAL_ON = "You see real coordinates from your next join, respawn or dimension change.";
     private static final String REAL_OFF = "You see shifted coordinates again from your next join, respawn or dimension change.";
+    private static final String OFF_NOTE = " The coordinate offset is off, so this changes nothing until it is on.";
 
     @GameTest
     public void theModRunsWithoutYolt(GameTestHelper helper) {
@@ -253,13 +254,13 @@ public class CoordinateGameTests {
             TestPlayers.op(player);
             int mark = TestPlayers.sent(player).size();
             helper.assertValueEqual(run(helper, player.createCommandSourceStack(), "yolt-coordinates real"), 1, "/yolt-coordinates real");
-            helper.assertValueEqual(said(player, mark), List.of(REAL_ON + " The coordinate offset is off."), "the reply");
+            helper.assertValueEqual(said(player, mark), List.of(REAL_ON + OFF_NOTE), "the reply");
             helper.assertTrue(YoltCoordinates.seesReal(player), "the command gave no real coordinates");
 
             mark = TestPlayers.sent(player).size();
             helper.assertValueEqual(run(helper, player.createCommandSourceStack(), "yolt-coordinates real"), 1,
                     "/yolt-coordinates real again");
-            helper.assertValueEqual(said(player, mark), List.of(REAL_OFF + " The coordinate offset is off."), "the second reply");
+            helper.assertValueEqual(said(player, mark), List.of(REAL_OFF + OFF_NOTE), "the second reply");
         } finally {
             try {
                 leave(player);
