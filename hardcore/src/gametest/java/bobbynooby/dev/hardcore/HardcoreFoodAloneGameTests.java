@@ -14,14 +14,15 @@ import net.minecraft.world.level.storage.TagValueOutput;
 
 import java.util.List;
 
+import static bobbynooby.dev.hardcore.HardcoreTestKit.FLOAT_CLOSE;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.assertClose;
+
 /**
  * Nutrients and the hunger tax with no YOLT on the server. Each test swaps its settings in and puts them back within
  * its one tick, so no other test sees them, and runs vanilla's food tick itself, since a test player gets none.
  */
 public class HardcoreFoodAloneGameTests {
     private static final BlockPos AT = new BlockPos(1, 1, 1);
-    private static final double CLOSE = 1e-9;
-    private static final float FLOAT_CLOSE = 1e-5F;
 
     // Vanilla takes 4.0 of exhaustion off at a time: the first burns the one point of saturation, which drains nothing,
     // the second a food point, which drains each group by 0.01. A cooked beef then puts all its 8 points on the bar:
@@ -73,14 +74,14 @@ public class HardcoreFoodAloneGameTests {
             player = TestPlayers.join(helper, "HungerTaxed", GameType.SURVIVAL, AT);
             float start = exhaustion(player);
             player.causeFoodExhaustion(0.1F);
-            assertClose(helper, exhaustion(player) - start, 0.2F, "an action's 0.1 at ×2");
+            assertClose(helper, exhaustion(player) - start, 0.2, FLOAT_CLOSE, "what an action's 0.1 cost at ×2");
             List<String> status = TestPlayers.status(helper, player);
             helper.assertTrue(status.contains("Server rules") && status.contains("  hunger ×2"), "/status: " + status);
 
             YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
             start = exhaustion(player);
             player.causeFoodExhaustion(0.1F);
-            assertClose(helper, exhaustion(player) - start, 0.1F, "an action's 0.1 at ×1");
+            assertClose(helper, exhaustion(player) - start, 0.1, FLOAT_CLOSE, "what an action's 0.1 cost at ×1");
             List<String> vanilla = TestPlayers.status(helper, player);
             helper.assertTrue(vanilla.stream().noneMatch(line -> line.contains("hunger")), "/status at ×1: " + vanilla);
         } finally {
@@ -111,13 +112,8 @@ public class HardcoreFoodAloneGameTests {
     private static void assertLevels(GameTestHelper helper, ServerPlayer player, double protein, double vitamins, double sugar,
                                      String when) {
         HardcoreState state = HardcoreStates.read(player.getUUID());
-        helper.assertTrue(Math.abs(state.protein - protein) < CLOSE && Math.abs(state.vitamins - vitamins) < CLOSE
-                        && Math.abs(state.sugar - sugar) < CLOSE,
-                "protein, vitamins and sugar " + state.protein + ", " + state.vitamins + ", " + state.sugar + " " + when
-                        + ", not " + protein + ", " + vitamins + ", " + sugar);
-    }
-
-    private static void assertClose(GameTestHelper helper, float actual, float expected, String what) {
-        helper.assertTrue(Math.abs(actual - expected) < FLOAT_CLOSE, what + " cost " + actual + ", not " + expected);
+        assertClose(helper, state.protein, protein, "protein " + when);
+        assertClose(helper, state.vitamins, vitamins, "vitamins " + when);
+        assertClose(helper, state.sugar, sugar, "sugar " + when);
     }
 }

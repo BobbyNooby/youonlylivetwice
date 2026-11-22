@@ -15,15 +15,11 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
@@ -157,13 +153,7 @@ public class HardcoreAloneGameTests {
         HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.tougherMobs.enabled = true));
         Zombie zombie = null;
         try {
-            ServerLevel level = helper.getLevel();
-            zombie = EntityTypes.ZOMBIE.create(level, EntitySpawnReason.NATURAL);
-            helper.assertTrue(zombie != null, "no zombie made");
-            Vec3 at = helper.absoluteVec(Vec3.atBottomCenterOf(new BlockPos(1, 1, 1)));
-            zombie.snapTo(at.x, at.y, at.z, 0.0F, 0.0F);
-            zombie.setPersistenceRequired();
-            helper.assertTrue(level.addFreshEntity(zombie), "the zombie was not added");
+            zombie = HardcoreTestKit.naturalZombie(helper, new BlockPos(1, 1, 1));
             AttributeInstance maxHealth = zombie.getAttribute(Attributes.MAX_HEALTH);
             helper.assertTrue(maxHealth != null && maxHealth.getModifier(MobBoosts.TOUGHER) != null,
                     "the zombie has no " + MobBoosts.TOUGHER + " modifier");

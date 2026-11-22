@@ -2,24 +2,21 @@ package bobbynooby.dev.hardcore;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.UUID;
+
+import static bobbynooby.dev.hardcore.HardcoreTestKit.NEXT_TO_BED;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.assertClose;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.assertSlow;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.placeBed;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.useBed;
 
 /**
  * Weight, broken legs, the limp and bed rest with no YOLT on the server, each the simplest case of YOLT's own test of
@@ -33,9 +30,6 @@ public class HardcoreBodyAloneGameTests {
     // Noon with the clock stopped and the sky clear, so the bed is a daytime nap
     private static final String BED = "yolt-hardcore-gametest:bed_rest_alone";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
-    // Beside the foot of the bed placeBed puts down
-    static final BlockPos NEXT_TO_BED = new BlockPos(1, 1, 0);
-    private static final double CLOSE = 1e-9;
     // Weight weighs again every 10 ticks, plus 2 for the slowdown to follow
     private static final int SETTLE = 12;
 
@@ -62,7 +56,7 @@ public class HardcoreBodyAloneGameTests {
             }));
             helper.runAfterDelay(2 * SETTLE, held.last(() -> assertSlow(helper, player, 0.0, "after the load was put down")));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -99,7 +93,7 @@ public class HardcoreBodyAloneGameTests {
                 assertSlow(helper, player, 0.0, "with the legs healed");
             }));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -129,7 +123,7 @@ public class HardcoreBodyAloneGameTests {
                 helper.assertFalse(Limp.limping(player), "still limping at 6 health");
             }));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -153,29 +147,14 @@ public class HardcoreBodyAloneGameTests {
             helper.assertTrue(player.isSleeping(), "the player could not lie down at noon");
             List<String> status = TestPlayers.status(helper, player);
             helper.assertTrue(status.contains("Resting healing in bed"), "/status: " + status);
-            helper.runAfterDelay(55, held.step(() -> assertHealth(helper, player, 11.0F, "50 ticks in bed")));
-            helper.runAfterDelay(105, held.last(() -> assertHealth(helper, player, 12.0F, "100 ticks in bed")));
+            helper.runAfterDelay(55, held.step(() ->
+                    assertClose(helper, player.getHealth(), 11.0, "the health after 50 ticks in bed")));
+            helper.runAfterDelay(105, held.last(() ->
+                    assertClose(helper, player.getHealth(), 12.0, "the health after 100 ticks in bed")));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
-    }
-
-    // A red bed with its foot at 1, 1, 1, facing south; returns the head
-    static BlockPos placeBed(GameTestHelper helper) {
-        BlockPos foot = new BlockPos(1, 1, 1);
-        BlockPos head = foot.relative(Direction.SOUTH);
-        BlockState bed = Blocks.BED.pick(DyeColor.RED).defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
-        helper.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
-        helper.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD));
-        return head;
-    }
-
-    // What a right click on the bed runs on the server
-    static void useBed(GameTestHelper helper, ServerPlayer player, BlockPos relativeHead) {
-        ServerLevel level = helper.getLevel();
-        BlockPos pos = helper.absolutePos(relativeHead);
-        level.getBlockState(pos).useWithoutItem(level, player, new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false));
     }
 
     // Full stacks into the first empty slots
@@ -183,15 +162,5 @@ public class HardcoreBodyAloneGameTests {
         for (int i = 0; i < stacks; i++) {
             player.getInventory().add(new ItemStack(item, 64));
         }
-    }
-
-    static void assertSlow(GameTestHelper helper, ServerPlayer player, double expected, String when) {
-        double applied = Slowdowns.applied(player);
-        helper.assertTrue(Math.abs(applied - expected) < CLOSE, "slowdown " + applied + " " + when + ", not " + expected);
-    }
-
-    private static void assertHealth(GameTestHelper helper, ServerPlayer player, float expected, String when) {
-        helper.assertTrue(Math.abs(player.getHealth() - expected) < CLOSE,
-                "health " + player.getHealth() + " after " + when + ", not " + expected);
     }
 }

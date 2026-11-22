@@ -18,6 +18,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 
+import static bobbynooby.dev.hardcore.HardcoreTestKit.assertSlow;
+
 /**
  * The Curse of the Undead, the players left out and the store, with no YOLT on the server. With no lockout a dead
  * player stays online and comes straight back, so the heart a death takes shows at the respawn. The curse ships on, so
@@ -88,6 +90,8 @@ public class HardcoreDeathAloneGameTests {
         ServerPlayer player = null;
         try {
             player = loaded(helper, "CurseSaved", GameType.SURVIVAL);
+            // The join's refresh saw a creative player, so the max health alone can't show a heart already lost
+            assertLost(helper, player.getUUID(), 0, "before the totem");
             helper.assertValueEqual(player.getMaxHealth(), 20.0F, "max health before the totem");
             int from = TestPlayers.mark(player);
             player.setItemSlot(EquipmentSlot.OFFHAND, new ItemStack(Items.TOTEM_OF_UNDYING));
@@ -133,7 +137,7 @@ public class HardcoreDeathAloneGameTests {
                         "the hotbar");
             }));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -161,7 +165,7 @@ public class HardcoreDeathAloneGameTests {
             }));
             helper.runAfterDelay(4, held.step(() -> {
                 helper.assertValueEqual(player.getMaxHealth(), 20.0F, "max health in creative");
-                HardcoreBodyAloneGameTests.assertSlow(helper, player, 0.0, "in creative");
+                assertSlow(helper, player, 0.0, "in creative");
                 HardcoreState kept = HardcoreStates.read(id);
                 helper.assertTrue(kept.curseHeartsLost == 2 && kept.legsBroken, "creative changed the stored state");
                 List<String> status = TestPlayers.status(helper, player);
@@ -171,7 +175,7 @@ public class HardcoreDeathAloneGameTests {
             }));
             helper.runAfterDelay(6, held.last(() -> assertInTheRules(helper, player, "back in survival")));
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -241,7 +245,7 @@ public class HardcoreDeathAloneGameTests {
     // Two hearts lost, and the legs' slowdown
     private static void assertInTheRules(GameTestHelper helper, ServerPlayer player, String when) {
         helper.assertValueEqual(player.getMaxHealth(), 16.0F, "max health " + when);
-        HardcoreBodyAloneGameTests.assertSlow(helper, player, 0.2, when);
+        assertSlow(helper, player, 0.2, when);
     }
 
     private static void assertLost(GameTestHelper helper, UUID id, int expected, String when) {

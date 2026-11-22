@@ -246,7 +246,8 @@ public class HardcoreCommandGameTests {
 
     // From the warning until it rises, the status says one rises tonight. Only the blood moon's own tick warns, so the
     // settings stay swapped in across ticks, in a batch of its own. It reads a clock of the test's, past warnTick on a
-    // day after every night the store has saved, so tonight rolls, and a warning saves no day.
+    // day freshDay hands it, after every night the store has saved and every day another test had, so tonight rolls,
+    // and a warning saves no day.
     @GameTest(environment = WARNED, maxTicks = 100)
     public void bloodMoonStatusSaysOneRisesTonight(GameTestHelper helper) {
         HardcoreFile.Loaded settings = with(c -> {
@@ -255,8 +256,7 @@ public class HardcoreCommandGameTests {
             c.bloodMoon.minNightsBetween = 0;
         });
         HardcoreConfig.BloodMoonSection config = settings.hardcore().bloodMoon;
-        long day = Math.max(Math.max(HardcoreStates.world(BloodMoon.LAST_DAY).orElse(0L),
-                HardcoreStates.world(BloodMoon.ENDED_DAY).orElse(0L)), config.graceDays) + 100L;
+        long day = HardcoreTestKit.freshDay(config);
         long clock = day * DAY + config.warnTick + 1;
         HardcoreFile.Loaded before = YoltHardcore.swapForTesting(settings);
         Runnable realClock = BloodMoon.useClockForTesting(() -> clock);

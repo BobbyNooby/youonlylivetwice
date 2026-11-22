@@ -16,8 +16,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.WorldClock;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -26,12 +24,21 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static bobbynooby.dev.hardcore.HardcoreTestKit.NEXT_TO_BED;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.assertClose;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.freshDay;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.naturalZombie;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.placeBed;
+import static bobbynooby.dev.hardcore.HardcoreTestKit.useBed;
 
 /**
  * Tougher and relentless mobs, the blood moon and the cold with no YOLT on the server. The mob tests swap their
@@ -48,7 +55,6 @@ public class HardcoreWorldAloneGameTests {
     private static final BlockPos AREA_FROM = new BlockPos(-2, -2, -2);
     private static final BlockPos AREA_TO = new BlockPos(9, 8, 9);
     private static final long DAY = 24000L;
-    private static final double CLOSE = 1e-9;
 
     // A hit of 4 from a tougher zombie lands as 5; one from a zombie made with tougher mobs off stays 4. Normal is the
     // difficulty that leaves a player's damage as dealt.
@@ -59,12 +65,12 @@ public class HardcoreWorldAloneGameTests {
         List<ServerPlayer> players = new ArrayList<>();
         try {
             helper.assertValueEqual(helper.getLevel().getDifficulty(), Difficulty.NORMAL, "the test world's difficulty");
-            Zombie tough = zombie(helper, zombies);
+            Zombie tough = spawned(zombies, naturalZombie(helper, MOB_AT));
             helper.assertTrue(tough.entityTags().contains(MobBoosts.TOUGH), "the zombie was not boosted");
             assertPlayerTakes(helper, players, "ToughHit", tough, 5.0F);
 
             YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
-            Zombie plain = zombie(helper, zombies);
+            Zombie plain = spawned(zombies, naturalZombie(helper, MOB_AT));
             helper.assertFalse(plain.entityTags().contains(MobBoosts.TOUGH), "a zombie was boosted with tougher mobs off");
             assertPlayerTakes(helper, players, "PlainHit", plain, 4.0F);
         } finally {
@@ -84,12 +90,12 @@ public class HardcoreWorldAloneGameTests {
         HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.relentlessMobs.enabled = true));
         List<Zombie> zombies = new ArrayList<>();
         try {
-            AttributeInstance range = followRange(zombie(helper, zombies));
+            AttributeInstance range = followRange(spawned(zombies, naturalZombie(helper, MOB_AT)));
             helper.assertTrue(range.getModifier(Relentless.RELENTLESS) != null, "no " + Relentless.RELENTLESS + " modifier");
             assertClose(helper, range.getValue(), range.getBaseValue() * 1.5, "a relentless zombie's follow range");
 
             YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
-            AttributeInstance plain = followRange(zombie(helper, zombies));
+            AttributeInstance plain = followRange(spawned(zombies, naturalZombie(helper, MOB_AT)));
             assertClose(helper, plain.getValue(), plain.getBaseValue(), "the follow range with relentless mobs off");
         } finally {
             try {
@@ -115,8 +121,7 @@ public class HardcoreWorldAloneGameTests {
             c.bloodMoon.minNightsBetween = 0;
         });
         HardcoreConfig.BloodMoonSection config = settings.hardcore().bloodMoon;
-        long day = Math.max(Math.max(HardcoreStates.world(BloodMoon.LAST_DAY).orElse(0L),
-                HardcoreStates.world(BloodMoon.ENDED_DAY).orElse(0L)), config.graceDays) + 100L;
+        long day = freshDay(config);
         long[] clock = {day * DAY + config.startTick};
         long[] asleepAt = new long[1];
         int[] from = new int[1];
@@ -125,8 +130,8 @@ public class HardcoreWorldAloneGameTests {
             Runnable realClock = BloodMoon.useClockForTesting(() -> clock[0]);
             held.onCleanUp(realClock);
             held.onCleanUp(() -> BloodMoon.stop(server));
-            BlockPos head = HardcoreBodyAloneGameTests.placeBed(helper);
-            ServerPlayer sleeper = held.join("MoonSleeper", GameType.SURVIVAL, HardcoreBodyAloneGameTests.NEXT_TO_BED);
+            BlockPos head = placeBed(helper);
+            ServerPlayer sleeper = held.join("MoonSleeper", GameType.SURVIVAL, NEXT_TO_BED);
             held.onCleanUp(() -> {
                 if (sleeper.isSleeping()) {
                     sleeper.stopSleepInBed(true, true);
@@ -150,7 +155,7 @@ public class HardcoreWorldAloneGameTests {
                         // batch's own midnight can be tens of thousands of ticks gone by now
                         toMidnight(helper);
                         helper.assertTrue(helper.getLevel().isDarkOutside(), "it isn't dark at midnight");
-                        HardcoreBodyAloneGameTests.useBed(helper, sleeper, head);
+                        useBed(helper, sleeper, head);
                         helper.assertTrue(sleeper.isSleeping(), "the player could not lie down at midnight");
                         asleepAt[0] = clockTicks(helper);
                     }))
@@ -178,15 +183,15 @@ public class HardcoreWorldAloneGameTests {
                     .thenExecute(held::cleanUp)
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
 
     // In the snow and under open sky the chill of a player who starts at none rises, while that of one three blocks
     // from a lit campfire, a heat source by the mod's own block tag, falls from half. Two once-a-second steps run
-    // before the check. The environment clears the weather, but rain left from before fades over up to 80 ticks and
-    // would still count as wet, so the test waits it out.
+    // before the check. The environment clears the weather, but rain left from before fades by 0.01 a tick, over up to
+    // 100 ticks, and would still count as wet, so the test waits it out.
     @GameTest(environment = COLD, maxTicks = 300, skyAccess = true)
     public void theColdChillsAndAFireWarms(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -212,7 +217,7 @@ public class HardcoreWorldAloneGameTests {
                     .thenExecute(held::cleanUp)
                     .thenSucceed();
         } catch (RuntimeException | Error e) {
-            held.cleanUp();
+            held.cleanUpAfter(e);
             throw e;
         }
     }
@@ -226,17 +231,9 @@ public class HardcoreWorldAloneGameTests {
         return player;
     }
 
-    // As a natural spawn makes it: made with its reason, then added to the world, which runs the load hook
-    private static Zombie zombie(GameTestHelper helper, List<Zombie> zombies) {
-        ServerLevel level = helper.getLevel();
-        Zombie zombie = EntityTypes.ZOMBIE.create(level, EntitySpawnReason.NATURAL);
-        helper.assertTrue(zombie != null, "no zombie made");
-        Vec3 at = helper.absoluteVec(Vec3.atBottomCenterOf(MOB_AT));
-        zombie.snapTo(at.x, at.y, at.z, 0.0F, 0.0F);
-        zombie.setPersistenceRequired();
-        helper.assertTrue(level.addFreshEntity(zombie), "the zombie was not added");
+    // Noted for the test to discard as it ends
+    private static Zombie spawned(List<Zombie> zombies, Zombie zombie) {
         zombies.add(zombie);
-        zombie.removeFreeWill();
         return zombie;
     }
 
@@ -276,17 +273,27 @@ public class HardcoreWorldAloneGameTests {
     }
 
     /**
-     * Sets the biome between two corners relative to the test, and returns what puts back the biome that was at its
-     * middle. Changes are whole 4×4×4 cells, so they reach up to 3 blocks past the corners.
+     * Sets the biome between two corners relative to the test, and returns what puts back each cell's own biome, since a
+     * structure may stand where two biomes meet. Biomes are kept per 4×4×4 cell, so the change reaches up to 3 blocks
+     * past the corners, and a fill from a cell's corner to that same corner sets that one cell.
      */
     private static Runnable setBiome(GameTestHelper helper, BlockPos relativeFrom, BlockPos relativeTo, ResourceKey<Biome> biome) {
         ServerLevel level = helper.getLevel();
         BlockPos from = helper.absolutePos(relativeFrom);
         BlockPos to = helper.absolutePos(relativeTo);
-        Holder<Biome> before = level.getNoiseBiome(QuartPos.fromBlock((from.getX() + to.getX()) / 2),
-                QuartPos.fromBlock((from.getY() + to.getY()) / 2), QuartPos.fromBlock((from.getZ() + to.getZ()) / 2));
+        // The test's rotation can swap the corners
+        BoundingBox area = BoundingBox.fromCorners(from, to);
+        Map<BlockPos, Holder<Biome>> before = new LinkedHashMap<>();
+        for (int x = QuartPos.fromBlock(area.minX()); x <= QuartPos.fromBlock(area.maxX()); x++) {
+            for (int y = QuartPos.fromBlock(area.minY()); y <= QuartPos.fromBlock(area.maxY()); y++) {
+                for (int z = QuartPos.fromBlock(area.minZ()); z <= QuartPos.fromBlock(area.maxZ()); z++) {
+                    BlockPos cell = new BlockPos(QuartPos.toBlock(x), QuartPos.toBlock(y), QuartPos.toBlock(z));
+                    before.put(cell, level.getNoiseBiome(x, y, z));
+                }
+            }
+        }
         fill(level, from, to, level.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(biome));
-        return () -> fill(level, from, to, before);
+        return () -> before.forEach((cell, was) -> fill(level, cell, cell, was));
     }
 
     // As vanilla's own test helper does it: nothing to change is fine
@@ -308,9 +315,5 @@ public class HardcoreWorldAloneGameTests {
         List<String> lines = TestPlayers.status(helper, player).stream().filter(line -> line.startsWith("Cold ")).toList();
         helper.assertTrue(lines.size() == 1 && lines.getFirst().endsWith(" · " + reason),
                 player.getPlainTextName() + "'s cold line is " + lines + ", not one ending in '" + reason + "'");
-    }
-
-    private static void assertClose(GameTestHelper helper, double actual, double expected, String name) {
-        helper.assertTrue(Math.abs(actual - expected) < CLOSE, name + " is " + actual + ", not " + expected);
     }
 }
