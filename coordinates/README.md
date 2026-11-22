@@ -136,7 +136,7 @@ Ops only.
 |---|---|
 | `/yolt-coordinates` | Shows whether the offset is on, or that it does nothing in a single-player world. |
 | `/yolt-coordinates reload` | Reads `config/yolt-coordinates.json` again, no restart needed. |
-| `/yolt-coordinates real` | Turns real coordinates on or off for you, from your next join, respawn or dimension change. From the console it does nothing: the console always uses real coordinates. In a single-player world it says the mod does nothing there. |
+| `/yolt-coordinates real` | Turns real coordinates on or off for you, from your next join, respawn or dimension change. Run plainly from the console it does nothing: the console always uses real coordinates. Through `/execute as <player>`, from the console or by an op, it does this for that player, who must be an op: anyone else is refused. In a single-player world it says the mod does nothing there. |
 
 Inside You Only Live Twice there is no `/yolt-coordinates`: the setting is YOLT's `hide.coordinates`, changed with
 `/yolt config` or `/yolt reload`, and `/yolt adminview` gives an op real coordinates.

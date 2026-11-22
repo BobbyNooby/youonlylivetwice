@@ -83,7 +83,7 @@ the `/yolt` commands above do the same.
 |---|---|---|
 | `/yolt-coordinates` | Ops, console | Shows whether the offset is on, or that it does nothing in a single-player world. |
 | `/yolt-coordinates reload` | Ops, console | Reads `config/yolt-coordinates.json` again, no restart needed. |
-| `/yolt-coordinates real` | Ops (a player) | Turns real coordinates on or off for you, from your next join, respawn or dimension change. It is kept until the server stops. |
+| `/yolt-coordinates real` | Ops (a player) | Turns real coordinates on or off for you, from your next join, respawn or dimension change. It is kept until the server stops. Through `/execute as <player>`, from the console or by an op, it does this for that player, who must be an op: anyone else is refused. |
 
 YOLT Anvils, YOLT Mending and YOLT Elytra have `/yolt-anvils`, `/yolt-mending` and `/yolt-elytra`, each with a
 `reload`, only on a server that has neither YOLT nor YOLT Hardcore. Their readmes, linked from
