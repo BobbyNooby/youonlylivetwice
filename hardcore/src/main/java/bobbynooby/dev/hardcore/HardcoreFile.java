@@ -22,9 +22,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -51,6 +54,8 @@ public final class HardcoreFile {
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
     // The same, one level deeper: each name maps to an object of numbers
     private static final Set<String> NUMBER_MAP_MAPS = Set.of("hardcore.nutrients.foods", "hardcore.tougherMobs.overrides");
+    // A {word} in a text, as YOLT's Messages reads one
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z0-9_]+)}");
     private static final String VERSION_KEY = "configVersion";
     private static final String DEFAULT = "default";
     private static final String CURRENT_VALUE = "the current value";
@@ -218,6 +223,30 @@ public final class HardcoreFile {
             notes.add(NEWER);
         }
         return new Result(loaded, notes, false, null);
+    }
+
+    /**
+     * A notice for each {word} in the six texts, as YOLT's Messages.unknownPlaceholders gives one: none of them fills
+     * anything in, so it is most likely a misspelt placeholder. It is sent as typed, so this is only said, never
+     * refused, and kept out of a start's notes, which would keep a copy of a file that loaded as typed.
+     */
+    public static List<String> unknownPlaceholders(BloodMoonTexts texts) {
+        Map<String, String> byKey = new LinkedHashMap<>();
+        byKey.put("bloodMoonWarningTitle", texts.warningTitle());
+        byKey.put("bloodMoonWarningLine", texts.warningLine());
+        byKey.put("bloodMoonRisenLine", texts.risenLine());
+        byKey.put("bloodMoonUpLine", texts.upLine());
+        byKey.put("bloodMoonSetLine", texts.setLine());
+        byKey.put("bloodMoonBarTitle", texts.barTitle());
+        List<String> notices = new ArrayList<>();
+        for (Map.Entry<String, String> text : byKey.entrySet()) {
+            Matcher match = PLACEHOLDER.matcher(text.getValue());
+            while (match.find()) {
+                notices.add("messages." + text.getKey() + ": has " + match.group()
+                        + ", which it doesn't fill in, so it shows as typed");
+            }
+        }
+        return notices;
     }
 
     /** The text the file is written with for these settings: every key, in the file's order. */

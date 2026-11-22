@@ -131,7 +131,11 @@ class HardcoreFileParityTest {
                                   "bloodMoon": {"barColour": "purple", "warnTick": 0, "endTick": 23999},
                                   "cold": {"enabled": true, "heatRadius": 8, "shelteredBelowSkyLight": 0}},
                      "messages": {"bloodMoonSetLine": "", "bloodMoonBarTitle": "Night of \\u00a7cBlood"}}""",
-            "{}");
+            "{}",
+            // Words no text fills in, which both only say
+            """
+                    {"messages": {"bloodMoonWarningTitle": "{x}{y_2} rises", "bloodMoonSetLine": "The {moon} has set.",
+                                  "bloodMoonBarTitle": "{not a word} {}", "bloodMoonUpLine": "{Up}"}}""");
 
     @TempDir
     Path dir;
@@ -227,9 +231,11 @@ class HardcoreFileParityTest {
         assertSameValues(yolt.config(), mod.loaded(), json);
     }
 
+    // The notices for a {word} no text fills in, which neither loader counts among its notes, come out the same too
     private static void assertSameValues(YoltConfig yolt, HardcoreFile.Loaded mod, String json) {
         assertEquals(GSON.toJsonTree(yolt.hardcore), GSON.toJsonTree(mod.hardcore()), json);
         assertEquals(texts(yolt), mod.texts(), json);
+        assertEquals(concerning(Messages.unknownPlaceholders(yolt)), HardcoreFile.unknownPlaceholders(mod.texts()), json);
     }
 
     // Values in use that differ from the defaults, so a value kept on a reload is told from a default

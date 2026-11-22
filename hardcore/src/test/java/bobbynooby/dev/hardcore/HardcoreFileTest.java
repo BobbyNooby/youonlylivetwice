@@ -399,6 +399,25 @@ class HardcoreFileTest {
         assertEquals("", started.loaded().texts().upLine());
     }
 
+    // None of the six texts fills anything in, so a {word} in one is most likely a misspelt placeholder of another
+    // text. It is sent as typed, so it is only said, and never in the notes, which would keep a copy of a file that
+    // loaded as typed.
+    @Test
+    void aWordATextDoesntFillInIsOnlySaid() throws IOException {
+        HardcoreFile.Result started = start("""
+                {"messages": {"bloodMoonWarningTitle": "{x}{y_2} rises", "bloodMoonSetLine": "The {moon} has set.",
+                              "bloodMoonBarTitle": "{not a word} {}"}}""");
+        assertEquals(List.of(), started.notes());
+        assertNull(started.backup());
+        assertEquals("The {moon} has set.", started.loaded().texts().setLine());
+        assertEquals(List.of(
+                "messages.bloodMoonWarningTitle: has {x}, which it doesn't fill in, so it shows as typed",
+                "messages.bloodMoonWarningTitle: has {y_2}, which it doesn't fill in, so it shows as typed",
+                "messages.bloodMoonSetLine: has {moon}, which it doesn't fill in, so it shows as typed"),
+                HardcoreFile.unknownPlaceholders(started.loaded().texts()));
+        assertEquals(List.of(), HardcoreFile.unknownPlaceholders(BloodMoonTexts.DEFAULTS));
+    }
+
     @Test
     void aReloadKeepsTheValueInUseForEachMistake() throws IOException {
         Files.writeString(file(), """

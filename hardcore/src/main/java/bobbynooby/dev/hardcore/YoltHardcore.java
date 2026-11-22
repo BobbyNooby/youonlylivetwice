@@ -167,6 +167,10 @@ public final class YoltHardcore implements ModInitializer {
                 LOGGER.warn("{}", note);
             }
         }
+        // Not among the notes, which would keep a copy of a file that loaded as typed, as YOLT says them at its start
+        for (String notice : HardcoreFile.unknownPlaceholders(own.texts())) {
+            LOGGER.warn("{}", notice);
+        }
         noteCurseAndLimp();
         LOGGER.info("{}", HardcoreCommands.features(own.hardcore()));
     }

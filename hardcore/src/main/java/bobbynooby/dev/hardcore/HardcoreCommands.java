@@ -67,7 +67,8 @@ final class HardcoreCommands {
         return 1;
     }
 
-    // Notes first, then the outcome. The file is the admin's own, so a reload never writes it.
+    // Notes first, then a notice for each {word} no text fills in, as YOLT's reload says them, then the outcome. The file
+    // is the admin's own, so a reload never writes it.
     private static int reload(CommandSourceStack source) {
         HardcoreFile.Result result = YoltHardcore.reload();
         for (String note : result.notes()) {
@@ -75,6 +76,9 @@ final class HardcoreCommands {
         }
         if (result.failed()) {
             return fail(source, "Nothing changed: " + HardcoreFile.NAME + " couldn't be read");
+        }
+        for (String notice : HardcoreFile.unknownPlaceholders(result.loaded().texts())) {
+            reply(source, Component.literal(notice));
         }
         source.sendSuccess(() -> Component.literal("Reloaded " + HardcoreFile.NAME + "."), true);
         return 1;

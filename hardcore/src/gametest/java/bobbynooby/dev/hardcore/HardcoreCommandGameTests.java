@@ -114,7 +114,8 @@ public class HardcoreCommandGameTests {
         helper.succeed();
     }
 
-    // Through the command, as an op at the console would. The reload reads only, so the bad value stays in the file.
+    // Through the command, as an op at the console would. The reload reads only, so the bad value stays in the file. A
+    // {word} no text fills in is said after the notes, as YOLT's reload says it.
     @GameTest
     public void aReloadAppliesAChangedFileAndNamesABadValue(GameTestHelper helper) {
         HardcoreFile.Loaded inUse = HardcoreFile.Loaded.defaults();
@@ -125,14 +126,15 @@ public class HardcoreCommandGameTests {
         try {
             String typed = """
                     {"hardcore": {"bloodMoon": {"enabled": true}, "weight": {"freeLoad": "heavy"}},
-                     "messages": {"bloodMoonSetLine": "Dawn."}}""";
+                     "messages": {"bloodMoonSetLine": "Dawn {soon}."}}""";
             write(file, typed);
             helper.assertValueEqual(TestPlayers.console(helper, "yolt-hardcore reload", false, 1), List.of(
                     "hardcore.weight.freeLoad: expected a number, using the current value",
+                    "messages.bloodMoonSetLine: has {soon}, which it doesn't fill in, so it shows as typed",
                     "Reloaded yolt-hardcore.json."), "the reply");
             helper.assertTrue(Host.settings().bloodMoon.enabled, "the reload didn't turn the blood moon on");
             helper.assertValueEqual(Host.settings().weight.freeLoad, 20.0, "the value in use for the bad value");
-            helper.assertValueEqual(Host.texts().setLine(), "Dawn.", "the set line");
+            helper.assertValueEqual(Host.texts().setLine(), "Dawn {soon}.", "the set line");
             helper.assertValueEqual(read(file), typed, "the file after the reload");
         } finally {
             restore(file, original, before);
