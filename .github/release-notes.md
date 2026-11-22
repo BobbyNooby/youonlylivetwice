@@ -9,7 +9,7 @@ game for a YOLT server: no setting, default, command, message or `/status` text.
 
 Each is for a Fabric server that wants only that part, with no YOLT on it.
 
-- **YOLT Hardcore** (`yolt-hardcore-1.4.0.jar`), new. The whole hardcore layer: weight, broken legs, the limp, bed
+- **YOLT Hardcore** (`yolt-hardcore-1.4.0.jar`), new. The hardcore layer: weight, broken legs, the limp, bed
   rest, the Curse of the Undead, nutrients, the hunger tax, tougher and relentless mobs, blood moons and cold. YOLT
   Anvils, YOLT Mending and YOLT Elytra come inside its jar. It reads `config/yolt-hardcore.json`, which has the same
   `hardcore` block as YOLT's config, key for key, and the six blood moon texts. Its defaults are YOLT's: only the Curse
@@ -28,7 +28,7 @@ Each is for a Fabric server that wants only that part, with no YOLT on it.
   you past 20 m/s. It reads `config/yolt-elytra.json` and gives ops `/yolt-elytra` and `/yolt-elytra reload`. On its
   own it is on by default.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/elytra/README.md).
-- **YOLT Anvils** (`yolt-anvils-1.4.0.jar`) does what it did in 1.2.1.
+- **YOLT Anvils** (`yolt-anvils-1.4.0.jar`) prices anvils as it did in 1.2.1.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/anvil/README.md).
 
 In each, a bad value in the config file is refused: the default is used at a server start, and the value in use at a
@@ -50,8 +50,8 @@ reload. Players in creative or spectator keep vanilla, except in YOLT Coordinate
 - YOLT Hardcore keeps the ids the hardcore layer had inside YOLT: its modifiers, tags and marks keep the
   `you-only-live-twice` namespace, and its store is still `database/you-only-live-twice-hardcore.db` in the world
   folder.
-- Each of the five jars refuses to start beside a You Only Live Twice from before it shipped that mod, such as 1.2.1
-  for all but YOLT Anvils. That YOLT has the part itself, and it would otherwise run twice.
+- Each of the five jars refuses to load beside a You Only Live Twice older than itself. An older YOLT has these parts
+  in it, and they would otherwise run twice.
 - The gravity change on a glider is YOLT Elytra's own, so since 1.2.1 it has the id `yolt-elytra:glide_gravity`. It
   was `you-only-live-twice:elytra_gravity`, which matters only to someone who reads it with `/attribute`.
 
