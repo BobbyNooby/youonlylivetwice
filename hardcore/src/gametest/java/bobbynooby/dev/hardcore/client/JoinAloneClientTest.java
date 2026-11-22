@@ -12,9 +12,6 @@ import static bobbynooby.dev.hardcore.client.ClientKit.check;
 // A real client joins a server with only YOLT Hardcore, and the report a typed /status sends reaches its chat. The
 // settings in use are the defaults, so the report is the one a new player on a server as shipped gets.
 public class JoinAloneClientTest implements FabricClientGameTest {
-    private static final List<String> REPORT = List.of("Your body", "Server rules", "  Mending 0.4/XP (vanilla 2)",
-            "  anvil: rename 1, repair 5, enchant 6");
-
     @Override
     public void runTest(ClientGameTestContext ctx) {
         // The client and its in-process server share one loader, so these are the mods the server runs
@@ -33,10 +30,12 @@ public class JoinAloneClientTest implements FabricClientGameTest {
                 ClientKit.clearChat(ctx);
                 int mark = ClientKit.mark();
                 ClientKit.type(ctx, connection, "/status");
-                ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> ClientKit.chat(mark).size() >= REPORT.size(),
+                ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT,
+                        mc -> ClientKit.chat(mark).size() >= ClientKit.STATUS_REPORT.size(),
                         mc -> "the client's chat showed " + ClientKit.chat(mark) + " after /status");
                 List<String> shown = ClientKit.chat(mark);
-                check(shown.equals(REPORT), () -> "the client's chat showed " + shown + " for /status, not " + REPORT);
+                check(shown.equals(ClientKit.STATUS_REPORT),
+                        () -> "the client's chat showed " + shown + " for /status, not " + ClientKit.STATUS_REPORT);
                 ClientKit.screenshotWithChat(ctx, "hardcore-alone-status");
             } finally {
                 ClientKit.runAll(List.of(

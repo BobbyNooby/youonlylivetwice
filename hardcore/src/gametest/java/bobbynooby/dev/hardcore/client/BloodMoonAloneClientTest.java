@@ -31,7 +31,7 @@ public class BloodMoonAloneClientTest implements FabricClientGameTest {
             try {
                 check(!server.computeOnServer(s -> BloodMoon.active()), () -> "a blood moon is up before the command");
                 check(ctx.computeOnClient(mc -> bars(mc).isEmpty()), () -> "the client shows a boss bar before the command");
-                server.runOnServer(s -> ClientKit.op(connection.getServerPlayer()));
+                server.runOnServer(s -> ClientBridge.op(connection.getServerPlayer()));
                 ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> ClientKit.clientHasCommand(mc, "yolt-hardcore"),
                         mc -> "an op's command tree has no /yolt-hardcore");
                 ClientKit.clearChat(ctx);
@@ -53,8 +53,7 @@ public class BloodMoonAloneClientTest implements FabricClientGameTest {
                         () -> ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> bars(mc).isEmpty(),
                                 mc -> "the client still shows a boss bar after the blood moon stopped"),
                         () -> ctx.waitTicks(UNDARKEN_TICKS),
-                        // The op list is a file in the client's run folder, which every later server reads
-                        () -> server.runOnServer(s -> ClientKit.deop(connection.getServerPlayer())),
+                        () -> server.runOnServer(s -> ClientBridge.deop(connection.getServerPlayer())),
                         () -> server.runOnServer(s -> putBack.run()),
                         () -> ClientKit.clearChat(ctx)));
             }

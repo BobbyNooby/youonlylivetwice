@@ -7,7 +7,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
-import net.minecraft.network.chat.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,10 +24,6 @@ import static bobbynooby.dev.hardcore.client.ClientKit.check;
  * /yolt-hardcore is refused. Both worlds stay in the run folder's saves, to be looked into after a run.
  */
 public class SingleplayerAloneClientTest implements FabricClientGameTest {
-    private static final String FEATURES = "Hardcore features on: curse, mending, anvil.";
-    private static final List<String> REPORT = List.of("Your body", "Server rules", "  Mending 0.4/XP (vanilla 2)",
-            "  anvil: rename 1, repair 5, enchant 6");
-
     @Override
     public void runTest(ClientGameTestContext ctx) {
         UUID self = ctx.computeOnClient(mc -> mc.getGameProfile().id());
@@ -45,7 +40,8 @@ public class SingleplayerAloneClientTest implements FabricClientGameTest {
         try (TestSingleplayerContext world = opened[0]) {
             Path folder = world.getWorldSave().getSaveDirectory();
             TestServerContext server = world.getServer();
-            check(logged.contains(FEATURES), () -> "the world's start logged " + logged + ", not \"" + FEATURES + "\"");
+            check(logged.contains(ClientKit.FEATURES),
+                    () -> "the world's start logged " + logged + ", not \"" + ClientKit.FEATURES + "\"");
             check(server.computeOnServer(s -> ClientBridge.active()), () -> "YOLT Hardcore isn't active in single-player");
             Path store = checkStoreIn(server, folder);
             check(!Files.exists(store), () -> store + " is there before anything was stored");
@@ -54,16 +50,17 @@ public class SingleplayerAloneClientTest implements FabricClientGameTest {
             ClientKit.clearChat(ctx);
             int mark = ClientKit.mark();
             ClientKit.type(ctx, world.getConnection(), "/status");
-            ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> ClientKit.chat(mark).size() >= REPORT.size(),
+            ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT,
+                    mc -> ClientKit.chat(mark).size() >= ClientKit.STATUS_REPORT.size(),
                     mc -> "the client's chat showed " + ClientKit.chat(mark) + " after /status");
-            check(ClientKit.chat(mark).equals(REPORT),
-                    () -> "the client's chat showed " + ClientKit.chat(mark) + " for /status, not " + REPORT);
+            check(ClientKit.chat(mark).equals(ClientKit.STATUS_REPORT),
+                    () -> "the client's chat showed " + ClientKit.chat(mark) + " for /status, not " + ClientKit.STATUS_REPORT);
 
             // The owner of a world with cheats on may use every command
             check(ctx.computeOnClient(mc -> ClientKit.clientHasCommand(mc, "yolt-hardcore")),
                     () -> "the owner's command tree has no /yolt-hardcore with cheats on");
             ClientKit.type(ctx, world.getConnection(), "/yolt-hardcore");
-            ClientKit.waitForChat(ctx, mark, FEATURES);
+            ClientKit.waitForChat(ctx, mark, ClientKit.FEATURES);
             ClientKit.screenshotWithChat(ctx, "hardcore-alone-sp-commands");
 
             ClientKit.clearChat(ctx);
@@ -100,11 +97,11 @@ public class SingleplayerAloneClientTest implements FabricClientGameTest {
             ClientKit.clearChat(ctx);
             int mark = ClientKit.mark();
             ClientKit.type(ctx, world.getConnection(), "/yolt-hardcore");
-            String unknown = Component.translatable("command.unknown.command").getString();
-            ClientKit.waitForChat(ctx, mark, unknown);
-            check(!ClientKit.chat(mark).contains(FEATURES), () -> "the owner with cheats off was told " + ClientKit.chat(mark));
+            ClientKit.waitForChat(ctx, mark, ClientKit.unknownCommand());
+            check(!ClientKit.chat(mark).contains(ClientKit.FEATURES),
+                    () -> "the owner with cheats off was told " + ClientKit.chat(mark));
             ClientKit.type(ctx, world.getConnection(), "/status");
-            ClientKit.waitForChat(ctx, mark, REPORT.getLast());
+            ClientKit.waitForChat(ctx, mark, ClientKit.STATUS_REPORT.getLast());
             ClientKit.screenshotWithChat(ctx, "hardcore-alone-sp-cheats-off");
             // Nothing told of a heart here before a death here
             check(!ClientKit.overlay(opened).contains(ClientKit.LOST_A_HEART),

@@ -381,7 +381,7 @@ public class HardcoreCommandGameTests {
         }
     }
 
-    private static void delete(Path file) {
+    static void delete(Path file) {
         try {
             Files.deleteIfExists(file);
         } catch (IOException e) {

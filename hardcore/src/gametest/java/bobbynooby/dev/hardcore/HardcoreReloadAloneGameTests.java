@@ -12,9 +12,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import org.jspecify.annotations.Nullable;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -53,7 +50,7 @@ public class HardcoreReloadAloneGameTests {
             // The file as it was, or gone if it wasn't there; Held puts the settings in use back after it
             held.onCleanUp(() -> {
                 if (original == null) {
-                    delete(file);
+                    HardcoreCommandGameTests.delete(file);
                 } else {
                     HardcoreCommandGameTests.write(file, original);
                 }
@@ -99,14 +96,6 @@ public class HardcoreReloadAloneGameTests {
         } catch (RuntimeException | Error e) {
             held.cleanUpAfter(e);
             throw e;
-        }
-    }
-
-    private static void delete(Path file) {
-        try {
-            Files.deleteIfExists(file);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
     }
 

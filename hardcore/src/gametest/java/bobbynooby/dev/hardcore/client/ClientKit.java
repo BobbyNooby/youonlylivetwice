@@ -17,7 +17,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
@@ -54,6 +53,11 @@ final class ClientKit {
     static final String TITLE_SCREEN = "deathScreen.titleScreen";
     // What the curse tells a player who comes back from a death that took one heart
     static final String LOST_A_HEART = "Curse of the Undead: −1 max heart.";
+    // What /status reports for a player with nothing on them, with the settings as shipped
+    static final List<String> STATUS_REPORT = List.of("Your body", "Server rules", "  Mending 0.4/XP (vanilla 2)",
+            "  anvil: rename 1, repair 5, enchant 6");
+    // What /yolt-hardcore and the start line say with the settings as shipped
+    static final String FEATURES = "Hardcore features on: curse, mending, anvil.";
     static final float FULL_HEALTH = 20.0F;
     // One heart lost to the curse leaves nine
     static final float CURSED_HEALTH = 18.0F;
@@ -205,15 +209,9 @@ final class ClientKit {
         return screen == null ? "no screen" : screen.getClass().getSimpleName();
     }
 
-    // The test server gives an op level 0 unless told otherwise, below the level /yolt-hardcore needs. The op list is a
-    // file in the client's run folder, which every later server reads, so each op is taken off again.
-    static void op(ServerPlayer player) {
-        player.level().getServer().getPlayerList().op(player.nameAndId(), Optional.of(LevelBasedPermissionSet.GAMEMASTER),
-                Optional.empty());
-    }
-
-    static void deop(ServerPlayer player) {
-        player.level().getServer().getPlayerList().deop(player.nameAndId());
+    /** What vanilla answers a command a player may not use, as one that doesn't exist, in the client's language. */
+    static String unknownCommand() {
+        return Component.translatable("command.unknown.command").getString();
     }
 
     /** True when the client's own command tree, which the server sends it, has this command. */

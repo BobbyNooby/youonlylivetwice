@@ -1,6 +1,7 @@
 package bobbynooby.dev.hardcore;
 
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Path;
@@ -27,9 +28,17 @@ public final class ClientBridge {
         return Host.active();
     }
 
-    /** The features on, as /yolt-hardcore and the start line word them. */
-    public static String features() {
-        return HardcoreCommands.features(Host.settings());
+    /** Makes the player an op at the level /yolt-hardcore needs, as the server GameTests do. */
+    public static void op(ServerPlayer player) {
+        TestPlayers.op(player);
+    }
+
+    /**
+     * Takes the op off again. The op list is a file in the client's run folder, which every later server of the run
+     * reads.
+     */
+    public static void deop(ServerPlayer player) {
+        TestPlayers.deop(player);
     }
 
     /** Where the mod keeps the hardcore states of this server's world. */
