@@ -7,10 +7,10 @@ of its own for servers that want only this. Players join with a plain vanilla cl
 
 ## What it does
 
-Each feature has its own switch. Three ship on: the Curse of the Undead, the flat anvil price and the Mending nerf.
-Everything else ships off.
+Each feature but the hunger tax has its own switch; the hunger tax is on at any multiplier but `1.0`. Three features
+ship on: the Curse of the Undead, the flat anvil price and the Mending nerf. Everything else ships off.
 
-| Feature | What it does | Switch | Default |
+| Feature | What it does | Setting | Default |
 |---|---|---|---|
 | Weight | Everything you carry weighs something. Over the free load you walk slower, and each jump costs extra hunger. Your ender chest doesn't count. | `hardcore.weight.enabled` | off |
 | Broken legs | A long fall breaks your legs. They slow you until they heal, which takes food the way health regen does, once your health is full. | `hardcore.legs.enabled` | off |
@@ -25,9 +25,9 @@ Everything else ships off.
 | Tougher mobs | Most hostile mobs have more health and speed, and hit players harder. | `hardcore.tougherMobs.enabled` | off |
 | Relentless mobs | Most hostile mobs track you from further away, and some zombies can break wooden doors on any difficulty. | `hardcore.relentlessMobs.enabled` | off |
 | Blood moon | Some nights are blood moons: more mobs spawn, tougher and better geared, and the night can't be slept through. | `hardcore.bloodMoon.enabled` | off |
-| Cold | Out in the open where it is cold enough to snow, a chill builds. Heat, shelter and leather bring it down, and a full chill freezes you. | `hardcore.cold.enabled` | off |
+| Cold | Out in the open where it is cold enough to snow, a chill builds. Heat and shelter bring it down, each piece of leather armour slows it, and a full chill freezes you. | `hardcore.cold.enabled` | off |
 
-A switch such as `hardcore.weight.enabled` is `enabled` in the `weight` part of the file's `hardcore` block.
+A setting such as `hardcore.weight.enabled` is `enabled` in the `weight` part of the file's `hardcore` block.
 
 [docs/hardcore.md](../docs/hardcore.md) describes every feature and [docs/config.md](../docs/config.md#hardcore) every
 setting. Both are written for YOLT, but this mod's `hardcore` block is the same block, key for key, so a block copied
@@ -48,7 +48,8 @@ spectator takes no heart.
   `hardcore/build/libs/`.
 - The jar already holds YOLT Anvils, YOLT Mending and YOLT Elytra, and sets them from its own file, so you don't need
   their jars. Inside it they read and write no file of their own and have no command: their settings are
-  `hardcore.anvil`, `hardcore.mending` and `hardcore.elytra` here.
+  `hardcore.anvil`, `hardcore.mending` and `hardcore.elytra` here. With their own jars in `mods` as well, one copy of
+  each loads, and this mod sets them.
 - It hasn't been tried in a single-player world.
 
 ## Config
@@ -75,10 +76,11 @@ The first server start writes `config/yolt-hardcore.json`. It has three parts:
   unknown key are each named, with YOLT's rules and words, in the server log at a start and in the reply to a reload.
   A bad value falls back to the default at a start and to the value in use at a reload, and an unknown key is ignored.
 - At a start the file is written again with every key, with the default in place of each bad value. When that replaces
-  a bad value or drops an unknown key, the old file is kept first as `yolt-hardcore.json.bak`, or beside it with the
-  time added when a different `.bak` is there already.
+  a bad value or drops an unknown key, the old file is kept first as `yolt-hardcore.json.bak`.
 - A file that isn't valid JSON is kept as `yolt-hardcore.json.bak` at a start, and the defaults are written in its
   place.
+- A copy never writes over a different `.bak`: it goes beside it, with the time added to its name. When the copy can't
+  be made, the file is left as it was.
 - A reload never writes the file. A reload of a file that is missing or isn't valid JSON changes nothing.
 - A file from a newer version (`configVersion` above 1) is read, but never written over.
 
@@ -128,5 +130,7 @@ block tag `you-only-live-twice:heat_sources` (what warms you nearby) and the ite
 
 You Only Live Twice ships this mod inside its own jar and sets it from YOLT's config: its `hardcore` block and the six
 blood moon texts in its `messages`. There the mod has no file and no `/yolt-hardcore` of its own, and the commands are
-YOLT's. Beside a You Only Live Twice older than this mod, which has the hardcore layer built in, the server won't
-start, and the log says why.
+YOLT's. With this jar in `mods` beside a You Only Live Twice of the same version, one copy loads, and YOLT sets it.
+
+Beside a You Only Live Twice older than this mod the server won't start, and the log names the reason. That keeps out
+a You Only Live Twice with the hardcore layer built in, such as 1.2.1, so no rule runs twice.
