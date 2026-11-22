@@ -27,7 +27,8 @@ public class HardcoreAloneGameTests {
         helper.succeed();
     }
 
-    // The tiny mods take their settings from this one, as they do from YOLT, so none has a command of its own
+    // The tiny mods take their settings from this one, as they do from YOLT, so none has a command of its own, and a
+    // reload of one names this mod
     @GameTest
     public void itHostsTheTinyMods(GameTestHelper helper) {
         helper.assertFalse(YoltHardcore.hosted(), "yolt-hardcore is hosted");
@@ -38,6 +39,10 @@ public class HardcoreAloneGameTests {
         for (String id : List.of(YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID)) {
             helper.assertTrue(root.getChild(id) == null, "/" + id + " is there while hosted");
         }
+        List<String> fromHere = List.of("the settings come from YOLT Hardcore");
+        helper.assertValueEqual(YoltAnvils.reload().notes(), fromHere, "what a reload of yolt-anvils says");
+        helper.assertValueEqual(YoltMending.reload().notes(), fromHere, "what a reload of yolt-mending says");
+        helper.assertValueEqual(YoltElytra.reload().notes(), fromHere, "what a reload of yolt-elytra says");
         helper.succeed();
     }
 

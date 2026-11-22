@@ -18,25 +18,32 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.function.Supplier;
 
 // Each mod YOLT ships takes YOLT's config, so it writes no file of its own and has no command. The config folder
 // outlives a run, so a file there may have been left by an older one: only a file changed since this server's JVM
-// started is this start's doing. A leftover is removed, then the mod is reloaded, which a mod on its own answers by
-// writing the missing file.
+// started is this start's doing. A leftover is removed, then the mod is reloaded, which a tiny mod on its own answers by
+// writing the missing file. Hosted, each answers by naming the mod its settings come from, the name YOLT's bridges
+// hand on.
 public class HostedModsGameTests {
     @GameTest
     public void hostedModsHaveNoFileAndNoCommand(GameTestHelper helper) throws IOException {
-        hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, AnvilConfig.FILE, YoltAnvils.hosted(), YoltAnvils::reload);
-        hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, MendingConfig.FILE, YoltMending.hosted(), YoltMending::reload);
-        hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, ElytraConfig.FILE, YoltElytra.hosted(), YoltElytra::reload);
+        hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, AnvilConfig.FILE, YoltAnvils.hosted(),
+                () -> YoltAnvils.reload().notes());
+        hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, MendingConfig.FILE, YoltMending.hosted(),
+                () -> YoltMending.reload().notes());
+        hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, ElytraConfig.FILE, YoltElytra.hosted(),
+                () -> YoltElytra.reload().notes());
         hasNoFileAndNoCommand(helper, YoltCoordinates.MOD_ID, CoordinateConfig.FILE, YoltCoordinates.hosted(),
-                YoltCoordinates::reload);
-        hasNoFileAndNoCommand(helper, YoltHardcore.MOD_ID, HardcoreFile.NAME, YoltHardcore.hosted(), YoltHardcore::reload);
+                () -> YoltCoordinates.reload().notes());
+        hasNoFileAndNoCommand(helper, YoltHardcore.MOD_ID, HardcoreFile.NAME, YoltHardcore.hosted(),
+                () -> YoltHardcore.reload().notes());
         helper.succeed();
     }
 
     private static void hasNoFileAndNoCommand(GameTestHelper helper, String id, String fileName, boolean hosted,
-            Runnable reload) throws IOException {
+            Supplier<List<String>> reload) throws IOException {
         helper.assertTrue(hosted, id + " isn't hosted");
         Path file = FabricLoader.getInstance().getConfigDir().resolve(fileName);
         if (Files.exists(file)) {
@@ -45,7 +52,8 @@ public class HostedModsGameTests {
             helper.assertTrue(changed < started, "this server start wrote " + file);
             Files.delete(file);
         }
-        reload.run();
+        helper.assertValueEqual(reload.get(), List.of("the settings come from You Only Live Twice"),
+                "what a reload of " + id + " says");
         helper.assertFalse(Files.exists(file), "a reload wrote " + file);
         helper.assertTrue(helper.getLevel().getServer().getCommands().getDispatcher().getRoot().getChild(id) == null,
                 "/" + id + " is there while hosted");
