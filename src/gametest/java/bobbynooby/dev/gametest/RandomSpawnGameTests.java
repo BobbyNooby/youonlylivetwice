@@ -35,6 +35,11 @@ public class RandomSpawnGameTests {
     private static final String NO_GROUND = "you-only-live-twice-gametest:random_spawn_no_ground";
     // How long it stays off, written out for the test's maxTicks
     static final int NO_GROUND_WAIT = 100;
+    // A first join's search ends in a later tick when its chunk isn't loaded yet. A respawn in another test of the batch
+    // waits for its own search with server.managedBlock, which runs the server's pending work, the first join's last step
+    // among it. A test that turns random spawn off around its respawn then hands the first join to vanilla's search at
+    // the world spawn, so the first join test runs on its own too.
+    private static final String FIRST_JOIN = "you-only-live-twice-gametest:random_spawn_first_join";
 
     @GameTest(skyAccess = true)
     public void powderSnowColumnRefused(GameTestHelper helper) {
@@ -224,7 +229,7 @@ public class RandomSpawnGameTests {
     // A first join's spot comes from the search vanilla runs for a new player, which the hook answers with a random
     // column: inside the border and the configured diameter, on a full top face, and far from the world spawn, where
     // vanilla would put them. The search loads its chunks over the next ticks.
-    @GameTest(maxTicks = 200)
+    @GameTest(environment = FIRST_JOIN, maxTicks = 200)
     public void firstJoinSpotIsRandom(GameTestHelper helper) {
         ServerLevel overworld = helper.getLevel().getServer().overworld();
         boolean before = Settings.get().randomSpawn;
