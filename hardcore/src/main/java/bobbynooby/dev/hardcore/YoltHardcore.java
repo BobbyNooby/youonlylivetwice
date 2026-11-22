@@ -187,7 +187,8 @@ public final class YoltHardcore implements ModInitializer {
         }
     }
 
-    // For the mod's own GameTests: swaps the settings in use for one test, which puts them back within the same tick
+    // For the mod's own GameTests: swaps the settings in use for one test, which puts them back as it ends: within its
+    // one tick, or for one that waits across ticks in a batch of its own, at its clean-up
     static HardcoreFile.Loaded swapForTesting(HardcoreFile.Loaded loaded) {
         HardcoreFile.Loaded before = own;
         own = loaded;
