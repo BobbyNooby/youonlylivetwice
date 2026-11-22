@@ -40,7 +40,10 @@ public final class YoltHardcore implements ModInitializer {
 
     // On its own: true while a server runs
     private static volatile boolean running;
-    // On its own: the settings and texts in use, swapped whole, so a reader on another thread gets one read or the other
+    // On its own: the settings and texts in use, swapped whole, so a reader on another thread gets one read or the other.
+    // OWN's settings() and texts() read it apart, so a reader on another thread that wants both could get them from
+    // either side of a reload; nothing reads them off the server thread today, and the server thread is the one that
+    // swaps.
     private static volatile HardcoreFile.Loaded own = HardcoreFile.Loaded.defaults();
     // On its own: the file's settings, while a server runs. There are no bodies without a host, so nothing is a
     // stand-in or a body.

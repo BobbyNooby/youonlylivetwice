@@ -116,7 +116,8 @@ public final class HardcoreFile {
             bloodMoonBarTitle = texts.barTitle();
         }
 
-        // Each text YOLT's Messages.check would refuse goes back to the fallback's, in the order the file has them
+        // Each text YOLT's Messages.check would refuse goes back to the fallback's, in the six keys' own order, not the
+        // order they are typed in
         BloodMoonTexts checked(BloodMoonTexts fallback, List<String> notes, String fallbackName) {
             return new BloodMoonTexts(
                     text("bloodMoonWarningTitle", bloodMoonWarningTitle, fallback.warningTitle(), notes, fallbackName),

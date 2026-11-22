@@ -49,7 +49,10 @@ final class HardcoreCommands {
                                                 0))))));
     }
 
-    /** What /yolt-hardcore says, and the start-up line after the file is read: the features that are on. */
+    /**
+     * What /yolt-hardcore says, and the start-up line after the file is read: the features that are on, by their
+     * sections' names in the file, so an admin finds each where it is switched.
+     */
     static String features(HardcoreConfig.HardcoreSection settings) {
         List<String> on = Hardcore.featuresOn(settings);
         return on.isEmpty() ? "Every hardcore feature is off." : "Hardcore features on: " + String.join(", ", on) + ".";
