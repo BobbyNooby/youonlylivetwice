@@ -1,0 +1,104 @@
+package bobbynooby.dev.hardcore;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+
+/**
+ * For a test that waits across ticks. The hardcore tick reads the settings in use at the end of every server tick, so
+ * such a test keeps its own settings in use from its start to its end, in a batch of its own, where no other test runs
+ * under them. What it changed goes back once, newest first: when its last step ends, when a step fails, or on the tick
+ * before it would time out, whichever comes first. The settings go back last, after the players have left.
+ */
+final class Held {
+    private final GameTestHelper helper;
+    private final List<Runnable> undo = new ArrayList<>();
+    private final AtomicBoolean done = new AtomicBoolean();
+
+    Held(GameTestHelper helper, HardcoreFile.Loaded settings) {
+        this.helper = helper;
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(settings);
+        undo.add(() -> YoltHardcore.swapForTesting(before));
+        helper.runBeforeTestEnd(this::cleanUp);
+    }
+
+    /** Held with the defaults and a change of the test's. */
+    Held(GameTestHelper helper, Consumer<HardcoreConfig.HardcoreSection> change) {
+        this(helper, HardcoreCommandGameTests.with(change));
+    }
+
+    /** Runs at the clean-up, before whatever was added before it. */
+    void onCleanUp(Runnable task) {
+        undo.add(task);
+    }
+
+    /** A player who leaves at the clean-up, by id, so one a respawn made leaves too. Loaded, so they can be hurt. */
+    ServerPlayer join(String base, GameType mode, BlockPos relativePos) {
+        ServerPlayer player = TestPlayers.join(helper, base, mode, relativePos);
+        MinecraftServer server = helper.getLevel().getServer();
+        UUID id = player.getUUID();
+        onCleanUp(() -> TestPlayers.leave(server, id));
+        TestPlayers.markLoaded(player);
+        return player;
+    }
+
+    /**
+     * A step that cleans up before its failure ends the test, since the steps that would have cleaned up never come. A
+     * step after the clean-up does nothing: the test has failed already, but a sequence still runs, in the same tick,
+     * the steps that follow a failed one, and those would reach for players who have left.
+     */
+    Runnable step(Runnable check) {
+        return () -> {
+            if (done.get()) {
+                return;
+            }
+            try {
+                check.run();
+            } catch (RuntimeException | Error e) {
+                cleanUp();
+                throw e;
+            }
+        };
+    }
+
+    /** The last step: its checks, the clean-up whether they pass or not, then the test passes. */
+    Runnable last(Runnable check) {
+        return () -> {
+            if (done.get()) {
+                return;
+            }
+            try {
+                check.run();
+            } finally {
+                cleanUp();
+            }
+            helper.succeed();
+        };
+    }
+
+    /** Runs what was changed backwards, once; every task runs even when one before it throws. */
+    void cleanUp() {
+        if (done.compareAndSet(false, true)) {
+            runFrom(undo.size() - 1);
+        }
+    }
+
+    private void runFrom(int index) {
+        if (index < 0) {
+            return;
+        }
+        try {
+            undo.get(index).run();
+        } finally {
+            runFrom(index - 1);
+        }
+    }
+}

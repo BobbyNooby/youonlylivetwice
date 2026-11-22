@@ -7,7 +7,11 @@
     "entrypoints": {
         "fabric-gametest": [
             "bobbynooby.dev.hardcore.HardcoreAloneGameTests",
-            "bobbynooby.dev.hardcore.HardcoreCommandGameTests"
+            "bobbynooby.dev.hardcore.HardcoreBodyAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreCommandGameTests",
+            "bobbynooby.dev.hardcore.HardcoreDeathAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreFoodAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreWorldAloneGameTests"
         ]
     }
 }
