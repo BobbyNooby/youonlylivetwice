@@ -118,7 +118,8 @@ class HardcoreChecksTest {
             bad(c -> c.cold.damageEverySeconds = 0, "hardcore.cold.damageEverySeconds"),
             bad(c -> c.cold.shiverExhaustionPerSecond = -1, "hardcore.cold.shiverExhaustionPerSecond"));
 
-    // The same keys as YOLT's config, so a warning reads the same whichever file the block is in
+    // The same keys as YOLT's config, so a warning reads the same whichever file the block is in. A second check finds
+    // nothing, so each refused value went back to the fallback's.
     @Test
     void everyRuleNamesItsKeyUnderHardcore() {
         for (Bad bad : ONE_PER_RULE) {
@@ -130,6 +131,9 @@ class HardcoreChecksTest {
                 assertTrue(path.startsWith("hardcore."), path);
             }
             assertEquals(bad.keys(), named, bad.keys().getFirst());
+            List<String> again = new ArrayList<>();
+            HardcoreChecks.check(section, new HardcoreConfig.HardcoreSection(), (path, problem) -> again.add(path));
+            assertEquals(List.of(), again, bad.keys().getFirst() + " after the fallback");
         }
     }
 }
