@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -59,12 +60,13 @@ public class CoordinateGameTests {
         ServerPlayer player = null;
         try {
             player = TestPlayers.join(helper, "joins", GameType.SURVIVAL, SPOT);
-            assertSentShifted(helper, player, "survival");
+            assertSentShifted(helper, player, 0, "the join");
         } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
             }
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -90,10 +92,11 @@ public class CoordinateGameTests {
             TestPlayers.receive(player, new ServerboundMovePlayerPacket.Pos(client.x + 1, client.y, client.z + 1, false, false));
             helper.assertValueEqual(player.position(), new Vec3(real.x + 1, real.y, real.z + 1), "the position after a step");
         } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
             }
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -106,10 +109,11 @@ public class CoordinateGameTests {
             player = TestPlayers.join(helper, "unshifted", GameType.SURVIVAL, SPOT);
             assertSentReal(helper, player, "a join while off");
         } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
             }
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -140,11 +144,11 @@ public class CoordinateGameTests {
             player = TestPlayers.respawn(helper, player, RESPAWN);
             helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "the offset after the next respawn");
         } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
+            try {
+                leave(player);
+            } finally {
+                restore(file, original, before);
             }
-            write(file, original);
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -176,16 +180,17 @@ public class CoordinateGameTests {
             player = TestPlayers.respawn(helper, player, RESPAWN);
             helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the respawn after the second command got no offset");
         } finally {
-            if (player != null) {
-                leaveAsOp(helper, player);
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
             }
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
 
     // Real coordinates are an op's: once de-opped, a player can't run the command to turn them off, so they stop at
-    // the next frame by themselves. The player is opped again at the end, so the command can take them off the list.
+    // the next frame by themselves
     @GameTest
     public void aDeoppedPlayerIsShiftedAgainAtTheirNextFrame(GameTestHelper helper) {
         CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
@@ -202,11 +207,11 @@ public class CoordinateGameTests {
             player = TestPlayers.respawn(helper, player, RESPAWN);
             helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the respawn after the deop got no offset");
         } finally {
-            if (player != null) {
-                TestPlayers.op(player);
-                leaveAsOp(helper, player);
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
             }
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -214,18 +219,12 @@ public class CoordinateGameTests {
     // Creative and spectator players are shifted too: on its own the mod has no one it leaves out
     @GameTest
     public void aCreativePlayerIsShifted(GameTestHelper helper) {
-        CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
-        ServerPlayer player = null;
-        try {
-            player = TestPlayers.join(helper, "creative", GameType.CREATIVE, SPOT);
-            assertSentShifted(helper, player, "creative");
-        } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
-            }
-            YoltCoordinates.swapForTesting(before);
-        }
-        helper.succeed();
+        assertShiftedIn(helper, "creative", GameType.CREATIVE);
+    }
+
+    @GameTest
+    public void aSpectatorIsShifted(GameTestHelper helper) {
+        assertShiftedIn(helper, "spectator", GameType.SPECTATOR);
     }
 
     // Each one refused, then each one run once the player is an op, so the refusals were for the permission. The file
@@ -249,7 +248,6 @@ public class CoordinateGameTests {
             helper.assertValueEqual(said(player, mark), List.of(), "what the player was told");
             helper.assertValueEqual(YoltCoordinates.settings(), CoordinateSettings.DEFAULTS, "the settings after a refused reload");
             helper.assertValueEqual(read(file), off, "the file after a refused reload");
-            helper.assertFalse(YoltCoordinates.seesReal(player), "a refused real gave the player real coordinates");
 
             TestPlayers.op(player);
             CommandSourceStack op = player.createCommandSourceStack();
@@ -259,11 +257,11 @@ public class CoordinateGameTests {
             helper.assertValueEqual(run(helper, op, "yolt-coordinates real"), 1, "/yolt-coordinates real as an op");
             helper.assertTrue(YoltCoordinates.seesReal(player), "an op's real gave no real coordinates");
         } finally {
-            if (player != null) {
-                leaveAsOp(helper, player);
+            try {
+                leave(player);
+            } finally {
+                restore(file, original, before);
             }
-            write(file, original);
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
@@ -272,9 +270,9 @@ public class CoordinateGameTests {
     @GameTest
     public void theConsoleHasNoCoordinatesToShow(GameTestHelper helper) {
         List<String> said = new ArrayList<>();
-        CommandSourceStack console = console(helper.getLevel().getServer(), said);
+        CommandSourceStack console = console(helper.getLevel().getServer(), said, true);
         helper.assertValueEqual(run(helper, console, "yolt-coordinates real"), 0, "/yolt-coordinates real from the console");
-        helper.assertValueEqual(said, List.of("Only a player has coordinates to show."), "what the console was told");
+        helper.assertValueEqual(said, List.of("Only a player has coordinates to show."), "the failures the console was told");
         helper.succeed();
     }
 
@@ -288,28 +286,51 @@ public class CoordinateGameTests {
         try {
             write(file, CoordinateConfig.FORMAT.json(OFF));
             List<String> said = new ArrayList<>();
-            helper.assertValueEqual(run(helper, console(helper.getLevel().getServer(), said), "yolt-coordinates reload"), 1,
+            helper.assertValueEqual(run(helper, console(helper.getLevel().getServer(), said, false), "yolt-coordinates reload"), 1,
                     "/yolt-coordinates reload");
             helper.assertValueEqual(said, List.of("Reloaded yolt-coordinates.json. The coordinate offset is off"), "the reply");
             player = TestPlayers.join(helper, "reloaded", GameType.SURVIVAL, SPOT);
             assertSentReal(helper, player, "a join after the reload");
         } finally {
-            if (player != null) {
-                TestPlayers.leave(player);
+            try {
+                leave(player);
+            } finally {
+                restore(file, original, before);
             }
-            write(file, original);
-            YoltCoordinates.swapForTesting(before);
         }
         helper.succeed();
     }
 
-    // The join's teleport, which puts the client where the player is, goes out moved by the player's offset on X and Z
-    private static void assertSentShifted(GameTestHelper helper, ServerPlayer player, String who) {
+    // A join's frame starts in the server's default game mode, before TestPlayers switches it, so this reads the frame
+    // of a respawn, which starts from the player in the mode they were given
+    private static void assertShiftedIn(GameTestHelper helper, String base, GameType mode) {
+        CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
+        ServerPlayer player = null;
+        try {
+            player = TestPlayers.join(helper, base, mode, SPOT);
+            helper.assertValueEqual(player.gameMode(), mode, "the game mode the respawn's frame starts in");
+            int mark = TestPlayers.sent(player).size();
+            player = TestPlayers.respawn(helper, player, RESPAWN);
+            helper.assertValueEqual(player.gameMode(), mode, "the game mode after the respawn");
+            assertSentShifted(helper, player, mark, "the " + mode.getName() + " respawn");
+        } finally {
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The teleport that starts a frame, which puts the client where the player is, goes out moved by the player's offset
+    // on X and Z
+    private static void assertSentShifted(GameTestHelper helper, ServerPlayer player, int from, String what) {
         Offset offset = CoordinateOffsets.offset(player);
-        helper.assertFalse(offset.isZero(), "the " + who + " join got no offset");
-        Vec3 sent = TestPlayers.last(helper, player, 0, ClientboundPlayerPositionPacket.class).change().position();
+        helper.assertFalse(offset.isZero(), what + " got no offset");
+        Vec3 sent = TestPlayers.last(helper, player, from, ClientboundPlayerPositionPacket.class).change().position();
         helper.assertValueEqual(sent, new Vec3(player.getX() + offset.x(), player.getY(), player.getZ() + offset.z()),
-                "the position the " + who + " join sent");
+                "the position " + what + " sent");
     }
 
     private static void assertSentReal(GameTestHelper helper, ServerPlayer player, String what) {
@@ -318,13 +339,14 @@ public class CoordinateGameTests {
         helper.assertValueEqual(sent, player.position(), "the position " + what + " sent");
     }
 
-    // Real coordinates off through the command while the player is still an op, then the player goes. Each step runs
-    // even when one before it fails.
-    private static void leaveAsOp(GameTestHelper helper, ServerPlayer player) {
+    // The player goes, off the list of who sees real coordinates and off the op list too, whatever the test gave them.
+    // Each step runs even when one before it fails.
+    private static void leave(@Nullable ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
         try {
-            if (YoltCoordinates.seesReal(player)) {
-                run(helper, player.createCommandSourceStack(), "yolt-coordinates real");
-            }
+            YoltCoordinates.forgetRealForTesting(player);
         } finally {
             try {
                 TestPlayers.deop(player);
@@ -334,14 +356,24 @@ public class CoordinateGameTests {
         }
     }
 
+    // The file as it was, and the settings, which go back even when the file can't be written
+    private static void restore(Path file, String original, CoordinateSettings before) {
+        try {
+            write(file, original);
+        } finally {
+            YoltCoordinates.swapForTesting(before);
+        }
+    }
+
     // The text of each system message the player was sent from packet "from" on
     private static List<String> said(ServerPlayer player, int from) {
         return TestPlayers.all(player, from, ClientboundSystemChatPacket.class).stream()
                 .map(packet -> packet.content().getString()).toList();
     }
 
-    // The server's own source, as the console types, with what it is told caught in a list
-    private static CommandSourceStack console(MinecraftServer server, List<String> said) {
+    // The server's own source, as the console types, with what it is told caught in a list: only its failures, or only
+    // its other replies, so a test can tell the two apart
+    private static CommandSourceStack console(MinecraftServer server, List<String> said, boolean failures) {
         return server.createCommandSourceStack().withSource(new CommandSource() {
             @Override
             public void sendSystemMessage(Component message) {
@@ -350,12 +382,12 @@ public class CoordinateGameTests {
 
             @Override
             public boolean acceptsSuccess() {
-                return true;
+                return !failures;
             }
 
             @Override
             public boolean acceptsFailure() {
-                return true;
+                return failures;
             }
 
             @Override

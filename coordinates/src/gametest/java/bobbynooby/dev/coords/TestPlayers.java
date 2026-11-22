@@ -40,7 +40,11 @@ final class TestPlayers {
 
     private TestPlayers() {}
 
-    /** A player who joins at a spot of the test's, in the game mode asked for. */
+    /**
+     * A player who joins at a spot of the test's, then is put in the game mode asked for. The join's frame has started by
+     * then, in the server's default mode, which is creative on the GameTest server, so a test of a mode reads a frame
+     * that starts later, such as a respawn's.
+     */
     static ServerPlayer join(GameTestHelper helper, String base, GameType mode, BlockPos relativePos) {
         if (base.length() > BASE_LIMIT) {
             throw new IllegalArgumentException("The base " + base + " is longer than " + BASE_LIMIT);
