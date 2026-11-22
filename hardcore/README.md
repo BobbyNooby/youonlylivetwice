@@ -54,7 +54,9 @@ spectator takes no heart.
   their jars. Inside it they read and write no file of their own and have no command: their settings are
   `hardcore.anvil`, `hardcore.mending` and `hardcore.elytra` here. With their own jars in `mods` as well, one copy of
   each loads, and this mod sets them.
-- It hasn't been tried in a single-player world.
+- Tried with a real client in single-player: in a new survival world `/status` answers and a death takes a heart, and
+  a second new world opened after it in the same client starts with no heart lost, keeps its own
+  `database/you-only-live-twice-hardcore.db`, and a death there takes a heart too.
 
 ## Config
 

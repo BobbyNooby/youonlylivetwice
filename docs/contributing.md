@@ -114,19 +114,29 @@ Everything runs locally, with Java 25:
 - `./gradlew :runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
   YOLT's server GameTests. Without the `:` every other mod's GameTests run too, unfiltered. Add
   `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
-- `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 5 minutes. Screenshots land in
-  `build/run/clientGameTest/screenshots/`. `scripts/client-tests.sh PresenceLeak,ServerList` runs only the tests whose
-  class names start with those. On NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on
-  Mesa, the integrated GPU.
+- `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 5 minutes: YOLT's against YOLT's
+  jar, then YOLT Hardcore's and YOLT Coordinates', each against its own jar with no YOLT, one window after the other.
+  `scripts/client-tests.sh --mod hardcore` or `scripts/client-tests.sh --mod coordinates` runs one mod's alone, in under
+  two minutes. `scripts/client-tests.sh PresenceLeak,ServerList` runs only YOLT's tests whose class names start
+  with those. On NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on Mesa, the
+  integrated GPU.
+- Screenshots land in `build/run/clientGameTest/screenshots/` for YOLT, `hardcore/build/run/clientGameTest/screenshots/`
+  and `coordinates/build/run/clientGameTest/screenshots/`, and the logs in `logs/` beside each. Every client run, and
+  `./gradlew build`, empties its project's `build/run/clientGameTest/` first, so copy the screenshots elsewhere to keep
+  them.
+- A mod gets client tests of its own by setting `ext.clientTests = true` in its `build.gradle` before it applies
+  `gradle/mod.gradle`, as `hardcore/` and `coordinates/` do, and listing them under `fabric-client-gametest` in its
+  `src/gametest/resources/fabric.mod.json`.
 
 GitHub Actions only runs for a push to `release`, where the tested jars become the draft release, and for runs started
 by hand, where the `client` option adds the client tests. A run's results are in the `test-results` artifact, kept for
-14 days, the client screenshots in `client-screenshots`, and the jars and the revive paper's resource pack zip in
-`Artifacts`. The draft release gets YOLT's jar, the five mods' own jars and the resource pack zip. A new tiny mod under
-`extras/` needs no change to the workflow while its mod id starts with `yolt-`: the `gather the release files` step
-and the release job pick up every `yolt-*` jar by pattern. A mod in a folder of its own, as `hardcore/` and
-`coordinates/` are, needs that folder added to the gather step and to the steps that store the test results and
-reports. Real skins aren't checked: test players have no skins, and the tests never ask Mojang. These tests haven't
+14 days, the client screenshots in `client-screenshots`, under each project's folder as in the repository, and the
+jars and the revive paper's resource pack zip in `Artifacts`. The draft release gets YOLT's jar, the five mods' own
+jars and the resource pack zip. A new tiny mod under `extras/` needs no change to the workflow while its mod id starts
+with `yolt-`: the `gather the release files` step and the release job pick up every `yolt-*` jar by pattern. A mod in a
+folder of its own, as `hardcore/` and `coordinates/` are, needs that folder added to the gather step and to the steps
+that store the test results and reports, and, with client tests, to the steps that store the client screenshots and
+logs. Real skins aren't checked: test players have no skins, and the tests never ask Mojang. These tests haven't
 replaced a hands-on session in a real client, which I haven't done yet.
 
 Two client tests record everything the client is sent, from inside its own connection (`PacketRecorder`):
