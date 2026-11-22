@@ -14,6 +14,7 @@ import net.minecraft.server.commands.FillBiomeCommand;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.clock.ClockTimeMarkers;
 import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
@@ -37,7 +38,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * settings in and out within one tick; the blood moon and the cold wait across ticks, each in a batch of its own.
  */
 public class HardcoreWorldAloneGameTests {
-    // The world's clock at midnight, running, with clear skies and no monster spawning, which would refuse the bed
+    // The world's clock running, with clear skies and no monster spawning, which would refuse the bed. Its clock_time
+    // puts the clock back as the batch ends.
     private static final String NIGHT = "yolt-hardcore-gametest:blood_moon_night_alone";
     private static final String COLD = "yolt-hardcore-gametest:cold_alone";
     private static final BlockPos PLAYER_AT = new BlockPos(1, 0, 1);
@@ -144,7 +146,10 @@ public class HardcoreWorldAloneGameTests {
                                 "chat as it rose: " + TestPlayers.said(sleeper, from[0]));
                         List<String> status = TestPlayers.status(helper, sleeper);
                         helper.assertTrue(status.contains("Blood moon tonight"), "/status: " + status);
-                        helper.assertTrue(helper.getLevel().isDarkOutside(), "it isn't dark at the batch's midnight");
+                        // The test server ticks without sleeping while it waits for a structure's chunks, so the
+                        // batch's own midnight can be tens of thousands of ticks gone by now
+                        toMidnight(helper);
+                        helper.assertTrue(helper.getLevel().isDarkOutside(), "it isn't dark at midnight");
                         HardcoreBodyAloneGameTests.useBed(helper, sleeper, head);
                         helper.assertTrue(sleeper.isSleeping(), "the player could not lie down at midnight");
                         asleepAt[0] = clockTicks(helper);
@@ -256,8 +261,18 @@ public class HardcoreWorldAloneGameTests {
 
     private static long clockTicks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Holder<WorldClock> clock = level.dimensionType().defaultClock().orElseThrow();
-        return level.getServer().clockManager().getInstance(clock).totalTicks();
+        return level.getServer().clockManager().getInstance(clock(level)).totalTicks();
+    }
+
+    // The sky's brightness is kept until the next level tick, so it is worked out again here
+    private static void toMidnight(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        level.getServer().clockManager().moveToTimeMarker(clock(level), ClockTimeMarkers.MIDNIGHT);
+        level.updateSkyBrightness();
+    }
+
+    private static Holder<WorldClock> clock(ServerLevel level) {
+        return level.dimensionType().defaultClock().orElseThrow();
     }
 
     /**
