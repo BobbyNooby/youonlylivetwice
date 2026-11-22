@@ -1,9 +1,18 @@
 YOLT 1.4.0 for Minecraft 26.3. It's a server-side Fabric mod: players join with a plain vanilla client and no client
 mod.
 
-This release makes two more parts of YOLT mods of their own: the hardcore layer, as YOLT Hardcore, and the coordinate
-offset, as YOLT Coordinates. With YOLT Anvils, YOLT Mending and YOLT Elytra, that makes five. Nothing changes in the
-game for a YOLT server: no setting, default, command, message or `/status` text.
+This release makes four more parts of YOLT mods of their own, beside YOLT Anvils from 1.2.1: the hardcore layer, as
+YOLT Hardcore, the coordinate offset, as YOLT Coordinates, the Mending nerf, as YOLT Mending, and the elytra nerf, as
+YOLT Elytra. Nothing changes in the game for a YOLT server: no setting, default, command, message or `/status` text,
+but for two small fixes:
+
+- While anyone in a dimension is on a daytime nap, nobody there gets vanilla's sleep line, "Sleeping through this
+  night" or "1/2 players sleeping", since a nap never skips the night. On a YOLT server the line only came with
+  `hardcore.bedRest.enabled` on and `sleep.hideSleepers` and `sleep.noNightSkip` both off.
+- When a player joins while still dead, such as after leaving from the death screen, the Curse of the Undead now tells
+  them at their respawn about the max heart that death took. It told them as they joined, behind the death screen. On
+  a YOLT server this shows with the defaults, for a player who comes back after a revive paper or the end of their
+  lockout, with no server restart since the death.
 
 ## Five mods of their own
 
@@ -17,16 +26,17 @@ Each is for a Fabric server that wants only that part, with no YOLT on it.
   `/yolt-hardcore` with `reload`, `status`, `bloodmoon` and `curse`. There are no logout bodies without YOLT, so the
   rules for bodies do nothing. [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/hardcore/README.md).
 - **YOLT Coordinates** (`yolt-coordinates-1.4.0.jar`), new. Each player's game gets its own fake X and Z, new at each
-  join, respawn and dimension change. It reads `config/yolt-coordinates.json` and gives ops `/yolt-coordinates`,
-  `/yolt-coordinates reload` and `/yolt-coordinates real`, which gives an op real coordinates. It only runs on a
-  dedicated server. [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/coordinates/README.md).
-- **YOLT Mending** (`yolt-mending-1.4.0.jar`), new since 1.2.1. Mending repairs 0.4 durability per XP point instead of
-  vanilla's 2, and no XP is lost. It reads `config/yolt-mending.json` and gives ops `/yolt-mending` and
-  `/yolt-mending reload`.
+  join, respawn and dimension change, though players who start at the world spawn get about the same amount (see
+  [What it gives away](https://github.com/BobbyNooby/youonlylivetwice/blob/release/coordinates/README.md#what-it-gives-away)).
+  It reads `config/yolt-coordinates.json` and gives ops `/yolt-coordinates`, `/yolt-coordinates reload` and
+  `/yolt-coordinates real`, which gives an op real coordinates. It only runs on a dedicated server.
+  [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/coordinates/README.md).
+- **YOLT Mending** (`yolt-mending-1.4.0.jar`), new. Mending repairs 0.4 durability per XP point instead of vanilla's
+  2, and no XP is lost. It reads `config/yolt-mending.json` and gives ops `/yolt-mending` and `/yolt-mending reload`.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/mending/README.md).
-- **YOLT Elytra** (`yolt-elytra-1.4.0.jar`), new since 1.2.1. Gliding is slower and floatier, and rockets can't push
-  you past 20 m/s. It reads `config/yolt-elytra.json` and gives ops `/yolt-elytra` and `/yolt-elytra reload`. On its
-  own it is on by default.
+- **YOLT Elytra** (`yolt-elytra-1.4.0.jar`), new. Gliding is slower and floatier, and rockets can't push you past
+  20 m/s. It reads `config/yolt-elytra.json` and gives ops `/yolt-elytra` and `/yolt-elytra reload`. On its own it is
+  on by default.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/elytra/README.md).
 - **YOLT Anvils** (`yolt-anvils-1.4.0.jar`) prices anvils as it did in 1.2.1.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/anvil/README.md).
@@ -47,13 +57,16 @@ reload. Players in creative or spectator keep vanilla, except in YOLT Coordinate
   "YOLT Mending".
 - A start logs `YOLT Coordinates takes its settings from You Only Live Twice`, and a line like it for YOLT Anvils, YOLT
   Mending and YOLT Elytra.
-- YOLT Hardcore keeps the ids the hardcore layer had inside YOLT: its modifiers, tags and marks keep the
-  `you-only-live-twice` namespace, and its store is still `database/you-only-live-twice-hardcore.db` in the world
-  folder.
-- Each of the five jars refuses to load beside a You Only Live Twice older than itself. An older YOLT has these parts
-  in it, and they would otherwise run twice.
-- The gravity change on a glider is YOLT Elytra's own, so since 1.2.1 it has the id `yolt-elytra:glide_gravity`. It
-  was `you-only-live-twice:elytra_gravity`, which matters only to someone who reads it with `/attribute`.
+- YOLT Hardcore keeps the ids the hardcore layer had inside YOLT: its modifiers and tags keep the
+  `you-only-live-twice` namespace, its marks on mobs keep their `yolt.` names, and its store is still
+  `database/you-only-live-twice-hardcore.db` in the world folder.
+- The two heat tags moved from YOLT's jar into YOLT Hardcore's, so a YOLT server has one more built-in data pack,
+  `yolt-hardcore`. The first start on an older world logs
+  `Found new data pack yolt-hardcore, loading it automatically`.
+- Every older YOLT has the coordinate offset built in, and 1.1.0 to 1.2.1 the other parts too, so each jar refuses to
+  load beside one. Beside 1.2.1, which ships YOLT Anvils itself, the server starts with that copy.
+- The gravity change on a glider is YOLT Elytra's own, so it now has the id `yolt-elytra:glide_gravity`. It was
+  `you-only-live-twice:elytra_gravity`, which matters only to someone who reads it with `/attribute`.
 
 ## What it does
 
@@ -82,6 +95,10 @@ writes the config and, with the world border on (the default), sets the border t
 five jars are only for servers without YOLT.
 
 Updating from 1.2.1 needs nothing else: there are no new settings and no changed defaults.
+
+Going back to 1.2.1 works too, and leaves the config file as it is. Take any `yolt-hardcore`, `yolt-coordinates`,
+`yolt-mending` or `yolt-elytra` jar out of `mods` first: 1.2.1 won't start beside one. Its log then warns
+`Missing data pack yolt-hardcore`, which does no harm: 1.2.1 has those two heat tags in its own jar.
 
 Updating from 1.2.0 or older works as it did for 1.2.1: the
 [1.2.1 notes](https://github.com/BobbyNooby/youonlylivetwice/releases/tag/v1.2.1) say what happens.

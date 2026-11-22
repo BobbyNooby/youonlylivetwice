@@ -50,8 +50,9 @@ Which to pick:
 - The coordinate offset without YOLT: YOLT Coordinates' jar. It can go beside YOLT Hardcore's.
 - Only the flat anvil price, the Mending nerf or the elytra nerf: that mod's own jar.
 
-Each mod's readme says how to set it up. Beside a YOLT from before it shipped that mod, which has that part built in,
-a mod's own jar stops the server from starting, and the log says why.
+Each mod's readme says how to set it up. Every older YOLT has the coordinate offset built in, and 1.1.0 to 1.2.1 the
+other parts too, so beside one a mod's own jar stops the server from starting, and the log says why. Beside 1.2.1,
+which ships YOLT Anvils itself, the server starts with that copy and leaves the YOLT Anvils jar out.
 
 ## Recommended server settings
 
