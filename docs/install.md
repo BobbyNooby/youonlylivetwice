@@ -2,6 +2,7 @@
 
 Contents:
 
+- [The release's files](#the-releases-files)
 - [Recommended server settings](#recommended-server-settings)
 - [Companion mods](#companion-mods)
 - [Updating and backups](#updating-and-backups)
@@ -13,10 +14,11 @@ You need:
 - [Fabric API](https://modrinth.com/mod/fabric-api) 0.165.2+26.3 or newer
 - Java 25
 
-Get the mod jar from the [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest), or from
-the `Artifacts` download on a successful run of the `build` workflow on GitHub (`you-only-live-twice-<version>.jar`;
-the `yolt-` jars beside it are the small mods on their own, which a YOLT server doesn't need). Put it in the server's
-`mods` folder, next to Fabric API.
+Get `you-only-live-twice-<version>.jar` from the
+[latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest), or from the `Artifacts` download on a
+successful run of the `build` workflow on GitHub. Put it in the server's `mods` folder, next to Fabric API. That one
+jar is all a YOLT server needs: the `yolt-` jars beside it are parts of YOLT as mods of their own, for servers without
+YOLT (see [The release's files](#the-releases-files)).
 
 The mod is server-side. It loads in single-player but does nothing there.
 
@@ -28,6 +30,28 @@ in the log.
 On Java 25 the server log warns that a "restricted method" was called by `org.sqlite.SQLiteJDBCLoader`. That is the
 bundled SQLite driver loading its native code, and it is harmless. If a later Java blocks it, start the server with
 `--enable-native-access=ALL-UNNAMED`.
+
+## The release's files
+
+| File | What it is |
+|---|---|
+| `you-only-live-twice-<version>.jar` | YOLT, with every feature. It holds YOLT Hardcore and YOLT Coordinates, and YOLT Hardcore holds YOLT Anvils, YOLT Mending and YOLT Elytra. |
+| `yolt-hardcore-<version>.jar` | [YOLT Hardcore](../hardcore/README.md): the [hardcore layer](hardcore.md) without YOLT. It holds YOLT Anvils, YOLT Mending and YOLT Elytra. |
+| `yolt-coordinates-<version>.jar` | [YOLT Coordinates](../coordinates/README.md): the [coordinate offset](coordinate-offset.md) without YOLT. It only runs on a dedicated server. |
+| `yolt-anvils-<version>.jar` | [YOLT Anvils](../extras/anvil/README.md): the [flat anvil price](hardcore.md#flat-anvil-prices) alone. |
+| `yolt-mending-<version>.jar` | [YOLT Mending](../extras/mending/README.md): the [Mending nerf](hardcore.md#mending-nerf) alone. |
+| `yolt-elytra-<version>.jar` | [YOLT Elytra](../extras/elytra/README.md): the [elytra nerf](hardcore.md#elytra-nerf) alone. |
+| `you-only-live-twice-revive-pack-<version>.zip` | The optional resource pack with the [revive paper's texture](hardcore.md#revive-paper-texture). |
+
+Which to pick:
+
+- A YOLT server: YOLT's jar. It needs none of the others.
+- The hardcore layer without YOLT: YOLT Hardcore's jar. YOLT Anvils, YOLT Mending and YOLT Elytra come with it.
+- The coordinate offset without YOLT: YOLT Coordinates' jar. It can go beside YOLT Hardcore's.
+- Only the flat anvil price, the Mending nerf or the elytra nerf: that mod's own jar.
+
+Each mod's readme says how to set it up. Beside a YOLT from before it shipped that mod, which has that part built in,
+a mod's own jar stops the server from starting, and the log says why.
 
 ## Recommended server settings
 
@@ -73,7 +97,8 @@ YOLT keeps its data in versioned files, so a newer build can upgrade them:
   `<file>.newer-<time>` before it is saved over. A file, or part of one, that can't be read is copied to
   `<file>.unreadable-<time>`.
 - **Hardcore database** (`database/you-only-live-twice-hardcore.db` in the world folder), made only once the
-  [hardcore layer](hardcore.md) first stores something. One from a newer YOLT is left untouched.
+  [hardcore layer](hardcore.md) first stores something. One from a newer YOLT is left untouched. YOLT Hardcore on its
+  own uses the same file, so a world keeps its hardcore state when it moves between YOLT and YOLT Hardcore.
 - **Death database** (`database/you-only-live-twice.db` in the world folder). Its layout is upgraded in place. A
   database from the old 1.21.5 build is moved aside to `you-only-live-twice.db.1.21.5-<time>.bak` at startup, and
   the lockouts in it end. One from a newer YOLT is left untouched, and the lockout then lets everyone in.

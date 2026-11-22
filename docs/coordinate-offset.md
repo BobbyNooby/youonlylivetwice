@@ -4,6 +4,11 @@
 fake ones too, though a client built for it can still work some real numbers out (see [Known limits](#known-limits)
 below).
 
+The coordinate offset is also a mod of its own, [YOLT Coordinates](../coordinates/README.md), for a server without
+YOLT. YOLT's jar ships it, so YOLT needs nothing extra. On its own it is switched by `enabled` in
+`config/yolt-coordinates.json`, an op gets real coordinates with `/yolt-coordinates real` in place of admin view, and
+there is no north compass and no reduced F3. Its readme says what that gives away.
+
 - Every position the server sends a player is shifted by a private amount, and every position that player's game
   sends back is shifted back, so the server itself always works in real coordinates.
 - Only X and Z move. Height stays real.

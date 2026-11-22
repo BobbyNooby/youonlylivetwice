@@ -9,6 +9,12 @@ feature off YOLT changes nothing for it. Turn on only the parts you want, and tu
 want, for example `/yolt config hardcore.curse.enabled false`.
 Every setting is in the [`hardcore` part of the config](config.md#hardcore).
 
+The hardcore layer is also a mod of its own, [YOLT Hardcore](../hardcore/README.md), for a server without YOLT. YOLT's
+jar ships it, so YOLT needs nothing extra. It has every part on this page but the
+[revive paper texture](#revive-paper-texture), which goes with YOLT's revive papers. On its own it reads the same
+`hardcore` block from `config/yolt-hardcore.json`, and keeps its state in the same file as under YOLT (see
+[Where it is stored](#where-it-is-stored)).
+
 Contents:
 
 - [Who it applies to](#who-it-applies-to)
@@ -298,7 +304,7 @@ Settings: [`hardcore.hungerTax`](config.md#hardcorehungertax).
 
 Mending repairs 0.4 durability per XP point (`durabilityPerXp`) instead of vanilla's 2.
 This part is also a mod of its own, [YOLT Mending](../extras/mending/README.md), for a server that wants only this.
-YOLT's jar ships it, so YOLT needs nothing extra.
+It comes inside YOLT Hardcore's jar, which YOLT's jar holds, so YOLT needs nothing extra.
 
 - XP you pick up still goes to damaged Mending gear first, but repairs a fifth as much.
 - No XP is lost. A part of a point too small to repair anything yet is kept for your next pickup (until you log out),
@@ -313,7 +319,7 @@ Settings: [`hardcore.mending`](config.md#hardcoremending).
 
 Every anvil use costs one fixed price, set by the biggest kind of job in it, and nothing ever becomes "Too Expensive!".
 This part is also a mod of its own, [YOLT Anvils](../extras/anvil/README.md), for a server that wants only this.
-YOLT's jar ships it, so YOLT needs nothing extra.
+It comes inside YOLT Hardcore's jar, which YOLT's jar holds, so YOLT needs nothing extra.
 
 | The use includes | Price |
 |---|---|
@@ -340,7 +346,8 @@ Settings: [`hardcore.anvil`](config.md#hardcoreanvil).
 
 Gliding is slower and floatier, and rockets can't push you past 20 m/s.
 This part is also a mod of its own, [YOLT Elytra](../extras/elytra/README.md), for a server that wants only this.
-YOLT's jar ships it, so YOLT needs nothing extra. It is on by default as a mod of its own, and off by default in YOLT.
+It comes inside YOLT Hardcore's jar, which YOLT's jar holds, so YOLT needs nothing extra. It is on by default as a mod
+of its own, and off by default in YOLT and in YOLT Hardcore.
 
 - While you glide, gravity is 0.6 times vanilla's (`glideGravityMultiplier`). Lighter gravity makes the glide slower,
   and you sink slower too, so you cover about the same ground for each block of height. Walking, jumping and falling
@@ -519,5 +526,8 @@ kept in one file for the world, `<world>/database/you-only-live-twice-hardcore.d
 first stored, so a server that never turns the layer on never gets one. An online player's state is saved when they
 leave, every 5 minutes, and at once after a death the curse counts. If the file can't be opened, the state lasts until
 the server stops and an error is logged.
+
+YOLT Hardcore on its own uses the same file, under the same name, so a world keeps its hardcore state when a server
+moves between YOLT and YOLT Hardcore.
 
 [All pages](README.md)

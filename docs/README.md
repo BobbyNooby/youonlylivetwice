@@ -8,7 +8,9 @@ feature, its settings and its limits.
 
 ### Setting up
 
-- [Installing](install.md): what you need, recommended server settings, companion mods, updates and backups.
+- [Installing](install.md): what you need, the release's files, recommended server settings, companion mods, updates
+  and backups.
+  - [The release's files](install.md#the-releases-files): YOLT's jar, and the jars of the mods of their own
   - [Recommended server settings](install.md#recommended-server-settings)
   - [Companion mods](install.md#companion-mods)
   - [Updating and backups](install.md#updating-and-backups)
@@ -30,6 +32,7 @@ feature, its settings and its limits.
   - [Load checks](config.md#load-checks)
 - [Commands and admin view](commands.md): the `/yolt` commands, `/status`, and what ops can see.
   - [Admin view](commands.md#admin-view)
+  - [Without YOLT](commands.md#without-yolt): the commands of the mods of their own
 
 ### How it plays
 
@@ -42,14 +45,16 @@ feature, its settings and its limits.
 - [Chat](chat.md): proximity chat and whispers.
 - [Hidden information](hidden-information.md): the tab list, nametags, commands, the F3 screen and the rest.
   - [Debug privacy](hidden-information.md#debug-privacy)
-- [Coordinate offset](coordinate-offset.md): fake X and Z numbers for each player (on by default).
+- [Coordinate offset](coordinate-offset.md): fake X and Z numbers for each player (on by default), also a mod of its
+  own: [YOLT Coordinates](../coordinates/README.md)
   - [Known limits](coordinate-offset.md#known-limits)
 - [World border and Nether](world-border.md): the shared border, the 1:1 Nether and random spawn.
   - [Random spawn](world-border.md#random-spawn)
 - [Skins](skins.md): skins on offline-mode servers, and picking your own.
   - [Known limits](skins.md#known-limits)
 - [Hardcore layer](hardcore.md): weight, broken legs, the curse, nutrients, tougher mobs, blood moons, cold and more
-  (off by default, apart from the curse, the flat anvil price and Mending).
+  (off by default, apart from the curse, the flat anvil price and Mending), also a mod of its own:
+  [YOLT Hardcore](../hardcore/README.md)
   - [Who it applies to](hardcore.md#who-it-applies-to)
   - [`/status`](hardcore.md#status)
   - [Slowdowns](hardcore.md#slowdowns)
@@ -73,7 +78,9 @@ feature, its settings and its limits.
 ### Before you host
 
 - [Known limits](known-limits.md): what YOLT can't do, and the trade-offs it makes.
-- [Contributing](contributing.md): how the tests run, and what to check on every Minecraft update.
+- [Contributing](contributing.md): the projects, how the tests run, and what to check on every Minecraft update.
+  - [Layout](contributing.md#layout)
+  - [Hosting YOLT Hardcore](contributing.md#hosting-yolt-hardcore)
   - [Testing](contributing.md#testing)
   - [On every Minecraft update](contributing.md#on-every-minecraft-update)
 

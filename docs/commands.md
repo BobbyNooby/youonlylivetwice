@@ -58,4 +58,35 @@ opped again. In admin view you don't get other players' whispers, since those ar
 With `hide.coordinates` on, admin view also gives you real coordinates, from your next join, respawn or dimension
 change.
 
+## Without YOLT
+
+These commands belong to the mods of their own, and only a server without YOLT has them. A YOLT server doesn't: there
+the `/yolt` commands above do the same.
+
+[YOLT Hardcore](../hardcore/README.md), the hardcore layer on its own:
+
+| Command | Who | What it does |
+|---|---|---|
+| `/status` | Everyone | Shows a report on your own body, as under YOLT. With nothing to report it says "Nothing to report". |
+| `/yolt-hardcore` | Ops, console | Names the hardcore features that are on. |
+| `/yolt-hardcore reload` | Ops, console | Reads `config/yolt-hardcore.json` again and names any value it refused, which keeps the value in use. A file that is missing or can't be read changes nothing. It never writes the file. |
+| `/yolt-hardcore status <player>` | Ops, console | Shows an online player's `/status` report. |
+| `/yolt-hardcore curse <player> set <hearts>` | Ops, console | Sets how many max hearts the Curse of the Undead has taken from an online player, up to `hardcore.curse.maxLostHearts`. Refused while the curse is off. |
+| `/yolt-hardcore curse <player> clear` | Ops, console | Clears an online player's curse. Refused while the curse is off. |
+| `/yolt-hardcore bloodmoon start` | Ops, console | As `/yolt bloodmoon start`. |
+| `/yolt-hardcore bloodmoon stop` | Ops, console | As `/yolt bloodmoon stop`. |
+| `/yolt-hardcore bloodmoon status` | Ops, console | As `/yolt bloodmoon status`. |
+
+[YOLT Coordinates](../coordinates/README.md), the coordinate offset on its own:
+
+| Command | Who | What it does |
+|---|---|---|
+| `/yolt-coordinates` | Ops, console | Shows whether the offset is on, or that it does nothing in a single-player world. |
+| `/yolt-coordinates reload` | Ops, console | Reads `config/yolt-coordinates.json` again, no restart needed. |
+| `/yolt-coordinates real` | Ops (a player) | Turns real coordinates on or off for you, from your next join, respawn or dimension change. It is kept until the server stops. |
+
+YOLT Anvils, YOLT Mending and YOLT Elytra have `/yolt-anvils`, `/yolt-mending` and `/yolt-elytra`, each with a
+`reload`, only on a server that has neither YOLT nor YOLT Hardcore. Their readmes, linked from
+[Installing](install.md#the-releases-files), say what they do.
+
 [All pages](README.md)

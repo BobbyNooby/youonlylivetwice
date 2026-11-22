@@ -37,9 +37,13 @@ paper's texture.
 
 Every feature has a switch in the config.
 
-The flat anvil prices, the Mending nerf and the elytra nerf are also mods of their own,
-[YOLT Anvils](extras/anvil/README.md), [YOLT Mending](extras/mending/README.md) and
-[YOLT Elytra](extras/elytra/README.md), for a server that wants only one part. YOLT's jar already holds them.
+Some parts are also mods of their own, for a server that wants only that part and not YOLT. YOLT's jar already holds
+them all:
+
+- [YOLT Hardcore](hardcore/README.md): the whole hardcore layer, with the three below inside it.
+- [YOLT Coordinates](coordinates/README.md): the fake coordinates.
+- [YOLT Anvils](extras/anvil/README.md), [YOLT Mending](extras/mending/README.md) and
+  [YOLT Elytra](extras/elytra/README.md): the flat anvil prices, the Mending nerf and the elytra nerf, one each.
 
 ## Install
 
@@ -47,7 +51,8 @@ The flat anvil prices, the Mending nerf and the elytra nerf are also mods of the
   0.165.2+26.3 or newer, and Java 25.
 - Get `you-only-live-twice-<version>.jar` from the
   [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
-  folder, next to Fabric API. It has every feature; the release's other jars are single parts of it, for other servers.
+  folder, next to Fabric API. It has every feature; the release's other jars are single parts of it, for other servers
+  ([Installing](docs/install.md#the-releases-files) lists them).
 - Start the server once. It writes `config/you-only-live-twice.json` and sets the border to 10,000 blocks across.
 - Set `spawn-protection=0` in `server.properties`, and pre-generate the world with Chunky.
   [Installing](docs/install.md) says why, and lists the companion mods I recommend.

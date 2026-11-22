@@ -172,6 +172,8 @@ Notes:
   sidebar, below names or in the list reaches non-ops too, and it can show player names. YOLT doesn't hide it.
 - Chat-bridge mods (Discord bridges and the like) don't see proximity chat.
 - The plain-text chat fallback skips the Social Interactions block list and "Only Show Secure Chat".
+- On a server without YOLT, [YOLT Coordinates](../coordinates/README.md) has its own switch for the coordinate offset,
+  `enabled` in `config/yolt-coordinates.json`.
 
 ## `sleep`
 
@@ -245,6 +247,10 @@ The [hardcore layer](hardcore.md). Every feature ships off except the Curse of t
 Mending, and with a feature off YOLT changes nothing for it. Since those are on, non-ops have `/status` by default, with
 its "Server rules" block. The
 hunger tax has no switch: its default multiplier, 1.0, is vanilla. Shares and chances are 0 to 1 (0.2 is 20%).
+
+On a server without YOLT, [YOLT Hardcore](../hardcore/README.md) reads this same block, key for key and with the same
+defaults and checks, from its own `config/yolt-hardcore.json`. The six `bloodMoon` texts of [`messages`](#messages) go
+beside it in that file, under the same names. A block copied from one file to the other reads the same.
 
 ### `hardcore.slow`
 
@@ -368,8 +374,8 @@ See [hunger tax](hardcore.md#hunger-tax).
 
 ### `hardcore.mending`
 
-See [Mending nerf](hardcore.md#mending-nerf). These set the YOLT Mending mod that YOLT ships.
-[YOLT Mending](../extras/mending/README.md) installed on its own has the same keys in `config/yolt-mending.json`
+See [Mending nerf](hardcore.md#mending-nerf). These set the YOLT Mending mod, which YOLT ships inside YOLT Hardcore's
+jar. [YOLT Mending](../extras/mending/README.md) installed on its own has the same keys in `config/yolt-mending.json`
 instead.
 
 | Key | Default | What it does | Restart? |
@@ -380,8 +386,8 @@ instead.
 ### `hardcore.anvil`
 
 See [flat anvil prices](hardcore.md#flat-anvil-prices). Prices are XP levels, 1 to 39: 0 can't be paid, and 40 or more
-shows "Too Expensive!". These set the YOLT Anvils mod that YOLT ships. [YOLT Anvils](../extras/anvil/README.md)
-installed on its own has the same keys in `config/yolt-anvils.json` instead.
+shows "Too Expensive!". These set the YOLT Anvils mod, which YOLT ships inside YOLT Hardcore's jar.
+[YOLT Anvils](../extras/anvil/README.md) installed on its own has the same keys in `config/yolt-anvils.json` instead.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
@@ -393,9 +399,9 @@ installed on its own has the same keys in `config/yolt-anvils.json` instead.
 
 ### `hardcore.elytra`
 
-See [elytra nerf](hardcore.md#elytra-nerf). These set the YOLT Elytra mod that YOLT ships.
-[YOLT Elytra](../extras/elytra/README.md) installed on its own has the same keys in `config/yolt-elytra.json`
-instead. It is on by default as a mod of its own, and off by default in YOLT.
+See [elytra nerf](hardcore.md#elytra-nerf). These set the YOLT Elytra mod, which YOLT ships inside YOLT Hardcore's
+jar. [YOLT Elytra](../extras/elytra/README.md) installed on its own has the same keys in `config/yolt-elytra.json`
+instead. It is on by default as a mod of its own, and off by default in YOLT and in YOLT Hardcore.
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
@@ -531,6 +537,9 @@ like any other key. The defaults are YOLT's own words.
 | `bloodMoonUpLine` | `"A blood moon is up. Mobs are stronger and more numerous until dawn."` | The chat line for a player who joins or comes into the Overworld during one, and for everyone when one carries on after a restart. | – | No |
 | `bloodMoonSetLine` | `"The blood moon has set."` | The chat line at dawn. | – | No |
 | `bloodMoonBarTitle` | `"Blood Moon"` | The boss bar's title. | – | Next blood moon |
+
+On a server without YOLT, the six `bloodMoon` texts are in the `messages` of `config/yolt-hardcore.json`, the file of
+[YOLT Hardcore](../hardcore/README.md), under the same names (see [`hardcore`](#hardcore)).
 
 ## File-only settings
 
