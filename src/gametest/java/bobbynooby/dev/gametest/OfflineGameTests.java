@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.Kills;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
@@ -449,14 +450,24 @@ public class OfflineGameTests {
         return yoltEvents(action).stream().map(event -> event.getMessage().getFormattedMessage()).toList();
     }
 
+    // The same for the coordinate offset, the YOLT Coordinates mod YOLT ships, which logs under its own name
+    static List<String> coordinatesLog(Runnable action) {
+        return events(YoltCoordinates.LOGGER.getName(), action).stream()
+                .map(event -> event.getMessage().getFormattedMessage()).toList();
+    }
+
     // The same, whole, for a test that checks what came with a line, such as its stack trace
     static List<LogEvent> yoltEvents(Runnable action) {
-        LoggerConfig config = ((Logger) LogManager.getLogger(Yolt.MOD_ID)).get();
+        return events(Yolt.MOD_ID, action);
+    }
+
+    private static List<LogEvent> events(String loggerName, Runnable action) {
+        LoggerConfig config = ((Logger) LogManager.getLogger(loggerName)).get();
         List<LogEvent> events = new CopyOnWriteArrayList<>();
         AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
             @Override
             public void append(LogEvent event) {
-                if (Yolt.MOD_ID.equals(event.getLoggerName())) {
+                if (loggerName.equals(event.getLoggerName())) {
                     // Log4j can reuse the event it hands over, so a copy is kept
                     events.add(event.toImmutable());
                 }

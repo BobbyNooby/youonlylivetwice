@@ -2,6 +2,8 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.anvils.AnvilConfig;
 import bobbynooby.dev.anvils.YoltAnvils;
+import bobbynooby.dev.coords.CoordinateConfig;
+import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.elytra.ElytraConfig;
 import bobbynooby.dev.elytra.YoltElytra;
 import bobbynooby.dev.mending.MendingConfig;
@@ -15,7 +17,7 @@ import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-// Each tiny mod YOLT ships takes YOLT's config, so it writes no file of its own and has no command. The config folder
+// Each mod YOLT ships takes YOLT's config, so it writes no file of its own and has no command. The config folder
 // outlives a run, so a file there may have been left by an older one: only a file changed since this server's JVM
 // started is this start's doing. A leftover is removed, then the mod is reloaded, which a mod on its own answers by
 // writing the missing file.
@@ -25,6 +27,8 @@ public class HostedModsGameTests {
         hasNoFileAndNoCommand(helper, YoltAnvils.MOD_ID, AnvilConfig.FILE, YoltAnvils.hosted(), YoltAnvils::reload);
         hasNoFileAndNoCommand(helper, YoltMending.MOD_ID, MendingConfig.FILE, YoltMending.hosted(), YoltMending::reload);
         hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, ElytraConfig.FILE, YoltElytra.hosted(), YoltElytra::reload);
+        hasNoFileAndNoCommand(helper, YoltCoordinates.MOD_ID, CoordinateConfig.FILE, YoltCoordinates.hosted(),
+                YoltCoordinates::reload);
         helper.succeed();
     }
 

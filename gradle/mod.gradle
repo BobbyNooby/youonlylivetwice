@@ -40,7 +40,7 @@ fabricApi {
     configureTests {
         createSourceSet = true
         modId = "${id}-gametest"
-        // Nothing here is drawn: what a tiny mod changes reaches the client as data, which the root project's client
+        // Nothing here is drawn: what a mod changes reaches the client as data, which the root project's client
         // tests check
         enableClientGameTests = false
         eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)

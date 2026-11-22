@@ -16,6 +16,7 @@ import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.revive.Revive;
 import bobbynooby.dev.skins.Skins;
 import bobbynooby.dev.visibility.AdminView;
+import bobbynooby.dev.visibility.CoordinateOffset;
 import bobbynooby.dev.visibility.DebugPrivacy;
 import bobbynooby.dev.visibility.NameTagTeam;
 import bobbynooby.dev.visibility.NorthCompass;
@@ -58,11 +59,12 @@ public final class YouOnlyLiveTwice implements ModInitializer {
         DebugPrivacy.init();
         // The compass keeps its target inside the world's edge as the player's client sees it, shifted by their offset
         NorthCompass.init(player -> CoordinateOffsets.offset(player).x());
-        // Coordinate offset: its hooks are on the connection, not on an event, apart from the border recheck at the end of
-        // a tick, which reads nothing another hook writes. Admin view is handed in, so an admin's next frame can be real,
-        // and so are the north compass's target, whose Z is the same for everyone, and debug privacy, which keeps the spawn
-        // protection line from naming a block.
-        CoordinateOffsets.init(AdminView::isOn, NorthCompass::isNorthTarget, DebugPrivacy::hidesPosition);
+        // Coordinate offset: the YOLT Coordinates mod, whose own onInitialize, run before or after this one, hooks it in.
+        // Its hooks are on the connection, not on an event, apart from the border recheck at the end of a tick, which
+        // reads nothing another hook writes, so where that lands doesn't matter. Here it is handed YOLT's switch, admin
+        // view, so an admin's next frame can be real, the north compass's target, whose Z is the same for everyone, debug
+        // privacy, which keeps the spawn protection line from naming a block, and stand-ins.
+        CoordinateOffset.init();
         ChatDelivery.init();
         Whispers.init();
         // Skins: its hooks make the Mojang lookup when a server starts and note who joins, which no other hook reads

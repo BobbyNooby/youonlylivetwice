@@ -3,7 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
-import bobbynooby.dev.mixin.PlayerLookAtPacketAccessor;
+import bobbynooby.dev.coords.mixin.PlayerLookAtPacketAccessor;
 import bobbynooby.dev.visibility.AdminView;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -479,7 +479,7 @@ public class CoordinateOffsetCoreGameTests {
         try {
             Offset offset = CoordinateOffsets.offset(player);
             int mark = OffsetTestKit.mark(player);
-            List<String> log = OfflineGameTests.yoltLog(() -> {
+            List<String> log = OfflineGameTests.coordinatesLog(() -> {
                 player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null));
                 player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null));
                 player.connection.send(new ClientboundBundlePacket(List.<Packet<? super ClientGamePacketListener>>of(
@@ -521,7 +521,7 @@ public class CoordinateOffsetCoreGameTests {
             Component unreadable = unreadableText();
             ClientboundDisconnectPacket kick = new ClientboundDisconnectPacket(unreadable);
             int mark = OffsetTestKit.mark(player);
-            List<String> log = OfflineGameTests.yoltLog(() -> {
+            List<String> log = OfflineGameTests.coordinatesLog(() -> {
                 player.connection.send(new ClientboundSystemChatPacket(unreadable, false));
                 OffsetTestKit.connection(player).send(kick, future -> ran[0] = true);
             });
@@ -633,7 +633,7 @@ public class CoordinateOffsetCoreGameTests {
     public void failedTranslationDropsTheReceivedPacket(GameTestHelper helper) {
         ServerPlayer player = OffsetTestKit.join(helper, "codropin", GameType.CREATIVE);
         try {
-            List<String> log = OfflineGameTests.yoltLog(() -> {
+            List<String> log = OfflineGameTests.coordinatesLog(() -> {
                 TestPlayers.receive(player, new ServerboundMoveVehiclePacket((PositionAndRotation) null, false));
                 TestPlayers.receive(player, new ServerboundMoveVehiclePacket((PositionAndRotation) null, false));
             });
@@ -652,7 +652,7 @@ public class CoordinateOffsetCoreGameTests {
         try {
             ClientboundForgetLevelChunkPacket forget = new ClientboundForgetLevelChunkPacket((ChunkPos) null);
             int mark = OffsetTestKit.mark(player);
-            List<String> log = OfflineGameTests.yoltLog(() -> {
+            List<String> log = OfflineGameTests.coordinatesLog(() -> {
                 player.connection.send(forget);
                 player.connection.send(forget);
             });
@@ -673,7 +673,7 @@ public class CoordinateOffsetCoreGameTests {
         ServerPlayer player = TestPlayers.join(helper, "conotedrop", GameType.CREATIVE, new BlockPos(1, 1, 1));
         ServerPlayer current = player;
         try {
-            List<String> notes = OfflineGameTests.yoltLog(
+            List<String> notes = OfflineGameTests.coordinatesLog(
                     () -> player.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null)));
             helper.assertValueEqual(notes.stream().filter(entry -> entry.startsWith("Could not note what a "
                     + "clientbound/minecraft:forget_level_chunk packet")).count(), 1L, "note lines in " + notes);
@@ -682,7 +682,7 @@ public class CoordinateOffsetCoreGameTests {
             current = OffsetTestKit.respawn(helper, player, helper.absolutePos(new BlockPos(3, 1, 3)), false);
             helper.assertFalse(CoordinateOffsets.offset(current).isZero(), "the respawn got no offset");
             ServerPlayer respawned = current;
-            List<String> drops = OfflineGameTests.yoltLog(
+            List<String> drops = OfflineGameTests.coordinatesLog(
                     () -> respawned.connection.send(new ClientboundForgetLevelChunkPacket((ChunkPos) null)));
             assertOneDropLine(helper, drops, "clientbound/minecraft:forget_level_chunk", player);
         } finally {

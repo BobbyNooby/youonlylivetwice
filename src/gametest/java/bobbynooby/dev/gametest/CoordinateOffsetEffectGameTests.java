@@ -2,9 +2,9 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
-import bobbynooby.dev.mixin.SoundPacketAccessor;
-import bobbynooby.dev.mixin.WaypointChunkAccessor;
-import bobbynooby.dev.mixin.WaypointVectorAccessor;
+import bobbynooby.dev.coords.mixin.SoundPacketAccessor;
+import bobbynooby.dev.coords.mixin.WaypointChunkAccessor;
+import bobbynooby.dev.coords.mixin.WaypointVectorAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;

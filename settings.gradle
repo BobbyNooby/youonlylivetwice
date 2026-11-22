@@ -14,3 +14,6 @@ pluginManagement {
 	include name
 	project(":$name").projectDir = file("extras/$name")
 }
+
+// The coordinate offset, a mod of its own that YOLT also ships inside its jar
+include 'coordinates'

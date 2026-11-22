@@ -1,6 +1,7 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.anvils.YoltAnvils;
+import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.elytra.YoltElytra;
 import bobbynooby.dev.mending.YoltMending;
@@ -12,7 +13,7 @@ import java.util.List;
 final class Ours {
     // The tiny mods put their modifiers in their own namespaces, so a check for YOLT's alone would miss them
     private static final List<String> IDS =
-            List.of(Yolt.MOD_ID, YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID);
+            List.of(Yolt.MOD_ID, YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID, YoltCoordinates.MOD_ID);
 
     private Ours() {}
 

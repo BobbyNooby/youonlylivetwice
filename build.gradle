@@ -20,14 +20,16 @@ repositories {
 
 // The tiny mods under extras/, Gradle project name to mod id
 def tinyMods = [anvil: 'yolt-anvils', mending: 'yolt-mending', elytra: 'yolt-elytra']
+// Every mod this jar ships inside it and hosts: the tiny mods and YOLT Coordinates, in coordinates/
+def hostedMods = tinyMods + [coordinates: 'yolt-coordinates']
 
 loom {
     mods {
         "you-only-live-twice" {
             sourceSet sourceSets.main
         }
-        // The tiny mods, so a dev run loads each as the mod of its own that a server would
-        tinyMods.each { name, modId ->
+        // The hosted mods, so a dev run loads each as the mod of its own that a server would
+        hostedMods.each { name, modId ->
             "$modId" {
                 sourceSet("main", ":$name")
             }
@@ -85,8 +87,8 @@ dependencies {
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
     implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
-    // Each tiny mod is a mod of its own, shipped inside this jar so one download still has everything
-    tinyMods.keySet().each { name ->
+    // Each hosted mod is a mod of its own, shipped inside this jar so one download still has everything
+    hostedMods.keySet().each { name ->
         implementation include(project(":$name"))
     }
     productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"

@@ -2,7 +2,7 @@ package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
-import bobbynooby.dev.mixin.SectionBlocksUpdatePacketAccessor;
+import bobbynooby.dev.coords.mixin.SectionBlocksUpdatePacketAccessor;
 import io.netty.buffer.Unpooled;
 import it.unimi.dsi.fastutil.shorts.ShortArraySet;
 import it.unimi.dsi.fastutil.shorts.ShortSet;

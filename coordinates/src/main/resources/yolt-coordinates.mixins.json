@@ -1,0 +1,37 @@
+{
+  "required": true,
+  "package": "bobbynooby.dev.coords.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "BlockEntityDataPacketInvoker",
+    "ChunkBlockEntityInfoInvoker",
+    "CoordinateOffsetCollisionMixin",
+    "CoordinateOffsetCommandMixin",
+    "CoordinateOffsetConnectionMixin",
+    "CoordinateOffsetContainerClickMixin",
+    "CoordinateOffsetDebugMixin",
+    "CoordinateOffsetRespawnMixin",
+    "CoordinateOffsetSpawnProtectionMixin",
+    "CoordinateOffsetTeleportMixin",
+    "CoordinateOffsetTypedCommandMixin",
+    "CoordinateOffsetVectorMixin",
+    "CustomDataAccessor",
+    "InitializeBorderPacketAccessor",
+    "ItemContainerContentsInvoker",
+    "LevelChunkPacketDataInvoker",
+    "PlayerInfoUpdatePacketAccessor",
+    "PlayerLookAtPacketAccessor",
+    "SectionBlocksUpdatePacketAccessor",
+    "ServerCommonPacketListenerAccessor",
+    "SetPlayerTeamPacketInvoker",
+    "SoundPacketAccessor",
+    "WaypointChunkAccessor",
+    "WaypointVectorAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

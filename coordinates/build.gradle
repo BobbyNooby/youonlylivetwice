@@ -1,0 +1,9 @@
+// YOLT Coordinates: the coordinate offset as a mod of its own. gradle/mod.gradle has the build every mod besides YOLT
+// shares.
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+ext.modId = 'yolt-coordinates'
+ext.sharedPackage = 'bobbynooby.dev.coords.shared'
+apply from: rootProject.file('gradle/mod.gradle')

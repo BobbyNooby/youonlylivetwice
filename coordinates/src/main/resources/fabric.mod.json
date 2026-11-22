@@ -1,0 +1,33 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-coordinates",
+    "version": "${version}",
+    "name": "YOLT Coordinates",
+    "description": "Server-side coordinate offset: every player's game is sent its own fake X and Z, new at each join, respawn and dimension change, while the server keeps working in the real ones. Turn it off in config/yolt-coordinates.json. Also part of You Only Live Twice.",
+    "authors": [
+        "BobbyNooby"
+    ],
+    "contact": {
+        "homepage": "https://github.com/BobbyNooby/youonlylivetwice/tree/release/coordinates",
+        "sources": "https://github.com/BobbyNooby/youonlylivetwice"
+    },
+    "license": "MIT",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "bobbynooby.dev.coords.YoltCoordinates"
+        ]
+    },
+    "mixins": [
+        "yolt-coordinates.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.20.1",
+        "minecraft": "~26.3",
+        "java": ">=25",
+        "fabric-api": ">=0.165.2+26.3"
+    },
+    "breaks": {
+        "you-only-live-twice": "<${version}"
+    }
+}

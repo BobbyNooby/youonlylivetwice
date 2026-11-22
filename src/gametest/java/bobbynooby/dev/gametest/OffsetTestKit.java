@@ -5,7 +5,7 @@ import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Frame;
 import bobbynooby.dev.coords.Offset;
-import bobbynooby.dev.mixin.ServerCommonPacketListenerAccessor;
+import bobbynooby.dev.coords.mixin.ServerCommonPacketListenerAccessor;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.Connection;

@@ -1,6 +1,7 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.anvils.AnvilSettings;
+import bobbynooby.dev.coords.CoordinateSettings;
 import bobbynooby.dev.elytra.ElytraSettings;
 import bobbynooby.dev.mending.MendingSettings;
 import org.junit.jupiter.api.Test;
@@ -32,5 +33,10 @@ class TinyModDefaultsTest {
         assertEquals(ElytraSettings.DEFAULTS.glideGravityMultiplier(), elytra.glideGravityMultiplier,
                 "glideGravityMultiplier");
         assertEquals(ElytraSettings.DEFAULTS.rocketCutoffSpeed(), elytra.rocketCutoffSpeed, "rocketCutoffSpeed");
+    }
+
+    @Test
+    void coordinateOffsetSwitchMatchesTheMod() {
+        assertEquals(CoordinateSettings.DEFAULTS.enabled(), new YoltConfig().hide.coordinates);
     }
 }
