@@ -16,7 +16,8 @@ import java.util.function.Consumer;
  * For a test that waits across ticks. The hardcore tick reads the settings in use at the end of every server tick, so
  * such a test keeps its own settings in use from its start to its end, in a batch of its own, where no other test runs
  * under them. What it changed goes back once, newest first: when its last step ends, when a step fails, or on the tick
- * before it would time out, whichever comes first. The settings go back last, after the players have left.
+ * before it would time out, which fails it, whichever comes first. The settings go back last, after the players have
+ * left.
  */
 final class Held {
     private final GameTestHelper helper;
@@ -27,7 +28,7 @@ final class Held {
         this.helper = helper;
         HardcoreFile.Loaded before = YoltHardcore.swapForTesting(settings);
         undo.add(() -> YoltHardcore.swapForTesting(before));
-        helper.runBeforeTestEnd(this::cleanUp);
+        helper.runBeforeTestEnd(this::ranOutOfTime);
     }
 
     /** Held with the defaults and a change of the test's. */
@@ -82,6 +83,15 @@ final class Held {
             }
             helper.succeed();
         };
+    }
+
+    // The tick before the timeout, with the last step still to come. The clean-up makes every step after it do nothing,
+    // and a wait that held the test up may pass once the clean-up has run, as one for a blood moon to end does when the
+    // clean-up stops it, so a sequence could reach its thenSucceed in this same tick and pass. Thrown from a task the
+    // test scheduled, the failure fails the test, and a succeed after it changes nothing.
+    private void ranOutOfTime() {
+        cleanUp();
+        throw helper.assertionException("ran out of time before its last step");
     }
 
     /** Runs what was changed backwards, once; every task runs even when one before it throws. */
