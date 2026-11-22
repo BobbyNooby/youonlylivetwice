@@ -15,6 +15,7 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -112,6 +113,39 @@ public class HardcoreDeathAloneGameTests {
             try {
                 Curse.set(id, 0);
                 TestPlayers.leave(server, id);
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A revive paper's hearts, which YOLT's revive gives back through refundRevivePaper while the player is away, come
+    // off the notice they are owed, so the respawn tells only of what the death still costs: nothing when it took one
+    // heart and the paper gave it back, one heart when it took two
+    @GameTest
+    public void aRevivePapersHeartsComeOffTheNotice(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.curse.reviveRefundHearts = 1));
+        List<UUID> ids = new ArrayList<>();
+        try {
+            ServerPlayer even = revivedAndBack(helper, ids, "PaperEven");
+            helper.assertValueEqual(even.getMaxHealth(), 20.0F, "max health with the one heart given back");
+            helper.assertValueEqual(TestPlayers.actionBars(even, 0), List.of(), "the hotbar with the one heart given back");
+
+            YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> {
+                c.curse.reviveRefundHearts = 1;
+                c.curse.heartsPerDeath = 2;
+            }));
+            ServerPlayer owed = revivedAndBack(helper, ids, "PaperOwed");
+            helper.assertValueEqual(owed.getMaxHealth(), 18.0F, "max health with one of two hearts given back");
+            helper.assertValueEqual(TestPlayers.actionBars(owed, 0), List.of(LOST_ONE), "the hotbar with one of two hearts given back");
+        } finally {
+            try {
+                for (UUID id : ids) {
+                    Curse.set(id, 0);
+                    TestPlayers.leave(server, id);
+                }
             } finally {
                 YoltHardcore.swapForTesting(before);
             }
@@ -252,6 +286,23 @@ public class HardcoreDeathAloneGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // A survival player dies and leaves from the death screen, a revive paper gives hearts back while they are away, as
+    // YOLT's revive does, and they join again dead and respawn. Returns the player who came back.
+    private static ServerPlayer revivedAndBack(GameTestHelper helper, List<UUID> ids, String base) {
+        GameProfile profile = TestPlayers.profile(base);
+        ids.add(profile.id());
+        ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, AT);
+        TestPlayers.markLoaded(player);
+        respawnBesideTest(helper, player);
+        player.kill(helper.getLevel());
+        helper.assertTrue(player.isDeadOrDying(), base + " did not die");
+        TestPlayers.leave(player);
+        helper.assertValueEqual(Curse.refundRevivePaper(profile.id()), 1, "hearts the paper gave back to " + base);
+        ServerPlayer dead = TestPlayers.rejoin(helper, profile, AT);
+        helper.assertTrue(dead.isDeadOrDying(), base + " did not come back dead");
+        return TestPlayers.respawn(dead);
     }
 
     private static ServerPlayer loaded(GameTestHelper helper, String base, GameType mode) {

@@ -106,6 +106,10 @@ public final class Curse {
         int hearts = cfg().reviveRefundHearts;
         int[] given = new int[1];
         HardcoreStates.update(uuid, s -> given[0] = CurseMaths.giveBack(s, hearts));
+        // The hearts come off the notice the player is owed, so the respawn tells only of what the death still costs
+        if (given[0] > 0) {
+            TELL_ON_RETURN.computeIfPresent(uuid, (id, owed) -> owed > given[0] ? owed - given[0] : null);
+        }
         return given[0];
     }
 
