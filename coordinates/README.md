@@ -82,15 +82,17 @@ These limits apply as they do inside YOLT:
   NBT key the mod doesn't know.
 - Not handled: another mod's own packets, which go out as that mod sent them, real positions included, and
   packet-level anticheats. Don't run either with this on.
-- Tried in a real client: on a server with only this mod the F3 screen shows the shifted numbers, a walk and a block
-  broken and placed in creative land on the real spot, a respawn starts a new stretch in chunk 0, 0, and
-  `/yolt-coordinates real` gives an op real numbers from their next respawn and, run again, shifted ones from the
-  respawn after; in a single-player world the client is shown real numbers and `/yolt-coordinates` says the mod does
-  nothing there. Not yet tried in a real client: walking through bamboo, a sculk sensor's particle in flight, dragging
-  a compass around the inventory, a border wall coming into view as you walk up to it, and minimap mods.
+- Not yet tried in a real client: walking through bamboo, a sculk sensor's particle in flight, dragging a compass around
+  the inventory, a border wall coming into view as you walk up to it, and minimap mods.
 
 [docs/coordinate-offset.md](../docs/coordinate-offset.md) has the full list. It is written for YOLT: there the setting
 is `hide.coordinates`, and admin view does what `/yolt-coordinates real` does here.
+
+Tried in a real client: on a server with only this mod the F3 screen shows the shifted numbers, a walk and a block
+broken and placed in creative land on the real spot, a respawn starts a new stretch in chunk 0, 0, and
+`/yolt-coordinates real` gives an op real numbers from their next respawn and, run again, shifted ones from the respawn
+after; in a single-player world the client is shown real numbers and `/yolt-coordinates` says the mod does nothing
+there.
 
 ## Install
 
