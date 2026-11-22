@@ -6,6 +6,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import org.jspecify.annotations.Nullable;
 
 /**
  * /yolt-coordinates real, which turns real coordinates on or off for the op who runs it. {@link YoltCoordinates#MOD}
@@ -32,11 +33,12 @@ final class CoordinateCommands {
     }
 
     // An offset only changes when a frame starts, so the op's coordinates follow at their next one, and the reply says
-    // so. The console, a command block or any other entity has no client to show coordinates to.
+    // so
     private static int real(CommandSourceStack source) {
         ServerPlayer player = source.getPlayer();
-        if (player == null) {
-            source.sendFailure(Component.literal("Only a player has coordinates to show."));
+        String refusal = refusal(YoltCoordinates.active(), player != null);
+        if (refusal != null) {
+            source.sendFailure(Component.literal(refusal));
             return 0;
         }
         boolean on = YoltCoordinates.toggleReal(player);
@@ -45,5 +47,16 @@ final class CoordinateCommands {
                 ? "You see real coordinates from your next join, respawn or dimension change."
                 : "You see shifted coordinates again from your next join, respawn or dimension change."), false);
         return 1;
+    }
+
+    /**
+     * Why /yolt-coordinates real can't be run, or null when it can. In a single-player world nothing is hidden. The
+     * console, a command block or any other entity that isn't a player has no client to show coordinates to.
+     */
+    static @Nullable String refusal(boolean active, boolean player) {
+        if (!active) {
+            return YoltCoordinates.SINGLE_PLAYER + ".";
+        }
+        return player ? null : "Only a player has coordinates to show.";
     }
 }

@@ -2,6 +2,7 @@ package bobbynooby.dev.coords;
 
 import bobbynooby.dev.coords.shared.SettingsFile;
 import bobbynooby.dev.coords.shared.TinyMod;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.commands.Commands;
@@ -9,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,10 +36,13 @@ import java.util.function.Supplier;
 public final class YoltCoordinates implements ModInitializer {
     public static final String MOD_ID = "yolt-coordinates";
     public static final Logger LOGGER = LoggerFactory.getLogger("YOLT Coordinates");
+    // The start-up line, /yolt-coordinates and the reload's reply only come up on its own, so they say whether the mod
+    // runs here at all, not only what the file says
     static final TinyMod<CoordinateSettings> MOD = new TinyMod<>(MOD_ID, "YOLT Coordinates", CoordinateConfig.FORMAT,
-            CoordinateSettings.DEFAULTS, CoordinateSettings::enabled,
-            settings -> settings.enabled() ? "each player's X and Z are shifted" : "nobody is shifted",
-            CoordinateSettings::describe);
+            CoordinateSettings.DEFAULTS, settings -> on(active(), settings), settings -> summary(active(), settings),
+            settings -> describe(active(), settings));
+    // What the log, /yolt-coordinates and /yolt-coordinates real say where the mod doesn't run
+    static final String SINGLE_PLAYER = "YOLT Coordinates does nothing in a single-player world";
     // On its own: true while a server with no single-player owner runs. The mod hides a world from its players, which a
     // single-player world's owner has no use for, and a world opened to LAN has that owner too.
     private static volatile boolean dedicated;
@@ -65,8 +70,9 @@ public final class YoltCoordinates implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        MOD.init();
+        // Before TinyMod's start, which runs after this one and logs whether the mod is on, so it knows by then
         ServerLifecycleEvents.SERVER_STARTING.register(YoltCoordinates::starting);
+        MOD.init();
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             dedicated = false;
             REAL.clear();
@@ -114,6 +120,26 @@ public final class YoltCoordinates implements ModInitializer {
         return active() && settings().enabled();
     }
 
+    /** The same for these settings, where active says whether the mod runs at all. */
+    static boolean on(boolean active, CoordinateSettings settings) {
+        return active && settings.enabled();
+    }
+
+    /** What the start-up line says after the switch. */
+    static String summary(boolean active, CoordinateSettings settings) {
+        return on(active, settings) ? "each player's X and Z are shifted" : "nobody is shifted";
+    }
+
+    /** The line /yolt-coordinates shows, and /yolt-coordinates reload after it reads the file. */
+    static String describe(boolean active, CoordinateSettings settings) {
+        return active ? settings.describe() : SINGLE_PLAYER;
+    }
+
+    /** On its own: true for a server with no single-player owner, which is a dedicated one. */
+    static boolean runsOn(@Nullable GameProfile singlePlayerOwner) {
+        return singlePlayerOwner == null;
+    }
+
     /** True when a frame that starts now gives this player real coordinates. */
     static boolean seesReal(ServerPlayer player) {
         return hooks.realCoordinates().test(player);
@@ -132,7 +158,7 @@ public final class YoltCoordinates implements ModInitializer {
         return true;
     }
 
-    /** True when a spawn is the north compass target, whose Z is the same for everyone. */
+    /** True when a spawn is the host's north compass target, whose Z is the same for everyone. */
     static boolean isNorthTarget(BlockPos pos) {
         return hooks.northTarget().test(pos);
     }
@@ -153,14 +179,19 @@ public final class YoltCoordinates implements ModInitializer {
 
     // Read at each start, so a world that is opened again is checked again. While hosted the host's rule is used.
     private static void starting(MinecraftServer server) {
-        dedicated = server.getSingleplayerProfile() == null;
+        dedicated = runsOn(server.getSingleplayerProfile());
         if (!dedicated && !hosted()) {
-            LOGGER.info("YOLT Coordinates does nothing in a single-player world");
+            LOGGER.info(SINGLE_PLAYER);
         }
     }
 
     // For the mod's own GameTests: swaps the settings in for one test, which puts them back within the same tick
     static CoordinateSettings swapForTesting(CoordinateSettings settings) {
         return MOD.swapForTesting(settings);
+    }
+
+    // For the mod's own GameTests: takes a test player off the list /yolt-coordinates real keeps, op or not
+    static void forgetRealForTesting(ServerPlayer player) {
+        REAL.remove(player.getUUID());
     }
 }
