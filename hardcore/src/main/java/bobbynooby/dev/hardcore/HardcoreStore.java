@@ -111,7 +111,7 @@ public final class HardcoreStore implements AutoCloseable {
     private static void refuseNewer(Path dbFile, int found) {
         if (found > SCHEMA_VERSION) {
             throw new IllegalStateException("The hardcore database " + dbFile + " is schema v" + found
-                    + ", newer than this version of YOLT reads (v" + SCHEMA_VERSION + "), so it is left as it is");
+                    + ", newer than this build reads (v" + SCHEMA_VERSION + "), so it is left as it is");
         }
     }
 
