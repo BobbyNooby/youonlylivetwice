@@ -7,6 +7,8 @@ import bobbynooby.dev.bodies.BodyTargetGoal;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.hardcore.HardcoreConfig;
+import bobbynooby.dev.hardcore.MobBoosts;
 import bobbynooby.dev.mixin.MobAccessor;
 import bobbynooby.dev.mixin.TargetGoalAccessor;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -479,6 +481,37 @@ public class BodyMobGameTests {
             spawned.add(plain);
             assertHit(helper, plain, Difficulty.HARD, attack, 4.0F);
         } finally {
+            level.getServer().setDifficulty(before, true);
+            cleanUp(helper, owner, spawned);
+        }
+        helper.succeed();
+    }
+
+    // Two mixin configs change LivingEntity.hurtServer: YOLT's BodyDifficultyDamageMixin wraps the whole method and
+    // scales a body's hit for the difficulty, and YOLT Hardcore's HardcoreMobDamageMixin boosts a tougher mob's hit at
+    // the head of the method it wraps, so the difficulty goes first, as Player.hurtServer scales a player's hit before
+    // the boost. Easy isn't linear: a hit of 4 is min(4 / 2 + 1, 4) = 3, then 1.25 times for tougher mobs. The boost
+    // first would give min(5 / 2 + 1, 5) = 3.5. Its own batch, as it changes the difficulty; it puts that and the switch
+    // back within the tick.
+    @GameTest(environment = BODY_DIFFICULTY)
+    public void bodyDifficultyScalesBeforeTheTougherBoost(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Difficulty before = level.getDifficulty();
+        HardcoreConfig.TougherMobsSection tougher = Settings.get().hardcore.tougherMobs;
+        boolean enabledBefore = tougher.enabled;
+        List<Entity> spawned = new ArrayList<>();
+        UUID owner = null;
+        try {
+            ServerPlayer player = join(helper, "Boosted");
+            owner = player.getUUID();
+            Mannequin body = leaveBodyWithDefaults(helper, player);
+            tougher.enabled = true;
+            Zombie zombie = HardcoreMobsGameTests.create(helper, spawned, EntityTypes.ZOMBIE, EntitySpawnReason.NATURAL,
+                    FOUR_AWAY);
+            helper.assertTrue(zombie.entityTags().contains(MobBoosts.TOUGH), "the zombie was not boosted");
+            assertHit(helper, body, Difficulty.EASY, level.damageSources().mobAttack(zombie), 3.75F);
+        } finally {
+            tougher.enabled = enabledBefore;
             level.getServer().setDifficulty(before, true);
             cleanUp(helper, owner, spawned);
         }
