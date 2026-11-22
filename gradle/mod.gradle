@@ -1,13 +1,15 @@
-// The build every mod besides You Only Live Twice shares. A mod's build.gradle sets ext.modId, and ext.sharedPackage if
-// it uses shared/, and applies this file. Each mod builds its own jar for servers that want only it, and the same jar
-// ships inside You Only Live Twice's (a tiny mod's inside YOLT Hardcore's, which YOLT's holds). The versions all come
-// from the root gradle.properties.
+// The build every mod besides You Only Live Twice shares. A mod's build.gradle sets ext.modId, ext.sharedPackage if it
+// uses shared/ and ext.clientTests if it has client GameTests, and applies this file. Each mod builds its own jar for
+// servers that want only it, and the same jar ships inside You Only Live Twice's (a tiny mod's inside YOLT Hardcore's,
+// which YOLT's holds). The versions all come from the root gradle.properties.
 
 // Not called modId: the modId line in configureTests below would then set this variable, not the test mod's id
 def id = project.ext.modId
 // The package this mod compiles the shared source under, such as bobbynooby.dev.anvils.shared, or null for a mod that
 // uses nothing in shared/
 def sharedPackage = project.ext.has('sharedPackage') ? project.ext.sharedPackage : null
+// True for a mod with client GameTests of its own, which a real client runs against this mod's jar alone
+def clientTests = project.ext.has('clientTests') && project.ext.clientTests
 
 version = project.mod_version
 group = project.maven_group
@@ -44,9 +46,9 @@ fabricApi {
     configureTests {
         createSourceSet = true
         modId = "${id}-gametest"
-        // Nothing here is drawn: what a mod changes reaches the client as data, which the root project's client
-        // tests check
-        enableClientGameTests = false
+        // Only a mod that sets ext.clientTests has client GameTests. The root project's client tests check what YOLT,
+        // with every mod inside it, shows a real client; a mod's own check what it shows with no YOLT on the server.
+        enableClientGameTests = clientTests
         eula = true // Bob agreed to the Minecraft EULA in chat (spec section 15)
     }
 }
@@ -55,6 +57,47 @@ loom.runs.named("gameTest") { run ->
     // Without a report file the GameTest results only exist in the console log
     run.systemProperties.put("fabric-api.gametest.report-file",
             layout.buildDirectory.file("test-results/gameTest/TEST-gameTest.xml").map { it.asFile.absolutePath })
+}
+
+if (clientTests) {
+    // A production client only loads mods from jars, so the test mod gets its own
+    def gametestJar = tasks.register("gametestJar", Jar) {
+        archiveClassifier = "gametest"
+        from sourceSets.gametest.output
+    }
+
+    // The projects whose client runs come before this mod's: the root, YOLT's, then each mod with client tests set up
+    // before this one. Projects are set up one at a time, the root first.
+    def modsBefore = rootProject.ext.has('modsWithClientTests') ? rootProject.ext.modsWithClientTests : []
+    rootProject.ext.modsWithClientTests = modsBefore + [project.path]
+    def before = [rootProject] + modsBefore.collect { rootProject.project(it) }
+
+    // A script applied from a file can't see the plugin's classes by name, so the task type comes from Loom's loader
+    def productionRun = Class.forName("net.fabricmc.loom.task.prod.ClientProductionRunTask", true,
+            plugins.findPlugin("net.fabricmc.fabric-loom").class.classLoader)
+
+    // As the root project's: this mod's jar, which Loom adds, with the test mod and Fabric API, and nothing of YOLT
+    tasks.register("runProductionClientGameTest", productionRun) {
+        mods.from(gametestJar)
+        jvmArgs.add("-Dfabric.client.gametest")
+        // Same folder as Loom's clientGameTest run, so the EULA it accepts covers the in-process server too
+        runDir = layout.buildDirectory.dir("run/clientGameTest")
+        dependsOn("acceptGameTestEula")
+        // After every client run before it, so whatever Gradle runs in parallel, one window opens at a time
+        before.each { mustRunAfter(it.tasks.named { name -> name == "runProductionClientGameTest" }) }
+        // Every project's downloadAssets writes the one assets folder in Gradle's cache that every client run reads,
+        // and Gradle stops a build in which a run isn't ordered after each of them
+        before.each { mustRunAfter(it.tasks.named { name -> name == "downloadAssets" }) }
+    }
+    // The same the other way: the runs before this one come after this mod's download
+    def download = tasks.named { name -> name == "downloadAssets" }
+    before.each {
+        it.tasks.named { name -> name == "runProductionClientGameTest" }.configureEach { mustRunAfter(download) }
+    }
+
+    dependencies {
+        productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    }
 }
 
 dependencies {
