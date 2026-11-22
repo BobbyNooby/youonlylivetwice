@@ -11,6 +11,8 @@
             "bobbynooby.dev.hardcore.HardcoreCommandGameTests",
             "bobbynooby.dev.hardcore.HardcoreDeathAloneGameTests",
             "bobbynooby.dev.hardcore.HardcoreFoodAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreReloadAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreTinyModsAloneGameTests",
             "bobbynooby.dev.hardcore.HardcoreWorldAloneGameTests"
         ],
         "fabric-client-gametest": [
