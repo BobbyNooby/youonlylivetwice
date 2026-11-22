@@ -186,8 +186,11 @@ public class HardcoreBodyAloneGameTests {
             helper.assertValueEqual(TestPlayers.actionBars(awake, 0), List.of(), "the hotbar of a player who arrived");
         } finally {
             try {
-                wakeAndLeave(napper);
-                TestPlayers.leave(awake);
+                try {
+                    wakeAndLeave(napper);
+                } finally {
+                    TestPlayers.leave(awake);
+                }
             } finally {
                 YoltHardcore.swapForTesting(before);
             }
