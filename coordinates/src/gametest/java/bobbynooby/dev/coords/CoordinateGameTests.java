@@ -17,6 +17,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.PositionMoveRotation;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.config.Property;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -27,6 +33,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * The mod on its own, with You Only Live Twice nowhere on the server: its own switch, file and commands. YOLT's GameTests
@@ -179,6 +186,80 @@ public class CoordinateGameTests {
             helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "the offset right after the second command");
             player = TestPlayers.respawn(helper, player, RESPAWN);
             helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the respawn after the second command got no offset");
+        } finally {
+            try {
+                leave(player);
+            } finally {
+                YoltCoordinates.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // Through /execute as, the command turns another player's real coordinates on or off, while the reply still goes to
+    // whoever ran it, so the reply names that player. The log names both: here an op, then the console.
+    @GameTest
+    public void realRunAsAnotherPlayerNamesThem(GameTestHelper helper) {
+        CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer runner = null;
+        ServerPlayer target = null;
+        try {
+            runner = TestPlayers.join(helper, "realrunner", GameType.SURVIVAL, SPOT);
+            target = TestPlayers.join(helper, "realtarget", GameType.SURVIVAL, SPOT);
+            TestPlayers.op(runner);
+            TestPlayers.op(target);
+            String runnerName = runner.getPlainTextName();
+            String targetName = target.getPlainTextName();
+            String command = "execute as " + targetName + " run yolt-coordinates real";
+            CommandSourceStack asRunner = runner.createCommandSourceStack();
+            int runnerMark = TestPlayers.sent(runner).size();
+            int targetMark = TestPlayers.sent(target).size();
+            List<String> logged = logged(() -> helper.assertValueEqual(run(helper, asRunner, command), 1, "/" + command));
+            helper.assertTrue(YoltCoordinates.seesReal(target), "the player it ran as was given no real coordinates");
+            helper.assertFalse(YoltCoordinates.seesReal(runner), "the op who ran it was given real coordinates");
+            helper.assertValueEqual(said(runner, runnerMark),
+                    List.of(targetName + " sees real coordinates from their next join, respawn or dimension change."),
+                    "the reply to the op who ran it");
+            helper.assertValueEqual(said(target, targetMark), List.of(), "what the player it ran as was told");
+            helper.assertValueEqual(logged, List.of(runnerName + " turned real coordinates on for " + targetName), "the log");
+
+            List<String> fromConsole = logged(() ->
+                    helper.assertValueEqual(run(helper, server.createCommandSourceStack(), command), 1, "/" + command + " from the console"));
+            helper.assertFalse(YoltCoordinates.seesReal(target), "the console's run left real coordinates on");
+            helper.assertValueEqual(fromConsole, List.of("Server turned real coordinates off for " + targetName),
+                    "the log of the console's run");
+        } finally {
+            try {
+                leave(runner);
+            } finally {
+                try {
+                    leave(target);
+                } finally {
+                    YoltCoordinates.swapForTesting(before);
+                }
+            }
+        }
+        helper.succeed();
+    }
+
+    // With the offset off nobody is shifted, whatever the command turns, so the reply says the offset is off as well
+    @GameTest
+    public void realWithTheOffsetOffSaysItIsOff(GameTestHelper helper) {
+        CoordinateSettings before = YoltCoordinates.swapForTesting(OFF);
+        ServerPlayer player = null;
+        try {
+            player = TestPlayers.join(helper, "realoff", GameType.SURVIVAL, SPOT);
+            TestPlayers.op(player);
+            int mark = TestPlayers.sent(player).size();
+            helper.assertValueEqual(run(helper, player.createCommandSourceStack(), "yolt-coordinates real"), 1, "/yolt-coordinates real");
+            helper.assertValueEqual(said(player, mark), List.of(REAL_ON + " The coordinate offset is off."), "the reply");
+            helper.assertTrue(YoltCoordinates.seesReal(player), "the command gave no real coordinates");
+
+            mark = TestPlayers.sent(player).size();
+            helper.assertValueEqual(run(helper, player.createCommandSourceStack(), "yolt-coordinates real"), 1,
+                    "/yolt-coordinates real again");
+            helper.assertValueEqual(said(player, mark), List.of(REAL_OFF + " The coordinate offset is off."), "the second reply");
         } finally {
             try {
                 leave(player);
@@ -363,6 +444,31 @@ public class CoordinateGameTests {
         } finally {
             YoltCoordinates.swapForTesting(before);
         }
+    }
+
+    // Each line the mod's own logger logs while the task runs, which is within the tick. The appender joins the config
+    // the logger already uses, which other loggers may use too, so it keeps the mod's lines only.
+    private static List<String> logged(Runnable task) {
+        String name = YoltCoordinates.LOGGER.getName();
+        LoggerConfig config = ((Logger) LogManager.getLogger(name)).get();
+        List<String> lines = new CopyOnWriteArrayList<>();
+        AbstractAppender appender = new AbstractAppender("yolt-coordinates-gametest", null, null, false, Property.EMPTY_ARRAY) {
+            @Override
+            public void append(LogEvent event) {
+                if (name.equals(event.getLoggerName())) {
+                    lines.add(event.getMessage().getFormattedMessage());
+                }
+            }
+        };
+        appender.start();
+        config.addAppender(appender, null, null);
+        try {
+            task.run();
+        } finally {
+            config.removeAppender(appender.getName());
+            appender.stop();
+        }
+        return List.copyOf(lines);
     }
 
     // The text of each system message the player was sent from packet "from" on

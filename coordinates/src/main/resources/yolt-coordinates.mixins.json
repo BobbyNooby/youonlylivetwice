@@ -5,6 +5,7 @@
   "mixins": [
     "BlockEntityDataPacketInvoker",
     "ChunkBlockEntityInfoInvoker",
+    "CommandSourceStackAccessor",
     "CoordinateOffsetCollisionMixin",
     "CoordinateOffsetCommandMixin",
     "CoordinateOffsetConnectionMixin",
