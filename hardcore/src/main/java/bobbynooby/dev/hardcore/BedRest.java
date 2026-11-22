@@ -51,6 +51,19 @@ public final class BedRest {
         return !rule.canSleep(player.level()) && allowsDaytime(rule);
     }
 
+    /** True while any of these players is napping, so vanilla's sleep line would count a nap that never skips. */
+    public static boolean anyNapping(List<ServerPlayer> players) {
+        if (!daytimeOn()) {
+            return false;
+        }
+        for (ServerPlayer player : players) {
+            if (napping(player)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** How fast the bed heals this player: 1.0 is the set pace, slower while protein is low. */
     public static double healingSpeed(ServerPlayer player) {
         return Nutrients.healingSpeed(player);

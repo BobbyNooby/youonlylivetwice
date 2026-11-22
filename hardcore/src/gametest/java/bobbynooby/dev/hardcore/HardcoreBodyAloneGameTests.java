@@ -8,6 +8,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +30,12 @@ public class HardcoreBodyAloneGameTests {
     private static final String LIMP = "yolt-hardcore-gametest:limp_alone";
     // Noon with the clock stopped and the sky clear, so the bed is a daytime nap
     private static final String BED = "yolt-hardcore-gametest:bed_rest_alone";
+    // The same noon and midnight, each in a batch of its own, so no other test's player is in the dimension to be told
+    // of a sleeper or to be one
+    private static final String NAP_LINE = "yolt-hardcore-gametest:nap_line_alone";
+    private static final String NIGHT_LINE = "yolt-hardcore-gametest:night_line_alone";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
+    private static final BlockPos AWAY_FROM_BED = new BlockPos(4, 1, 4);
     // Weight weighs again every 10 ticks, plus 2 for the slowdown to follow
     private static final int SETTLE = 12;
 
@@ -154,6 +160,79 @@ public class HardcoreBodyAloneGameTests {
         } catch (RuntimeException | Error e) {
             held.cleanUpAfter(e);
             throw e;
+        }
+    }
+
+    // Vanilla tells everyone in the dimension how many are in bed as someone lies down, and again as a player arrives
+    // while someone is: "Sleeping through this night" with one player, "1/2 players sleeping" with two. A nap never
+    // counts towards the skip, so at noon either line would promise what can't happen.
+    @GameTest(environment = NAP_LINE)
+    public void aDaytimeNapSendsNoSleepLine(GameTestHelper helper) {
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.bedRest.enabled = true));
+        ServerPlayer napper = null;
+        ServerPlayer awake = null;
+        try {
+            BlockPos head = placeBed(helper);
+            napper = TestPlayers.join(helper, "Napper", GameType.SURVIVAL, NEXT_TO_BED);
+            helper.assertFalse(helper.getLevel().isDarkOutside(), "it is dark at the batch's noon");
+            int from = TestPlayers.mark(napper);
+            useBed(helper, napper, head);
+            helper.assertTrue(napper.isSleeping(), "the player could not lie down at noon");
+            helper.assertTrue(BedRest.napping(napper), "lying down at noon is not a nap");
+            helper.assertValueEqual(TestPlayers.actionBars(napper, from), List.of(), "the napper's hotbar as they lay down");
+
+            awake = TestPlayers.join(helper, "Awake", GameType.SURVIVAL, AWAY_FROM_BED);
+            helper.assertValueEqual(TestPlayers.actionBars(napper, from), List.of(), "the napper's hotbar as another arrived");
+            helper.assertValueEqual(TestPlayers.actionBars(awake, 0), List.of(), "the hotbar of a player who arrived");
+        } finally {
+            try {
+                wakeAndLeave(napper);
+                TestPlayers.leave(awake);
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The control: at midnight vanilla's own rule lets the player lie down, which is no nap, so vanilla's line goes
+    // out. A test player gets no tick of its own, and only that tick counts how long it has slept, so the night never
+    // skips.
+    @GameTest(environment = NIGHT_LINE)
+    public void aNightsSleepStillSendsTheSleepLine(GameTestHelper helper) {
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.bedRest.enabled = true));
+        ServerPlayer sleeper = null;
+        try {
+            BlockPos head = placeBed(helper);
+            sleeper = TestPlayers.join(helper, "Sleeper", GameType.SURVIVAL, NEXT_TO_BED);
+            helper.assertTrue(helper.getLevel().isDarkOutside(), "it isn't dark at the batch's midnight");
+            int from = TestPlayers.mark(sleeper);
+            useBed(helper, sleeper, head);
+            helper.assertTrue(sleeper.isSleeping(), "the player could not lie down at midnight");
+            helper.assertFalse(BedRest.napping(sleeper), "lying down at midnight is a nap");
+            helper.assertValueEqual(TestPlayers.actionBars(sleeper, from), List.of("Sleeping through this night"),
+                    "the sleeper's hotbar as they lay down");
+        } finally {
+            try {
+                wakeAndLeave(sleeper);
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // Out of bed first, so the player doesn't leave as a sleeper. Nothing for a player who never joined.
+    private static void wakeAndLeave(@Nullable ServerPlayer player) {
+        if (player == null) {
+            return;
+        }
+        try {
+            if (player.isSleeping()) {
+                player.stopSleepInBed(true, true);
+            }
+        } finally {
+            TestPlayers.leave(player);
         }
     }
 
