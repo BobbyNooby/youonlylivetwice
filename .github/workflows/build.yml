@@ -160,14 +160,21 @@ jobs:
             sleep 60
           done
           exit 1
+      # YOLT's client tests against YOLT's jar, then YOLT Hardcore's and YOLT Coordinates', each against its own jar
+      # with no YOLT, one window after the other
       - name: run client game tests
         run: ./gradlew runProductionClientGameTest
+      # With more than one path the artifact keeps each file's folder from the repository root, so YOLT's shots are
+      # under build/ and each mod's under its own folder
       - name: store screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: client-screenshots
-          path: build/run/clientGameTest/screenshots
+          path: |
+            build/run/clientGameTest/screenshots
+            hardcore/build/run/clientGameTest/screenshots
+            coordinates/build/run/clientGameTest/screenshots
       - name: store client logs
         if: failure()
         uses: actions/upload-artifact@v7
@@ -176,6 +183,10 @@ jobs:
           path: |
             build/run/clientGameTest/logs
             build/run/clientGameTest/crash-reports
+            hardcore/build/run/clientGameTest/logs
+            hardcore/build/run/clientGameTest/crash-reports
+            coordinates/build/run/clientGameTest/logs
+            coordinates/build/run/clientGameTest/crash-reports
 
   # A push to release whose tests all pass makes a draft release of its jars, tagged v<mod_version>, with
   # .github/release-notes.md as its text. A draft stays private until it is published on GitHub, and until then each
