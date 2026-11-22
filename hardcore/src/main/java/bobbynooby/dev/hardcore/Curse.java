@@ -45,7 +45,10 @@ public final class Curse {
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> TELL_ON_RETURN.clear());
     }
 
-    /** A death, online or not. Only one in survival or adventure counts, whatever the lockout counts. */
+    /**
+     * A death, online or not. Only one in survival or adventure counts, even where a host counts others for rules of
+     * its own, as YOLT's lockout can.
+     */
     public static void onDeath(UUID uuid, GameType modeAtDeath) {
         if (!on()) {
             return;
