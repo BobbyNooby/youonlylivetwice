@@ -1,6 +1,7 @@
 package bobbynooby.dev.config;
 
 import bobbynooby.dev.core.Yolt;
+import bobbynooby.dev.hardcore.HardcoreChecks;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import org.jspecify.annotations.Nullable;
@@ -94,8 +95,8 @@ public final class Settings {
 
     // Logged at a load, and after a set only when that set is what made the curse and the limp cross
     private static void noteCurseAndLimp(@Nullable YoltConfig before, YoltConfig now) {
-        String notice = ConfigChecks.curseOutlastsLimp(now);
-        if (notice != null && (before == null || ConfigChecks.curseOutlastsLimp(before) == null)) {
+        String notice = HardcoreChecks.curseOutlastsLimp(now.hardcore);
+        if (notice != null && (before == null || HardcoreChecks.curseOutlastsLimp(before.hardcore) == null)) {
             Yolt.LOGGER.info("Config: {}", notice);
         }
     }

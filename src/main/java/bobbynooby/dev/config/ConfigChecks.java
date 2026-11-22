@@ -167,11 +167,6 @@ final class ConfigChecks {
         return id != null && !id.getPath().isEmpty();
     }
 
-    /** HardcoreChecks.curseOutlastsLimp on this config's hardcore block: a notice, or null. */
-    static @Nullable String curseOutlastsLimp(YoltConfig config) {
-        return HardcoreChecks.curseOutlastsLimp(config.hardcore);
-    }
-
     // Read whole, as the maps are: a name with a slash or a space would match no command, and one bad name is most likely
     // a sign the rest need a look too
     private static boolean commandNames(List<String> names) {

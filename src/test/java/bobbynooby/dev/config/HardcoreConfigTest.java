@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.hardcore.HardcoreChecks;
 import bobbynooby.dev.hardcore.HardcoreConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -241,7 +242,7 @@ class HardcoreConfigTest {
         YoltConfig curseOnly = new YoltConfig();
         curseOnly.hardcore.curse.enabled = true;
         curseOnly.hardcore.curse.maxLostHearts = 8;
-        assertNull(ConfigChecks.curseOutlastsLimp(curseOnly));
+        assertNull(HardcoreChecks.curseOutlastsLimp(curseOnly.hardcore));
         assertCrossedAfterSet(file, curseOnly, "hardcore.limp.enabled", new JsonPrimitive(true));
 
         // The curse ships on, so it is turned off here to be the switch that goes on
@@ -254,7 +255,7 @@ class HardcoreConfigTest {
         YoltConfig both = new YoltConfig();
         both.hardcore.curse.enabled = true;
         both.hardcore.limp.enabled = true;
-        assertNull(ConfigChecks.curseOutlastsLimp(both), "the shipped numbers with both on");
+        assertNull(HardcoreChecks.curseOutlastsLimp(both.hardcore), "the shipped numbers with both on");
         // 3 hearts left against a recovery line of 3
         assertCrossedAfterSet(file, both, "hardcore.curse.maxLostHearts", new JsonPrimitive(7));
         assertCrossedAfterSet(file, both, "hardcore.limp.recoverAtHearts", new JsonPrimitive(8.0));
@@ -263,7 +264,7 @@ class HardcoreConfigTest {
         ConfigLoader.Change fine = ConfigLoader.setKey(file, both, key("hardcore.curse.maxLostHearts"), new JsonPrimitive(6));
         assertNull(fine.problem());
         assertEquals(6, fine.config().hardcore.curse.maxLostHearts);
-        assertNull(ConfigChecks.curseOutlastsLimp(fine.config()));
+        assertNull(HardcoreChecks.curseOutlastsLimp(fine.config().hardcore));
     }
 
     private static void assertCrossedAfterSet(Path file, YoltConfig live, String path, JsonPrimitive value) {
@@ -272,7 +273,7 @@ class HardcoreConfigTest {
         assertEquals(value.getAsString(), key(path).show(change.config()), path);
         assertTrue(change.config().hardcore.curse.enabled, path);
         assertTrue(change.config().hardcore.limp.enabled, path);
-        String notice = ConfigChecks.curseOutlastsLimp(change.config());
+        String notice = HardcoreChecks.curseOutlastsLimp(change.config().hardcore);
         assertNotNull(notice, path);
         assertTrue(notice.contains("This is allowed"), notice);
     }
@@ -652,7 +653,7 @@ class HardcoreConfigTest {
             assertEquals(typed.hardcore.limp.recoverAtHearts, r.config().hardcore.limp.recoverAtHearts, json);
             assertTrue(r.config().hardcore.curse.enabled, json);
             assertTrue(r.config().hardcore.limp.enabled, json);
-            assertNotNull(ConfigChecks.curseOutlastsLimp(r.config()), json);
+            assertNotNull(HardcoreChecks.curseOutlastsLimp(r.config().hardcore), json);
         }
 
         // Right on the edges nothing falls back: the same damage twice, and one heart more than the limp's line
@@ -660,7 +661,7 @@ class HardcoreConfigTest {
                 + "\"curse\":{\"enabled\":true,\"maxLostHearts\":6},\"limp\":{\"enabled\":true}}}");
         assertEquals(List.of(), edges.warnings().stream().filter(w -> w.startsWith("hardcore.")).toList());
         assertEquals(6, edges.config().hardcore.curse.maxLostHearts);
-        assertNull(ConfigChecks.curseOutlastsLimp(edges.config()));
+        assertNull(HardcoreChecks.curseOutlastsLimp(edges.config().hardcore));
     }
 
     // A file holding each value at its dotted path, as an admin would type them, read at startup
@@ -794,7 +795,7 @@ class HardcoreConfigTest {
         config.hardcore.curse.enabled = true;
         config.hardcore.limp.enabled = true;
         config.hardcore.curse.maxLostHearts = 12;
-        String notice = ConfigChecks.curseOutlastsLimp(config);
+        String notice = HardcoreChecks.curseOutlastsLimp(config.hardcore);
         assertNotNull(notice);
         assertTrue(notice.startsWith("with hardcore.curse.maxLostHearts 12, a fully cursed player has 0 hearts,"), notice);
         assertFalse(notice.contains("-2"), notice);
