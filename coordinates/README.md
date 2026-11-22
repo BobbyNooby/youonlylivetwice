@@ -51,11 +51,15 @@ It is on as soon as it is installed.
 
 ## What it gives away
 
-Inside You Only Live Twice, by default, compasses point north and F3 stays reduced. On its own the mod has neither:
+Inside You Only Live Twice, by default, compasses point north, F3 stays reduced and players with no spawn point start
+at a random spot. On its own the mod has none of these:
 
 - A compass points at the world spawn, shifted like everything else. A player who knows where the world spawn really
   is can work out their amount from where the compass points.
 - The mod doesn't reduce F3: it shows vanilla's screen, in your shifted numbers.
+- Random spawn: a new player and anyone who respawns with no bed start at the world spawn, so all those stretches get
+  the same amount, give or take a chunk, and players in them can share coordinates. The world spawn is often near real
+  0, 0, so those numbers are close to the real ones, and real when it is in the chunk at 0, 0.
 
 These limits apply as they do inside YOLT:
 

@@ -7,7 +7,9 @@ below).
 The coordinate offset is also a mod of its own, [YOLT Coordinates](../coordinates/README.md), for a server without
 YOLT. YOLT's jar ships it, so YOLT needs nothing extra. On its own it is switched by `enabled` in
 `config/yolt-coordinates.json`, an op gets real coordinates with `/yolt-coordinates real` in place of admin view, and
-there is no north compass and no reduced F3. Its readme says what that gives away.
+there is no north compass, no reduced F3 and no random spawn. Without random spawn, a new player and anyone who
+respawns with no bed start at the world spawn, so all those stretches get about the same amount, as with `randomSpawn`
+off in the [Known limits](#known-limits) below. Its readme says what all that gives away.
 
 - Every position the server sends a player is shifted by a private amount, and every position that player's game
   sends back is shifted back, so the server itself always works in real coordinates.
