@@ -244,6 +244,43 @@ public class CoordinateGameTests {
         helper.succeed();
     }
 
+    // Only an op is ever given real coordinates, so through /execute as the command refuses a player who isn't one and
+    // turns nothing on: opped afterwards, they still see shifted coordinates
+    @GameTest
+    public void realRunAsAPlayerWhoIsNotAnOpIsRefused(GameTestHelper helper) {
+        CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
+        ServerPlayer runner = null;
+        ServerPlayer target = null;
+        try {
+            runner = TestPlayers.join(helper, "realasker", GameType.SURVIVAL, SPOT);
+            target = TestPlayers.join(helper, "realnotop", GameType.SURVIVAL, SPOT);
+            TestPlayers.op(runner);
+            String targetName = target.getPlainTextName();
+            String command = "execute as " + targetName + " run yolt-coordinates real";
+            int runnerMark = TestPlayers.sent(runner).size();
+            int targetMark = TestPlayers.sent(target).size();
+            // Brigadier answers a forked command such as /execute as with the number of forks it ran, whatever each
+            // returned, so the refusal shows in the reply and in what was turned on
+            run(helper, runner.createCommandSourceStack(), command);
+            helper.assertValueEqual(said(runner, runnerMark),
+                    List.of(targetName + " is not an op, and only an op sees real coordinates."), "what the op who ran it was told");
+            helper.assertValueEqual(said(target, targetMark), List.of(), "what the player it ran as was told");
+            TestPlayers.op(target);
+            helper.assertFalse(YoltCoordinates.seesReal(target), "the refused command turned real coordinates on");
+        } finally {
+            try {
+                leave(runner);
+            } finally {
+                try {
+                    leave(target);
+                } finally {
+                    YoltCoordinates.swapForTesting(before);
+                }
+            }
+        }
+        helper.succeed();
+    }
+
     // With the offset off nobody is shifted, whatever the command turns, so the reply says the offset is off as well
     @GameTest
     public void realWithTheOffsetOffSaysItIsOff(GameTestHelper helper) {

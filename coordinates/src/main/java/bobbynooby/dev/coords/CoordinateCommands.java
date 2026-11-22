@@ -45,10 +45,17 @@ final class CoordinateCommands {
             source.sendFailure(Component.literal(refusal));
             return 0;
         }
+        String name = player.getPlainTextName();
+        // Only an op is ever given real coordinates, by the same check as the mod's own hook, so for anyone else the
+        // entry would do nothing until they were opped, and then hand them real coordinates unasked. The command itself
+        // needs that level, so this is a source with more than the player has, such as /execute as run by an op.
+        if (!Commands.LEVEL_GAMEMASTERS.check(player.permissions())) {
+            source.sendFailure(Component.literal(name + " is not an op, and only an op sees real coordinates."));
+            return 0;
+        }
         boolean on = YoltCoordinates.toggleReal(player);
         CommandSource caller = ((CommandSourceStackAccessor) source).yoltCoordinatesSource();
         boolean own = caller == player.commandSource();
-        String name = player.getPlainTextName();
         if (own) {
             YoltCoordinates.LOGGER.info("{} turned real coordinates {}", name, on ? "on" : "off");
         } else {
