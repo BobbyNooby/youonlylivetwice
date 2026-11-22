@@ -30,10 +30,10 @@ import java.util.UUID;
  */
 public final class YoltHardcore implements ModInitializer {
     public static final String MOD_ID = "yolt-hardcore";
-    public static final Logger LOGGER = LoggerFactory.getLogger("YOLT Hardcore");
+    private static final String NAME = "YOLT Hardcore";
+    public static final Logger LOGGER = LoggerFactory.getLogger(NAME);
     // The custom value a host sets to true in its fabric.mod.json
     private static final String HOST_KEY = "yolt-hardcore:host";
-    private static final String NAME = "YOLT Hardcore";
 
     // On its own: true while a server runs
     private static volatile boolean running;
