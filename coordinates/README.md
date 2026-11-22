@@ -11,7 +11,8 @@ It is on as soon as it is installed.
 
 - Every position the server sends a player is shifted by a private amount, and every position that player's game sends
   back is shifted back, so the server itself always works in real coordinates. A minimap mod or a hacked client gets
-  the fake numbers too.
+  the fake numbers too, though a client built for it can still work some real numbers out (see
+  [What it gives away](#what-it-gives-away)).
 - Only X and Z move. Height stays real.
 - The amount is new at each join, respawn and dimension change, never on a timer. Each stretch starts you in the chunk
   at 0, 0.
@@ -60,6 +61,9 @@ These limits apply as they do inside YOLT:
 
 - A wall of a border whose size and centre are known gives that real axis away once you see it.
 - A map you hold gives your real X and Z modulo its size, and a known seed gives everything away through the terrain.
+- Some terrain is the same in every world, whatever the seed: where snow starts on a mountain, where frozen-ocean ice
+  ends, and which flowers grow where in a flower field. A client built for it can match what it sees against that and
+  find its real X and Z.
 - In the End, the main island at real 0, 0 gives the End's amount away. It is new at every trip there, and spots in
   other dimensions are never shown in it.
 - Each stretch puts you in chunk 0, 0 at its start, so a stretch that starts in the real chunk at 0, 0 shows real
@@ -72,8 +76,10 @@ These limits apply as they do inside YOLT:
   shows.
 - Some things go out as an op or a data pack wrote them, with any position in them real, such as a position under an
   NBT key the mod doesn't know.
-- Another mod's own packets go out as that mod sent them, real positions included. Don't run a mod that sends
-  positions in packets of its own with this on.
+- Not handled: another mod's own packets, which go out as that mod sent them, real positions included, and
+  packet-level anticheats. Don't run either with this on.
+- Not yet tried in a real client: walking through bamboo, a sculk sensor's particle in flight, dragging a compass around
+  the inventory, a border wall coming into view as you walk up to it, and minimap mods.
 
 [docs/coordinate-offset.md](../docs/coordinate-offset.md) has the full list. It is written for YOLT: there the setting
 is `hide.coordinates`, and admin view does what `/yolt-coordinates real` does here.
@@ -84,8 +90,8 @@ is `hide.coordinates`, and admin view does what `/yolt-coordinates real` does he
   0.165.2+26.3 or newer, and Java 25.
 - Put `yolt-coordinates-<version>.jar` in the server's `mods` folder, next to Fabric API. The client doesn't need it.
   `./gradlew :coordinates:build` builds it into `coordinates/build/libs/`.
-- It only runs on a dedicated server. In a single-player world, or one opened to LAN, it does nothing, and the log
-  says so at each start.
+- It only runs on a dedicated server. In a single-player world, or one opened to LAN, it does nothing: the log says so
+  at each start, and so do `/yolt-coordinates` and `/yolt-coordinates real`. The file is still written there.
 - Running You Only Live Twice? Then you have this already: YOLT's jar ships it, set from YOLT's own
   [`hide.coordinates`](../docs/config.md#hide). Beside a You Only Live Twice older than this mod, which has the offset
   built in, the server won't start.
@@ -112,7 +118,8 @@ The first server start writes `config/yolt-coordinates.json`:
   where you made it, until you fix it.
 - Adding it writes the whole file again with the mod's own key only. A misspelt key and any comment in the file are
   gone after that. The server log at a start, or the reload's reply, says which key wasn't a setting.
-- A file that isn't valid JSON is never written over. The default is used at a start, and a reload changes nothing.
+- A file the mod can't read as JSON at all is never written over. The default is used at a start, and a reload
+  changes nothing.
 
 ## Commands
 
@@ -120,9 +127,9 @@ Ops only.
 
 | Command | What it does |
 |---|---|
-| `/yolt-coordinates` | Shows whether the offset is on. |
+| `/yolt-coordinates` | Shows whether the offset is on, or that it does nothing in a single-player world. |
 | `/yolt-coordinates reload` | Reads `config/yolt-coordinates.json` again, no restart needed. |
-| `/yolt-coordinates real` | Turns real coordinates on or off for you, from your next join, respawn or dimension change. From the console it does nothing: the console always uses real coordinates. |
+| `/yolt-coordinates real` | Turns real coordinates on or off for you, from your next join, respawn or dimension change. From the console it does nothing: the console always uses real coordinates. In a single-player world it says the mod does nothing there. |
 
 Inside You Only Live Twice there is no `/yolt-coordinates`: the setting is YOLT's `hide.coordinates`, changed with
 `/yolt config` or `/yolt reload`, and `/yolt adminview` gives an op real coordinates.
