@@ -88,13 +88,16 @@ is `hide.coordinates`, and admin view does what `/yolt-coordinates real` does he
 
 - You need Minecraft 26.3, Fabric Loader 0.20.1 or newer, [Fabric API](https://modrinth.com/mod/fabric-api)
   0.165.2+26.3 or newer, and Java 25.
-- Put `yolt-coordinates-<version>.jar` in the server's `mods` folder, next to Fabric API. The client doesn't need it.
-  `./gradlew :coordinates:build` builds it into `coordinates/build/libs/`.
+- Get `yolt-coordinates-<version>.jar` from the
+  [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
+  folder, next to Fabric API. The client doesn't need it.
 - It only runs on a dedicated server. In a single-player world, or one opened to LAN, it does nothing: the log says so
   at each start, and so do `/yolt-coordinates` and `/yolt-coordinates real`. The file is still written there.
 - Running You Only Live Twice? Then you have this already: YOLT's jar ships it, set from YOLT's own
   [`hide.coordinates`](../docs/config.md#hide). Beside a You Only Live Twice older than this mod, which has the offset
   built in, the server won't start.
+- It can run beside [YOLT Hardcore](../hardcore/README.md), the hardcore layer of You Only Live Twice as a mod of its
+  own.
 
 ## Config
 

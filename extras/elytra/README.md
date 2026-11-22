@@ -24,10 +24,11 @@ It is on as soon as it is installed.
 - Get `yolt-elytra-<version>.jar` from the
   [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
   folder, next to Fabric API. The client doesn't need it.
-- Running You Only Live Twice? Then you have this already: YOLT's jar ships it, set from YOLT's own config, where it
-  is off until you turn it on. Installing both does no harm: Fabric loads one copy, this jar when it has YOLT's version
-  and the one inside YOLT's jar when it doesn't. Beside a You Only Live Twice from before it shipped this mod, the
-  server won't start, and the log says why.
+- Running You Only Live Twice or [YOLT Hardcore](../../hardcore/README.md)? Then you have this already: YOLT Hardcore's
+  jar ships it, and YOLT's jar ships YOLT Hardcore's. It is set from `hardcore.elytra`, in YOLT's config or in YOLT
+  Hardcore's own, where it is off until you turn it on. Installing both does no harm: Fabric loads one copy, this jar
+  when it has YOLT Hardcore's version and the one inside YOLT Hardcore's jar when it doesn't. Beside a You Only Live
+  Twice from before it shipped this mod, the server won't start, and the log says why.
 
 ## Config
 
@@ -53,7 +54,8 @@ The first server start writes `config/yolt-elytra.json`:
   where you made it, until you fix it.
 - Adding a key writes the whole file again with the mod's own keys only. A misspelt key and any comment in the file are
   gone after that. The server log at a start, or the reload's reply, says which key wasn't a setting.
-- A file that isn't valid JSON is never written over. The defaults are used at a start, and a reload changes nothing.
+- A file the mod can't read as JSON at all is never written over. The defaults are used at a start, and a reload
+  changes nothing.
 
 ## Commands
 
@@ -65,11 +67,13 @@ Ops only.
 | `/yolt-elytra reload` | Reads `config/yolt-elytra.json` again. It applies from the next tick, no restart needed. |
 
 Inside You Only Live Twice there is no `/yolt-elytra`: the settings are YOLT's
-[`hardcore.elytra`](../../docs/config.md#hardcoreelytra), changed with `/yolt config` or `/yolt reload`.
+[`hardcore.elytra`](../../docs/config.md#hardcoreelytra), changed with `/yolt config` or `/yolt reload`. With YOLT
+Hardcore on its own there is none either: they are `hardcore.elytra` in `config/yolt-hardcore.json`, read again with
+`/yolt-hardcore reload`.
 
 ## For mod authors
 
-Another mod can ship YOLT Elytra inside its own jar and set it from its own config, as YOLT does. Call
+Another mod can ship YOLT Elytra inside its own jar and set it from its own config, as YOLT Hardcore does. Call
 `YoltElytra.hostedBy(name, settings, exempt)` from your `onInitialize`:
 
 - `settings` is read every tick for each player and at every rocket, so it can hand out your live config as an
