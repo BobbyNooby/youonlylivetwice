@@ -73,7 +73,11 @@ smallest one to copy):
    (`hardcore/src/main/java/bobbynooby/dev/hardcore/HardcoreChecks.java`) with the mod's own rule methods, as
    `MendingSettings.isRate` is used there. YOLT's `ConfigChecks` and YOLT Hardcore's own file both go through
    `HardcoreChecks`, so YOLT's config, `config/yolt-hardcore.json` and the mod's own file refuse the same values.
-6. Add it to the tests that list every tiny mod: `TinyModDefaultsTest` (YOLT ships the mod's numbers),
+6. Add its switch to `Hardcore.featuresOn`, under its section's name. That list is what `/yolt-hardcore` and YOLT
+   Hardcore's start line name, and `Hardcore.anyOn()` is true only while the list has a name in it. Left out, with
+   only this mod's switch on, `/status` says "Nothing to report", and under YOLT, while `restrictCommands` is on,
+   non-ops don't get `/status`.
+7. Add it to the tests that list every tiny mod: `TinyModDefaultsTest` (YOLT ships the mod's numbers),
    `HostedModsGameTests` (inside YOLT it has no file and no command), `HardcoreAloneGameTests` in `hardcore/`
    (inside YOLT Hardcore on its own it has no command either), and, if it adds attribute modifiers or anything saved
    with a player, `Ours` in YOLT's gametest package.
@@ -146,9 +150,9 @@ Maps and lists are read whole, so a new entry in a default map, such as a food i
 reach a server either. Its step replaces the map only where it still equals the old default map, entry for entry.
 A key that is new in a release needs no step: a file without it takes its default.
 
-These steps are in YOLT's loader only. YOLT Hardcore's own `config/yolt-hardcore.json` holds every key too, and
-`HardcoreFile` has no upgrade steps yet, so a changed hardcore default doesn't reach a server that runs YOLT Hardcore
-alone and already has the file.
+These steps are in YOLT's loader only. YOLT Hardcore's, the tiny mods' and YOLT Coordinates' own files are written
+with every key too, and none has upgrade steps (`HardcoreFile`, `SettingsFile`), so a changed default doesn't reach a
+server that runs one of those mods without YOLT and already has its file.
 
 ## On every Minecraft update
 
