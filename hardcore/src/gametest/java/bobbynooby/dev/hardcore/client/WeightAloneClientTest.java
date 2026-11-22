@@ -40,8 +40,9 @@ public class WeightAloneClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         ClientKit.withServer(ctx, (server, connection) -> {
-            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(c -> c.weight.enabled = true));
             Vec3 home = server.computeOnServer(s -> connection.getServerPlayer().position());
+            // Last before the try, so nothing can fail between the swap and what puts it back
+            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(c -> c.weight.enabled = true));
             try {
                 check(server.computeOnServer(s -> connection.getServerPlayer().gameMode()) == GameType.SURVIVAL,
                         () -> "the client's player isn't in survival, where weight counts");

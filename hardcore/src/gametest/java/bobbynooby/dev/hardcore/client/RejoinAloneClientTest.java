@@ -21,9 +21,6 @@ import static bobbynooby.dev.hardcore.client.ClientKit.check;
 // A player who dies, leaves from the death screen and joins again is put back on the death screen, and isn't told of
 // the lost heart there, where the hotbar can't be seen; the respawn tells them, once
 public class RejoinAloneClientTest implements FabricClientGameTest {
-    // Longer than a line the join or the respawn sends takes to reach the client and show
-    private static final int HOLD_TICKS = 60;
-
     @Override
     public void runTest(ClientGameTestContext ctx) {
         UUID self = ctx.computeOnClient(mc -> mc.getGameProfile().id());
@@ -75,7 +72,7 @@ public class RejoinAloneClientTest implements FabricClientGameTest {
                     mc -> "the client joined to " + ClientKit.screenName(mc) + ", not the death screen it left from");
             check(server.computeOnServer(s -> connection.getServerPlayer().isDeadOrDying()),
                     () -> "the server has the client's player alive after it joined again");
-            ClientKit.holdOnClient(ctx, HOLD_TICKS, mc -> mc.gui.screen() instanceof DeathScreen
+            ClientKit.holdOnClient(ctx, ClientKit.HOLD_TICKS, mc -> mc.gui.screen() instanceof DeathScreen
                             && !ClientKit.overlay(mark).contains(ClientKit.LOST_A_HEART),
                     mc -> mc.gui.screen() instanceof DeathScreen
                             ? "the client was told of the heart on the death screen: " + ClientKit.overlay(mark)
@@ -89,7 +86,7 @@ public class RejoinAloneClientTest implements FabricClientGameTest {
                             + ClientKit.CURSED_HEALTH);
             ctx.waitTicks(ClientKit.HOTBAR_LINE_TICKS);
             ClientKit.screenshot(ctx, "hardcore-alone-rejoin-told");
-            ClientKit.holdOnClient(ctx, HOLD_TICKS, mc -> told(mark) == 1,
+            ClientKit.holdOnClient(ctx, ClientKit.HOLD_TICKS, mc -> told(mark) == 1,
                     mc -> "the client was told of the heart " + told(mark) + " times: " + ClientKit.overlay(mark));
         }
     }

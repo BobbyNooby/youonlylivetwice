@@ -5,6 +5,7 @@ import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.minecraft.client.gui.screens.DeathScreen;
 import net.minecraft.world.level.GameType;
 
 import java.nio.file.Files;
@@ -40,8 +41,11 @@ public class CurseAloneClientTest implements FabricClientGameTest {
                 check(server.computeOnServer(s -> Files.isRegularFile(ClientBridge.storeFile(s))),
                         () -> "no " + server.computeOnServer(ClientBridge::storeFile) + " after the death");
                 // The line waits for the respawn, since the death screen hides the hotbar
-                check(!ClientKit.overlay(mark).contains(ClientKit.LOST_A_HEART),
-                        () -> "the client was told of the heart on the death screen: " + ClientKit.overlay(mark));
+                ClientKit.holdOnClient(ctx, ClientKit.HOLD_TICKS, mc -> mc.gui.screen() instanceof DeathScreen
+                                && !ClientKit.overlay(mark).contains(ClientKit.LOST_A_HEART),
+                        mc -> mc.gui.screen() instanceof DeathScreen
+                                ? "the client was told of the heart on the death screen: " + ClientKit.overlay(mark)
+                                : "the client left the death screen for " + ClientKit.screenName(mc) + " by itself");
 
                 ClientKit.respawn(ctx);
                 ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> mc.player.getMaxHealth() == ClientKit.CURSED_HEALTH,

@@ -49,10 +49,11 @@ public class AnvilAloneClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         ClientKit.withServer(ctx, (server, connection) -> {
-            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(c -> c.anvil.enabled = false));
             BlockPos anvil = server.computeOnServer(s -> connection.getServerPlayer().blockPosition()
                     .relative(Direction.NORTH, USE_DISTANCE));
             int levelsWas = server.computeOnServer(s -> connection.getServerPlayer().experienceLevel);
+            // Last before the try, so nothing can fail between the swap and what puts it back
+            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(c -> c.anvil.enabled = false));
             try {
                 check(server.computeOnServer(s -> connection.getServerPlayer().gameMode()) == GameType.SURVIVAL,
                         () -> "the client's player isn't in survival, where the flat price counts");

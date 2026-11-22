@@ -46,6 +46,9 @@ final class ClientKit {
     // fade, and it is gone after the three
     static final int HOTBAR_LINE_TICKS = 10;
     static final int HOTBAR_LINE_GONE_TICKS = 60;
+    // Longer than a line the death, the join or the respawn sends takes to reach the client and show, for a check that
+    // nothing was told
+    static final int HOLD_TICKS = 60;
     // A death screen's buttons wake 20 ticks after it opens, and a confirm screen's after its own delay
     private static final int BUTTON_TIMEOUT = 100;
     static final String RESPAWN = "deathScreen.respawn";
