@@ -90,8 +90,9 @@ public final class YoltHardcore implements ModInitializer {
     public void onInitialize() {
         List<String> hosts = declaredHosts();
         if (!hosts.isEmpty()) {
-            // The host sets the mod up. One that never does leaves every feature off, since nothing is registered and
-            // the own switch never turns on.
+            // The host sets the mod up. One that never does leaves every hardcore feature off, since only this check is
+            // registered and the own switch never turns on. Nothing then hands the tiny mods their settings either, so
+            // YOLT Anvils, YOLT Mending and YOLT Elytra run as if on their own, with their own files and commands.
             ServerLifecycleEvents.SERVER_STARTING.register(server -> {
                 if (!hosted) {
                     LOGGER.error("{} says it hosts YOLT Hardcore but never set it up, so YOLT Hardcore is off",

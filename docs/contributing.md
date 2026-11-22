@@ -90,8 +90,9 @@ YOLT is the one host today, and another mod can host YOLT Hardcore the same way:
   host's rules apply in this world, and the host's stand-ins and bodies.
 - While hosted, YOLT Hardcore reads no file, registers no command (no `/status` and no `/yolt-hardcore`) and has no
   entity-load hook: the host calls `MobBoosts.onLoad` for each mob as it loads, from a hook of its own.
-- With a host declared, the mod sets nothing up in its own `onInitialize`. A host that declares itself and never calls
-  `hostedBy` leaves every feature off, and the log says so at the server start.
+- With a host declared, the mod's own `onInitialize` only registers a check for the server start. A host that declares
+  itself and never calls `hostedBy` leaves every hardcore feature off, and the log says so at the server start. YOLT
+  Anvils, YOLT Mending and YOLT Elytra then run as if on their own, with their own files and commands.
 
 ## Testing
 
