@@ -6,8 +6,12 @@ import net.fabricmc.fabric.api.entity.event.v1.EntitySleepEvents;
 
 /** What the sleep switches mean; the sleep and bed-respawn hooks only ask these. */
 public final class Sleep {
-    /** Far more sleepers than a real server has in bed at once, so in practice the night never skips. */
-    public static final int SLEEPERS_NEEDED_WHEN_BLOCKED = 727;
+    /**
+     * Far more sleepers than a real server has in bed at once, so in practice the night never skips. It is the number
+     * YOLT Hardcore's blood moon gives vanilla when it blocks the skip, so whichever of the two sleep mixins runs first,
+     * the count is the same.
+     */
+    public static final int SLEEPERS_NEEDED_WHEN_BLOCKED = BloodMoon.SLEEPERS_NEEDED_WHEN_BLOCKED;
 
     private Sleep() {}
 

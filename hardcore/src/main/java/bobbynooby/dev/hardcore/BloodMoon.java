@@ -46,6 +46,10 @@ public final class BloodMoon {
     public static final String WARNING_LINE = BloodMoonTexts.DEFAULTS.warningLine();
     public static final String UP_LINE = BloodMoonTexts.DEFAULTS.upLine();
     public static final String SET_LINE = BloodMoonTexts.DEFAULTS.setLine();
+    // The sleepers vanilla is told it needs while the skip is blocked: far more than a real server has in bed at once, so
+    // in practice the night never skips. YOLT's own sleep rules take theirs from here, so whichever of the two sleep
+    // mixins runs first, the count is the same.
+    public static final int SLEEPERS_NEEDED_WHEN_BLOCKED = 727;
     private static final int STATUS_ORDER = 90;
     private static final long TICKS_PER_DAY = 24000L;
     // The bar is a rough clock, so once a second is plenty
