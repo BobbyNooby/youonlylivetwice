@@ -127,6 +127,8 @@ class HardcoreFileTest {
         assertEquals(List.of(), started.notes());
         assertEquals(json(HardcoreFile.Loaded.defaults()), json(started.loaded()));
         assertNull(started.backup());
+        // Written again with every key, the texts' included
+        assertEquals(HardcoreFile.json(HardcoreFile.Loaded.defaults()), Files.readString(file()));
     }
 
     // As YOLT's loader: a newer file is read but never written over, since the rewrite would drop what only the newer
@@ -491,6 +493,22 @@ class HardcoreFileTest {
         assertEquals(typed, Files.readString(dir.resolve(HardcoreFile.NAME + ".bak")));
         assertEquals(HardcoreFile.json(HardcoreFile.Loaded.defaults()), Files.readString(file()));
         assertEquals(json(HardcoreFile.Loaded.defaults()), json(started.loaded()));
+    }
+
+    // JSON, but not one object: a list, or nothing at all, which Gson reads as a JSON null
+    @Test
+    void aStartKeepsAFileWhoseRootIsNotAnObjectAsBak() throws IOException {
+        for (String typed : List.of("[1]", "")) {
+            Path file = Files.createTempDirectory(dir, "root").resolve(HardcoreFile.NAME);
+            Files.writeString(file, typed);
+            HardcoreFile.Result started = HardcoreFile.start(file);
+            assertTrue(started.failed(), typed);
+            assertEquals(List.of("config is not valid JSON (root is not an object), old file saved as yolt-hardcore.json.bak,"
+                    + " using defaults"), started.notes(), typed);
+            assertEquals(typed, Files.readString(file.resolveSibling(HardcoreFile.NAME + ".bak")));
+            assertEquals(HardcoreFile.json(HardcoreFile.Loaded.defaults()), Files.readString(file));
+            assertEquals(json(HardcoreFile.Loaded.defaults()), json(started.loaded()));
+        }
     }
 
     @Test

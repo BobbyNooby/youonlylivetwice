@@ -22,15 +22,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * YOLT's loader and YOLT Hardcore's own file read the same hardcore block and the same six blood moon texts, with rules
  * written twice, since the mod can't use YOLT's classes. For each file here, YOLT's warnings about those are the mod's
- * notes, in the same order and words, at a start and on a reload, and the two read the same values.
+ * notes, in the same order and words, at a start and on a reload, and the two read the same values. A file with a
+ * mistake must give a note and one without must give none, so the two can't agree by both going quiet.
  */
 class HardcoreFileParityTest {
     private static final Gson GSON = new Gson();
     private static final List<String> TEXT_KEYS = List.of("bloodMoonWarningTitle", "bloodMoonWarningLine",
             "bloodMoonRisenLine", "bloodMoonUpLine", "bloodMoonSetLine", "bloodMoonBarTitle");
 
-    // One kind of mistake each, then several at once, then files with none
-    private static final List<String> FILES = List.of(
+    // One kind of mistake each, then several at once: each must give a note, so the two can't agree by both saying
+    // nothing
+    private static final List<String> MISTAKES = List.of(
             "{\"hardcore\": {\"curse\": {\"enabled\": \"no\", \"countAfk\": 0}}}",
             "{\"hardcore\": {\"weight\": {\"freeLoad\": \"10\"}, \"bloodMoon\": {\"chance\": false}}}",
             "{\"hardcore\": {\"weight\": {\"freeLoad\": 1e999, \"fullLoad\": -1e999}, \"cold\": {\"maxSlow\": 1e400}}}",
@@ -118,7 +120,10 @@ class HardcoreFileParityTest {
             "{\"messages\": \"none\"}",
             // The checks of the texts come after the hardcore block's
             "{\"messages\": {\"bloodMoonSetLine\": \"" + "x".repeat(Messages.MAX_LENGTH + 1) + "\"},"
-                    + " \"hardcore\": {\"slow\": {\"cap\": 2}, \"cold\": {\"heatRadius\": 9}}}",
+                    + " \"hardcore\": {\"slow\": {\"cap\": 2}, \"cold\": {\"heatRadius\": 9}}}");
+
+    // Files with no mistake, which neither may give a note for
+    private static final List<String> CLEAN = List.of(
             // Good values, edges included
             """
                     {"hardcore": {"weight": {"enabled": true, "freeLoad": 0, "fullLoad": 1, "groups": {"c:ores": 5, "a:b": 0},
@@ -142,15 +147,21 @@ class HardcoreFileParityTest {
 
     @Test
     void eachFileReadsTheSameAtAStart() throws IOException {
-        for (String json : FILES) {
-            assertSameAtStart(json);
+        for (String json : MISTAKES) {
+            assertSameAtStart(json, true);
+        }
+        for (String json : CLEAN) {
+            assertSameAtStart(json, false);
         }
     }
 
     @Test
     void eachFileReadsTheSameOnAReload() throws IOException {
-        for (String json : FILES) {
-            assertSameOnReload(json);
+        for (String json : MISTAKES) {
+            assertSameOnReload(json, true);
+        }
+        for (String json : CLEAN) {
+            assertSameOnReload(json, false);
         }
     }
 
@@ -164,8 +175,8 @@ class HardcoreFileParityTest {
                         .append("x".repeat(length)).append('"');
             }
             String json = "{\"messages\": {" + messages + "}}";
-            assertSameAtStart(json);
-            assertSameOnReload(json);
+            assertSameAtStart(json, length > Messages.MAX_LENGTH);
+            assertSameOnReload(json, length > Messages.MAX_LENGTH);
         }
     }
 
@@ -200,7 +211,7 @@ class HardcoreFileParityTest {
         assertEquals(BloodMoonTexts.DEFAULTS, texts(read.config()));
     }
 
-    private void assertSameAtStart(String json) throws IOException {
+    private void assertSameAtStart(String json, boolean mistaken) throws IOException {
         Path folder = Files.createTempDirectory(dir, "start");
         Path yoltFile = folder.resolve("you-only-live-twice.json");
         Path modFile = folder.resolve(HardcoreFile.NAME);
@@ -210,6 +221,7 @@ class HardcoreFileParityTest {
         HardcoreFile.Result mod = HardcoreFile.start(modFile);
         assertFalse(mod.failed(), json);
         List<String> expected = concerning(yolt.warnings());
+        assertEquals(mistaken, !expected.isEmpty(), (mistaken ? "no note for " : "a note for ") + json);
         assertEquals(expected, concerning(mod.notes()), json);
         // The mod's only other note is the copy it keeps before a rewrite that leaves out something typed
         List<String> others = mod.notes().stream().filter(note -> !concerns(note)).toList();
@@ -218,7 +230,7 @@ class HardcoreFileParityTest {
         assertSameValues(yolt.config(), mod.loaded(), json);
     }
 
-    private void assertSameOnReload(String json) throws IOException {
+    private void assertSameOnReload(String json, boolean mistaken) throws IOException {
         Path folder = Files.createTempDirectory(dir, "reload");
         Path yoltFile = folder.resolve("you-only-live-twice.json");
         Path modFile = folder.resolve(HardcoreFile.NAME);
@@ -227,7 +239,9 @@ class HardcoreFileParityTest {
         ConfigLoader.Result yolt = ConfigLoader.load(yoltFile, yoltInUse(), false);
         HardcoreFile.Result mod = HardcoreFile.reload(modFile, modInUse());
         assertFalse(mod.failed(), json);
-        assertEquals(concerning(yolt.warnings()), mod.notes(), json);
+        List<String> expected = concerning(yolt.warnings());
+        assertEquals(mistaken, !expected.isEmpty(), (mistaken ? "no note for " : "a note for ") + json);
+        assertEquals(expected, mod.notes(), json);
         assertSameValues(yolt.config(), mod.loaded(), json);
     }
 
