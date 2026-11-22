@@ -3,6 +3,7 @@ package bobbynooby.dev.gametest;
 import bobbynooby.dev.bodies.PlayerBody;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
+import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.gametest.mixin.FoodDataAccessor;
 import bobbynooby.dev.hardcore.Cold;
@@ -568,11 +569,13 @@ public class HardcoreAllGameTests {
         }
     }
 
-    // Every error YOLT and the hardcore layer, the YOLT Hardcore mod YOLT ships, which logs under its own name, log from
-    // start to stop, across ticks. It joins the configs their loggers already use, as OfflineGameTests.yoltEvents does.
+    // Every error YOLT, the hardcore layer and the coordinate offset log from start to stop, across ticks. The last two
+    // are the YOLT Hardcore and YOLT Coordinates mods YOLT ships, each logging under its own name. It joins the configs
+    // their loggers already use, as OfflineGameTests.yoltEvents does.
     private static final class LogWatch {
-        private static final List<String> LOGGERS = List.of(Yolt.MOD_ID, YoltHardcore.LOGGER.getName());
-        // Both loggers may use the same config, which takes the appender once
+        private static final List<String> LOGGERS = List.of(Yolt.MOD_ID, YoltHardcore.LOGGER.getName(),
+                YoltCoordinates.LOGGER.getName());
+        // The loggers may share a config, which takes the appender once
         private final List<LoggerConfig> configs;
         private final AbstractAppender appender;
         private final List<LogEvent> errors = new CopyOnWriteArrayList<>();
