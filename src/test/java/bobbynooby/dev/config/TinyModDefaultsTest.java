@@ -3,6 +3,7 @@ package bobbynooby.dev.config;
 import bobbynooby.dev.anvils.AnvilSettings;
 import bobbynooby.dev.coords.CoordinateSettings;
 import bobbynooby.dev.elytra.ElytraSettings;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.mending.MendingSettings;
 import org.junit.jupiter.api.Test;
 

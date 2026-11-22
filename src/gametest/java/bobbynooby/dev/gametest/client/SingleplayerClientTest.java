@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest.client;
 
 import bobbynooby.dev.anvils.YoltAnvils;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.elytra.YoltElytra;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.mending.YoltMending;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;

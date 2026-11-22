@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

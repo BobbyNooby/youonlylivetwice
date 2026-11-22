@@ -3,7 +3,6 @@ package bobbynooby.dev.hardcore;
 import bobbynooby.dev.bodies.BodyRecord;
 import bobbynooby.dev.bodies.BodyRules;
 import bobbynooby.dev.bodies.BodyStore;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Guard;
 import bobbynooby.dev.core.StandIn;

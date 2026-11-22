@@ -1,7 +1,7 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
 import bobbynooby.dev.graves.GraveItems;
 import com.mojang.authlib.GameProfile;
@@ -159,7 +159,7 @@ public class HardcorePackGameTests {
     @GameTest(environment = MODEL_CHANGE, maxTicks = 80)
     public void pack1ChangedReviveModelReachesExistingPapers(GameTestHelper helper) {
         ServerPlayer player = TestPlayers.join(helper, "PackModel", GameType.SURVIVAL, new BlockPos(1, 1, 1));
-        HardcoreConfig.ResourcePackSection cfg = Settings.get().resourcePack;
+        YoltConfig.ResourcePackSection cfg = Settings.get().resourcePack;
         String modelBefore = cfg.reviveModel;
         boolean switchBefore = cfg.reviveTexture;
         Runnable cleanUp = BodyTestKit.once(() -> {
@@ -221,7 +221,7 @@ public class HardcorePackGameTests {
     public void pack1PapersOnCursorAndInOpenChestFollowTheSwitch(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ServerPlayer player = TestPlayers.join(helper, "PackMenus", GameType.SURVIVAL, new BlockPos(1, 1, 1));
-        HardcoreConfig.ResourcePackSection cfg = Settings.get().resourcePack;
+        YoltConfig.ResourcePackSection cfg = Settings.get().resourcePack;
         boolean switchBefore = cfg.reviveTexture;
         List<Entity> made = new ArrayList<>();
         Runnable cleanUp = BodyTestKit.once(() -> {

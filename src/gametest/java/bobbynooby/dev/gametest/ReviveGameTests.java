@@ -1,6 +1,5 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Profiles;
@@ -10,6 +9,7 @@ import bobbynooby.dev.graves.GraveItems;
 import bobbynooby.dev.graves.GraveMenu;
 import bobbynooby.dev.graves.GraveStore;
 import bobbynooby.dev.graves.Graves;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.lockout.DeathStore;

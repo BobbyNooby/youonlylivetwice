@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;

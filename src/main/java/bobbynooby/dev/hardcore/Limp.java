@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.StandIn;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;

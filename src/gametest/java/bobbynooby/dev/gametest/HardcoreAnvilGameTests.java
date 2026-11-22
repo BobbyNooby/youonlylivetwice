@@ -1,8 +1,8 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.graves.GraveItems;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.Status;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;

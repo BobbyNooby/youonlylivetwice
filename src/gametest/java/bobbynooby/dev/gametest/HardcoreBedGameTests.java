@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.gametest.mixin.FoodDataAccessor;
 import bobbynooby.dev.hardcore.BedRest;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Legs;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;

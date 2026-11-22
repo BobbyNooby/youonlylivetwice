@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.hardcore.Hardcore;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.Slowdowns;
 import bobbynooby.dev.hardcore.Status;
 import com.mojang.authlib.GameProfile;

@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.core.Guard;

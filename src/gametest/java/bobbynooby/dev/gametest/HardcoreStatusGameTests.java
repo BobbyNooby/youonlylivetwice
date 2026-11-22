@@ -1,12 +1,12 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.chat.CommandRestriction;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.config.YoltConfig;
 import bobbynooby.dev.gametest.mixin.ServerGamePacketListenerInvoker;
 import bobbynooby.dev.hardcore.Curse;
 import bobbynooby.dev.hardcore.Hardcore;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.HardcoreState;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Legs;

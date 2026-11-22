@@ -1,8 +1,8 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.gametest.mixin.FoodDataAccessor;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.HungerTax;
 import bobbynooby.dev.hardcore.Legs;

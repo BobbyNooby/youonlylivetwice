@@ -2,7 +2,6 @@ package bobbynooby.dev.hardcore;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Set;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import net.minecraft.resources.Identifier;

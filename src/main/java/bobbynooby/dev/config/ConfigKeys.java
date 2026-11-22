@@ -1,5 +1,6 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import com.google.gson.annotations.SerializedName;
 
 import java.lang.reflect.Field;
@@ -116,11 +117,19 @@ public final class ConfigKeys {
                 collect(fieldType, path + ".", keys);
                 continue;
             }
-            Applies applies = field.getAnnotation(Applies.class);
-            Applies.When when = applies == null ? Applies.When.NOW : applies.value();
             ConfigKey.Kind kind = kindOf(fieldType, path);
-            keys.add(new ConfigKey(path, field, kind, choices(kind, fieldType), when));
+            keys.add(new ConfigKey(path, field, kind, choices(kind, fieldType), when(field)));
         }
+    }
+
+    // YOLT Hardcore's keys carry the mod's own annotation, whose When names match YOLT's, so they get the same notes
+    private static Applies.When when(Field field) {
+        Applies applies = field.getAnnotation(Applies.class);
+        if (applies != null) {
+            return applies.value();
+        }
+        HardcoreConfig.Applies hardcore = field.getAnnotation(HardcoreConfig.Applies.class);
+        return hardcore == null ? Applies.When.NOW : Applies.When.valueOf(hardcore.value().name());
     }
 
     private static ConfigKey.Kind kindOf(Class<?> type, String path) {

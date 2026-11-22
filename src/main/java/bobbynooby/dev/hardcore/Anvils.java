@@ -2,7 +2,6 @@ package bobbynooby.dev.hardcore;
 
 import bobbynooby.dev.anvils.AnvilSettings;
 import bobbynooby.dev.anvils.YoltAnvils;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import net.minecraft.server.level.ServerPlayer;
 

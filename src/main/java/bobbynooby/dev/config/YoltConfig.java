@@ -1,5 +1,7 @@
 package bobbynooby.dev.config;
 
+import bobbynooby.dev.hardcore.BloodMoonTexts;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
@@ -26,7 +28,7 @@ public class YoltConfig {
     public ServerListSection serverList = new ServerListSection();
     public SkinsSection skins = new SkinsSection();
     public HardcoreConfig.HardcoreSection hardcore = new HardcoreConfig.HardcoreSection();
-    public HardcoreConfig.ResourcePackSection resourcePack = new HardcoreConfig.ResourcePackSection();
+    public ResourcePackSection resourcePack = new ResourcePackSection();
     public MessagesSection messages = new MessagesSection();
 
     // YOLT's flavour lines, shipped as both the tab-list header's and the server list's MOTD lines
@@ -164,6 +166,13 @@ public class YoltConfig {
         public boolean lockAfterFirstChoice = true;
     }
 
+    // Top-level "resourcePack" in the config, beside hardcore. The pack itself is set in server.properties, not here.
+    public static class ResourcePackSection {
+        // Revive papers show reviveModel, an item model the server's resource pack must hold
+        public boolean reviveTexture = false;
+        public String reviveModel = "you-only-live-twice:revive_paper";
+    }
+
     // What players are told, in YOLT's words. § colour codes work, and a \n starts a new line where the text is a chat
     // line or a kick. Each {placeholder} a text's @Placeholders names is filled in; a required one can't be left out.
     public static class MessagesSection {
@@ -183,13 +192,14 @@ public class YoltConfig {
         // A paper is told apart by its data, not its name, so a new name only changes what players read
         @Applies(Applies.When.NEW_PAPERS) @Placeholders(value = "name", required = "name") public String reviveName = "Revive {name}";
         @Placeholders("name") public String graveTitle = "{name}'s Grave";
-        public String bloodMoonWarningTitle = "The moon will rise red tonight…";
-        public String bloodMoonWarningLine = "A blood moon rises tonight. Find somewhere safe before dark.";
-        public String bloodMoonRisenLine = "The blood moon has risen. Mobs are stronger and more numerous until dawn.";
-        public String bloodMoonUpLine = "A blood moon is up. Mobs are stronger and more numerous until dawn.";
-        public String bloodMoonSetLine = "The blood moon has set.";
+        // The blood moon's texts, whose defaults YOLT Hardcore holds so each is written once
+        public String bloodMoonWarningTitle = BloodMoonTexts.DEFAULTS.warningTitle();
+        public String bloodMoonWarningLine = BloodMoonTexts.DEFAULTS.warningLine();
+        public String bloodMoonRisenLine = BloodMoonTexts.DEFAULTS.risenLine();
+        public String bloodMoonUpLine = BloodMoonTexts.DEFAULTS.upLine();
+        public String bloodMoonSetLine = BloodMoonTexts.DEFAULTS.setLine();
         // The bar is made as the blood moon starts, so one already up keeps its title
-        @Applies(Applies.When.NEXT_BLOOD_MOON) public String bloodMoonBarTitle = "Blood Moon";
+        @Applies(Applies.When.NEXT_BLOOD_MOON) public String bloodMoonBarTitle = BloodMoonTexts.DEFAULTS.barTitle();
     }
 
     public enum EnderChestMode {

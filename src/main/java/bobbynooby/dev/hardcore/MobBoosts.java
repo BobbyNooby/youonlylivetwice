@@ -1,7 +1,6 @@
 package bobbynooby.dev.hardcore;
 
 import bobbynooby.dev.bodies.BodyRules;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.mixin.CreeperAccessor;

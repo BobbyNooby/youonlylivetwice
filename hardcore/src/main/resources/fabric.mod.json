@@ -1,0 +1,36 @@
+{
+    "schemaVersion": 1,
+    "id": "yolt-hardcore",
+    "version": "${version}",
+    "name": "YOLT Hardcore",
+    "description": "Server-side hardcore survival: what you carry slows you down, falls break your legs, every return from death costs a max heart, food matters, mobs are tougher, some nights are blood moons and the cold can freeze you. Ships YOLT Anvils, YOLT Mending and YOLT Elytra inside. Also part of You Only Live Twice.",
+    "authors": [
+        "BobbyNooby"
+    ],
+    "contact": {
+        "homepage": "https://github.com/BobbyNooby/youonlylivetwice/tree/release/hardcore",
+        "sources": "https://github.com/BobbyNooby/youonlylivetwice"
+    },
+    "license": "MIT",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "bobbynooby.dev.hardcore.YoltHardcore"
+        ]
+    },
+    "mixins": [
+        "yolt-hardcore.mixins.json"
+    ],
+    "depends": {
+        "fabricloader": ">=0.20.1",
+        "minecraft": "~26.3",
+        "java": ">=25",
+        "fabric-api": ">=0.165.2+26.3",
+        "yolt-anvils": ">=${version}",
+        "yolt-mending": ">=${version}",
+        "yolt-elytra": ">=${version}"
+    },
+    "breaks": {
+        "you-only-live-twice": "<${version}"
+    }
+}

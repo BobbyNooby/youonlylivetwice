@@ -1,8 +1,8 @@
 package bobbynooby.dev.gametest;
 
 import bobbynooby.dev.bodies.BodyTargetGoal;
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.MobBoosts;
 import bobbynooby.dev.hardcore.Relentless;
 import bobbynooby.dev.mixin.MobAccessor;

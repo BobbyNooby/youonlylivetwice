@@ -1,7 +1,11 @@
-package bobbynooby.dev.config;
+package bobbynooby.dev.hardcore;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +17,23 @@ import java.util.Map;
  */
 public final class HardcoreConfig {
     private HardcoreConfig() {}
+
+    /**
+     * When a change to this key takes effect. A key without it takes effect at once. The mod's own, so it needs nothing
+     * of YOLT's; YOLT's ConfigKeys reads it beside its own Applies, so /yolt config gives these keys the same notes.
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.FIELD)
+    public @interface Applies {
+        When value();
+    }
+
+    // YOLT's Applies.When has each of these under the same name, with the note its replies give
+    public enum When {
+        NEW_DEATHS,
+        MOBS_LOAD,
+        NEXT_BLOOD_MOON
+    }
 
     public static class HardcoreSection {
         public SlowSection slow = new SlowSection();
@@ -110,8 +131,8 @@ public final class HardcoreConfig {
     // Hearts, two health points each; a heal comes after healEveryDays of the player's own online play, 24,000 ticks a day
     public static class CurseSection {
         public boolean enabled = true;
-        @Applies(Applies.When.NEW_DEATHS) public int heartsPerDeath = 1;
-        @Applies(Applies.When.NEW_DEATHS) public int heartsPerTotem = 1;
+        @Applies(When.NEW_DEATHS) public int heartsPerDeath = 1;
+        @Applies(When.NEW_DEATHS) public int heartsPerTotem = 1;
         public int maxLostHearts = 4;
         public int healHearts = 1;
         public double healEveryDays = 3.0;
@@ -244,14 +265,14 @@ public final class HardcoreConfig {
     // Multipliers on hostile mobs, set as each mob loads; overrides name only the values that differ for that mob
     public static class TougherMobsSection {
         public boolean enabled = false;
-        @Applies(Applies.When.MOBS_LOAD) public double health = 1.5;
+        @Applies(When.MOBS_LOAD) public double health = 1.5;
         // Read as each hit lands, so a change applies at once
         public double damage = 1.25;
-        @Applies(Applies.When.MOBS_LOAD) public double speed = 1.1;
+        @Applies(When.MOBS_LOAD) public double speed = 1.1;
         public DamageAppliesTo damageAppliesTo = DamageAppliesTo.PLAYERS;
-        @Applies(Applies.When.MOBS_LOAD) public boolean includeSpawners = true;
-        @Applies(Applies.When.MOBS_LOAD) public boolean includeTrialSpawners = false;
-        @Applies(Applies.When.MOBS_LOAD) public boolean includeCommandsAndEggs = false;
+        @Applies(When.MOBS_LOAD) public boolean includeSpawners = true;
+        @Applies(When.MOBS_LOAD) public boolean includeTrialSpawners = false;
+        @Applies(When.MOBS_LOAD) public boolean includeCommandsAndEggs = false;
         public List<String> exclude = new ArrayList<>(List.of(
                 "minecraft:wither", "minecraft:ender_dragon", "minecraft:elder_guardian", "minecraft:warden"));
         public Map<String, Map<String, Double>> overrides = overrides();
@@ -276,9 +297,9 @@ public final class HardcoreConfig {
     // A broken door drops as one item, as in vanilla, unless dropBrokenDoor is off, when it is gone with no drop.
     public static class RelentlessMobsSection {
         public boolean enabled = false;
-        @Applies(Applies.When.MOBS_LOAD) public double followRange = 1.5;
+        @Applies(When.MOBS_LOAD) public double followRange = 1.5;
         public boolean doorsAnyDifficulty = true;
-        @Applies(Applies.When.MOBS_LOAD) public double doorBreakerChance = 0.25;
+        @Applies(When.MOBS_LOAD) public double doorBreakerChance = 0.25;
         public boolean dropBrokenDoor = true;
         public List<String> exclude = new ArrayList<>(List.of("minecraft:warden"));
     }
@@ -294,22 +315,22 @@ public final class HardcoreConfig {
         public int startTick = 12542;
         public int endTick = 23460;
         public int warnTick = 9000;
-        @Applies(Applies.When.MOBS_LOAD) public double health = 1.25;
+        @Applies(When.MOBS_LOAD) public double health = 1.25;
         public double damage = 1.0;
-        @Applies(Applies.When.MOBS_LOAD) public double speed = 1.1;
+        @Applies(When.MOBS_LOAD) public double speed = 1.1;
         public double spawnCap = 2.0;
         public boolean capBoostNearPlayerBodies = false;
         public boolean canSleepThrough = false;
-        @Applies(Applies.When.MOBS_LOAD) public double armourChance = 0.35;
-        @Applies(Applies.When.MOBS_LOAD) public double enchantChance = 0.25;
+        @Applies(When.MOBS_LOAD) public double armourChance = 0.35;
+        @Applies(When.MOBS_LOAD) public double enchantChance = 0.25;
         public double xp = 2.0;
         public int extraLootRolls = 1;
-        @Applies(Applies.When.MOBS_LOAD) public double chargedCreeperChance = 0.0;
+        @Applies(When.MOBS_LOAD) public double chargedCreeperChance = 0.0;
         // The bar is made as a blood moon starts, so one already up keeps what it started with
-        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean bossBar = true;
-        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean darkenSky = true;
-        @Applies(Applies.When.NEXT_BLOOD_MOON) public boolean fog = false;
-        @Applies(Applies.When.NEXT_BLOOD_MOON) public BarColour barColour = BarColour.RED;
+        @Applies(When.NEXT_BLOOD_MOON) public boolean bossBar = true;
+        @Applies(When.NEXT_BLOOD_MOON) public boolean darkenSky = true;
+        @Applies(When.NEXT_BLOOD_MOON) public boolean fog = false;
+        @Applies(When.NEXT_BLOOD_MOON) public BarColour barColour = BarColour.RED;
         public WarningSection warning = new WarningSection();
     }
 
@@ -347,13 +368,6 @@ public final class HardcoreConfig {
         public int damageEverySeconds = 2;
         public boolean canKill = false;
         public double shiverExhaustionPerSecond = 0.05;
-    }
-
-    // Top-level "resourcePack" in the config, beside hardcore. The pack itself is set in server.properties, not here.
-    public static class ResourcePackSection {
-        // Revive papers show reviveModel, an item model the server's resource pack must hold
-        public boolean reviveTexture = false;
-        public String reviveModel = "you-only-live-twice:revive_paper";
     }
 
     // Paper, and the stone-like building blocks no group tag reaches, so they weigh like stone

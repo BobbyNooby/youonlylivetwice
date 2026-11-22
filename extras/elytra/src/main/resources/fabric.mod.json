@@ -28,6 +28,7 @@
         "fabric-api": ">=0.165.2+26.3"
     },
     "breaks": {
-        "you-only-live-twice": "<${version}"
+        "you-only-live-twice": "<${version}",
+        "yolt-hardcore": "<${version}"
     }
 }

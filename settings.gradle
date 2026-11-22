@@ -9,7 +9,7 @@ pluginManagement {
 	}
 }
 
-// The tiny mods, each a mod of its own that YOLT also ships inside its jar
+// The tiny mods, each a mod of its own that YOLT Hardcore ships inside its jar, and so YOLT too
 ['anvil', 'mending', 'elytra'].each { name ->
 	include name
 	project(":$name").projectDir = file("extras/$name")
@@ -17,3 +17,6 @@ pluginManagement {
 
 // The coordinate offset, a mod of its own that YOLT also ships inside its jar
 include 'coordinates'
+
+// The hardcore layer, a mod of its own that YOLT also ships inside its jar
+include 'hardcore'

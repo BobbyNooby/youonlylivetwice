@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.core.Yolt;
 import net.minecraft.core.BlockPos;

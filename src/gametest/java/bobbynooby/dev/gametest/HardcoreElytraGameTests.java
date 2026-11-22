@@ -1,9 +1,9 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import bobbynooby.dev.config.Settings;
 import bobbynooby.dev.elytra.YoltElytra;
 import bobbynooby.dev.elytra.mixin.FireworkRocketInvoker;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;

@@ -30,6 +30,7 @@
 		"yolt-anvils": ">=${version}",
 		"yolt-mending": ">=${version}",
 		"yolt-elytra": ">=${version}",
-		"yolt-coordinates": ">=${version}"
+		"yolt-coordinates": ">=${version}",
+		"yolt-hardcore": ">=${version}"
 	}
 }

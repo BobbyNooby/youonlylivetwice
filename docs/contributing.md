@@ -47,9 +47,10 @@ To add a tiny mod that works both on its own and inside YOLT (`extras/mending/` 
    who is left out (`YoltMending`, with its `hostedBy`).
 3. Wire up the build. Its `build.gradle`, like the mending one, sets `ext.modId` and `ext.sharedPackage`, the mod's own
    package with `.shared` on the end, and then applies `gradle/mod.gradle`. Add the folder's name to the list in
-   `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the root `build.gradle`: that ships its jar
-   inside YOLT's and loads it in a dev run. Add the mod id to `depends` in YOLT's `src/main/resources/fabric.mod.json`,
-   at `>=${version}`.
+   `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the root `build.gradle`: that loads it in a
+   dev run. Add an `implementation include(project(':<folder>'))` line to `hardcore/build.gradle`: that ships its jar
+   inside YOLT Hardcore's, which YOLT's jar holds. Add the mod id to `depends` in YOLT's
+   `src/main/resources/fabric.mod.json` and in `hardcore/src/main/resources/fabric.mod.json`, at `>=${version}`.
 4. Write a bridge in `src/main/java/bobbynooby/dev/hardcore/`, like `Mending.java`. Its `init()` calls the mod's
    `hostedBy("You Only Live Twice", ...)` with settings read live from the mod's section of YOLT's config
    (`HardcoreConfig`) and the players YOLT leaves out, and `Hardcore.init()` calls that `init()`. Without a bridge the

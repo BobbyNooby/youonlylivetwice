@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 
 /** The sums behind broken legs, apart from the game so they can be checked on their own. */
 public final class LegHealing {

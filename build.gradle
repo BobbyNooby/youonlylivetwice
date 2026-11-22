@@ -18,10 +18,12 @@ repositories {
     // for more information about repositories.
 }
 
-// The tiny mods under extras/, Gradle project name to mod id
+// The tiny mods under extras/, Gradle project name to mod id. They ship inside YOLT Hardcore's jar, which this holds.
 def tinyMods = [anvil: 'yolt-anvils', mending: 'yolt-mending', elytra: 'yolt-elytra']
-// Every mod this jar ships inside it and hosts: the tiny mods and YOLT Coordinates, in coordinates/
-def hostedMods = tinyMods + [coordinates: 'yolt-coordinates']
+// The mods this jar ships inside it: YOLT Hardcore, in hardcore/, and YOLT Coordinates, in coordinates/
+def shippedMods = [hardcore: 'yolt-hardcore', coordinates: 'yolt-coordinates']
+// Every mod this jar holds, straight or inside another mod's jar
+def hostedMods = tinyMods + shippedMods
 
 loom {
     mods {
@@ -86,9 +88,13 @@ dependencies {
 
     // Fabric API. This is technically optional, but you probably want it anyway.
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-    implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
-    // Each hosted mod is a mod of its own, shipped inside this jar so one download still has everything
-    hostedMods.keySet().each { name ->
+    // SQLite and the tiny mods come inside YOLT Hardcore's jar, so here they are only for compiling and dev runs
+    implementation "org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}"
+    tinyMods.keySet().each { name ->
+        implementation project(":$name")
+    }
+    // Each shipped mod is a mod of its own, inside this jar so one download still has everything
+    shippedMods.keySet().each { name ->
         implementation include(project(":$name"))
     }
     productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"

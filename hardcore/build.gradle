@@ -1,0 +1,16 @@
+// YOLT Hardcore: the hardcore layer as a mod of its own. gradle/mod.gradle has the build every mod besides YOLT
+// shares. It uses nothing in shared/, so it sets no ext.sharedPackage.
+plugins {
+    id 'net.fabricmc.fabric-loom'
+}
+
+ext.modId = 'yolt-hardcore'
+apply from: rootProject.file('gradle/mod.gradle')
+
+dependencies {
+    // The tiny mods and SQLite ship inside this jar, so a server with only it, or with YOLT, has one copy of each
+    implementation include(project(':anvil'))
+    implementation include(project(':mending'))
+    implementation include(project(':elytra'))
+    implementation include("org.xerial:sqlite-jdbc:${project.sqlite_jdbc_version}")
+}

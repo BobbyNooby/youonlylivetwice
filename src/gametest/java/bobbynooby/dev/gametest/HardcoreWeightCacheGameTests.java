@@ -1,6 +1,6 @@
 package bobbynooby.dev.gametest;
 
-import bobbynooby.dev.config.HardcoreConfig;
+import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.Weight;
 import bobbynooby.dev.hardcore.WeightTable;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;

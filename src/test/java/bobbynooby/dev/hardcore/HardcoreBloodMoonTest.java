@@ -1,6 +1,5 @@
 package bobbynooby.dev.hardcore;
 
-import bobbynooby.dev.config.HardcoreConfig;
 import net.minecraft.world.BossEvent;
 import org.junit.jupiter.api.Test;
 
