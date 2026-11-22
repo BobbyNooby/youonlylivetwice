@@ -168,6 +168,11 @@ public final class Curse {
 
     private static void refresh(ServerPlayer player) {
         apply(player);
+        // Vanilla doesn't respawn a dead player as they join, so one who left from the death screen joins to it again,
+        // where the hotbar can't be seen. The notice waits for the respawn's refresh.
+        if (player.isDeadOrDying()) {
+            return;
+        }
         Integer lost = TELL_ON_RETURN.remove(player.getUUID());
         if (lost != null && on()) {
             Hardcore.actionBar(player, NAME + ": −" + hearts(lost) + ".");

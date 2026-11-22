@@ -84,6 +84,41 @@ public class HardcoreDeathAloneGameTests {
         helper.succeed();
     }
 
+    // Vanilla doesn't respawn a dead player as they join, so one who left from the death screen comes back to it, where
+    // the hotbar can't be seen. The heart the death took is told at the respawn after that, once.
+    @GameTest
+    public void aPlayerWhoRejoinsDeadIsToldAtTheRespawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
+        GameProfile profile = TestPlayers.profile("CurseRejoin");
+        UUID id = profile.id();
+        try {
+            ServerPlayer player = TestPlayers.join(helper, profile, GameType.SURVIVAL, AT);
+            TestPlayers.markLoaded(player);
+            respawnBesideTest(helper, player);
+            player.kill(helper.getLevel());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            assertLost(helper, id, 1, "after the death");
+            TestPlayers.leave(player);
+
+            ServerPlayer dead = TestPlayers.rejoin(helper, profile, AT);
+            helper.assertTrue(dead.isDeadOrDying(), "the player did not come back dead");
+            helper.assertValueEqual(TestPlayers.actionBars(dead, 0), List.of(), "the hotbar as the dead player joined");
+
+            ServerPlayer back = TestPlayers.respawn(dead);
+            helper.assertValueEqual(back.getMaxHealth(), 18.0F, "max health after the respawn");
+            helper.assertValueEqual(TestPlayers.actionBars(back, 0), List.of(LOST_ONE), "the hotbar after the respawn");
+        } finally {
+            try {
+                Curse.set(id, 0);
+                TestPlayers.leave(server, id);
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
     @GameTest
     public void aTotemTakesAMaxHeart(GameTestHelper helper) {
         HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
