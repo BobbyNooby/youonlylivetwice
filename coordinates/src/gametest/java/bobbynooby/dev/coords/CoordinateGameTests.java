@@ -184,6 +184,33 @@ public class CoordinateGameTests {
         helper.succeed();
     }
 
+    // Real coordinates are an op's: once de-opped, a player can't run the command to turn them off, so they stop at
+    // the next frame by themselves. The player is opped again at the end, so the command can take them off the list.
+    @GameTest
+    public void aDeoppedPlayerIsShiftedAgainAtTheirNextFrame(GameTestHelper helper) {
+        CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
+        ServerPlayer player = null;
+        try {
+            player = TestPlayers.join(helper, "deopped", GameType.SURVIVAL, SPOT);
+            TestPlayers.op(player);
+            helper.assertValueEqual(run(helper, player.createCommandSourceStack(), "yolt-coordinates real"), 1, "/yolt-coordinates real");
+            player = TestPlayers.respawn(helper, player, RESPAWN);
+            helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "the offset after a respawn with real on");
+
+            TestPlayers.deop(player);
+            helper.assertValueEqual(CoordinateOffsets.offset(player), Offset.ZERO, "the offset right after the deop");
+            player = TestPlayers.respawn(helper, player, RESPAWN);
+            helper.assertFalse(CoordinateOffsets.offset(player).isZero(), "the respawn after the deop got no offset");
+        } finally {
+            if (player != null) {
+                TestPlayers.op(player);
+                leaveAsOp(helper, player);
+            }
+            YoltCoordinates.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
     // Creative and spectator players are shifted too: on its own the mod has no one it leaves out
     @GameTest
     public void aCreativePlayerIsShifted(GameTestHelper helper) {

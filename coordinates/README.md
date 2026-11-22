@@ -34,7 +34,9 @@ It is on as soon as it is installed.
 
 - An op is shifted like everyone else until they run `/yolt-coordinates real`, which gives them real coordinates from
   their next join, respawn or dimension change. Running it again shifts them again from the next one. It is kept until
-  the server stops, across logins, and it stays on for a player who stops being an op.
+  the server stops, across logins, and only counts while the player is an op: a player who is de-opped is shifted
+  again from their next join, respawn or dimension change, and opped again they get real coordinates back from the
+  next one.
 - An op with an offset types coordinates in their own shifted numbers, and `~` and `^` work as usual. A particle's
   spread is a distance, so it stays as typed. Only what a player types counts: the console, command blocks, functions
   (a `/function` an op types included), advancement rewards and scheduled functions use real coordinates. Command

@@ -4,6 +4,7 @@ import bobbynooby.dev.coords.shared.SettingsFile;
 import bobbynooby.dev.coords.shared.TinyMod;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -42,9 +43,12 @@ public final class YoltCoordinates implements ModInitializer {
     private static volatile boolean dedicated;
     // On its own: the players who turned real coordinates on with /yolt-coordinates real, kept until the server stops
     private static final Set<UUID> REAL = ConcurrentHashMap.newKeySet();
-    // On its own: nobody is sent a north target, hides their position or is a stand-in, as those are a host's
-    private static final Hooks OWN = new Hooks(() -> dedicated, player -> REAL.contains(player.getUUID()), pos -> false,
-            player -> false, entity -> false);
+    // On its own: real coordinates only while the player is still an op at the level the command needs, as a player
+    // who is de-opped could not run it again to turn them off. Nobody is sent a north target, hides their position or
+    // is a stand-in, as those are a host's.
+    private static final Hooks OWN = new Hooks(() -> dedicated,
+            player -> REAL.contains(player.getUUID()) && Commands.LEVEL_GAMEMASTERS.check(player.permissions()),
+            pos -> false, player -> false, entity -> false);
 
     private static volatile Hooks hooks = OWN;
 
