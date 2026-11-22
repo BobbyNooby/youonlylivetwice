@@ -12,6 +12,16 @@
             "bobbynooby.dev.hardcore.HardcoreDeathAloneGameTests",
             "bobbynooby.dev.hardcore.HardcoreFoodAloneGameTests",
             "bobbynooby.dev.hardcore.HardcoreWorldAloneGameTests"
+        ],
+        "fabric-client-gametest": [
+            "bobbynooby.dev.hardcore.client.JoinAloneClientTest",
+            "bobbynooby.dev.hardcore.client.CommandAloneClientTest",
+            "bobbynooby.dev.hardcore.client.CurseAloneClientTest",
+            "bobbynooby.dev.hardcore.client.RejoinAloneClientTest",
+            "bobbynooby.dev.hardcore.client.WeightAloneClientTest",
+            "bobbynooby.dev.hardcore.client.BloodMoonAloneClientTest",
+            "bobbynooby.dev.hardcore.client.AnvilAloneClientTest",
+            "bobbynooby.dev.hardcore.client.SingleplayerAloneClientTest"
         ]
     }
 }

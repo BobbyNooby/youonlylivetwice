@@ -5,6 +5,8 @@ plugins {
 }
 
 ext.modId = 'yolt-hardcore'
+// A real client joins a server with only this mod, and opens single-player worlds with it
+ext.clientTests = true
 apply from: rootProject.file('gradle/mod.gradle')
 
 dependencies {
