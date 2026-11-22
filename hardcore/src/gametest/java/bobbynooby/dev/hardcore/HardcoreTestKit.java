@@ -63,7 +63,8 @@ final class HardcoreTestKit {
 
     /**
      * A zombie as a natural spawn makes it: made with its reason, which a mob boost reads, then added to the world,
-     * which runs the load hook. Kept from despawning; the test discards it.
+     * which runs the load hook. Kept from despawning; the test discards it. It keeps its goals, which YOLT's own mob
+     * tests take away: each test here discards it in the tick it was made in, so no goal ever runs.
      */
     static Zombie naturalZombie(GameTestHelper helper, BlockPos relativePos) {
         ServerLevel level = helper.getLevel();
