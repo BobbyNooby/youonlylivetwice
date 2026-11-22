@@ -7,7 +7,8 @@ on:
     branches: [release]
   # Manual run for hunting flaky tests: filter picks GameTests by name,
   # verify repeats each of them 100 times per rotation, and client adds the client tests.
-  # filter and verify reach YOLT's own GameTests only: each tiny mod's always run once, in full
+  # filter and verify reach YOLT's own GameTests only: every other mod's (the tiny mods', YOLT Hardcore's and YOLT
+  # Coordinates') always run once, in full
   workflow_dispatch:
     inputs:
       filter:
@@ -72,13 +73,15 @@ jobs:
           if [ "$GAMETEST_VERIFY" = "true" ]; then args+=("-Dfabric-api.gametest.verify=true"); fi
           # --continue keeps JUnit running after a GameTest failure
           ./gradlew build --continue "${args[@]}"
-      # The optional revive paper texture, zipped next to the jar so it travels with it to the release, and each tiny
-      # mod's own jar beside YOLT's, which already holds a copy of it. The pattern leaves out the -sources jars.
+      # The optional revive paper texture, zipped next to the jar so it travels with it to the release, and the jar of
+      # each mod of its own beside YOLT's, which already holds a copy of each (the tiny mods' inside YOLT Hardcore's).
+      # The pattern leaves out the -sources jars.
       - name: gather the release files
         run: |
           version=$(sed -n 's/^mod_version=//p' gradle.properties)
           (cd pack/revive-paper && zip -r "../../build/libs/you-only-live-twice-revive-pack-$version.zip" .)
-          cp extras/*/build/libs/yolt-*-"$version".jar build/libs/
+          cp extras/*/build/libs/yolt-*-"$version".jar hardcore/build/libs/yolt-*-"$version".jar \
+            coordinates/build/libs/yolt-*-"$version".jar build/libs/
       - name: summarise failed tests
         if: always()
         # A fork's pull request gets a read-only token; the summary must never turn a build red
@@ -102,6 +105,8 @@ jobs:
           path: |
             build/test-results/
             extras/*/build/test-results/
+            hardcore/build/test-results/
+            coordinates/build/test-results/
           retention-days: 14
       - name: store test reports
         if: failure()
@@ -113,6 +118,10 @@ jobs:
             build/test-results/
             extras/*/build/reports/
             extras/*/build/test-results/
+            hardcore/build/reports/
+            hardcore/build/test-results/
+            coordinates/build/reports/
+            coordinates/build/test-results/
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -197,15 +206,15 @@ jobs:
           title="You Only Live Twice $version for Minecraft $minecraft"
           jar="build/libs/you-only-live-twice-$version.jar"
           pack="build/libs/you-only-live-twice-revive-pack-$version.zip"
-          # Each tiny mod on its own, for a server that wants only that part
-          tiny=(build/libs/yolt-*-"$version".jar)
+          # Each mod of its own, for a server that wants only that part
+          mods=(build/libs/yolt-*-"$version".jar)
           # A draft has no tag yet, so the release list is read rather than the tag: true for a draft, false once published
           draft=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$tag\") | .draft")
           if [ "$draft" = "false" ]; then
             echo "$tag is published already; raise mod_version in gradle.properties for a new release"
           elif [ "$draft" = "true" ]; then
-            gh release upload "$tag" "$jar" "$pack" "${tiny[@]}" --clobber
+            gh release upload "$tag" "$jar" "$pack" "${mods[@]}" --clobber
             gh release edit "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           else
-            gh release create "$tag" "$jar" "$pack" "${tiny[@]}" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
+            gh release create "$tag" "$jar" "$pack" "${mods[@]}" --draft --target "$GITHUB_SHA" --title "$title" --notes-file .github/release-notes.md
           fi
