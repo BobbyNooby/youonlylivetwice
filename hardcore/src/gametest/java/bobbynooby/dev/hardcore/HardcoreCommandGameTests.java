@@ -17,16 +17,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * /status and /yolt-hardcore on their own, with YOLT's replies. Each test runs within one tick and before it ends puts
- * back what it changed: the settings in use, the file, the players it joined and opped, a blood moon it started and a
- * curse it set.
+ * /status and /yolt-hardcore on their own, with YOLT's replies. Each test runs within one tick, but for the one with a
+ * batch of its own, and before it ends puts back what it changed: the settings in use, the file, the players it joined
+ * and opped, a blood moon it started and a curse it set. One thing stays, as in YOLT's own blood moon command test: a
+ * blood moon started and stopped leaves its day in the store as the last one and the last one ended, and the store has
+ * no way to take a day out again.
  */
 public class HardcoreCommandGameTests {
     private static final BlockPos SPOT = new BlockPos(1, 1, 1);
     private static final String FAILED_READ = "Nothing changed: yolt-hardcore.json couldn't be read";
+    // A batch of its own, for the test that holds the blood moon on across ticks
+    private static final String WARNED = "yolt-hardcore-gametest:blood_moon_warned";
+    private static final long DAY = 24000L;
 
     // Review Focus 5. Each admin command refused, then two of them run once the player is an op, so the refusals were
     // for the permission. The file that turns the blood moon on proves the refused reload read nothing.
@@ -236,6 +242,54 @@ public class HardcoreCommandGameTests {
             }
         }
         helper.succeed();
+    }
+
+    // From the warning until it rises, the status says one rises tonight. Only the blood moon's own tick warns, so the
+    // settings stay swapped in across ticks, in a batch of its own. It reads a clock of the test's, past warnTick on a
+    // day after every night the store has saved, so tonight rolls, and a warning saves no day.
+    @GameTest(environment = WARNED, maxTicks = 100)
+    public void bloodMoonStatusSaysOneRisesTonight(GameTestHelper helper) {
+        HardcoreFile.Loaded settings = with(c -> {
+            c.bloodMoon.enabled = true;
+            c.bloodMoon.chance = 1.0;
+            c.bloodMoon.minNightsBetween = 0;
+        });
+        HardcoreConfig.BloodMoonSection config = settings.hardcore().bloodMoon;
+        long day = Math.max(Math.max(HardcoreStates.world(BloodMoon.LAST_DAY).orElse(0L),
+                HardcoreStates.world(BloodMoon.ENDED_DAY).orElse(0L)), config.graceDays) + 100L;
+        long clock = day * DAY + config.warnTick + 1;
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(settings);
+        Runnable realClock = BloodMoon.useClockForTesting(() -> clock);
+        AtomicBoolean cleaned = new AtomicBoolean();
+        Runnable cleanUp = () -> {
+            if (cleaned.compareAndSet(false, true)) {
+                try {
+                    realClock.run();
+                    BloodMoon.restartForTesting();
+                } finally {
+                    YoltHardcore.swapForTesting(before);
+                }
+            }
+        };
+        // For a test that times out; a step that fails cleans up for itself
+        helper.runBeforeTestEnd(cleanUp);
+        try {
+            helper.startSequence()
+                    .thenWaitUntil(() -> helper.assertTrue(BloodMoon.tonight(), "no warning past warnTick"))
+                    .thenExecute(() -> {
+                        try {
+                            helper.assertFalse(BloodMoon.active(), "a blood moon is up before its start");
+                            helper.assertValueEqual(TestPlayers.console(helper, "yolt-hardcore bloodmoon status", false, 1),
+                                    List.of("A blood moon rises tonight."), "the status after the warning");
+                        } finally {
+                            cleanUp.run();
+                        }
+                    })
+                    .thenSucceed();
+        } catch (RuntimeException | Error e) {
+            cleanUp.run();
+            throw e;
+        }
     }
 
     @GameTest
