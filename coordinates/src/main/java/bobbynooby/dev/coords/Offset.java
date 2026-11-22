@@ -11,7 +11,7 @@ import java.util.random.RandomGenerator;
 
 /**
  * The shift a player's client sees on X and Z: client = real + offset. Y is never shifted. Both values are whole chunks,
- * so chunk contents stay where they are inside their chunk, and stay under a million blocks, so the north compass's
+ * so chunk contents stay where they are inside their chunk, and stay under a million blocks, so a host's north compass
  * target keeps inside the world's edge.
  */
 public record Offset(int x, int z) {

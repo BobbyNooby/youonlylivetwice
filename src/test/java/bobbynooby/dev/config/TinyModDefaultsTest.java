@@ -11,8 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Each mod YOLT's jar holds ships the same numbers in its own file as YOLT's config does and, but for the elytra nerf,
-// the same switch, so a server that moves from one to the other plays the same
+// The tiny mods and YOLT Coordinates each ship the same numbers in their own file as YOLT's config, so a server that
+// moves from one to the other plays the same. The switches match too, apart from the elytra nerf's, which YOLT ships
+// off.
 class TinyModDefaultsTest {
     @Test
     void anvilNumbersMatchTheMod() {
