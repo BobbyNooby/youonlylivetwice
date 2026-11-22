@@ -7,6 +7,13 @@
     "entrypoints": {
         "fabric-gametest": [
             "bobbynooby.dev.coords.CoordinateGameTests"
+        ],
+        "fabric-client-gametest": [
+            "bobbynooby.dev.coords.client.JoinAloneClientTest",
+            "bobbynooby.dev.coords.client.WalkAndBuildAloneClientTest",
+            "bobbynooby.dev.coords.client.RespawnAloneClientTest",
+            "bobbynooby.dev.coords.client.RealAloneClientTest",
+            "bobbynooby.dev.coords.client.SingleplayerAloneClientTest"
         ]
     }
 }
