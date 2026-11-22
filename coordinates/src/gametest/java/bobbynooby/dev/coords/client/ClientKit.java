@@ -73,7 +73,7 @@ final class ClientKit {
     static final int SPAWN_Z = 2_000;
     // A death screen's buttons wake 20 ticks after it opens
     private static final int BUTTON_TIMEOUT = 100;
-    static final String RESPAWN = "deathScreen.respawn";
+    private static final String RESPAWN = "deathScreen.respawn";
 
     // Not the mod's own logger, whose lines a test reads
     static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger("YOLT Coordinates client tests");
@@ -147,7 +147,7 @@ final class ClientKit {
         return shown;
     }
 
-    /** The client's chunk, as its F3 screen names it, is 0, 0: where every stretch starts. */
+    /** The chunk of the block the client's player stands in is 0, 0: where every stretch starts. */
     static void checkArrivalChunk(ClientGameTestContext ctx, String when) {
         ChunkPos chunk = ctx.computeOnClient(mc -> ChunkPos.containing(mc.player.blockPosition()));
         check(chunk.x() == 0 && chunk.z() == 0, () -> "the client arrived in its chunk " + chunk + " " + when + ", not 0, 0");
@@ -168,7 +168,7 @@ final class ClientKit {
         ctx.getInput().lookAt(yaw, pitch);
     }
 
-    static boolean still(Minecraft mc) {
+    private static boolean still(Minecraft mc) {
         return mc.player.getDeltaMovement().horizontalDistanceSqr() < CLOSE * CLOSE;
     }
 
@@ -224,7 +224,12 @@ final class ClientKit {
                         chunk.getRegionLocalZ(), chunk.getRegionX(), chunk.getRegionZ()));
     }
 
-    /** The F3 screen's position lines start with these, for a player at this position in the screen's numbers. */
+    /**
+     * The F3 screen's position lines start with these, for a player at this position in the screen's numbers. The lines
+     * are worked out from the position the client holds, so this only shows the screen draws what the client holds: it
+     * fails if something changes vanilla's position entry, never for a shift gone wrong. That the client holds the
+     * server's position shifted is checkShifted's to prove.
+     */
     static void checkF3Position(ClientGameTestContext ctx, Vec3 position, String when) {
         List<String> expected = positionLines(position);
         List<String> shown = ctx.computeOnClient(mc -> f3Lines(mc, DebugScreenEntries.PLAYER_POSITION));
@@ -249,7 +254,7 @@ final class ClientKit {
     }
 
     /** The chat lines the client was shown from the mark on. */
-    static List<String> chat(int from) {
+    private static List<String> chat(int from) {
         List<String> all = List.copyOf(CHAT);
         return all.subList(Math.min(from, all.size()), all.size());
     }
@@ -344,7 +349,7 @@ final class ClientKit {
                 .filter(button -> button.getMessage().getString().equals(label)).findFirst();
     }
 
-    static String screenName(Minecraft mc) {
+    private static String screenName(Minecraft mc) {
         Screen screen = mc.gui.screen();
         return screen == null ? "no screen" : screen.getClass().getSimpleName();
     }

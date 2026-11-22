@@ -35,6 +35,7 @@ public class JoinAloneClientTest implements FabricClientGameTest {
                 Vec3 real = server.computeOnServer(s -> connection.getServerPlayer().position());
                 ClientKit.checkArrivalChunk(ctx, "at the join");
 
+                // What the screen draws, which the shot shows; checkShifted above is what proves the shift
                 ClientKit.showF3(ctx);
                 ClientKit.checkF3Position(ctx, shown, "after the join");
                 List<String> realLines = ClientKit.positionLines(real);

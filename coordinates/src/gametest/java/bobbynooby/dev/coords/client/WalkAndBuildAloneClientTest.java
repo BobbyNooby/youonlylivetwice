@@ -28,7 +28,7 @@ import static bobbynooby.dev.coords.client.ClientKit.check;
  * attack key and places one with its use key. Each goes to the server in the client's shifted numbers, so each lands
  * on the real spot only if the mod shifts it back: the server sees the player move as far as the client did, at the
  * real spot, and the real block is broken and then placed. Untranslated, the server would call the walk moving too
- * quickly, and the break and the place would name a block a thousand blocks away.
+ * quickly, and the break and the place would name a block one shift away, over 2,000 blocks off for the join's shift.
  */
 public class WalkAndBuildAloneClientTest implements FabricClientGameTest {
     private static final float NORTH = 180.0F;
