@@ -3,6 +3,7 @@ package bobbynooby.dev.coords.client;
 import bobbynooby.dev.coords.ClientBridge;
 import bobbynooby.dev.coords.CoordinateOffsets;
 import bobbynooby.dev.coords.Offset;
+import bobbynooby.dev.coords.YoltCoordinates;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestServerConnection;
@@ -52,6 +53,10 @@ public class SingleplayerAloneClientTest implements FabricClientGameTest {
                 check(logged.contains(START_LINE), () -> "the world's start logged " + logged + ", not \"" + START_LINE + "\"");
                 check(Files.isRegularFile(file), () -> "the world's start wrote no " + file);
                 check(!server.computeOnServer(s -> ClientBridge.active()), () -> "YOLT Coordinates runs in a single-player world");
+                // The start line reads the same with the switch off, and with it off nothing is shifted anywhere, so
+                // the position checks below would pass for that alone
+                check(server.computeOnServer(s -> YoltCoordinates.settings().enabled()),
+                        () -> "the offset's switch is off in the single-player world");
 
                 checkReal(ctx, server, connection, "after the join");
                 server.runOnServer(s -> ClientKit.moveSpawn(s, ClientKit.SPAWN_X, ClientKit.SPAWN_Z));
