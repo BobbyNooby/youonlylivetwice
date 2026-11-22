@@ -35,8 +35,8 @@ import java.util.stream.Stream;
  * It is read key by key with the rules and words of YOLT's own loader, so one bad value only loses that value: a
  * missing key takes the fallback, a wrong type or an unknown key is named, and so is a value HardcoreChecks refuses.
  * The fallback is the default at a start and the value in use on a reload. At a start the file is written again with
- * every key, after a copy of it is kept as .bak when a note names something typed; a reload only reads. YOLT's
- * HardcoreFileParityTest holds the two loaders to the same notes and values.
+ * every key, after a copy of it is kept as .bak when a note names something typed, unless it is from a newer version;
+ * a reload only reads. YOLT's HardcoreFileParityTest holds the two loaders to the same notes and values.
  */
 public final class HardcoreFile {
     public static final String NAME = "yolt-hardcore.json";
@@ -51,8 +51,11 @@ public final class HardcoreFile {
             "hardcore.weight.itemsEach", "hardcore.weight.armourFactors");
     // The same, one level deeper: each name maps to an object of numbers
     private static final Set<String> NUMBER_MAP_MAPS = Set.of("hardcore.nutrients.foods", "hardcore.tougherMobs.overrides");
+    private static final String VERSION_KEY = "configVersion";
     private static final String DEFAULT = "default";
     private static final String CURRENT_VALUE = "the current value";
+    // A reload says it too, as YOLT's does, though it never writes
+    private static final String NEWER = "config is from a newer version, so it was not rewritten";
 
     /** What the mod runs on: the hardcore settings and the blood moon's texts. */
     public record Loaded(HardcoreConfig.HardcoreSection hardcore, BloodMoonTexts texts) {
@@ -137,8 +140,8 @@ public final class HardcoreFile {
     /**
      * Reads the file at a server start, with the defaults for whatever it lacks or gets wrong, and writes it again with
      * every key. A missing file is written with the defaults. One that can't be read or isn't JSON is kept as .bak and
-     * the defaults written in its place. A folder that can't be written never stops the start: the notes say so, and
-     * what was read still applies.
+     * the defaults written in its place. One from a newer version is read but left as it is. A folder that can't be
+     * written never stops the start: the notes say so, and what was read still applies.
      */
     public static Result start(Path file) {
         List<String> notes = new ArrayList<>();
@@ -162,11 +165,18 @@ public final class HardcoreFile {
             notes.add(problem + ", old file saved as " + backup + ", using defaults");
             return defaults(file, notes, true, backup);
         }
+        int version = fileVersion(user, notes);
+        int notesBeforeRead = notes.size();
         Loaded loaded = read(user, Loaded.defaults(), DEFAULT, notes);
-        // Each note names something typed in the file that the rewrite leaves out or changes, so the admin's file is
-        // kept first, under the same name as one that can't be read
+        if (version > VERSION) {
+            // Rewriting would drop what only the newer version knows, and label the rest as this version's
+            notes.add(NEWER);
+            return new Result(loaded, notes, false, null);
+        }
+        // Each note since the reading began names something typed in the file that the rewrite leaves out or changes,
+        // so the admin's file is kept first, under the same name as one that can't be read
         String backup = null;
-        if (!notes.isEmpty()) {
+        if (notes.size() > notesBeforeRead) {
             try {
                 backup = backup(file, file.getFileName() + ".bak");
                 notes.add("old file saved as " + backup + " before the rewrite");
@@ -202,7 +212,12 @@ public final class HardcoreFile {
             notes.add(problem(e));
             return new Result(inUse, notes, true, null);
         }
-        return new Result(read(user, inUse, CURRENT_VALUE, notes), notes, false, null);
+        int version = fileVersion(user, notes);
+        Loaded loaded = read(user, inUse, CURRENT_VALUE, notes);
+        if (version > VERSION) {
+            notes.add(NEWER);
+        }
+        return new Result(loaded, notes, false, null);
     }
 
     /** The text the file is written with for these settings: every key, in the file's order. */
@@ -228,6 +243,22 @@ public final class HardcoreFile {
         HardcoreChecks.check(shape.hardcore, fallback.hardcore(),
                 (path, problem) -> notes.add(path + ": " + problem + ", using " + fallbackName));
         return new Loaded(shape.hardcore, shape.messages.checked(fallback.texts(), notes, fallbackName));
+    }
+
+    // Every file this mod writes has the version, so one without it was written by hand, against this version's docs: it
+    // reads as this version, and so does an unusable one. merge names one that isn't a whole number that fits in an
+    // int; zero or below can only be a damaged file, so that is named here.
+    private static int fileVersion(JsonObject user, List<String> notes) {
+        JsonElement value = user.get(VERSION_KEY);
+        if (value == null || primitiveProblem(new JsonPrimitive(VERSION), value) != null) {
+            return VERSION;
+        }
+        int version = value.getAsInt();
+        if (version < 1) {
+            notes.add(VERSION_KEY + ": " + value.getAsString() + " is not a version, read as version " + VERSION);
+            return VERSION;
+        }
+        return version;
     }
 
     // A file that can't be read (not UTF-8, say) is as unusable as one that isn't JSON. The decoder only says "Input

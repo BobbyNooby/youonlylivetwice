@@ -129,6 +129,59 @@ class HardcoreFileTest {
         assertNull(started.backup());
     }
 
+    // As YOLT's loader: a newer file is read but never written over, since the rewrite would drop what only the newer
+    // version knows and label the rest as this version's
+    @Test
+    void aFileFromANewerVersionIsReadButNotRewritten() throws IOException {
+        String typed = """
+                {"configVersion": 2, "hardcore": {"weight": {"enabled": true, "freeLoad": "lots"}, "future": {}}}""";
+        HardcoreFile.Result started = start(typed);
+        assertEquals(List.of("hardcore.weight.freeLoad: expected a number" + DEFAULT, "hardcore.future: unknown key, ignored",
+                "config is from a newer version, so it was not rewritten"), started.notes());
+        assertFalse(started.failed());
+        assertNull(started.backup());
+        assertTrue(started.loaded().hardcore().weight.enabled);
+        assertEquals(16.0, started.loaded().hardcore().weight.freeLoad);
+        assertEquals(typed, Files.readString(file()));
+        try (Stream<Path> files = Files.list(dir)) {
+            assertEquals(List.of(file()), files.toList());
+        }
+
+        HardcoreFile.Result reloaded = HardcoreFile.reload(file(), inUse());
+        assertEquals(List.of("hardcore.weight.freeLoad: expected a number" + CURRENT, "hardcore.future: unknown key, ignored",
+                "config is from a newer version, so it was not rewritten"), reloaded.notes());
+        assertEquals(20.0, reloaded.loaded().hardcore().weight.freeLoad);
+    }
+
+    // Zero or below can only be a damaged file, so it reads as this version, said as YOLT says it. As in YOLT, the
+    // version alone keeps no copy before the rewrite, which writes this version.
+    @Test
+    void aVersionBelowOneIsReadAsThisVersion() throws IOException {
+        for (String version : List.of("0", "-5")) {
+            HardcoreFile.Result started = start("{\"configVersion\": " + version + ", \"hardcore\": {\"weight\": {\"enabled\": true}}}");
+            String note = "configVersion: " + version + " is not a version, read as version 1";
+            assertEquals(List.of(note), started.notes());
+            assertNull(started.backup());
+            assertTrue(started.loaded().hardcore().weight.enabled);
+            assertEquals(HardcoreFile.json(started.loaded()), Files.readString(file()));
+            assertFalse(Files.exists(dir.resolve(HardcoreFile.NAME + ".bak")));
+
+            Files.writeString(file(), "{\"configVersion\": " + version + "}");
+            assertEquals(List.of(note), HardcoreFile.reload(file(), inUse()).notes());
+        }
+    }
+
+    // One that isn't a whole number is named as any other key is, and the start keeps a copy before writing this version
+    @Test
+    void aVersionThatIsNotANumberIsNamedAsAnyKeyIs() throws IOException {
+        String typed = "{\"configVersion\": \"one\", \"hardcore\": {\"weight\": {\"enabled\": true}}}";
+        HardcoreFile.Result started = start(typed);
+        assertEquals(List.of("configVersion: expected a number" + DEFAULT, COPIED), started.notes());
+        assertEquals(typed, Files.readString(dir.resolve(HardcoreFile.NAME + ".bak")));
+        assertEquals(HardcoreFile.json(started.loaded()), Files.readString(file()));
+        assertTrue(started.loaded().hardcore().weight.enabled);
+    }
+
     @Test
     void aMissingKeyTakesTheDefaultAndTheStartWritesItIn() throws IOException {
         HardcoreFile.Result started = start("{\"hardcore\": {\"weight\": {\"enabled\": true}}}");
