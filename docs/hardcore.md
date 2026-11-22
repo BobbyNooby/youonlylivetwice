@@ -13,8 +13,10 @@ The hardcore layer is also a mod of its own, [YOLT Hardcore](../hardcore/README.
 jar ships it, so YOLT needs nothing extra. It has every part on this page but the
 [revive paper texture](#revive-paper-texture), which goes with YOLT's revive papers. Logout bodies, the lockout and
 revive papers are YOLT's, so the rules for them do nothing without YOLT, and in place of the `/yolt` commands on this
-page it has [`/status` and `/yolt-hardcore`](commands.md#without-yolt). On its own it reads the same `hardcore` block
-from `config/yolt-hardcore.json`, and keeps its state in the same file as under YOLT (see
+page it has [`/status` and `/yolt-hardcore`](commands.md#without-yolt). Random spawn and the night skip block
+(`sleep.noNightSkip`) are YOLT's too, so on its own the cold moves no spawn, and an ordinary night can be slept through
+as in vanilla; a blood moon still blocks the skip unless `canSleepThrough` is on. On its own it reads the same
+`hardcore` block from `config/yolt-hardcore.json`, and keeps its state in the same file as under YOLT (see
 [Where it is stored](#where-it-is-stored)).
 
 Contents:

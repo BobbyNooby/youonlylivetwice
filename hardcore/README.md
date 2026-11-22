@@ -46,6 +46,10 @@ spectator takes no heart.
   [latest release](https://github.com/BobbyNooby/youonlylivetwice/releases/latest) and put it in the server's `mods`
   folder, next to Fabric API. The client doesn't need it. `./gradlew :hardcore:build` builds it into
   `hardcore/build/libs/`.
+- A client with the jar in its own `mods` runs it in every single-player world it opens, a world opened to LAN
+  included, all from that client's one `config/yolt-hardcore.json`. Every feature that is on there applies to players
+  in survival and adventure, so with the file as it ships the Curse of the Undead, the flat anvil price and the Mending
+  nerf apply in those worlds.
 - The jar already holds YOLT Anvils, YOLT Mending and YOLT Elytra, and sets them from its own file, so you don't need
   their jars. Inside it they read and write no file of their own and have no command: their settings are
   `hardcore.anvil`, `hardcore.mending` and `hardcore.elytra` here. With their own jars in `mods` as well, one copy of
@@ -77,6 +81,8 @@ The first server start writes `config/yolt-hardcore.json`. It has three parts:
   A bad value falls back to the default at a start and to the value in use at a reload, and an unknown key is ignored.
 - At a start the file is written again with every key, with the default in place of each bad value. When that replaces
   a bad value or drops an unknown key, the old file is kept first as `yolt-hardcore.json.bak`.
+- A comment typed into the file is read past, and gone once a start writes the file again. No copy is kept for a
+  comment alone.
 - A file that isn't valid JSON is kept as `yolt-hardcore.json.bak` at a start, and the defaults are written in its
   place.
 - A copy never writes over a different `.bak`: it goes beside it, with the time added to its name. When the copy can't
@@ -113,6 +119,10 @@ ways:
 - There are no revive papers and no `/yolt unkill`, so `hardcore.curse.reviveRefundHearts` and
   `hardcore.curse.unkillRefunds` do nothing.
 - `/yolt-hardcore curse` and `/yolt-hardcore status` take an online player only.
+- There is no random spawn, so the cold never moves a spawn: a new player and anyone who respawns with no bed start at
+  the world spawn, as in vanilla, even where it is cold enough to snow.
+- YOLT's `sleep.noNightSkip` isn't here, so an ordinary night can be slept through as in vanilla. A blood moon still
+  blocks the skip, unless `hardcore.bloodMoon.canSleepThrough` is on.
 
 ## Where it is stored
 
