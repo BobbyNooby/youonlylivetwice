@@ -1,8 +1,8 @@
-// YOLT Anvils: the flat anvil price as a mod of its own. extras/extra.gradle has the build every tiny mod shares.
+// YOLT Anvils: the flat anvil price as a mod of its own. gradle/mod.gradle has the build every mod besides YOLT shares.
 plugins {
     id 'net.fabricmc.fabric-loom'
 }
 
 ext.modId = 'yolt-anvils'
 ext.sharedPackage = 'bobbynooby.dev.anvils.shared'
-apply from: rootProject.file('extras/extra.gradle')
+apply from: rootProject.file('gradle/mod.gradle')

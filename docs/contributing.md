@@ -11,7 +11,7 @@ Contents:
 
 - The root project is You Only Live Twice itself: `src/main` the mod, `src/test` its JUnit tests, `src/gametest` its
   GameTests, server and client.
-- The tiny mods live under `extras/` and share one build, `extras/extra.gradle`. Each tiny mod's own `build.gradle`
+- The tiny mods live under `extras/` and share one build, `gradle/mod.gradle`. Each tiny mod's own `build.gradle`
   sets its mod id and the package for its copy of `shared/`, and applies that file.
 - `shared/` is source, not a mod and never a jar: the settings file, its kinds of key, the switch between hosted and
   on its own, and the command that every tiny mod has. At each build a tiny mod copies it into its own `build/` folder,
@@ -46,7 +46,7 @@ To add a tiny mod that works both on its own and inside YOLT (`extras/mending/` 
    (`MendingConfig`), and a `TinyMod` in its `ModInitializer`, which the rest of the mod asks for its settings and for
    who is left out (`YoltMending`, with its `hostedBy`).
 3. Wire up the build. Its `build.gradle`, like the mending one, sets `ext.modId` and `ext.sharedPackage`, the mod's own
-   package with `.shared` on the end, and then applies `extras/extra.gradle`. Add the folder's name to the list in
+   package with `.shared` on the end, and then applies `gradle/mod.gradle`. Add the folder's name to the list in
    `settings.gradle`, and the folder's name and the mod id to `tinyMods` in the root `build.gradle`: that ships its jar
    inside YOLT's and loads it in a dev run. Add the mod id to `depends` in YOLT's `src/main/resources/fabric.mod.json`,
    at `>=${version}`.

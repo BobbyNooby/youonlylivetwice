@@ -1,6 +1,6 @@
-// The build every tiny mod shares. A tiny mod's build.gradle sets ext.modId and ext.sharedPackage and applies this
-// file. Each tiny mod builds its own jar for servers that want only it, and You Only Live Twice ships the same jar
-// inside its own. The versions all come from the root gradle.properties.
+// The build every mod besides You Only Live Twice shares. A mod's build.gradle sets ext.modId and ext.sharedPackage and
+// applies this file. Each mod builds its own jar for servers that want only it, and You Only Live Twice ships the same
+// jar inside its own. The versions all come from the root gradle.properties.
 
 // Not called modId: the modId line in configureTests below would then set this variable, not the test mod's id
 def id = project.ext.modId
