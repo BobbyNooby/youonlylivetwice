@@ -67,7 +67,7 @@ if (clientTests) {
     }
 
     // The projects whose client runs come before this mod's: the root, YOLT's, then each mod with client tests set up
-    // before this one. Projects are set up one at a time, the root first.
+    // before this one. Projects are set up one at a time, so the list grows in order.
     def modsBefore = rootProject.ext.has('modsWithClientTests') ? rootProject.ext.modsWithClientTests : []
     rootProject.ext.modsWithClientTests = modsBefore + [project.path]
     def before = [rootProject] + modsBefore.collect { rootProject.project(it) }
@@ -83,16 +83,26 @@ if (clientTests) {
         // Same folder as Loom's clientGameTest run, so the EULA it accepts covers the in-process server too
         runDir = layout.buildDirectory.dir("run/clientGameTest")
         dependsOn("acceptGameTestEula")
-        // After every client run before it, so whatever Gradle runs in parallel, one window opens at a time
-        before.each { mustRunAfter(it.tasks.named { name -> name == "runProductionClientGameTest" }) }
-        // Every project's downloadAssets writes the one assets folder in Gradle's cache that every client run reads,
-        // and Gradle stops a build in which a run isn't ordered after each of them
-        before.each { mustRunAfter(it.tasks.named { name -> name == "downloadAssets" }) }
     }
-    // The same the other way: the runs before this one come after this mod's download
+
+    // Both client runs, the production one above and Loom's own dev run, each open a window. Each of this mod's comes
+    // after the same run of every project before it, so whatever Gradle runs in parallel, one window opens at a time.
+    // Every project's downloadAssets writes the one assets folder in Gradle's cache that every client run reads, and
+    // Gradle stops a build in which a run isn't ordered after each of them: this mod's runs come after the earlier
+    // projects' downloads and theirs after this mod's. Every task is matched lazily by tasks.named { }, which also
+    // reaches a task registered after this script runs, as Loom's and the root's may be; tasks.named("...") would fail
+    // on one that isn't there yet.
     def download = tasks.named { name -> name == "downloadAssets" }
-    before.each {
-        it.tasks.named { name -> name == "runProductionClientGameTest" }.configureEach { mustRunAfter(download) }
+    ["runProductionClientGameTest", "runClientGameTest"].each { runName ->
+        tasks.named { name -> name == runName }.configureEach { run ->
+            before.each { other ->
+                run.mustRunAfter(other.tasks.named { name -> name == runName })
+                run.mustRunAfter(other.tasks.named { name -> name == "downloadAssets" })
+            }
+        }
+        before.each { other ->
+            other.tasks.named { name -> name == runName }.configureEach { it.mustRunAfter(download) }
+        }
     }
 
     dependencies {
