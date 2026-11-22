@@ -64,7 +64,7 @@ final class Held {
             try {
                 check.run();
             } catch (RuntimeException | Error e) {
-                cleanUp();
+                cleanUpAfter(e);
                 throw e;
             }
         };
@@ -78,11 +78,25 @@ final class Held {
             }
             try {
                 check.run();
-            } finally {
-                cleanUp();
+            } catch (RuntimeException | Error e) {
+                cleanUpAfter(e);
+                throw e;
             }
+            cleanUp();
             helper.succeed();
         };
+    }
+
+    /**
+     * The clean-up after a failure, which the caller then throws: a clean-up that throws as well is added to the
+     * failure, so the failure's own message is what the test reports.
+     */
+    void cleanUpAfter(Throwable failure) {
+        try {
+            cleanUp();
+        } catch (RuntimeException | Error e) {
+            failure.addSuppressed(e);
+        }
     }
 
     // The tick before the timeout, with the last step still to come. The clean-up makes every step after it do nothing,
@@ -90,25 +104,36 @@ final class Held {
     // clean-up stops it, so a sequence could reach its thenSucceed in this same tick and pass. Thrown from a task the
     // test scheduled, the failure fails the test, and a succeed after it changes nothing.
     private void ranOutOfTime() {
-        cleanUp();
-        throw helper.assertionException("ran out of time before its last step");
+        RuntimeException timedOut = helper.assertionException("ran out of time before its last step");
+        cleanUpAfter(timedOut);
+        throw timedOut;
     }
 
-    /** Runs what was changed backwards, once; every task runs even when one before it throws. */
+    /**
+     * Runs what was changed backwards, once. Every task runs even when one before it throws; the first to throw is
+     * thrown at the end, with any later one added to it.
+     */
     void cleanUp() {
-        if (done.compareAndSet(false, true)) {
-            runFrom(undo.size() - 1);
-        }
-    }
-
-    private void runFrom(int index) {
-        if (index < 0) {
+        if (!done.compareAndSet(false, true)) {
             return;
         }
-        try {
-            undo.get(index).run();
-        } finally {
-            runFrom(index - 1);
+        Throwable first = null;
+        for (int i = undo.size() - 1; i >= 0; i--) {
+            try {
+                undo.get(i).run();
+            } catch (RuntimeException | Error e) {
+                if (first == null) {
+                    first = e;
+                } else {
+                    first.addSuppressed(e);
+                }
+            }
+        }
+        if (first instanceof RuntimeException e) {
+            throw e;
+        }
+        if (first instanceof Error e) {
+            throw e;
         }
     }
 }
