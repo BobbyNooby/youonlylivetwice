@@ -10,6 +10,10 @@ import java.util.UUID;
  * What a mod that hosts YOLT Hardcore hands it, each read at every use, so a host can hand out its live config. A host
  * says so in its fabric.mod.json, with the custom value {@code "yolt-hardcore:host": true}, and calls
  * {@link YoltHardcore#hostedBy} from its own onInitialize.
+ * <p>
+ * While hosted the mod registers no entity-load hook, so a host calls {@link MobBoosts#onLoad} for each mob as it
+ * loads, from an entity-load hook of its own, in the order it needs: YOLT boosts a mob before it gives it the goal that
+ * hunts bodies.
  */
 public interface HardcoreHost {
     /** The host's name, for the log, such as "You Only Live Twice". */

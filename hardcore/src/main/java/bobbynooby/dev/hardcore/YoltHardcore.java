@@ -107,6 +107,8 @@ public final class YoltHardcore implements ModInitializer {
         // Only here, as a host has commands of its own
         CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) ->
                 HardcoreCommands.register(dispatcher));
+        // Only here too, as a host with an entity-load hook of its own boosts mobs from it, in its own order
+        MobBoosts.boostAsMobsLoad();
         Hardcore.init();
     }
 

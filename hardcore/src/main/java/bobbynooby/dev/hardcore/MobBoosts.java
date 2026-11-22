@@ -1,6 +1,7 @@
 package bobbynooby.dev.hardcore;
 
 import bobbynooby.dev.hardcore.mixin.CreeperAccessor;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -38,6 +39,19 @@ public final class MobBoosts {
     public static final String BLOOD_MOON_MARK = "yolt.blood_moon";
 
     private MobBoosts() {}
+
+    /**
+     * On its own, nothing else calls onLoad, so the mod's own entity-load hook does. A host with an entity-load hook of
+     * its own calls onLoad from it instead, in the order it needs, so this is never registered while hosted.
+     */
+    static void boostAsMobsLoad() {
+        // Runs for each entity of a chunk in turn, so a throw would break off the rest
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof Mob mob) {
+                Guard.run(() -> onLoad(mob, level), "Could not boost {}", mob.getUUID());
+            }
+        });
+    }
 
     /** Decides a mob seen for the first time, then sets or removes the modifiers to match the config. */
     public static void onLoad(Mob mob, ServerLevel level) {
