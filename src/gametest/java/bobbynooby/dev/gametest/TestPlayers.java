@@ -14,6 +14,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.network.config.PrepareSpawnTask;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.util.ProblemReporter;
@@ -93,6 +94,23 @@ public final class TestPlayers {
             player.loadAndSpawnParentVehicle(input);
         });
         return player;
+    }
+
+    // The last step of a real login, run when the client has finished its configuration: vanilla's spawn task, which the
+    // caller started and ticked until it was ready, makes the player from their save if there is one and places them at
+    // the spot it holds
+    public static ServerPlayer placeFrom(PrepareSpawnTask task, GameProfile profile) {
+        CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
+        Connection connection = new Connection(PacketFlow.SERVERBOUND);
+        EmbeddedChannel channel = new EmbeddedChannel(connection);
+        CHANNELS.put(profile.id(), channel);
+        try {
+            return task.spawnPlayer(connection, cookie);
+        } catch (RuntimeException | Error e) {
+            CHANNELS.remove(profile.id());
+            channel.close();
+            throw e;
+        }
     }
 
     public static Recording joinRecording(GameTestHelper helper, String name, GameType mode, BlockPos relativePos) {

@@ -57,6 +57,7 @@
     "PlayerListLoginMixin",
     "PlayerListVisibilityMixin",
     "PlayerSpawnFinderInvoker",
+    "RandomSpawnFirstJoinMixin",
     "RandomSpawnMixin",
     "ReviveRecipeMixin",
     "ServerCommandSuggestionsProviderMixin",

@@ -105,6 +105,50 @@ class RandomSpawnTest {
         assertEquals(everyColumn, zs);
     }
 
+    // A first join's spot is checked again when the player is placed, and every column a pick gives must pass that
+    // check, or a spot just picked would be picked again
+    @Test
+    void everyPickedColumnPassesTheAreaCheck() {
+        Random random = new Random(8);
+        List<RandomSpawn.Area> areas = List.of(
+                RandomSpawn.area(-500, 500, -500, 500, 0, 0, 10000),
+                RandomSpawn.area(50.5, 150.5, -70.25, 29.75, 100.5, -20.25, 10000),
+                RandomSpawn.area(-30_000_000, 1000, -30_000_000, 30_000_000, 800, 0, 10000),
+                RandomSpawn.area(9.5, 10.5, 9.5, 10.5, 10, 10, 1));
+        for (RandomSpawn.Area area : areas) {
+            for (int i = 0; i < PICKS; i++) {
+                RandomSpawn.Column column = RandomSpawn.pickColumn(random, area);
+                assertTrue(RandomSpawn.canPick(area, column.x(), column.z()), column + " was picked in " + area + " but fails the check");
+            }
+        }
+    }
+
+    // The blocks just past each edge fail the check: half outside a decimal edge, and beside the one block a tiny border
+    // picks
+    @Test
+    void areaCheckRefusesTheBlocksPastEachEdge() {
+        RandomSpawn.Area whole = RandomSpawn.area(0, 10, 0, 10, 5, 5, 10000);
+        assertTrue(RandomSpawn.canPick(whole, 0, 9));
+        assertTrue(RandomSpawn.canPick(whole, 9, 0));
+        assertFalse(RandomSpawn.canPick(whole, -1, 5));
+        assertFalse(RandomSpawn.canPick(whole, 10, 5));
+        assertFalse(RandomSpawn.canPick(whole, 5, -1));
+        assertFalse(RandomSpawn.canPick(whole, 5, 10));
+
+        RandomSpawn.Area decimal = RandomSpawn.area(50.5, 150.5, -70.25, 29.75, 100.5, -20.25, 10000);
+        assertTrue(RandomSpawn.canPick(decimal, 51, -70));
+        assertTrue(RandomSpawn.canPick(decimal, 149, 28));
+        assertFalse(RandomSpawn.canPick(decimal, 50, 0));
+        assertFalse(RandomSpawn.canPick(decimal, 150, 0));
+        assertFalse(RandomSpawn.canPick(decimal, 100, -71));
+        assertFalse(RandomSpawn.canPick(decimal, 100, 29));
+
+        RandomSpawn.Area tiny = RandomSpawn.area(9.5, 10.5, 9.5, 10.5, 10, 10, 1);
+        assertTrue(RandomSpawn.canPick(tiny, 10, 10));
+        assertFalse(RandomSpawn.canPick(tiny, 9, 10));
+        assertFalse(RandomSpawn.canPick(tiny, 11, 10));
+    }
+
     // An edge cut on one side only, with the centre off it: the other side still ends at the diameter
     @Test
     void oneCutEdgeKeepsTheOtherSidesDiameter() {

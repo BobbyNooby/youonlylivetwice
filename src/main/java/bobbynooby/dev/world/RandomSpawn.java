@@ -9,12 +9,14 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Random;
@@ -66,9 +68,41 @@ public final class RandomSpawn {
      * NO_GROUND_TICKS ticks, which ends it at the world spawn.
      */
     public static @Nullable BlockPos pick(ServerLevel level) {
+        return pickIn(level, liveArea(level));
+    }
+
+    /** True when this spot's column is one a pick could give now, inside the live border and YOLT's diameter. */
+    public static boolean insidePickArea(ServerLevel level, Vec3 spot) {
+        return canPick(liveArea(level), Mth.floor(spot.x), Mth.floor(spot.z));
+    }
+
+    /**
+     * Where a player joining for the first time is placed. Their spot is picked as they log in, and they are placed
+     * there only once their chunks have loaded and their client is ready. In between they aren't online for the border
+     * commands to check, so a border changed meanwhile can leave the spot outside: then it is picked again. If no new
+     * spot is found, they are placed at the old one, as vanilla would place them.
+     */
+    public static Vec3 firstJoinSpot(ServerLevel level, Vec3 picked, String name) {
+        if (!placesFirstJoins(level.getServer(), level) || insidePickArea(level, picked)) {
+            return picked;
+        }
+        BlockPos from = BlockPos.containing(picked);
+        BlockPos spot = pick(level);
+        if (spot == null) {
+            Yolt.LOGGER.warn("{}'s first spawn at {} is outside the random spawn area since the border changed while they were"
+                    + " joining, and no new spot was found, so they join there", name, from.toShortString());
+            return picked;
+        }
+        Yolt.LOGGER.info("Moved {}'s first spawn from {} to {}, since the border changed while they were joining", name,
+                from.toShortString(), spot.toShortString());
+        return Vec3.atBottomCenterOf(spot);
+    }
+
+    // The area a pick reads from the live border and the config when it starts
+    private static Area liveArea(ServerLevel level) {
         WorldBorder border = level.getWorldBorder();
-        return pickIn(level, area(border.getMinX(), border.getMaxX(), border.getMinZ(), border.getMaxZ(),
-                border.getCenterX(), border.getCenterZ(), Settings.get().worldBorder.diameter));
+        return area(border.getMinX(), border.getMaxX(), border.getMinZ(), border.getMaxZ(),
+                border.getCenterX(), border.getCenterZ(), Settings.get().worldBorder.diameter);
     }
 
     /** The same inside the given area. Public for the tests, which give it an area of their own. */
@@ -179,5 +213,19 @@ public final class RandomSpawn {
             return (int) Math.floor((lowEdge + highEdge) / 2);
         }
         return low + random.nextInt(high - low + 1);
+    }
+
+    // True for a column pickColumn can give in this area, with the same edges pickInside works out
+    static boolean canPick(Area area, int x, int z) {
+        return canPickInside(x, area.minX(), area.maxX()) && canPickInside(z, area.minZ(), area.maxZ());
+    }
+
+    private static boolean canPickInside(int block, double lowEdge, double highEdge) {
+        int low = (int) Math.ceil(lowEdge);
+        int high = (int) Math.floor(highEdge - 1);
+        if (high < low) {
+            return block == (int) Math.floor((lowEdge + highEdge) / 2);
+        }
+        return low <= block && block <= high;
     }
 }
