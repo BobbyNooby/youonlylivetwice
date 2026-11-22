@@ -74,12 +74,36 @@ public final class Hardcore {
 
     /** True while any hardcore feature is switched on. */
     public static boolean anyOn() {
-        return Host.on(c -> c.weight.enabled || c.legs.enabled || c.limp.enabled
-                || c.bedRest.enabled || c.curse.enabled
-                || c.nutrients.enabled || c.hungerTax.multiplier != 1.0
-                || c.mending.enabled || c.elytra.enabled || c.anvil.enabled
-                || c.tougherMobs.enabled || c.relentlessMobs.enabled
-                || c.bloodMoon.enabled || c.cold.enabled);
+        return Host.on(c -> !featuresOn(c).isEmpty());
+    }
+
+    /**
+     * The features these settings switch on, by their sections' names in the file and in its order. The hunger tax has
+     * no switch of its own, so it is on at any multiplier but vanilla's.
+     */
+    static List<String> featuresOn(HardcoreConfig.HardcoreSection c) {
+        List<String> on = new ArrayList<>();
+        addIf(on, c.weight.enabled, "weight");
+        addIf(on, c.legs.enabled, "legs");
+        addIf(on, c.limp.enabled, "limp");
+        addIf(on, c.bedRest.enabled, "bedRest");
+        addIf(on, c.curse.enabled, "curse");
+        addIf(on, c.nutrients.enabled, "nutrients");
+        addIf(on, c.hungerTax.multiplier != 1.0, "hungerTax");
+        addIf(on, c.mending.enabled, "mending");
+        addIf(on, c.anvil.enabled, "anvil");
+        addIf(on, c.elytra.enabled, "elytra");
+        addIf(on, c.tougherMobs.enabled, "tougherMobs");
+        addIf(on, c.relentlessMobs.enabled, "relentlessMobs");
+        addIf(on, c.bloodMoon.enabled, "bloodMoon");
+        addIf(on, c.cold.enabled, "cold");
+        return on;
+    }
+
+    private static void addIf(List<String> names, boolean on, String name) {
+        if (on) {
+            names.add(name);
+        }
     }
 
     /** Runs at the end of every server tick for each online player who isn't exempt. */

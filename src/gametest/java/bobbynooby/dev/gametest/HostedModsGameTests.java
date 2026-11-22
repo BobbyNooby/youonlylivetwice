@@ -6,6 +6,7 @@ import bobbynooby.dev.coords.CoordinateConfig;
 import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.elytra.ElytraConfig;
 import bobbynooby.dev.elytra.YoltElytra;
+import bobbynooby.dev.hardcore.HardcoreFile;
 import bobbynooby.dev.hardcore.YoltHardcore;
 import bobbynooby.dev.mending.MendingConfig;
 import bobbynooby.dev.mending.YoltMending;
@@ -30,8 +31,7 @@ public class HostedModsGameTests {
         hasNoFileAndNoCommand(helper, YoltElytra.MOD_ID, ElytraConfig.FILE, YoltElytra.hosted(), YoltElytra::reload);
         hasNoFileAndNoCommand(helper, YoltCoordinates.MOD_ID, CoordinateConfig.FILE, YoltCoordinates.hosted(),
                 YoltCoordinates::reload);
-        // YOLT Hardcore has no reload of its own yet, so nothing is run in its place
-        hasNoFileAndNoCommand(helper, YoltHardcore.MOD_ID, "yolt-hardcore.json", YoltHardcore.hosted(), () -> {});
+        hasNoFileAndNoCommand(helper, YoltHardcore.MOD_ID, HardcoreFile.NAME, YoltHardcore.hosted(), YoltHardcore::reload);
         helper.succeed();
     }
 

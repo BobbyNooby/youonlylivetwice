@@ -1,6 +1,7 @@
 package bobbynooby.dev.hardcore;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
@@ -11,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,8 +27,9 @@ import java.util.UUID;
  * and calls {@link #hostedBy} from its own onInitialize. The mod then sets itself up inside that call, so every hook it
  * registers lands at the place in the host's start-up where the host calls it. Fabric runs an event's listeners in the
  * order they registered, and a host may need its own hooks on an event to run first. From then on every value comes
- * from the host, read at each use. With no such mod loaded, it sets itself up in its own onInitialize and runs on its
- * defaults on any server.
+ * from the host, read at each use. With no such mod loaded, it sets itself up in its own onInitialize, runs on any
+ * server, reads config/yolt-hardcore.json at each start and on /yolt-hardcore reload, and has /status for everyone and
+ * /yolt-hardcore for ops.
  */
 public final class YoltHardcore implements ModInitializer {
     public static final String MOD_ID = "yolt-hardcore";
@@ -37,11 +40,11 @@ public final class YoltHardcore implements ModInitializer {
 
     // On its own: true while a server runs
     private static volatile boolean running;
-    // On its own: the defaults, while a server runs. There are no bodies without a host, so nothing is a stand-in or a
-    // body.
+    // On its own: the settings and texts in use, swapped whole, so a reader on another thread gets one read or the other
+    private static volatile HardcoreFile.Loaded own = HardcoreFile.Loaded.defaults();
+    // On its own: the file's settings, while a server runs. There are no bodies without a host, so nothing is a
+    // stand-in or a body.
     static final HardcoreHost OWN = new HardcoreHost() {
-        private final HardcoreConfig.HardcoreSection settings = new HardcoreConfig.HardcoreSection();
-
         @Override
         public String name() {
             return NAME;
@@ -54,12 +57,12 @@ public final class YoltHardcore implements ModInitializer {
 
         @Override
         public HardcoreConfig.HardcoreSection settings() {
-            return settings;
+            return own.hardcore();
         }
 
         @Override
         public BloodMoonTexts texts() {
-            return BloodMoonTexts.DEFAULTS;
+            return own.texts();
         }
 
         @Override
@@ -94,9 +97,16 @@ public final class YoltHardcore implements ModInitializer {
             });
             return;
         }
-        // Before Hardcore.init(), whose store opens in a SERVER_STARTING listener that asks whether the rules apply
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> running = true);
+        // Before Hardcore.init(), whose store opens in a SERVER_STARTING listener that asks whether the rules apply,
+        // and whose features read the settings from then on
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            start();
+            running = true;
+        });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> running = false);
+        // Only here, as a host has commands of its own
+        CommandRegistrationCallback.EVENT.register((dispatcher, registries, environment) ->
+                HardcoreCommands.register(dispatcher));
         Hardcore.init();
     }
 
@@ -120,6 +130,58 @@ public final class YoltHardcore implements ModInitializer {
     /** True when another mod hosts this one. */
     public static boolean hosted() {
         return hosted;
+    }
+
+    /**
+     * Reads config/yolt-hardcore.json again. A key that is missing or refused keeps the value in use, and a file that is
+     * missing or can't be read changes nothing. While hosted it does nothing, since the host's config is the one in use.
+     */
+    public static HardcoreFile.Result reload() {
+        if (hosted) {
+            return new HardcoreFile.Result(new HardcoreFile.Loaded(Host.settings(), Host.texts()),
+                    List.of("the settings come from " + Host.name()), true, null);
+        }
+        HardcoreFile.Result result = HardcoreFile.reload(configFile(), own);
+        if (!result.failed()) {
+            own = result.loaded();
+            noteCurseAndLimp();
+        }
+        return result;
+    }
+
+    /** Where the file is read from on its own. */
+    static Path configFile() {
+        return FabricLoader.getInstance().getConfigDir().resolve(HardcoreFile.NAME);
+    }
+
+    // Every start reads the file afresh, with the defaults for whatever it lacks or gets wrong
+    private static void start() {
+        HardcoreFile.Result result = HardcoreFile.start(configFile());
+        own = result.loaded();
+        for (String note : result.notes()) {
+            if (result.failed()) {
+                LOGGER.error("{}", note);
+            } else {
+                LOGGER.warn("{}", note);
+            }
+        }
+        noteCurseAndLimp();
+        LOGGER.info("{}", HardcoreCommands.features(own.hardcore()));
+    }
+
+    // Allowed, so only said, as YOLT says it when it reads its config
+    private static void noteCurseAndLimp() {
+        String notice = HardcoreChecks.curseOutlastsLimp(own.hardcore());
+        if (notice != null) {
+            LOGGER.info("{}", notice);
+        }
+    }
+
+    // For the mod's own GameTests: swaps the settings in use for one test, which puts them back within the same tick
+    static HardcoreFile.Loaded swapForTesting(HardcoreFile.Loaded loaded) {
+        HardcoreFile.Loaded before = own;
+        own = loaded;
+        return before;
     }
 
     // The names of the loaded mods whose fabric.mod.json says they host this one

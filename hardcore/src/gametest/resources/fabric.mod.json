@@ -6,7 +6,8 @@
     "environment": "*",
     "entrypoints": {
         "fabric-gametest": [
-            "bobbynooby.dev.hardcore.HardcoreAloneGameTests"
+            "bobbynooby.dev.hardcore.HardcoreAloneGameTests",
+            "bobbynooby.dev.hardcore.HardcoreCommandGameTests"
         ]
     }
 }

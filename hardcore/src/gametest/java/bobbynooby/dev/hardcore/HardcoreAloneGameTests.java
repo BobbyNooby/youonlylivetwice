@@ -9,6 +9,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.gametest.framework.GameTestHelper;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 /** The mod on its own, with You Only Live Twice nowhere on the server. */
@@ -36,6 +38,20 @@ public class HardcoreAloneGameTests {
         for (String id : List.of(YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID)) {
             helper.assertTrue(root.getChild(id) == null, "/" + id + " is there while hosted");
         }
+        helper.succeed();
+    }
+
+    // The start wrote the file with every key, so it reads back with nothing to say
+    @GameTest
+    public void theStartWroteTheFile(GameTestHelper helper) {
+        Path file = YoltHardcore.configFile();
+        helper.assertTrue(Files.exists(file), "the start wrote no " + file);
+        HardcoreFile.Result read = HardcoreFile.reload(file, HardcoreFile.Loaded.defaults());
+        helper.assertFalse(read.failed(), "the file couldn't be read: " + read.notes());
+        helper.assertValueEqual(read.notes(), List.of(), "what reading the file said");
+        RootCommandNode<CommandSourceStack> root = helper.getLevel().getServer().getCommands().getDispatcher().getRoot();
+        helper.assertTrue(root.getChild(YoltHardcore.MOD_ID) != null, "/yolt-hardcore isn't there on its own");
+        helper.assertTrue(root.getChild("status") != null, "/status isn't there on its own");
         helper.succeed();
     }
 }
