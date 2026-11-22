@@ -3,13 +3,18 @@ package bobbynooby.dev.coords;
 import bobbynooby.dev.coords.shared.SettingsFile;
 import bobbynooby.dev.coords.shared.TinyMod;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -17,12 +22,13 @@ import java.util.function.Supplier;
 /**
  * YOLT Coordinates: each player's client is sent its own shift of X and Z, which {@link CoordinateOffsets} does.
  * <p>
- * On its own, it reads config/yolt-coordinates.json at each server start and on /yolt-coordinates reload. A mod that
+ * On its own, it reads config/yolt-coordinates.json at each server start and on /yolt-coordinates reload, it only runs
+ * on a dedicated server, and /yolt-coordinates real gives an op real coordinates from their next frame. A mod that
  * ships it inside its own jar can take over instead: it calls {@link #hostedBy} from its own onInitialize, and from
- * then on the switch and the {@link Hooks} come from that mod, the file is never read or written and the command isn't
- * there. Every mod's onInitialize runs before any server starts, and the hooks are read at each use, never copied at
- * init, so the order the two mods load in doesn't matter. {@link TinyMod} does the settings; the methods here hand it
- * on.
+ * then on the switch and the {@link Hooks} come from that mod, the file is never read or written and the commands
+ * aren't there. Every mod's onInitialize runs before any server starts, and the hooks are read at each use, never
+ * copied at init, so the order the two mods load in doesn't matter. {@link TinyMod} does the settings; the methods
+ * here hand it on.
  */
 public final class YoltCoordinates implements ModInitializer {
     public static final String MOD_ID = "yolt-coordinates";
@@ -31,10 +37,14 @@ public final class YoltCoordinates implements ModInitializer {
             CoordinateSettings.DEFAULTS, CoordinateSettings::enabled,
             settings -> settings.enabled() ? "each player's X and Z are shifted" : "nobody is shifted",
             CoordinateSettings::describe);
-    // On its own: always active, and nobody sees real coordinates, is sent a north target, hides their position or is a
-    // stand-in
-    private static final Hooks OWN = new Hooks(() -> true, player -> false, pos -> false, player -> false,
-            entity -> false);
+    // On its own: true while a server with no single-player owner runs. The mod hides a world from its players, which a
+    // single-player world's owner has no use for, and a world opened to LAN has that owner too.
+    private static volatile boolean dedicated;
+    // On its own: the players who turned real coordinates on with /yolt-coordinates real, kept until the server stops
+    private static final Set<UUID> REAL = ConcurrentHashMap.newKeySet();
+    // On its own: nobody is sent a north target, hides their position or is a stand-in, as those are a host's
+    private static final Hooks OWN = new Hooks(() -> dedicated, player -> REAL.contains(player.getUUID()), pos -> false,
+            player -> false, entity -> false);
 
     private static volatile Hooks hooks = OWN;
 
@@ -52,6 +62,12 @@ public final class YoltCoordinates implements ModInitializer {
     @Override
     public void onInitialize() {
         MOD.init();
+        ServerLifecycleEvents.SERVER_STARTING.register(YoltCoordinates::starting);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            dedicated = false;
+            REAL.clear();
+        });
+        CoordinateCommands.init();
         CoordinateOffsets.init();
     }
 
@@ -99,6 +115,19 @@ public final class YoltCoordinates implements ModInitializer {
         return hooks.realCoordinates().test(player);
     }
 
+    /**
+     * On its own: turns real coordinates on or off for this player, for the frames that start from now on. Returns
+     * true when they are now on.
+     */
+    static boolean toggleReal(ServerPlayer player) {
+        UUID id = player.getUUID();
+        if (REAL.remove(id)) {
+            return false;
+        }
+        REAL.add(id);
+        return true;
+    }
+
     /** True when a spawn is the north compass target, whose Z is the same for everyone. */
     static boolean isNorthTarget(BlockPos pos) {
         return hooks.northTarget().test(pos);
@@ -116,6 +145,14 @@ public final class YoltCoordinates implements ModInitializer {
 
     static Path configFile() {
         return MOD.configFile();
+    }
+
+    // Read at each start, so a world that is opened again is checked again. While hosted the host's rule is used.
+    private static void starting(MinecraftServer server) {
+        dedicated = server.getSingleplayerProfile() == null;
+        if (!dedicated && !hosted()) {
+            LOGGER.info("YOLT Coordinates does nothing in a single-player world");
+        }
     }
 
     // For the mod's own GameTests: swaps the settings in for one test, which puts them back within the same tick

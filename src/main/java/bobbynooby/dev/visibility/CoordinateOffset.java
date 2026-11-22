@@ -12,11 +12,15 @@ import bobbynooby.dev.core.StandIn;
  * keeps the spawn protection line from naming a block, and stand-ins such as player bodies, which have no client.
  */
 public final class CoordinateOffset {
+    // Made once: the mod reads the settings on the block collision path, which runs for every block an entity touches
+    private static final CoordinateSettings ON = new CoordinateSettings(true);
+    private static final CoordinateSettings OFF = new CoordinateSettings(false);
+
     private CoordinateOffset() {}
 
     public static void init() {
         YoltCoordinates.hostedBy("You Only Live Twice",
-                () -> new CoordinateSettings(Settings.on(c -> c.hide.coordinates)),
+                () -> Settings.on(c -> c.hide.coordinates) ? ON : OFF,
                 new YoltCoordinates.Hooks(Settings::active, AdminView::isOn, NorthCompass::isNorthTarget,
                         DebugPrivacy::hidesPosition, StandIn::is));
     }

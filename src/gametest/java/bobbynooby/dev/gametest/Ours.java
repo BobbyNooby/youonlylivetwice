@@ -11,7 +11,8 @@ import java.util.List;
 
 /** What counts as YOLT's own on a player: its id and the ids of the mods its jar holds. */
 final class Ours {
-    // The tiny mods put their modifiers in their own namespaces, so a check for YOLT's alone would miss them
+    // The mods YOLT's jar holds use their own namespaces for what they add, such as a tiny mod's modifiers, so a check
+    // for YOLT's alone would miss them
     private static final List<String> IDS =
             List.of(Yolt.MOD_ID, YoltAnvils.MOD_ID, YoltMending.MOD_ID, YoltElytra.MOD_ID, YoltCoordinates.MOD_ID);
 

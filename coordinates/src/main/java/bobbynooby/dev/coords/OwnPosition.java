@@ -91,8 +91,9 @@ final class OwnPosition {
         OffsetState state = context.state();
         Vec3 anchor = state.nextAnchor;
         state.nextAnchor = null;
-        // Admin view is read from the player the connection holds. During a respawn that is the one who died, as the new
-        // one only gets the saved flag once the respawn is done.
+        // Whether they see real coordinates is read from the player the connection holds. During a respawn that is the one
+        // who died, as a flag a host saves with the player, such as YOLT's admin view, only reaches the new one once the
+        // respawn is done.
         ServerPlayer player = context.listener().player;
         Offset offset = CoordinateOffsets.frameOffset(player, anchor);
         CommonPlayerSpawnInfo spawn = packet.commonPlayerSpawnInfo();

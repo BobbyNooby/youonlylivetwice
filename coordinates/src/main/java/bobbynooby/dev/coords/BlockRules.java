@@ -213,7 +213,8 @@ public final class BlockRules {
         return new ClientboundOpenSignEditorPacket(context.offset().shift(packet.pos()), packet.slot());
     }
 
-    // An entity's or a block entity's whole save is full of positions, and only ops can ask, who have admin view
+    // An entity's or a block entity's whole save is full of positions. Only ops can ask, and an op who needs it can turn
+    // real coordinates on, as a frame with no offset sends this packet as it is.
     private static Packet<?> tagAnswer(ClientboundTagQueryPacket packet, Context context) {
         return new ClientboundTagQueryPacket(packet.getTransactionId(), new CompoundTag());
     }

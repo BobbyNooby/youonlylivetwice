@@ -158,7 +158,8 @@ public final class CoordinateOffsets {
 
     /**
      * The debug subscriptions the player is sent values for. With an offset only the server's tick times, as the others'
-     * values are full of positions and only ops get them, who have admin view for real coordinates.
+     * values are full of positions and only ops get them. An op who needs them can turn real coordinates on, and a frame
+     * with no offset gets them all.
      */
     public static Set<DebugSubscription<?>> debugSubscriptions(ServerPlayer player, Set<DebugSubscription<?>> vanilla) {
         if (offset(player).isZero()) {

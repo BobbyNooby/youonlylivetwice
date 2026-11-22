@@ -8,9 +8,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// YOLT's config and each tiny mod's own file ship the same numbers, so a server that moves from one to the other plays
-// the same
+// Each mod YOLT's jar holds ships the same numbers in its own file as YOLT's config does and, but for the elytra nerf,
+// the same switch, so a server that moves from one to the other plays the same
 class TinyModDefaultsTest {
     @Test
     void anvilNumbersMatchTheMod() {
@@ -35,8 +36,12 @@ class TinyModDefaultsTest {
         assertEquals(ElytraSettings.DEFAULTS.rocketCutoffSpeed(), elytra.rocketCutoffSpeed, "rocketCutoffSpeed");
     }
 
+    // Both ship on, so a server that moves from YOLT to the mod on its own, or back, keeps hiding coordinates
     @Test
     void coordinateOffsetSwitchMatchesTheMod() {
-        assertEquals(CoordinateSettings.DEFAULTS.enabled(), new YoltConfig().hide.coordinates);
+        boolean coordinates = new YoltConfig().hide.coordinates;
+        assertTrue(coordinates, "YOLT ships hide.coordinates off");
+        assertEquals(CoordinateSettings.DEFAULTS.enabled(), coordinates,
+                "the mod's enabled and hide.coordinates ship different values");
     }
 }
