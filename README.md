@@ -40,7 +40,8 @@ Every feature has a switch in the config.
 Some parts are also mods of their own, for a server that wants only that part and not YOLT. YOLT's jar already holds
 them all:
 
-- [YOLT Hardcore](hardcore/README.md): the whole hardcore layer, with the three below inside it.
+- [YOLT Hardcore](hardcore/README.md): the hardcore layer, apart from the revive paper texture, with the three below
+  inside it.
 - [YOLT Coordinates](coordinates/README.md): the fake coordinates.
 - [YOLT Anvils](extras/anvil/README.md), [YOLT Mending](extras/mending/README.md) and
   [YOLT Elytra](extras/elytra/README.md): the flat anvil prices, the Mending nerf and the elytra nerf, one each.

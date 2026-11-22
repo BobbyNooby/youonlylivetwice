@@ -11,8 +11,10 @@ Every setting is in the [`hardcore` part of the config](config.md#hardcore).
 
 The hardcore layer is also a mod of its own, [YOLT Hardcore](../hardcore/README.md), for a server without YOLT. YOLT's
 jar ships it, so YOLT needs nothing extra. It has every part on this page but the
-[revive paper texture](#revive-paper-texture), which goes with YOLT's revive papers. On its own it reads the same
-`hardcore` block from `config/yolt-hardcore.json`, and keeps its state in the same file as under YOLT (see
+[revive paper texture](#revive-paper-texture), which goes with YOLT's revive papers. Logout bodies, the lockout and
+revive papers are YOLT's, so the rules for them do nothing without YOLT, and in place of the `/yolt` commands on this
+page it has [`/status` and `/yolt-hardcore`](commands.md#without-yolt). On its own it reads the same `hardcore` block
+from `config/yolt-hardcore.json`, and keeps its state in the same file as under YOLT (see
 [Where it is stored](#where-it-is-stored)).
 
 Contents:
