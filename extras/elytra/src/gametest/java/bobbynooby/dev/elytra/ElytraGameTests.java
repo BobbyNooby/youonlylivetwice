@@ -196,6 +196,59 @@ public class ElytraGameTests {
         helper.succeed();
     }
 
+    // A rocket boosting a glider past the cut-off is ended at the glider's tick, with no blast and no damage, and one
+    // boosting a glider under it goes on
+    @GameTest
+    public void aBoostingRocketEndsPastTheCutoff(GameTestHelper helper) {
+        ElytraSettings before = YoltElytra.swapForTesting(ElytraSettings.DEFAULTS);
+        ServerPlayer fast = glider(helper, "AloneBoostFast", GameType.SURVIVAL, FAST);
+        ServerPlayer slow = glider(helper, "AloneBoostSlow", GameType.SURVIVAL, SLOW);
+        FireworkRocketEntity fastRocket = attachRocket(helper, fast);
+        FireworkRocketEntity slowRocket = attachRocket(helper, slow);
+        try {
+            float health = fast.getHealth();
+            Glide.tick(fast);
+            Glide.tick(slow);
+            helper.assertTrue(fastRocket.isRemoved(), "the rocket still boosts at 30 m/s");
+            helper.assertValueEqual(fast.getHealth(), health, "the glider's health after the rocket ended");
+            helper.assertFalse(slowRocket.isRemoved(), "the rocket ended at 10 m/s");
+        } finally {
+            fastRocket.discard();
+            slowRocket.discard();
+            land(fast, slow);
+            YoltElytra.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
+    // Only rockets boosting the fast glider end: not another glider's rocket beside them, nor a rocket the fast glider
+    // shot that flies free
+    @GameTest
+    public void someoneElsesRocketIsLeftAlone(GameTestHelper helper) {
+        ElytraSettings before = YoltElytra.swapForTesting(ElytraSettings.DEFAULTS);
+        ServerPlayer fast = glider(helper, "AloneOwnFast", GameType.SURVIVAL, FAST);
+        ServerPlayer other = glider(helper, "AloneOther", GameType.SURVIVAL, SLOW);
+        FireworkRocketEntity boosting = attachRocket(helper, fast);
+        FireworkRocketEntity othersRocket = attachRocket(helper, other);
+        FireworkRocketEntity shot = new FireworkRocketEntity(helper.getLevel(), new ItemStack(Items.FIREWORK_ROCKET), fast,
+                fast.getX() + 2.0, fast.getY(), fast.getZ(), true);
+        helper.getLevel().addFreshEntity(shot);
+        try {
+            helper.assertTrue(othersRocket.distanceTo(fast) < ROCKET_REACH, "the other rocket is out of the fast glider's reach");
+            Glide.tick(fast);
+            helper.assertTrue(boosting.isRemoved(), "the fast glider's own rocket still boosts at 30 m/s");
+            helper.assertFalse(othersRocket.isRemoved(), "the other glider's rocket ended");
+            helper.assertFalse(shot.isRemoved(), "the rocket the fast glider shot ended");
+        } finally {
+            boosting.discard();
+            othersRocket.discard();
+            shot.discard();
+            land(fast, other);
+            YoltElytra.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
     // The same 30 m/s that is past the default cut-off
     @GameTest
     public void aCutoffOfZeroNeverCuts(GameTestHelper helper) {
@@ -299,6 +352,13 @@ public class ElytraGameTests {
         player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.FIREWORK_ROCKET, 5));
         return player.gameMode.useItem(player, helper.getLevel(), player.getItemInHand(InteractionHand.MAIN_HAND),
                 InteractionHand.MAIN_HAND);
+    }
+
+    // A rocket boosting the player, as one fired while gliding is
+    private static FireworkRocketEntity attachRocket(GameTestHelper helper, ServerPlayer player) {
+        FireworkRocketEntity rocket = new FireworkRocketEntity(helper.getLevel(), new ItemStack(Items.FIREWORK_ROCKET), player);
+        helper.getLevel().addFreshEntity(rocket);
+        return rocket;
     }
 
     // Every rocket this player launched
