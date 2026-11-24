@@ -148,6 +148,11 @@ Its ids keep YOLT's namespace, `you-only-live-twice`: the modifiers it saves on 
 block tag `you-only-live-twice:heat_sources` (what warms you nearby) and the item tag `you-only-live-twice:held_heat`
 (what warms you held in a hand).
 
+With the jar taken out, mobs that loaded while it ran keep what it saved on them: those three modifiers, so their extra
+health, speed and follow range, though they no longer hit harder; a zombie that won the door roll, which then breaks
+doors on Hard only, as vanilla's do; and a blood moon's charged creeper. Players keep nothing: what it changes on a
+player is never saved with them.
+
 ## Inside You Only Live Twice
 
 You Only Live Twice ships this mod inside its own jar and sets it from YOLT's config: its `hardcore` block and the six
