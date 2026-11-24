@@ -828,7 +828,7 @@ public class SleepGameTests {
     }
 
     // Sleep lines sent to this player's action bar, counting from packet number "from"
-    private static int sleepLines(ServerPlayer player, int from) {
+    static int sleepLines(ServerPlayer player, int from) {
         List<Packet<?>> packets = TestPlayers.sentPackets(player);
         return (int) packets.subList(from, packets.size()).stream()
                 .filter(p -> p instanceof ClientboundSystemChatPacket chat && chat.overlay() && SLEEP_LINES.contains(key(chat.content())))

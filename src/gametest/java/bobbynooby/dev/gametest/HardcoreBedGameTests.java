@@ -6,6 +6,7 @@ import bobbynooby.dev.hardcore.BedRest;
 import bobbynooby.dev.hardcore.HardcoreConfig;
 import bobbynooby.dev.hardcore.HardcoreStates;
 import bobbynooby.dev.hardcore.Legs;
+import bobbynooby.dev.world.Sleep;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -42,6 +43,8 @@ public class HardcoreBedGameTests {
     private static final String BED_ZERO = "you-only-live-twice-gametest:hardcore_bed_zero";
     // Bed rest on, for the Nether
     private static final String BED_NETHER = "you-only-live-twice-gametest:hardcore_bed_nether";
+    // Noon with the clock stopped, and YOLT's own sleep switches off, so only bed rest decides whether the sleep line goes
+    private static final String BED_NAP_LINE = "you-only-live-twice-gametest:hardcore_bed_nap_line";
     private static final BlockPos STANDING = new BlockPos(4, 1, 4);
     // Four blocks across from the bed's head, inside vanilla's 8 by 5 monster box
     private static final BlockPos ZOMBIE_AT = new BlockPos(5, 1, 2);
@@ -224,6 +227,36 @@ public class HardcoreBedGameTests {
                 cleanUp.run();
             }
         }
+    }
+
+    // Hosted under YOLT, a daytime nap sends nobody vanilla's sleep line, as it starts or as it ends. Vanilla counts again
+    // after the napper is out of bed, when nobody naps any more, and would send "0/2 players sleeping" at noon.
+    @GameTest(environment = BED_NAP_LINE)
+    public void bed4ANapSendsNoSleepLineAsItStartsOrEnds(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos head = SleepGameTests.placeBed(helper);
+        ServerPlayer napper = TestPlayers.join(helper, "LineNapper", GameType.SURVIVAL, SleepGameTests.NEXT_TO_BED);
+        ServerPlayer watcher = TestPlayers.join(helper, "LineWatcher", GameType.SURVIVAL, STANDING);
+        try {
+            helper.assertFalse(Sleep.hidesSleepStatus(), "YOLT's own switches hold the sleep line back, so nothing is tested");
+            clearSky(level);
+            helper.assertFalse(level.isDarkOutside(), "it is dark, so vanilla would let anyone sleep");
+            int napperFrom = TestPlayers.sentPackets(napper).size();
+            SleepGameTests.useBed(helper, napper, head);
+            helper.assertTrue(BedRest.napping(napper), "lying down at noon is not a nap");
+            helper.assertValueEqual(SleepGameTests.sleepLines(watcher, 0), 0, "sleep lines sent to the watcher as the nap started");
+            napper.stopSleepInBed(false, true);
+            helper.assertFalse(napper.isSleeping(), "the napper is still in bed after getting up");
+            helper.assertValueEqual(SleepGameTests.sleepLines(watcher, 0), 0, "sleep lines sent to the watcher as the nap ended");
+            helper.assertValueEqual(SleepGameTests.sleepLines(napper, napperFrom), 0, "sleep lines sent to the napper");
+        } finally {
+            try {
+                SleepGameTests.wakeAndLeave(napper);
+            } finally {
+                TestPlayers.leave(watcher);
+            }
+        }
+        helper.succeed();
     }
 
     // Low protein halves bed healing as it does other healing: a heal every 100 ticks rather than every 50
