@@ -417,6 +417,7 @@ public class RandomSpawnGameTests {
             BlockPos point = helper.absolutePos(new BlockPos(7, 1, 7));
             player.setRespawnPosition(new ServerPlayer.RespawnConfig(
                     LevelData.RespawnData.of(helper.getLevel().dimension(), point, 0.0F, 0.0F), true), false);
+            helper.assertTrue(player.getRespawnConfig() != null, "the respawn point wasn't set");
             border.setCenter(point.getX() + MOVE, point.getZ());
             helper.assertFalse(insideArea(border, Vec3.atBottomCenterOf(point)),
                     "the moved border's area still holds the respawn point " + point.toShortString());
@@ -595,8 +596,10 @@ public class RandomSpawnGameTests {
             CommandGameTests.restoreBorders(borders);
             Settings.get().randomSpawn = randomBefore;
             task.close();
-            if (player.get() != null) {
-                TestPlayers.leave(player.get());
+            // Looked up by id, since a placement that threw after the player went online hands no player back
+            ServerPlayer online = server.getPlayerList().getPlayer(profile.id());
+            if (online != null) {
+                TestPlayers.leave(online);
             }
         }
         helper.succeed();
