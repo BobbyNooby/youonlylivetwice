@@ -9,20 +9,29 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class HardcoreFileTest {
     private static final Gson GSON = new Gson();
@@ -560,6 +569,68 @@ class HardcoreFileTest {
         HardcoreFile.Result read = HardcoreFile.reload(file(), HardcoreFile.Loaded.defaults());
         assertEquals(List.of(), read.notes());
         assertEquals(json(started.loaded()), json(read.loaded()));
+    }
+
+    // An admin's config may be a link to a file kept elsewhere: the rewrite writes that file and leaves the link, and
+    // the copy of what was typed goes beside the link, where the notes name it, not beside the file it points to
+    @Test
+    void aLinkedFileIsWrittenThroughTheLinkAndItsCopyGoesBesideTheLink() throws IOException {
+        Path managed = Files.createDirectories(dir.resolve("managed")).resolve(HardcoreFile.NAME);
+        String typed = "{\"hardcore\": {\"weight\": {\"enabled\": true, \"freeLoad\": \"lots\"}}}";
+        Files.writeString(managed, typed, StandardCharsets.UTF_8);
+        Path link = link(file(), managed);
+        HardcoreFile.Result started = HardcoreFile.start(link);
+        assertEquals(List.of("hardcore.weight.freeLoad: expected a number" + DEFAULT, COPIED), started.notes());
+        assertTrue(Files.isSymbolicLink(link), "the link was written over");
+        assertEquals(managed, Files.readSymbolicLink(link));
+        assertEquals(HardcoreFile.json(started.loaded()), Files.readString(managed));
+        Path bak = dir.resolve(HardcoreFile.NAME + ".bak");
+        assertTrue(Files.isRegularFile(bak, LinkOption.NOFOLLOW_LINKS), "no plain .bak beside the link");
+        assertEquals(typed, Files.readString(bak));
+        try (Stream<Path> files = Files.list(managed.getParent())) {
+            assertEquals(List.of(managed), files.toList(), "something was left beside the linked file");
+        }
+    }
+
+    // The rewrite is a new file, which gets what any new file in its folder gets, not an owner-only temporary file's
+    @Test
+    void aRewrittenFileHasTheModeOfANewFile() throws IOException {
+        assumeTrue(Files.getFileStore(dir).supportsFileAttributeView(PosixFileAttributeView.class), "no POSIX permissions here");
+        Files.writeString(file(), "{\"hardcore\": {\"weight\": {\"enabled\": true}}}", StandardCharsets.UTF_8);
+        Files.setPosixFilePermissions(file(), PosixFilePermissions.fromString("rw-r--r--"));
+        Path probe = Files.writeString(dir.resolve("new.txt"), "");
+        Set<PosixFilePermission> newFile = Files.getPosixFilePermissions(probe);
+        assumeFalse(newFile.equals(PosixFilePermissions.fromString("rw-------")), "a new file here is owner-only anyway");
+        HardcoreFile.Result started = HardcoreFile.start(file());
+        assertEquals(List.of(), started.notes());
+        assertEquals(HardcoreFile.json(started.loaded()), Files.readString(file()));
+        assertEquals(PosixFilePermissions.toString(newFile), PosixFilePermissions.toString(Files.getPosixFilePermissions(file())));
+    }
+
+    // A link to a file that isn't there can't be written through: the note says so, the defaults are in use, and the
+    // link stays as it was
+    @Test
+    void aLinkToNowhereEndsInTheNote() throws IOException {
+        Path nowhere = dir.resolve("gone").resolve(HardcoreFile.NAME);
+        Path link = link(file(), nowhere);
+        HardcoreFile.Result started = assertDoesNotThrow(() -> HardcoreFile.start(link));
+        assertFalse(started.failed());
+        assertEquals(1, started.notes().size(), started.notes().toString());
+        assertTrue(started.notes().getFirst().startsWith("The config file could not be written ("), started.notes().getFirst());
+        assertTrue(started.notes().getFirst().endsWith("), so YOLT Hardcore runs on the defaults."), started.notes().getFirst());
+        assertEquals(json(HardcoreFile.Loaded.defaults()), json(started.loaded()));
+        assertTrue(Files.isSymbolicLink(link), "the link was written over");
+        assertFalse(Files.exists(nowhere));
+    }
+
+    // A file system without links skips the test
+    private static Path link(Path link, Path target) throws IOException {
+        try {
+            return Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | FileSystemException e) {
+            assumeTrue(false, "no symbolic links here: " + e);
+            throw e;
+        }
     }
 
     // The settings in use are the file's or the defaults all the same, and the reason is in the notes

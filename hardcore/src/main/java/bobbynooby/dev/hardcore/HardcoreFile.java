@@ -321,12 +321,13 @@ public final class HardcoreFile {
     }
 
     // Writes a temp file beside it, forces it to disk and moves it over the file, so neither a crash mid-write nor a
-    // power cut just after it can leave half a file or an empty one
+    // power cut just after it can leave half a file or an empty one. A file that is a link is written where the link
+    // points, so the link stays, and a link to nowhere can't be.
     private static void write(Path file, Loaded loaded) {
         String text = json(loaded);
-        Path target = file.toAbsolutePath();
-        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
         try {
+            Path target = Files.isSymbolicLink(file) ? file.toRealPath() : file.toAbsolutePath();
+            Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
             Files.createDirectories(target.getParent());
             try {
                 Files.writeString(tmp, text, StandardCharsets.UTF_8);
@@ -354,7 +355,8 @@ public final class HardcoreFile {
     /**
      * Copies the file to name. A name that already holds other bytes, perhaps the admin's whole file from an earlier
      * start, is never written over: the copy goes beside it with the time added. A copy with these bytes already there
-     * is used as it is. Returns the name of the copy.
+     * is used as it is. A file that is a link is copied beside the link, as a plain file of what it points to, where
+     * the notes name it. Returns the name of the copy.
      */
     private static String backup(Path file, String name) {
         try {

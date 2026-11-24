@@ -92,6 +92,8 @@ The first server start writes `config/yolt-hardcore.json`. It has three parts:
   place.
 - A copy never writes over a different `.bak`: it goes beside it, with the time added to its name. When the copy can't
   be made, the file is left as it was.
+- A file that is a symbolic link is written where the link points, so the link stays, and its `.bak` goes beside the
+  link.
 - A reload never writes the file. A reload of a file that is missing or isn't valid JSON changes nothing.
 - A file from a newer version (`configVersion` above 1) is read, but never written over.
 
