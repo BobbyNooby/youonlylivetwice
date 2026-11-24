@@ -1,5 +1,6 @@
 package bobbynooby.dev.elytra.client;
 
+import bobbynooby.dev.elytra.ClientBridge;
 import bobbynooby.dev.elytra.ElytraSettings;
 import bobbynooby.dev.elytra.YoltElytra;
 import bobbynooby.dev.elytra.mixin.FireworkRocketInvoker;
@@ -67,8 +68,15 @@ final class ClientKit {
     private static final float NOSE_DOWN = 30.0F;
     private static final int LANDING_TIMEOUT = 600;
     private static final int ROCKETS = 5;
-    // A plain rocket lasts at least 20 ticks, 10 for each of its 1 + 1 flight steps, before it explodes
+    // The shipped glide gravity with no rocket cut-off, for the vanilla rocket the others are measured against
+    private static final ElytraSettings NO_CUTOFF = new ElytraSettings(true, MULTIPLIER, 0.0);
+    // A plain rocket lasts at least 20 ticks on the server, 10 for each of its 1 + 1 flight steps, before it explodes. The
+    // client has it from the tick after it is fired to the tick after it ends, which can put it a tick either way.
     private static final int ROCKET_LEAST_LIFE = 20;
+    // The cut-off ends a rocket fired from a slow glide 4 ticks after it reaches the client: its second push takes the
+    // client past 20 m/s, the server sees that move a packet later and ends the rocket, and the client sees it go a tick
+    // after. Twice that leaves room for a tick of lag and still fails a cut-off that lets a rocket push for long.
+    private static final int ROCKET_ENDS_WITHIN = 8;
     private static final int FOLLOW_TICKS = 60;
     // Longer than a use takes to reach the server and its rocket, if any, to reach the client
     private static final int HOLD_TICKS = 20;
@@ -143,10 +151,13 @@ final class ClientKit {
     }
 
     /**
-     * Rockets in a level glide from 40 blocks up, with the settings as shipped. Below the cut-off a rocket is vanilla's:
-     * it is fired, used up and pushes the client past the cut-off, but the server ends it well before the 20 ticks a
-     * plain rocket lasts. Past the cut-off the next one isn't fired: none is used up, no rocket reaches the client, and
-     * the client, whose own copy of a rocket is what pushes it, goes no faster.
+     * Rockets in level glides from 40 blocks up. First the vanilla rocket, with the cut-off off: fired from a slow glide
+     * it pushes the client for a plain rocket's life, past the cut-off's speed. With the cut-off as shipped swapped back
+     * in and the client past it, the next rocket isn't fired: none is used up, no rocket reaches the client, and the
+     * client, whose own copy of a rocket is what pushes it, goes no faster. Then, in a new slow glide with the cut-off as
+     * shipped, a rocket is fired and used up and the server ends it within ROCKET_ENDS_WITHIN ticks. How fast the client
+     * got by then is logged but not checked: the rule promises the rocket ends, and a mod that held the speed down would
+     * keep to it too.
      */
     static void checkRockets(ClientGameTestContext ctx, TestServerContext server, TestServerConnection connection,
                              Vec3 home, String shot) {
@@ -156,43 +167,82 @@ final class ClientKit {
             player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.FIREWORK_ROCKET, ROCKETS));
         });
         waitForRockets(ctx, ROCKETS, "before the glide");
+
+        Runnable shipped = server.computeOnServer(s -> ClientBridge.use(NO_CUTOFF));
+        try {
+            startGlide(ctx, server, connection, home, HIGH, LEVEL);
+            waitOnClient(ctx, LONG_TIMEOUT, mc -> gravityIs(mc, true), mc -> gravity(mc) + " while it glides");
+            Push vanilla = fireFromSlowGlide(ctx, server, connection, "with no cut-off");
+            check(vanilla.life() >= ROCKET_LEAST_LIFE - 1, () -> "with no cut-off the rocket pushed the client for "
+                    + vanilla.life() + " ticks, not a plain rocket's life: " + vanilla.samples());
+            check(vanilla.top() > CUTOFF, () -> "with no cut-off the rocket took the client to " + vanilla.top()
+                    + " m/s, not past the cut-off's " + CUTOFF + ": " + vanilla.samples());
+            waitForRockets(ctx, ROCKETS - 1, "after the rocket with no cut-off");
+        } finally {
+            server.runOnServer(s -> shipped.run());
+        }
+
+        checkRefused(ctx, server, connection);
+
+        // A new glide, slow again, so the rocket below starts under the cut-off as the vanilla one did
+        land(ctx, server, connection, home);
         startGlide(ctx, server, connection, home, HIGH, LEVEL);
         waitOnClient(ctx, LONG_TIMEOUT, mc -> gravityIs(mc, true), mc -> gravity(mc) + " while it glides");
+        Push cut = fireFromSlowGlide(ctx, server, connection, "with the cut-off as shipped");
+        check(cut.life() <= ROCKET_ENDS_WITHIN, () -> "with the cut-off as shipped the rocket pushed the client for "
+                + cut.life() + " ticks, not " + ROCKET_ENDS_WITHIN + " or fewer: " + cut.samples());
+        waitForRockets(ctx, ROCKETS - 2, "after the rocket with the cut-off as shipped");
+        thirdPersonShot(ctx, shot);
+    }
 
-        check(!server.computeOnServer(s -> YoltElytra.refusesRocket(connection.getServerPlayer())),
-                () -> "the server refuses a rocket at the glide's start");
+    // How long a rocket was on the client, from the tick it arrived to the tick it was gone, the fastest the client went
+    // meanwhile, and its speed each tick
+    private record Push(int life, double top, List<String> samples) {}
+
+    // The use key with rockets in hand, the client gliding slower than the cut-off, and the client followed tick by tick
+    // until the rocket that reached it has gone: its speed, and whether a rocket is on it. The samples are logged, so a
+    // run's numbers can be read whether or not it passes.
+    private static Push fireFromSlowGlide(ClientGameTestContext ctx, TestServerContext server,
+                                         TestServerConnection connection, String when) {
+        // The server judges the speed from the client's last moves, which a new glide takes a tick or two to send
+        waitOnServer(server, LONG_TIMEOUT, s -> !YoltElytra.pastCutoff(connection.getServerPlayer()),
+                s -> "the server sees the client past the cut-off before the rocket " + when);
         double before = ctx.computeOnClient(ClientKit::speed);
-        check(before < CUTOFF, () -> "the client glides at " + before + " m/s before the first rocket");
+        check(before < CUTOFF, () -> "the client glides at " + before + " m/s before the rocket " + when);
         ctx.getInput().pressKey(options -> options.keyUse);
         List<String> samples = new ArrayList<>();
         int arrived = -1;
         int gone = -1;
-        double fastest = before;
+        double top = before;
         for (int tick = 1; tick <= FOLLOW_TICKS && gone < 0; tick++) {
             ctx.waitTick();
             boolean pushed = ctx.computeOnClient(ClientKit::rocketOn);
             double speed = ctx.computeOnClient(ClientKit::speed);
             samples.add(String.format(Locale.ROOT, "%d:%.2f%s", tick, speed, pushed ? "R" : ""));
-            fastest = Math.max(fastest, speed);
+            top = Math.max(top, speed);
             if (pushed && arrived < 0) {
                 arrived = tick;
             } else if (!pushed && arrived >= 0) {
                 gone = tick;
             }
         }
-        LOGGER.info("The client's speed in m/s each tick after the first rocket, R while a rocket is on it: {}", samples);
+        LOGGER.info("The client's speed in m/s each tick after the rocket {}, from {}, R while a rocket is on it: {}",
+                when, before, samples);
         int came = arrived;
         int went = gone;
-        double top = fastest;
-        check(came >= 0, () -> "no rocket reached the client after its use key, at " + before + " m/s: " + samples);
-        check(went >= 0, () -> "the rocket still pushed the client " + FOLLOW_TICKS + " ticks after its use key: " + samples);
-        check(top > CUTOFF, () -> "the rocket took the client to " + top + " m/s, not past the cut-off: " + samples);
-        check(went - came < ROCKET_LEAST_LIFE, () -> "the rocket pushed the client for " + (went - came)
-                + " ticks, as long as vanilla's: " + samples);
-        waitForRockets(ctx, ROCKETS - 1, "after the first rocket");
+        check(came >= 0, () -> "no rocket reached the client after its use key " + when + ": " + samples);
+        check(went >= 0, () -> "the rocket " + when + " still pushed the client " + FOLLOW_TICKS + " ticks after its use key: "
+                + samples);
+        return new Push(went - came, top, List.copyOf(samples));
+    }
 
-        check(server.computeOnServer(s -> YoltElytra.refusesRocket(connection.getServerPlayer())),
-                () -> "the server doesn't refuse a rocket at " + ctx.computeOnClient(ClientKit::speed) + " m/s");
+    // With the cut-off as shipped and the client past it, the use key fires nothing: no rocket reaches the client, the
+    // client goes no faster, and none is used up, on the client or the server
+    private static void checkRefused(ClientGameTestContext ctx, TestServerContext server, TestServerConnection connection) {
+        // The state the refusal depends on, not the refusal itself, which the use key below tries
+        check(server.computeOnServer(s -> YoltElytra.pastCutoff(connection.getServerPlayer())),
+                () -> "the server doesn't see the client past the cut-off at " + ctx.computeOnClient(ClientKit::speed)
+                        + " m/s");
         double at = ctx.computeOnClient(ClientKit::speed);
         ctx.getInput().pressKey(options -> options.keyUse);
         List<String> after = new ArrayList<>();
@@ -203,18 +253,31 @@ final class ClientKit {
             after.add(String.format(Locale.ROOT, "%d:%.2f", tick, speed));
             check(!ctx.computeOnClient(ClientKit::rocketOn), () -> "a rocket reached the client " + now
                     + " ticks after its use key past the cut-off: " + after);
-            check(speed <= at, () -> "the client sped up from " + at + " to " + speed + " m/s after its use key past the cut-off: "
-                    + after);
+            check(speed <= at, () -> "the client sped up from " + at + " to " + speed + " m/s after its use key past the "
+                    + "cut-off: " + after);
         }
-        LOGGER.info("The client's speed in m/s each tick after the second rocket, from {}: {}", at, after);
-        waitForRockets(ctx, ROCKETS - 1, "after the second rocket");
+        LOGGER.info("The client's speed in m/s each tick after its use key past the cut-off, from {}: {}", at, after);
+        waitForRockets(ctx, ROCKETS - 1, "after the use key past the cut-off");
         server.runOnServer(s -> {
             ServerPlayer player = connection.getServerPlayer();
             check(player.getMainHandItem().getCount() == ROCKETS - 1, () -> "the server's player has "
-                    + player.getMainHandItem().getCount() + " rockets after the second, not " + (ROCKETS - 1));
-            check(!rocketOn(player.level(), player), () -> "the server has a rocket on the player after the second");
+                    + player.getMainHandItem().getCount() + " rockets after the use key past the cut-off, not " + (ROCKETS - 1));
+            check(!rocketOn(player.level(), player), () -> "the server has a rocket on the player after the use key past "
+                    + "the cut-off");
         });
-        thirdPersonShot(ctx, shot);
+    }
+
+    // Back on the ground at home, which ends the glide, rockets and elytra kept
+    private static void land(ClientGameTestContext ctx, TestServerContext server, TestServerConnection connection,
+                             Vec3 home) {
+        server.runOnServer(s -> {
+            ServerPlayer player = connection.getServerPlayer();
+            player.teleportTo(player.level(), home.x, home.y, home.z, Set.of(), NORTH, LEVEL, true);
+        });
+        waitOnServer(server, LONG_TIMEOUT, s -> !connection.getServerPlayer().isFallFlying(),
+                s -> "the server's player still glides after it was put on the ground");
+        waitOnClient(ctx, LONG_TIMEOUT, mc -> !mc.player.isFallFlying() && mc.player.onGround(),
+                mc -> "the client still glides after it was put on the ground, at " + mc.player.position());
     }
 
     /**
