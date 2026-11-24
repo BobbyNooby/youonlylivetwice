@@ -362,7 +362,7 @@ of its own, and off by default in YOLT and in YOLT Hardcore.
   and the server only learns how fast you went a moment later, so a rocket goes on pushing for a few ticks past the
   cut-off. Measured with YOLT Elytra on its own and one rocket fired from a slow glide: the push ended after about a
   fifth of a second, where without the cut-off it lasted about a second, and it still took the player to about
-  30 m/s. The cut-off never slows you itself: it only ends the rocket.
+  32 m/s. The cut-off never slows you itself: it only ends the rocket.
 - A rocket fired while you are already past the cut-off does nothing and isn't used up.
 - The client flies with the server's gravity itself, so the flight stays smooth.
 - Weight, legs and the limp don't slow gliding.

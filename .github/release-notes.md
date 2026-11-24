@@ -42,7 +42,7 @@ Each is for a Fabric server that wants only that part, with no YOLT on it.
   once you fly faster than 20 m/s. That doesn't hold you at 20: your own game does the boosting and the server learns
   your speed a moment later, so the push goes on for a few ticks. Measured with one rocket fired from a slow glide,
   the push lasted about a fifth of a second, where without the cut-off it lasted about a second, and still took the
-  player to about 30 m/s. A rocket fired while you are past the cut-off does nothing and isn't used up. It reads
+  player to about 32 m/s. A rocket fired while you are past the cut-off does nothing and isn't used up. It reads
   `config/yolt-elytra.json` and gives ops `/yolt-elytra` and `/yolt-elytra reload`. On its own it is on by default.
   [Readme](https://github.com/BobbyNooby/youonlylivetwice/blob/release/extras/elytra/README.md).
 - **YOLT Anvils** (`yolt-anvils-1.3.0.jar`) prices anvils as it did in 1.2.1.
