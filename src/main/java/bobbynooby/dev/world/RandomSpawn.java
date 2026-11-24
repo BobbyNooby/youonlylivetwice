@@ -132,10 +132,11 @@ public final class RandomSpawn {
                 int y = level.getChunk(SectionPos.blockToSectionCoord(column.x()), SectionPos.blockToSectionCoord(column.z()))
                         .getHeight(Heightmap.Types.WORLD_SURFACE, column.x(), column.z()) + 1;
                 BlockPos fallback = new BlockPos(column.x(), y, column.z());
-                // An empty column, as on a void map: a spot over the void kills, so vanilla's own spawn is better
+                // An empty column, as on a void map: a spot over the void kills, so vanilla's own spawn is better. The
+                // line says nothing of what comes next, which is the caller's: vanilla's search, or the first join
+                // check keeping the spot it had, which says so itself.
                 if (y <= level.getMinY()) {
-                    Yolt.LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground, so vanilla picks the spawn",
-                            ATTEMPTS);
+                    Yolt.LOGGER.warn("No safe random spawn found in {} columns, and the last one has no ground", ATTEMPTS);
                     noGroundServer = level.getServer();
                     noGroundUntil = level.getServer().getTickCount() + NO_GROUND_TICKS;
                     return null;

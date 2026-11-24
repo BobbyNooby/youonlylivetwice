@@ -186,8 +186,7 @@ public class RandomSpawnGameTests {
             BlockPos[] spot = new BlockPos[1];
             List<String> log = OfflineGameTests.yoltLog(() -> spot[0] = RandomSpawn.pickIn(level, only));
             helper.assertTrue(spot[0] == null, "the search over the void gave the spot " + spot[0]);
-            helper.assertValueEqual(log, List.of("No safe random spawn found in 50 columns, and the last one has no ground,"
-                    + " so vanilla picks the spawn"), "log");
+            helper.assertValueEqual(log, List.of("No safe random spawn found in 50 columns, and the last one has no ground"), "log");
             helper.assertFalse(RandomSpawn.appliesTo(level), "random spawn still answers in the tick that found no ground");
             helper.assertValueEqual(RandomSpawn.NO_GROUND_TICKS, NO_GROUND_WAIT, "ticks random spawn stays off");
             BlockPos vanilla = PlayerSpawnFinderInvoker.yoltLevelRespawnPos(level, column.getX(), column.getZ());
@@ -371,7 +370,7 @@ public class RandomSpawnGameTests {
             }, (player, held, log) -> {
                 helper.assertValueEqual(player.position(), held, "where the player was placed");
                 helper.assertValueEqual(log, List.of(
-                        "No safe random spawn found in 50 columns, and the last one has no ground, so vanilla picks the spawn",
+                        "No safe random spawn found in 50 columns, and the last one has no ground",
                         player.nameAndId().name() + "'s first spawn at " + BlockPos.containing(held).toShortString()
                                 + " is outside the random spawn area now, and no new spot was found, so they join there"), "log");
             });
