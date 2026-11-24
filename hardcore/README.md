@@ -53,7 +53,8 @@ screen from the death screen), the heart is still lost, but the line never comes
 - A client with the jar in its own `mods` runs it in every single-player world it opens, a world opened to LAN
   included, all from that client's one `config/yolt-hardcore.json`. Every feature that is on there applies to players
   in survival and adventure, so with the file as it ships the Curse of the Undead, the flat anvil price and the Mending
-  nerf apply in those worlds.
+  nerf apply in those worlds. In a world with cheats off its owner isn't an op, so has no `/yolt-hardcore`: a setting
+  changes by editing the file and opening the world again.
 - The jar already holds YOLT Anvils, YOLT Mending and YOLT Elytra, and sets them from its own file, so you don't need
   their jars. Inside it they read and write no file of their own and have no command: their settings are
   `hardcore.anvil`, `hardcore.mending` and `hardcore.elytra` here. With their own jars in `mods` as well, one copy of
