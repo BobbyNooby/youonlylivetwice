@@ -623,6 +623,24 @@ class HardcoreFileTest {
         assertFalse(Files.exists(nowhere));
     }
 
+    // A leftover temp file that is a link is never written through: the rewrite ends in the note, the file the link
+    // points to keeps its text, and the config stays a plain file as typed
+    @Test
+    void aTempFileThatIsALinkIsNeverWrittenThrough() throws IOException {
+        Path other = Files.writeString(dir.resolve("other.txt"), "someone else's file");
+        link(dir.resolve(HardcoreFile.NAME + ".tmp"), other);
+        String typed = "{\"hardcore\": {\"weight\": {\"enabled\": true}}}";
+        HardcoreFile.Result started = assertDoesNotThrow(() -> start(typed));
+        assertFalse(started.failed());
+        assertEquals(1, started.notes().size(), started.notes().toString());
+        assertTrue(started.notes().getFirst().startsWith("The config file could not be rewritten ("), started.notes().getFirst());
+        assertTrue(started.notes().getFirst().endsWith("), so it is left as it was."), started.notes().getFirst());
+        assertTrue(started.loaded().hardcore().weight.enabled);
+        assertEquals("someone else's file", Files.readString(other));
+        assertFalse(Files.isSymbolicLink(file()), "the config is a link now");
+        assertEquals(typed, Files.readString(file()));
+    }
+
     // A file system without links skips the test
     private static Path link(Path link, Path target) throws IOException {
         try {

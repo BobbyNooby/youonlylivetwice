@@ -18,6 +18,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -322,7 +323,8 @@ public final class HardcoreFile {
 
     // Writes a temp file beside it, forces it to disk and moves it over the file, so neither a crash mid-write nor a
     // power cut just after it can leave half a file or an empty one. A file that is a link is written where the link
-    // points, so the link stays, and a link to nowhere can't be.
+    // points, so the link stays, and a link to nowhere can't be. The temp file is never opened through a link: a
+    // leftover link of that name ends in the note, not in a write somewhere else that the move would put in its place.
     private static void write(Path file, Loaded loaded) {
         String text = json(loaded);
         try {
@@ -330,8 +332,9 @@ public final class HardcoreFile {
             Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
             Files.createDirectories(target.getParent());
             try {
-                Files.writeString(tmp, text, StandardCharsets.UTF_8);
-                try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.WRITE)) {
+                Files.writeString(tmp, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+                try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
                     channel.force(true);
                 }
                 try {
