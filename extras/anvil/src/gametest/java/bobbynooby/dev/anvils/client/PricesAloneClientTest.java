@@ -23,19 +23,24 @@ import java.util.List;
 import static bobbynooby.dev.anvils.client.ClientKit.check;
 
 /**
- * A real client's anvil screen on a server with only YOLT Anvils, with the prices as shipped: an enchant shows 6, a
- * repair 5 and a rename 1, where vanilla would show 1, 1 and 11 for the same items, and taking the enchant's result costs
- * the client 6 levels. The same player in creative is shown vanilla's 1 for the repair.
+ * A real client's anvil screen on a server with only YOLT Anvils. With the mod switched off it shows vanilla's prices for
+ * an enchant, a repair and a rename: 1, 1 and 11. With the prices as shipped the same items show 6, 5 and 1, and taking
+ * the enchant's result costs the client 6 levels. The same player in creative is shown vanilla's 1 for the repair.
  */
 public class PricesAloneClientTest implements FabricClientGameTest {
     private static final int LEVELS = 30;
     // Vanilla prices a rename at 1 plus the item's prior work; the flat price is the rename cost alone
     private static final int PRIOR_WORK = 10;
+    // Vanilla's prices for the items below: a Sharpness I book's enchanting, one diamond's repair, and the rename
+    private static final int VANILLA_ENCHANT = 1;
     private static final int VANILLA_REPAIR = 1;
+    private static final int VANILLA_RENAME = 1 + PRIOR_WORK;
     private static final String NEW_NAME = "Frostbite";
     // The prices as shipped, with no chance the anvil wears down between the uses, so one anvil serves them all
     private static final AnvilSettings SHIPPED_PRICES = new AnvilSettings(true, AnvilSettings.DEFAULTS.enchantCost(),
             AnvilSettings.DEFAULTS.repairCost(), AnvilSettings.DEFAULTS.renameCost(), 0.0);
+    private static final AnvilSettings MOD_OFF = new AnvilSettings(false, SHIPPED_PRICES.enchantCost(),
+            SHIPPED_PRICES.repairCost(), SHIPPED_PRICES.renameCost(), 0.0);
 
     @Override
     public void runTest(ClientGameTestContext ctx) {
@@ -43,16 +48,29 @@ public class PricesAloneClientTest implements FabricClientGameTest {
             GameType modeWas = server.computeOnServer(s -> connection.getServerPlayer().gameMode());
             int levelsWas = server.computeOnServer(s -> connection.getServerPlayer().experienceLevel);
             BlockPos[] anvil = new BlockPos[1];
-            // Last before the try, so nothing can fail between the swap and what puts it back
-            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(SHIPPED_PRICES));
+            // Last before the try, so nothing can fail between the swap and what puts it back. It puts back the settings
+            // from before the test, whatever the test swaps in after it.
+            Runnable putBack = server.computeOnServer(s -> ClientBridge.use(MOD_OFF));
             try {
                 check(modeWas == GameType.SURVIVAL, () -> "the client's player is in " + modeWas + ", not survival");
                 server.runOnServer(s -> connection.getServerPlayer().setExperienceLevels(LEVELS));
                 ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> mc.player.experienceLevel == LEVELS,
                         mc -> "the client has " + mc.player.experienceLevel + " levels, not " + LEVELS);
                 anvil[0] = ClientKit.openAnvil(ctx, server, connection);
-
                 ItemStack book = server.computeOnServer(PricesAloneClientTest::sharpnessBook);
+
+                // The mod switched off: the client is shown vanilla's prices for the items the flat prices are checked on
+                ClientKit.put(ctx, server, connection, new ItemStack(Items.DIAMOND_SWORD), book);
+                ClientKit.waitForPrice(ctx, connection, VANILLA_ENCHANT, "a sword enchanted from a book with the mod off");
+                ClientKit.put(ctx, server, connection, wornPickaxe(), new ItemStack(Items.DIAMOND));
+                ClientKit.waitForPrice(ctx, connection, VANILLA_REPAIR, "a pickaxe repaired with a diamond with the mod off");
+                ClientKit.put(ctx, server, connection, priorWorkSword(), ItemStack.EMPTY);
+                ClientKit.typeName(ctx, connection, NEW_NAME);
+                ClientKit.waitForPrice(ctx, connection, VANILLA_RENAME,
+                        "a rename of a sword with prior work " + PRIOR_WORK + " with the mod off");
+                shot(ctx, "anvils-alone-off-rename");
+
+                server.runOnServer(s -> ClientBridge.use(SHIPPED_PRICES));
                 ClientKit.put(ctx, server, connection, new ItemStack(Items.DIAMOND_SWORD), book);
                 ClientKit.waitForPrice(ctx, connection, SHIPPED_PRICES.enchantCost(), "a sword enchanted from a book");
                 shot(ctx, "anvils-alone-enchant");
@@ -68,9 +86,7 @@ public class PricesAloneClientTest implements FabricClientGameTest {
                 ClientKit.waitForPrice(ctx, connection, SHIPPED_PRICES.repairCost(), "a pickaxe repaired with a diamond");
                 shot(ctx, "anvils-alone-repair");
 
-                ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
-                sword.set(DataComponents.REPAIR_COST, PRIOR_WORK);
-                ClientKit.put(ctx, server, connection, sword, ItemStack.EMPTY);
+                ClientKit.put(ctx, server, connection, priorWorkSword(), ItemStack.EMPTY);
                 ClientKit.typeName(ctx, connection, NEW_NAME);
                 ClientKit.waitForPrice(ctx, connection, SHIPPED_PRICES.renameCost(),
                         "a rename of a sword with prior work " + PRIOR_WORK);
@@ -113,6 +129,13 @@ public class PricesAloneClientTest implements FabricClientGameTest {
     private static ItemStack sharpnessBook(MinecraftServer server) {
         return EnchantmentHelper.createBook(new EnchantmentInstance(
                 server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.SHARPNESS), 1));
+    }
+
+    // A diamond sword whose prior work vanilla adds to a rename's price
+    private static ItemStack priorWorkSword() {
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        sword.set(DataComponents.REPAIR_COST, PRIOR_WORK);
+        return sword;
     }
 
     // A diamond pickaxe a hundred points worn, which one diamond repairs in full
