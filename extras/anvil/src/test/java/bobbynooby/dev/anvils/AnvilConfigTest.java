@@ -9,14 +9,22 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class AnvilConfigTest {
     private static final AnvilSettings CURRENT = new AnvilSettings(false, 9, 8, 7, 0.5);
@@ -26,6 +34,16 @@ class AnvilConfigTest {
 
     private static SettingsFile.Parsed<AnvilSettings> parse(String json, AnvilSettings fallback) {
         return AnvilConfig.parse(JsonParser.parseString(json).getAsJsonObject(), fallback);
+    }
+
+    // A file system without links skips the test
+    private static Path link(Path link, Path target) throws IOException {
+        try {
+            return Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | FileSystemException e) {
+            assumeTrue(false, "no symbolic links here: " + e);
+            throw e;
+        }
     }
 
     private static boolean mentions(List<String> lines, String key) {
@@ -191,6 +209,57 @@ class AnvilConfigTest {
         SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
         assertFalse(result.failed(), result.notes().toString());
         assertEquals(CURRENT, result.settings());
+    }
+
+    // An admin's config may be a link to a file kept elsewhere: a rewrite writes that file and leaves the link
+    @Test
+    void aLinkedFileIsWrittenThroughTheLink() throws IOException {
+        Path managed = Files.createDirectories(folder.resolve("managed")).resolve(AnvilConfig.FILE);
+        Files.writeString(managed, "{\"repairCost\": 3}");
+        Path file = link(Files.createDirectories(folder.resolve("config")).resolve(AnvilConfig.FILE), managed);
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        AnvilSettings expected = new AnvilSettings(true, 6, 3, 1, 0.12);
+        assertEquals(expected, result.settings());
+        assertTrue(result.notes().stream().anyMatch(note -> note.startsWith("added ")), result.notes().toString());
+        assertTrue(Files.isSymbolicLink(file), "the link was written over");
+        assertEquals(managed, Files.readSymbolicLink(file));
+        assertEquals(AnvilConfig.json(expected), Files.readString(managed));
+        try (var left = Files.list(managed.getParent())) {
+            assertEquals(1, left.count(), "a temporary file was left beside the linked file");
+        }
+        try (var left = Files.list(file.getParent())) {
+            assertEquals(1, left.count(), "a file was left beside the link");
+        }
+    }
+
+    // The rewrite is a new file, which gets what any new file in its folder gets, not an owner-only temporary file's
+    @Test
+    void aRewrittenFileHasTheModeOfANewFile() throws IOException {
+        assumeTrue(Files.getFileStore(folder).supportsFileAttributeView(PosixFileAttributeView.class),
+                "no POSIX permissions here");
+        Path file = folder.resolve(AnvilConfig.FILE);
+        Files.writeString(file, "{\"repairCost\": 3}");
+        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-r--r--"));
+        Path probe = Files.writeString(folder.resolve("new.txt"), "");
+        Set<PosixFilePermission> newFile = Files.getPosixFilePermissions(probe);
+        assumeFalse(newFile.equals(PosixFilePermissions.fromString("rw-------")), "a new file here is owner-only anyway");
+        SettingsFile.Result<AnvilSettings> result = AnvilConfig.load(file, AnvilSettings.DEFAULTS);
+        assertTrue(result.notes().stream().anyMatch(note -> note.startsWith("added ")), result.notes().toString());
+        assertEquals(PosixFilePermissions.toString(newFile), PosixFilePermissions.toString(Files.getPosixFilePermissions(file)));
+    }
+
+    // A link to a file that isn't there can't be written through: the note says so, and the link stays as it was
+    @Test
+    void aLinkToNowhereEndsInTheNote() throws IOException {
+        Path nowhere = folder.resolve("gone").resolve(AnvilConfig.FILE);
+        Path file = link(folder.resolve(AnvilConfig.FILE), nowhere);
+        SettingsFile.Result<AnvilSettings> result = assertDoesNotThrow(() -> AnvilConfig.load(file, CURRENT));
+        assertEquals(CURRENT, result.settings());
+        assertFalse(result.failed());
+        assertEquals(1, result.notes().size(), result.notes().toString());
+        assertTrue(result.notes().getFirst().startsWith("couldn't write " + AnvilConfig.FILE + ": "), result.notes().getFirst());
+        assertTrue(Files.isSymbolicLink(file), "the link was written over");
+        assertFalse(Files.exists(nowhere));
     }
 
     @Test

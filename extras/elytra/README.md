@@ -65,6 +65,7 @@ The first server start writes `config/yolt-elytra.json`:
   where you made it, until you fix it.
 - Adding a key writes the whole file again with the mod's own keys only. A misspelt key and any comment in the file are
   gone after that. The server log at a start, or the reload's reply, says which key wasn't a setting.
+- A file that is a symbolic link is written where the link points, so the link stays.
 - A file the mod can't read as JSON at all is never written over. The defaults are used at a start, and a reload
   changes nothing.
 

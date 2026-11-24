@@ -8,11 +8,13 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -138,18 +140,23 @@ public final class SettingsFile<S> {
         return GSON.toJson(json) + "\n";
     }
 
-    // Through a file beside it, so a crash mid-write never leaves half a config
+    // Through a file beside it, forced to disk before it is moved over the config, so neither a crash mid-write nor a
+    // power cut just after it can leave half a config or an empty one. The new file gets the permissions any new file
+    // gets. A config that is a link is written where the link points, so the link stays, and a link to nowhere can't be.
     private String write(Path file, S settings, String done) {
         try {
-            Path parent = file.toAbsolutePath().getParent();
-            Files.createDirectories(parent);
-            Path temporary = Files.createTempFile(parent, file.getFileName().toString(), ".tmp");
+            Path target = Files.isSymbolicLink(file) ? file.toRealPath() : file.toAbsolutePath();
+            Files.createDirectories(target.getParent());
+            Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
             try {
                 Files.writeString(temporary, json(settings), StandardCharsets.UTF_8);
+                try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                    channel.force(true);
+                }
                 try {
-                    Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                    Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 } catch (AtomicMoveNotSupportedException e) {
-                    Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
                 }
             } finally {
                 Files.deleteIfExists(temporary);
