@@ -405,9 +405,9 @@ instead. It is on by default as a mod of its own, and off by default in YOLT and
 
 | Key | Default | What it does | Restart? |
 |---|---|---|---|
-| `enabled` | `false` | Gliding is slower, and rockets stop pushing past a speed. | No |
+| `enabled` | `false` | Gliding is slower, and a rocket's push is cut short past a speed. | No |
 | `glideGravityMultiplier` | `0.6` | Gravity while gliding, 0 or more. 1.0 is vanilla. | No |
-| `rocketCutoffSpeed` | `20.0` | Horizontal speed in m/s past which a rocket stops boosting, 0 or more. 0 means never. | No |
+| `rocketCutoffSpeed` | `20.0` | Horizontal speed in m/s past which a rocket's push ends, a few ticks later, 0 or more. 0 means never. One rocket can still take you well past it: see [elytra nerf](hardcore.md#elytra-nerf). | No |
 
 ### `hardcore.tougherMobs`
 

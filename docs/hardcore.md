@@ -348,7 +348,7 @@ Settings: [`hardcore.anvil`](config.md#hardcoreanvil).
 
 ## Elytra nerf
 
-Gliding is slower and floatier, and rockets can't push you past 20 m/s.
+Gliding is slower and floatier, and a rocket's push is cut short once you fly faster than 20 m/s.
 This part is also a mod of its own, [YOLT Elytra](../extras/elytra/README.md), for a server that wants only this.
 It comes inside YOLT Hardcore's jar, which YOLT's jar holds, so YOLT needs nothing extra. It is on by default as a mod
 of its own, and off by default in YOLT and in YOLT Hardcore.
@@ -358,6 +358,11 @@ of its own, and off by default in YOLT and in YOLT Hardcore.
   stay vanilla.
 - While a rocket boosts you and your horizontal speed passes 20 m/s (`rocketCutoffSpeed`), the rocket ends early,
   with no explosion and no damage. 0 turns the cut-off off.
+- This makes a rocket's push shorter, but doesn't hold you at 20 m/s. Your own game moves you and does the boosting,
+  and the server only learns how fast you went a moment later, so a rocket goes on pushing for a few ticks past the
+  cut-off. Measured with YOLT Elytra on its own and one rocket fired from a slow glide: the push ended after about a
+  fifth of a second, where without the cut-off it lasted about a second, and it still took the player to about
+  30 m/s. The cut-off never slows you itself: it only ends the rocket.
 - A rocket fired while you are already past the cut-off does nothing and isn't used up.
 - The client flies with the server's gravity itself, so the flight stays smooth.
 - Weight, legs and the limp don't slow gliding.

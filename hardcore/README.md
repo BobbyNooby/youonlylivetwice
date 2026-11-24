@@ -21,7 +21,7 @@ ship on: the Curse of the Undead, the flat anvil price and the Mending nerf. Eve
 | Hunger tax | Multiplies the hunger actions cost, such as sprinting, jumping, mining and taking damage. Healing isn't taxed. | `hardcore.hungerTax.multiplier` | `1.0`, vanilla |
 | Mending nerf | Mending repairs 0.4 durability per XP point instead of vanilla's 2. This is YOLT Mending. | `hardcore.mending.enabled` | on |
 | Flat anvil prices | Each anvil use costs one flat price, 1 level to rename, 5 to repair or 6 to enchant, which never grows with use. This is YOLT Anvils. | `hardcore.anvil.enabled` | on |
-| Elytra nerf | A slower, floatier glide, and rockets stop pushing past 20 m/s. This is YOLT Elytra. | `hardcore.elytra.enabled` | off |
+| Elytra nerf | A slower, floatier glide, and a rocket's push is cut short once you pass 20 m/s. This is YOLT Elytra. | `hardcore.elytra.enabled` | off |
 | Tougher mobs | Most hostile mobs have more health and speed, and hit players harder. | `hardcore.tougherMobs.enabled` | off |
 | Relentless mobs | Most hostile mobs track you from further away, and some zombies can break wooden doors on any difficulty. | `hardcore.relentlessMobs.enabled` | off |
 | Blood moon | Some nights are blood moons: more mobs spawn, tougher and better geared, and the night can't be slept through. | `hardcore.bloodMoon.enabled` | off |
