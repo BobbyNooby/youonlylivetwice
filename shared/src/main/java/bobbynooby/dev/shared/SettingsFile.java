@@ -12,6 +12,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -143,14 +144,17 @@ public final class SettingsFile<S> {
     // Through a file beside it, forced to disk before it is moved over the config, so neither a crash mid-write nor a
     // power cut just after it can leave half a config or an empty one. The new file gets the permissions any new file
     // gets. A config that is a link is written where the link points, so the link stays, and a link to nowhere can't be.
+    // The file beside it is never opened through a link: a leftover link of that name ends in the note, not in a write
+    // somewhere else that the move would then put in the config's place.
     private String write(Path file, S settings, String done) {
         try {
             Path target = Files.isSymbolicLink(file) ? file.toRealPath() : file.toAbsolutePath();
             Files.createDirectories(target.getParent());
             Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
             try {
-                Files.writeString(temporary, json(settings), StandardCharsets.UTF_8);
-                try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                Files.writeString(temporary, json(settings), StandardCharsets.UTF_8, StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+                try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
                     channel.force(true);
                 }
                 try {

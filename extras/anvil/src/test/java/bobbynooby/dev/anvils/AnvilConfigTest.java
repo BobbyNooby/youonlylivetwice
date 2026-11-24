@@ -262,6 +262,24 @@ class AnvilConfigTest {
         assertFalse(Files.exists(nowhere));
     }
 
+    // A leftover temporary file that is a link is never written through: the rewrite ends in the note, the file the link
+    // points to keeps its text, and the config stays a plain file as typed
+    @Test
+    void aTemporaryFileThatIsALinkIsNeverWrittenThrough() throws IOException {
+        Path other = Files.writeString(folder.resolve("other.txt"), "someone else's file");
+        Path file = folder.resolve(AnvilConfig.FILE);
+        String typed = "{\"repairCost\": 3}";
+        Files.writeString(file, typed);
+        link(folder.resolve(AnvilConfig.FILE + ".tmp"), other);
+        SettingsFile.Result<AnvilSettings> result = assertDoesNotThrow(() -> AnvilConfig.load(file, AnvilSettings.DEFAULTS));
+        assertEquals(new AnvilSettings(true, 6, 3, 1, 0.12), result.settings());
+        assertTrue(result.notes().stream().anyMatch(note -> note.startsWith("couldn't write " + AnvilConfig.FILE + ": ")),
+                result.notes().toString());
+        assertEquals("someone else's file", Files.readString(other));
+        assertFalse(Files.isSymbolicLink(file), "the config is a link now");
+        assertEquals(typed, Files.readString(file));
+    }
+
     @Test
     void theDefaultsAreValid() {
         AnvilSettings d = AnvilSettings.DEFAULTS;
