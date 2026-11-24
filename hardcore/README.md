@@ -38,6 +38,10 @@ Players in survival and adventure play by these rules. Creative and spectator pl
 takes every slowdown and lost heart off within a tick, and a switch back puts them on again. A death in creative or
 spectator takes no heart.
 
+The Curse of the Undead tells a player over the hotbar, as they respawn, how many max hearts the death took. That notice
+is only kept in memory: if the server stops between the death and the respawn (in single-player, leaving to the title
+screen from the death screen), the heart is still lost, but the line never comes.
+
 ## Install
 
 - You need Minecraft 26.3, Fabric Loader 0.20.1 or newer, [Fabric API](https://modrinth.com/mod/fabric-api)
