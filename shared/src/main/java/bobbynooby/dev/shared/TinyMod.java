@@ -75,9 +75,15 @@ public final class TinyMod<S> {
 
     /**
      * Hands this mod's settings to another mod. settings is read at every use, so it can hand out its live config, and
-     * exempt names the players who are left out. Called once, from the host's own onInitialize.
+     * exempt names the players who are left out. Called once, from the host's own onInitialize: a second call throws,
+     * so two mods can't both think they set it.
      */
-    public void hostedBy(String host, Supplier<S> settings, Predicate<ServerPlayer> exempt) {
+    public synchronized void hostedBy(String host, Supplier<S> settings, Predicate<ServerPlayer> exempt) {
+        Host<S> current = this.host;
+        if (current != null) {
+            throw new IllegalStateException(name + " is hosted by " + current.name() + " already, so " + host
+                    + " can't host it too");
+        }
         this.host = new Host<>(host, settings, exempt);
     }
 

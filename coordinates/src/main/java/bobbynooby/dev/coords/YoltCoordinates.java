@@ -83,13 +83,13 @@ public final class YoltCoordinates implements ModInitializer {
 
     /**
      * Hands this mod's switch and hooks to another mod. settings is read at every use, so it can hand out its live
-     * config. Called once, from the host's own onInitialize.
+     * config. Called once, from the host's own onInitialize: a second call throws and leaves the first host's hooks.
      */
     public static void hostedBy(String name, Supplier<CoordinateSettings> settings, Hooks hooks) {
-        YoltCoordinates.hooks = hooks;
         // TinyMod wants the players it leaves out, which here are the ones who see real coordinates. Its own rule for
         // them, creative and spectator, isn't this mod's, so it is never asked.
         MOD.hostedBy(name, settings, hooks.realCoordinates());
+        YoltCoordinates.hooks = hooks;
     }
 
     /** The settings in use now. */
