@@ -40,6 +40,15 @@ class MendingMathsTest {
         assertResult(MendingMaths.repair(10, Double.NaN, 5, 0.2), 0, 0, 0.2);
     }
 
+    // Above 1 a point, what is kept can be more than a whole point: 1 XP at 2.5 on 1 point of damage keeps 1.5. The next
+    // item's point then comes out of that with no XP spent, and an item with more damage spends the XP on top.
+    @Test
+    void mend1ARateAboveOneCanKeepMoreThanAPoint() {
+        assertResult(MendingMaths.repair(1, 2.5, 1, 0.0), 1, 1, 1.5);
+        assertResult(MendingMaths.repair(1, 2.5, 1, 1.5), 1, 0, 0.5);
+        assertResult(MendingMaths.repair(1, 2.5, 100, 1.5), 4, 1, 0.0);
+    }
+
     private static void assertResult(MendingMaths.Result result, int repaired, int xpUsed, double carried) {
         assertEquals(repaired, result.repaired(), "repaired");
         assertEquals(xpUsed, result.xpUsed(), "XP used");
