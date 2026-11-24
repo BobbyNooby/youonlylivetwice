@@ -132,11 +132,19 @@ public class HardcoreAloneGameTests {
         helper.succeed();
     }
 
-    // The start wrote the file with every key, so it reads back with nothing to say
+    // The start wrote the file with every key. As the start left it, the file had changed since this server's JVM
+    // started, so it was no leftover of an earlier run, and it held what the mod writes for the settings in use. It reads
+    // back with nothing to say.
     @GameTest
     public void theStartWroteTheFile(GameTestHelper helper) {
         Path file = YoltHardcore.configFile();
         helper.assertTrue(Files.exists(file), "the start wrote no " + file);
+        long started = ManagementFactory.getRuntimeMXBean().getStartTime();
+        helper.assertTrue(StartRecord.changedAt() >= started, "the start left " + file + " as an earlier run wrote it");
+        // Swapped straight back, for the settings in use
+        HardcoreFile.Loaded inUse = YoltHardcore.swapForTesting(HardcoreFile.Loaded.defaults());
+        YoltHardcore.swapForTesting(inUse);
+        helper.assertValueEqual(StartRecord.text(), HardcoreFile.json(inUse), "the file's text after the start");
         HardcoreFile.Result read = HardcoreFile.reload(file, HardcoreFile.Loaded.defaults());
         helper.assertFalse(read.failed(), "the file couldn't be read: " + read.notes());
         helper.assertValueEqual(read.notes(), List.of(), "what reading the file said");

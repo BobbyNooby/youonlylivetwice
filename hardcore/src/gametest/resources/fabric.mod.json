@@ -5,6 +5,9 @@
     "name": "YOLT Hardcore GameTests",
     "environment": "*",
     "entrypoints": {
+        "main": [
+            "bobbynooby.dev.hardcore.StartRecord"
+        ],
         "fabric-gametest": [
             "bobbynooby.dev.hardcore.HardcoreAloneGameTests",
             "bobbynooby.dev.hardcore.HardcoreBodyAloneGameTests",
