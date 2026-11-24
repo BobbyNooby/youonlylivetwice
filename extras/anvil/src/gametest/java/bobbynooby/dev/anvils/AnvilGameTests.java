@@ -88,7 +88,9 @@ public class AnvilGameTests {
         helper.succeed();
     }
 
-    // Vanilla would add the 63 to the price and refuse it as too expensive
+    // Vanilla would add the 63 to the price and refuse it as too expensive. With the prior work left out that price is
+    // small, so a job vanilla prices past 40 by itself, a plain sword and one with seven costly enchantments, checks the
+    // refusal too: vanilla refuses it, and the mod charges the flat price and lets it be taken.
     @GameTest
     public void oldPriorWorkIsIgnoredAndNeverTooExpensive(GameTestHelper helper) {
         AnvilSettings before = YoltAnvils.swapForTesting(AnvilSettings.DEFAULTS);
@@ -102,6 +104,28 @@ public class AnvilGameTests {
             helper.assertValueEqual(taken.getDamageValue(), 0, "the damage left");
             helper.assertValueEqual(taken.get(DataComponents.REPAIR_COST), 0, "the prior work after the repair");
             helper.assertValueEqual(player.experienceLevel, LEVELS - 5, "the levels left");
+
+            ItemStack costly = new ItemStack(Items.DIAMOND_SWORD);
+            for (ResourceKey<Enchantment> key : List.of(Enchantments.SHARPNESS, Enchantments.LOOTING, Enchantments.FIRE_ASPECT,
+                    Enchantments.KNOCKBACK, Enchantments.UNBREAKING, Enchantments.MENDING, Enchantments.SWEEPING_EDGE)) {
+                Holder<Enchantment> enchantment = enchantment(helper, key);
+                costly.enchant(enchantment, enchantment.value().getMaxLevel());
+            }
+            YoltAnvils.swapForTesting(new AnvilSettings(false, 6, 5, 1, 0.12));
+            menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(costly.copy());
+            helper.assertTrue(menu.getCost() >= 40, "vanilla's price is only " + menu.getCost());
+            helper.assertTrue(menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().isEmpty(), "vanilla made a result past 40");
+
+            YoltAnvils.swapForTesting(AnvilSettings.DEFAULTS);
+            menu = open(player, ContainerLevelAccess.NULL);
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(new ItemStack(Items.DIAMOND_SWORD));
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(costly.copy());
+            helper.assertValueEqual(menu.getCost(), 6, "the flat price of a job vanilla prices past 40");
+            ItemStack sword = take(menu, player);
+            helper.assertValueEqual(EnchantmentHelper.getEnchantmentsForCrafting(sword).size(), 7, "enchantments on the result");
+            helper.assertValueEqual(player.experienceLevel, LEVELS - 11, "the levels left after both");
         } finally {
             YoltAnvils.swapForTesting(before);
         }
