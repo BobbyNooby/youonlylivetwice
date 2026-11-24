@@ -116,8 +116,8 @@ Everything runs locally, with Java 25:
   `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
 - `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 10 minutes: YOLT's against YOLT's
   jar, then those of YOLT Anvils, YOLT Mending, YOLT Elytra, YOLT Hardcore and YOLT Coordinates, each against its own
-  jar with no YOLT, one window after the other. `scripts/client-tests.sh --mod <project>` runs one mod's alone, in a
-  minute or two, by its Gradle project name: `anvil`, `mending`, `elytra`, `hardcore` or `coordinates`.
+  jar with no YOLT, one window after the other. `scripts/client-tests.sh --mod <project>` runs one mod's alone, in
+  under two minutes, by its Gradle project name: `anvil`, `mending`, `elytra`, `hardcore` or `coordinates`.
   `scripts/client-tests.sh PresenceLeak,ServerList` runs only YOLT's tests whose class names start with those. On
   NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on Mesa, the integrated GPU.
 - Screenshots land in `build/run/clientGameTest/screenshots/` for YOLT,

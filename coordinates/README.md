@@ -91,8 +91,9 @@ is `hide.coordinates`, and admin view does what `/yolt-coordinates real` does he
 Tried in a real client: on a server with only this mod the F3 screen shows the shifted numbers, a walk and a block
 broken and placed in creative land on the real spot, a respawn starts a new stretch in chunk 0, 0, and
 `/yolt-coordinates real` gives an op real numbers from their next respawn and, run again, shifted ones from the respawn
-after; in a single-player world the client is shown real numbers and `/yolt-coordinates` says the mod does nothing
-there.
+after. A second player who joins nearby, a test player with no client of their own, is seen at their real spot
+shifted by the client's own amount, not theirs, and still is after they move 2 blocks and then 20 more. In a
+single-player world the client is shown real numbers and `/yolt-coordinates` says the mod does nothing there.
 
 ## Install
 
