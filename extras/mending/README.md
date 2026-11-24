@@ -79,4 +79,6 @@ Another mod can ship YOLT Mending inside its own jar and set it from its own con
 - `settings` is read at every XP pickup, so it can hand out your live config as a `MendingSettings`.
 - `exempt` names the players who keep vanilla's Mending.
 
-From then on the file is never read or written and `/yolt-mending` isn't registered.
+From then on the file is never read or written and `/yolt-mending` isn't registered. Only one mod can host it, as a
+second `hostedBy` call throws, and YOLT Hardcore hosts it wherever YOLT Hardcore runs, on its own or inside You Only
+Live Twice.

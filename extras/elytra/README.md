@@ -93,4 +93,5 @@ Another mod can ship YOLT Elytra inside its own jar and set it from its own conf
 - `exempt` names the players who keep vanilla's elytra.
 
 From then on the file is never read or written and `/yolt-elytra` isn't registered. The mod still ticks its players
-itself, with your settings.
+itself, with your settings. Only one mod can host it, as a second `hostedBy` call throws, and YOLT Hardcore hosts it
+wherever YOLT Hardcore runs, on its own or inside You Only Live Twice.

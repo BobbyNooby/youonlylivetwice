@@ -99,4 +99,6 @@ Another mod can ship YOLT Anvils inside its own jar and set it from its own conf
 - `settings` is read at every anvil use, so it can hand out your live config as an `AnvilSettings`.
 - `exempt` names the players who keep vanilla's anvil.
 
-From then on the file is never read or written and `/yolt-anvils` isn't registered.
+From then on the file is never read or written and `/yolt-anvils` isn't registered. Only one mod can host it, as a
+second `hostedBy` call throws, and YOLT Hardcore hosts it wherever YOLT Hardcore runs, on its own or inside You Only
+Live Twice.
