@@ -8,14 +8,17 @@ import net.fabricmc.fabric.api.entity.FakePlayer;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
@@ -23,6 +26,8 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.FireworkExplosion;
+import net.minecraft.world.item.component.Fireworks;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
@@ -197,11 +202,12 @@ public class ElytraGameTests {
     }
 
     // A rocket boosting a glider past the cut-off is ended at the glider's tick, with no blast and no damage, and one
-    // boosting a glider under it goes on
+    // boosting a glider under it goes on. The rocket carries a star and the fast glider can be hurt, so a rocket that
+    // exploded rather than ended would show in their health.
     @GameTest
     public void aBoostingRocketEndsPastTheCutoff(GameTestHelper helper) {
         ElytraSettings before = YoltElytra.swapForTesting(ElytraSettings.DEFAULTS);
-        ServerPlayer fast = glider(helper, "AloneBoostFast", GameType.SURVIVAL, FAST);
+        ServerPlayer fast = glide(hurtable(helper, "AloneBoostFast"), FAST);
         ServerPlayer slow = glider(helper, "AloneBoostSlow", GameType.SURVIVAL, SLOW);
         FireworkRocketEntity fastRocket = attachRocket(helper, fast);
         FireworkRocketEntity slowRocket = attachRocket(helper, slow);
@@ -327,9 +333,27 @@ public class ElytraGameTests {
         return player;
     }
 
+    // A survival fake player of its own that damage reaches, which Fabric's fake players never take. Where player()
+    // stands one.
+    private static ServerPlayer hurtable(GameTestHelper helper, String name) {
+        ServerPlayer player = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), name)) {
+            @Override
+            public boolean isInvulnerableTo(ServerLevel level, DamageSource source) {
+                return false;
+            }
+        };
+        player.setGameMode(GameType.SURVIVAL);
+        player.setPos(helper.absoluteVec(new Vec3(1.5, 1.0, 1.5)));
+        return player;
+    }
+
     // Wearing an elytra and gliding east at this many blocks per tick
     private static ServerPlayer glider(GameTestHelper helper, String name, GameType mode, double blocksPerTick) {
-        ServerPlayer player = player(helper, name, mode);
+        return glide(player(helper, name, mode), blocksPerTick);
+    }
+
+    private static ServerPlayer glide(ServerPlayer player, double blocksPerTick) {
         player.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.ELYTRA));
         player.startFallFlying();
         player.setKnownMovement(new Vec3(blocksPerTick, 0.0, 0.0));
@@ -354,9 +378,12 @@ public class ElytraGameTests {
                 InteractionHand.MAIN_HAND);
     }
 
-    // A rocket boosting the player, as one fired while gliding is
+    // A rocket boosting the player, as one fired while gliding is. It carries a firework star, so it would hurt the
+    // player if it exploded.
     private static FireworkRocketEntity attachRocket(GameTestHelper helper, ServerPlayer player) {
-        FireworkRocketEntity rocket = new FireworkRocketEntity(helper.getLevel(), new ItemStack(Items.FIREWORK_ROCKET), player);
+        ItemStack stack = new ItemStack(Items.FIREWORK_ROCKET);
+        stack.set(DataComponents.FIREWORKS, new Fireworks(1, List.of(FireworkExplosion.DEFAULT)));
+        FireworkRocketEntity rocket = new FireworkRocketEntity(helper.getLevel(), stack, player);
         helper.getLevel().addFreshEntity(rocket);
         return rocket;
     }
