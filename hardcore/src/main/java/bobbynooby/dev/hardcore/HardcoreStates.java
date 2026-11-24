@@ -176,7 +176,7 @@ public final class HardcoreStates {
     }
 
     private static synchronized void useFile(@Nullable Path dbFile) {
-        flushAll();
+        flushAll(true);
         HardcoreStore open = store;
         store = null;
         failed = false;
@@ -210,6 +210,11 @@ public final class HardcoreStates {
      * server thread one wait, not one per player.
      */
     static synchronized void flushAll() {
+        flushAll(false);
+    }
+
+    // last: every state is forgotten straight after, as at a server stop, so what the store can't take now is lost
+    private static void flushAll(boolean last) {
         // Online states over older failed writes of the same player, since they are newer
         Map<UUID, String> players = new LinkedHashMap<>();
         for (UUID uuid : List.copyOf(UNSAVED_PLAYERS.keySet())) {
@@ -236,8 +241,13 @@ public final class HardcoreStates {
         try {
             open.saveAll(players, world);
         } catch (RuntimeException e) {
-            YoltHardcore.LOGGER.error("Could not save {} hardcore states and {} world values, keeping them for the next save",
-                    players.size(), world.size(), e);
+            if (last) {
+                YoltHardcore.LOGGER.error("Could not save the hardcore states of {} players and {} world values before the"
+                        + " store closed, so they are lost", players.size(), world.size(), e);
+            } else {
+                YoltHardcore.LOGGER.error("Could not save {} hardcore states and {} world values, keeping them for the next save",
+                        players.size(), world.size(), e);
+            }
             return;
         }
         players.forEach((uuid, data) -> {

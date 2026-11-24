@@ -1,5 +1,12 @@
 package bobbynooby.dev.hardcore;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.config.Property;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,6 +21,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -279,6 +287,34 @@ class HardcoreStoreTest {
         }
     }
 
+    // A stop forgets every state after its last save, so when the store refuses that save the states are lost, and the
+    // log says so as an error, with how many, rather than that they are kept for a next save that never comes
+    @Test
+    void aStopWhoseSaveFailsSaysWhatIsLost() throws SQLException {
+        Path file = dir.resolve("hardcore.db");
+        HardcoreStore.open(file).close();
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
+             Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TRIGGER refuse_player BEFORE INSERT ON player BEGIN SELECT RAISE(ABORT, 'refused'); END");
+            statement.execute("CREATE TRIGGER refuse_world BEFORE INSERT ON world BEGIN SELECT RAISE(ABORT, 'refused'); END");
+        }
+        HardcoreStates.useFileForTesting(null);
+        HardcoreStates.useStoreForTesting(HardcoreStore.open(file));
+        List<String> errors;
+        try {
+            HardcoreStates.update(uuid, state -> state.legsBroken = true);
+            HardcoreStates.update(UUID.randomUUID(), state -> state.chill = 0.5);
+            HardcoreStates.setWorld("lastBloodMoonDay", 12);
+            assertTrue(HardcoreStates.read(uuid).legsBroken, "the change wasn't kept in memory");
+            errors = errorsLogged(() -> HardcoreStates.useFileForTesting(null));
+        } finally {
+            HardcoreStates.useFileForTesting(null);
+        }
+        assertEquals(List.of("Could not save the hardcore states of 2 players and 1 world values before the store closed, so"
+                + " they are lost"), errors);
+        assertFalse(HardcoreStates.read(uuid).legsBroken, "the state outlived the stop");
+    }
+
     // One transaction: a row the file refuses rolls back the rows before it, and every state waits for the next flush
     @Test
     void flushStopsAtAFailedWriteAndKeepsEveryState() throws SQLException {
@@ -321,5 +357,30 @@ class HardcoreStoreTest {
         } finally {
             HardcoreStates.useFileForTesting(null);
         }
+    }
+
+    // The errors the mod logs while the task runs. The appender joins the config the mod's logger already uses, which
+    // other loggers may use too, so it keeps the mod's lines only.
+    private static List<String> errorsLogged(Runnable task) {
+        String name = YoltHardcore.LOGGER.getName();
+        LoggerConfig config = ((Logger) LogManager.getLogger(name)).get();
+        List<String> lines = new CopyOnWriteArrayList<>();
+        AbstractAppender appender = new AbstractAppender("yolt-hardcore-test", null, null, false, Property.EMPTY_ARRAY) {
+            @Override
+            public void append(LogEvent event) {
+                if (name.equals(event.getLoggerName()) && event.getLevel().isMoreSpecificThan(Level.ERROR)) {
+                    lines.add(event.getMessage().getFormattedMessage());
+                }
+            }
+        };
+        appender.start();
+        config.addAppender(appender, null, null);
+        try {
+            task.run();
+        } finally {
+            config.removeAppender(appender.getName());
+            appender.stop();
+        }
+        return List.copyOf(lines);
     }
 }
