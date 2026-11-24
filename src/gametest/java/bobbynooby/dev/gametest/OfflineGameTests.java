@@ -445,8 +445,8 @@ public class OfflineGameTests {
 
     // Every message YOLT logs while the action runs. The appender joins the config YOLT's logger already uses, and
     // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console. Other
-    // test classes use it too.
-    static List<String> yoltLog(Runnable action) {
+    // test classes use it too, a client test among them.
+    public static List<String> yoltLog(Runnable action) {
         return yoltEvents(action).stream().map(event -> event.getMessage().getFormattedMessage()).toList();
     }
 

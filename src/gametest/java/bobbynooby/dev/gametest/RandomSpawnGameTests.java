@@ -62,6 +62,7 @@ public class RandomSpawnGameTests {
     private static final String RETURNING = "you-only-live-twice-gametest:random_spawn_returning";
     private static final String RESPAWN_POINT = "you-only-live-twice-gametest:random_spawn_respawn_point";
     private static final String OFF_FIRST_JOIN = "you-only-live-twice-gametest:random_spawn_off_first_join";
+    private static final String ADVENTURE = "you-only-live-twice-gametest:random_spawn_adventure";
     // Far enough that the 10,000 block area round a centre moved this far can't hold a spot near the old one
     private static final int MOVE = 20_000;
     // The spawn task loads 7 by 7 chunks round the spot before it is ready, and a random spot's have to be generated,
@@ -465,6 +466,34 @@ public class RandomSpawnGameTests {
             Settings.get().randomSpawn = before;
         }
         helper.succeed();
+    }
+
+    // In adventure mode vanilla puts a new player right on the world spawn with no search, so random spawn stays out, and
+    // the border commands check the world spawn instead. The check at placement stays out too, even when a moved border
+    // leaves that spot outside the area random spawn picks from. Random spawn is on, so only the game mode keeps it out.
+    @GameTest(environment = ADVENTURE)
+    public void firstJoinInAdventureKeepsTheWorldSpawn(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel overworld = server.overworld();
+        GameType modeBefore = server.getWorldData().getGameType();
+        server.getWorldData().setGameType(GameType.ADVENTURE);
+        try {
+            firstJoin(helper, "Adventure", true, held -> {
+                helper.assertTrue(RandomSpawn.appliesTo(overworld), "random spawn doesn't answer in the overworld");
+                BlockPos spawn = overworld.getRespawnData().pos();
+                BlockPos feet = BlockPos.containing(held);
+                helper.assertTrue(feet.getX() == spawn.getX() && feet.getZ() == spawn.getZ(),
+                        "the adventure join's spot " + feet.toShortString() + " isn't on the world spawn " + spawn.toShortString());
+                WorldBorder border = overworld.getWorldBorder();
+                border.setCenter(held.x + MOVE, held.z);
+                helper.assertFalse(insideArea(border, held), "the moved border's area still holds the world spawn " + held);
+            }, (player, held, log) -> {
+                helper.assertValueEqual(player.position(), held, "where the player was placed");
+                helper.assertValueEqual(log, List.of(), "log");
+            });
+        } finally {
+            server.getWorldData().setGameType(modeBefore);
+        }
     }
 
     // The check a first join's spot gets at placement stays out of the Nether and the End, as the pick does: a spot there
