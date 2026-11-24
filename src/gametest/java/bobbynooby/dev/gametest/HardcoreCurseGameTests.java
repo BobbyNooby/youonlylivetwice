@@ -727,6 +727,40 @@ public class HardcoreCurseGameTests {
         helper.succeed();
     }
 
+    // A player who left from the death screen, kept out by the lockout and let back by a revive paper joins still dead,
+    // as on a YOLT server with the defaults. The join is behind the death screen, so nothing is told there, and the
+    // heart the death took is told once, at the respawn.
+    @GameTest(environment = CURSE_LOCKOUT)
+    public void curse2ADeadJoinIsToldAtTheRespawnNotTheJoin(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerPlayer player = join(helper, "CurseDeadJoin");
+        ServerPlayer user = join(helper, "CurseDeadPaper", AT.offset(1, 0, 0));
+        GameProfile profile = player.getGameProfile();
+        UUID uuid = player.getUUID();
+        try (LockoutGameTests.OwnStore own = new LockoutGameTests.OwnStore()) {
+            GraveDeathGameTests.respawnBesideTest(helper, player);
+            player.kill(player.level());
+            helper.assertTrue(player.isDeadOrDying(), "the player did not die");
+            helper.assertValueEqual(HardcoreStates.read(uuid).curseHeartsLost, 1, "hearts lost to the death");
+            // Gone before the death kick comes
+            TestPlayers.leave(player);
+            ItemStack head = ReviveGameTests.reviveHead(ResolvableProfile.createResolved(profile), 1);
+            helper.assertValueEqual(Revive.tryUse(user, head), Revive.Outcome.REVIVED, "the revive paper");
+
+            ServerPlayer dead = TestPlayers.rejoin(helper, profile, GameType.SURVIVAL, AT);
+            helper.assertTrue(dead.isDeadOrDying(), "the player did not come back dead");
+            helper.assertValueEqual(actionBars(dead), List.of(), "the hotbar as the dead player joined");
+            ServerPlayer back = TestPlayers.respawn(dead, false, Entity.RemovalReason.KILLED);
+            helper.assertValueEqual(actionBars(back), List.of("Curse of the Undead: −1 max heart."), "the hotbar after the respawn");
+            assertMaxHealth(helper, back, 18.0F, "after the respawn");
+        } finally {
+            Curse.set(uuid, 0);
+            leave(server, uuid);
+            leave(server, user.getUUID());
+        }
+        helper.succeed();
+    }
+
     // The heal says so over the hotbar, once
     @GameTest(environment = CURSE_HEAL, maxTicks = 220)
     public void curse6AHealSaysPlusOneHeart(GameTestHelper helper) {
