@@ -7,6 +7,10 @@
     "entrypoints": {
         "fabric-gametest": [
             "bobbynooby.dev.elytra.ElytraGameTests"
+        ],
+        "fabric-client-gametest": [
+            "bobbynooby.dev.elytra.client.GlideAloneClientTest",
+            "bobbynooby.dev.elytra.client.SingleplayerAloneClientTest"
         ]
     }
 }

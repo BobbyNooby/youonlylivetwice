@@ -7,6 +7,11 @@
 	"entrypoints": {
 		"fabric-gametest": [
 			"bobbynooby.dev.anvils.AnvilGameTests"
+		],
+		"fabric-client-gametest": [
+			"bobbynooby.dev.anvils.client.CommandAloneClientTest",
+			"bobbynooby.dev.anvils.client.PricesAloneClientTest",
+			"bobbynooby.dev.anvils.client.SingleplayerAloneClientTest"
 		]
 	}
 }

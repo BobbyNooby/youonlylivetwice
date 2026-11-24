@@ -5,4 +5,6 @@ plugins {
 
 ext.modId = 'yolt-anvils'
 ext.sharedPackage = 'bobbynooby.dev.anvils.shared'
+// A real client joins a server with only this mod, and opens a single-player world with it
+ext.clientTests = true
 apply from: rootProject.file('gradle/mod.gradle')
