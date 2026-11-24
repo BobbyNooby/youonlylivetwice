@@ -1,6 +1,7 @@
 package bobbynooby.dev.hardcore;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.attribute.BedRule;
 import net.minecraft.world.attribute.EnvironmentAttributes;
@@ -51,17 +52,13 @@ public final class BedRest {
         return !rule.canSleep(player.level()) && allowsDaytime(rule);
     }
 
-    /** True while any of these players is napping, so vanilla's sleep line would count a nap that never skips. */
-    public static boolean anyNapping(List<ServerPlayer> players) {
-        if (!daytimeOn()) {
-            return false;
-        }
-        for (ServerPlayer player : players) {
-            if (napping(player)) {
-                return true;
-            }
-        }
-        return false;
+    /**
+     * True while it is nap time in this dimension: its beds may be used in the day, and vanilla's own rule would let
+     * nobody sleep now. Anyone asleep then is napping, and anyone who just got up was.
+     */
+    public static boolean napTime(ServerLevel level) {
+        BedRule rule = level.environmentAttributes().getDimensionValue(EnvironmentAttributes.BED_RULE);
+        return allowsDaytime(rule) && !rule.canSleep(level);
     }
 
     /** How fast the bed heals this player: 1.0 is the set pace, slower while protein is low. */

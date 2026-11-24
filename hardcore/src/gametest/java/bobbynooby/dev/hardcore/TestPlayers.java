@@ -126,6 +126,15 @@ final class TestPlayers {
         }
     }
 
+    /**
+     * The player goes as a client's disconnect takes them, in ServerGamePacketListenerImpl.removePlayerFromWorld's order:
+     * a sleeper is woken first, with no new count, and the player list lets them go after.
+     */
+    static void disconnect(ServerPlayer player) {
+        player.disconnect();
+        leave(player);
+    }
+
     /** The player with this id goes, whichever object a respawn made them. Nothing if they are away. */
     static void leave(MinecraftServer server, UUID id) {
         leave(server.getPlayerList().getPlayer(id));

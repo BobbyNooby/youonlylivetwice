@@ -34,6 +34,10 @@ public class HardcoreBodyAloneGameTests {
     // of a sleeper or to be one
     private static final String NAP_LINE = "yolt-hardcore-gametest:nap_line_alone";
     private static final String NIGHT_LINE = "yolt-hardcore-gametest:night_line_alone";
+    // The same again, one batch for each way a sleep ends
+    private static final String NAP_UP = "yolt-hardcore-gametest:nap_up_alone";
+    private static final String NAP_LEAVE = "yolt-hardcore-gametest:nap_leave_alone";
+    private static final String NIGHT_UP = "yolt-hardcore-gametest:night_up_alone";
     private static final BlockPos AT = new BlockPos(1, 1, 1);
     private static final BlockPos AWAY_FROM_BED = new BlockPos(4, 1, 4);
     // Weight weighs again every 10 ticks, plus 2 for the slowdown to follow
@@ -218,6 +222,103 @@ public class HardcoreBodyAloneGameTests {
         } finally {
             try {
                 wakeAndLeave(sleeper);
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A nap ends as the napper gets up, the way the client's Leave Bed button asks. Vanilla takes them out of bed first
+    // and counts after, when nobody naps any more, so the count would tell everyone "0/2 players sleeping" at noon.
+    @GameTest(environment = NAP_UP)
+    public void aNapperGettingUpSendsNoSleepLine(GameTestHelper helper) {
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.bedRest.enabled = true));
+        ServerPlayer napper = null;
+        ServerPlayer watcher = null;
+        try {
+            BlockPos head = placeBed(helper);
+            napper = TestPlayers.join(helper, "UpNapper", GameType.SURVIVAL, NEXT_TO_BED);
+            watcher = TestPlayers.join(helper, "UpWatcher", GameType.SURVIVAL, AWAY_FROM_BED);
+            helper.assertFalse(helper.getLevel().isDarkOutside(), "it is dark at the batch's noon");
+            int from = TestPlayers.mark(napper);
+            useBed(helper, napper, head);
+            helper.assertTrue(BedRest.napping(napper), "lying down at noon is not a nap");
+            napper.stopSleepInBed(false, true);
+            helper.assertFalse(napper.isSleeping(), "the napper is still in bed after getting up");
+            helper.assertValueEqual(TestPlayers.actionBars(watcher, 0), List.of(), "the watcher's hotbar through the nap");
+            helper.assertValueEqual(TestPlayers.actionBars(napper, from), List.of(), "the napper's hotbar through the nap");
+        } finally {
+            try {
+                try {
+                    wakeAndLeave(napper);
+                } finally {
+                    TestPlayers.leave(watcher);
+                }
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // A napper who leaves the game is woken and then let go, and the count after that has nobody napping either
+    @GameTest(environment = NAP_LEAVE)
+    public void aNapperLeavingTheGameSendsNoSleepLine(GameTestHelper helper) {
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.bedRest.enabled = true));
+        ServerPlayer napper = null;
+        ServerPlayer watcher = null;
+        try {
+            BlockPos head = placeBed(helper);
+            napper = TestPlayers.join(helper, "GoneNapper", GameType.SURVIVAL, NEXT_TO_BED);
+            watcher = TestPlayers.join(helper, "GoneWatcher", GameType.SURVIVAL, AWAY_FROM_BED);
+            helper.assertFalse(helper.getLevel().isDarkOutside(), "it is dark at the batch's noon");
+            useBed(helper, napper, head);
+            helper.assertTrue(BedRest.napping(napper), "lying down at noon is not a nap");
+            ServerPlayer leaving = napper;
+            napper = null;
+            TestPlayers.disconnect(leaving);
+            helper.assertFalse(helper.getLevel().players().contains(leaving), "the napper is still in the dimension");
+            helper.assertValueEqual(TestPlayers.actionBars(watcher, 0), List.of(), "the watcher's hotbar through the nap");
+        } finally {
+            try {
+                try {
+                    wakeAndLeave(napper);
+                } finally {
+                    TestPlayers.leave(watcher);
+                }
+            } finally {
+                YoltHardcore.swapForTesting(before);
+            }
+        }
+        helper.succeed();
+    }
+
+    // The control: at midnight a sleep is no nap, so vanilla's line reaches the watcher as the sleeper lies down and
+    // again as they get up
+    @GameTest(environment = NIGHT_UP)
+    public void aNightSleeperGettingUpStillSendsTheSleepLine(GameTestHelper helper) {
+        HardcoreFile.Loaded before = YoltHardcore.swapForTesting(HardcoreCommandGameTests.with(c -> c.bedRest.enabled = true));
+        ServerPlayer sleeper = null;
+        ServerPlayer watcher = null;
+        try {
+            BlockPos head = placeBed(helper);
+            sleeper = TestPlayers.join(helper, "UpSleeper", GameType.SURVIVAL, NEXT_TO_BED);
+            watcher = TestPlayers.join(helper, "NightWatcher", GameType.SURVIVAL, AWAY_FROM_BED);
+            helper.assertTrue(helper.getLevel().isDarkOutside(), "it isn't dark at the batch's midnight");
+            useBed(helper, sleeper, head);
+            helper.assertTrue(sleeper.isSleeping(), "the player could not lie down at midnight");
+            helper.assertFalse(BedRest.napping(sleeper), "lying down at midnight is a nap");
+            sleeper.stopSleepInBed(false, true);
+            helper.assertValueEqual(TestPlayers.actionBars(watcher, 0), List.of("1/2 players sleeping", "0/2 players sleeping"),
+                    "the watcher's hotbar through the night's sleep");
+        } finally {
+            try {
+                try {
+                    wakeAndLeave(sleeper);
+                } finally {
+                    TestPlayers.leave(watcher);
+                }
             } finally {
                 YoltHardcore.swapForTesting(before);
             }
