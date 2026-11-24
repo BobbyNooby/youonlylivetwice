@@ -21,7 +21,9 @@ vanilla's 128, so it can't lead to someone else's portal far away.
   offline player without a body can end up outside, and the border commands' reply says they weren't checked.
 - A player joining for the first time isn't online until their chunks have loaded and they are placed, so the border
   commands can't check them. If the border changes in that moment and leaves their random spot outside, YOLT picks a
-  new spot inside the border as they are placed.
+  new spot inside the border as they are placed. If it finds no ground for one, as over a void, they join at the old
+  spot outside the border, and for the next 100 ticks (5 seconds) new players and respawns get vanilla's spawn, as
+  after any random spawn search that finds no ground.
 
 ## Random spawn
 
