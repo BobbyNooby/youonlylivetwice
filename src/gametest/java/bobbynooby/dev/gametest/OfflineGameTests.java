@@ -7,6 +7,7 @@ import bobbynooby.dev.coords.YoltCoordinates;
 import bobbynooby.dev.core.Yolt;
 import bobbynooby.dev.graves.Grave;
 import bobbynooby.dev.graves.GraveStore;
+import bobbynooby.dev.hardcore.YoltHardcore;
 import bobbynooby.dev.lockout.DeathLockout;
 import bobbynooby.dev.offline.OfflinePlayerData;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -447,38 +448,45 @@ public class OfflineGameTests {
     // leaves it after: Logger.addAppender makes a config of its own that stays and cuts YOLT off the console. Other
     // test classes use it too, a client test among them.
     public static List<String> yoltLog(Runnable action) {
-        return yoltEvents(action).stream().map(event -> event.getMessage().getFormattedMessage()).toList();
+        return events(List.of(Yolt.MOD_ID), action).stream().map(event -> event.getMessage().getFormattedMessage()).toList();
     }
 
     // The same for the coordinate offset, the YOLT Coordinates mod YOLT ships, which logs under its own name
     static List<String> coordinatesLog(Runnable action) {
-        return events(YoltCoordinates.LOGGER.getName(), action).stream()
+        return events(List.of(YoltCoordinates.LOGGER.getName()), action).stream()
                 .map(event -> event.getMessage().getFormattedMessage()).toList();
     }
 
-    // The same, whole, for a test that checks what came with a line, such as its stack trace
+    // The same, whole, for a test that checks what came with a line, such as its stack trace. It also hears the hardcore
+    // layer and the coordinate offset, the YOLT Hardcore and YOLT Coordinates mods YOLT ships, which log under their own
+    // names, so a test of the errors an action logs sees theirs too. Every test that uses it picks the lines it checks.
     static List<LogEvent> yoltEvents(Runnable action) {
-        return events(Yolt.MOD_ID, action);
+        return events(List.of(Yolt.MOD_ID, YoltHardcore.LOGGER.getName(), YoltCoordinates.LOGGER.getName()), action);
     }
 
-    private static List<LogEvent> events(String loggerName, Runnable action) {
-        LoggerConfig config = ((Logger) LogManager.getLogger(loggerName)).get();
+    // The loggers may share a config, which takes the appender once
+    private static List<LogEvent> events(List<String> loggerNames, Runnable action) {
+        List<LoggerConfig> configs = loggerNames.stream().map(name -> ((Logger) LogManager.getLogger(name)).get()).distinct().toList();
         List<LogEvent> events = new CopyOnWriteArrayList<>();
         AbstractAppender appender = new AbstractAppender("yolt-gametest", null, null, false, Property.EMPTY_ARRAY) {
             @Override
             public void append(LogEvent event) {
-                if (loggerName.equals(event.getLoggerName())) {
+                if (loggerNames.contains(event.getLoggerName())) {
                     // Log4j can reuse the event it hands over, so a copy is kept
                     events.add(event.toImmutable());
                 }
             }
         };
         appender.start();
-        config.addAppender(appender, null, null);
+        for (LoggerConfig config : configs) {
+            config.addAppender(appender, null, null);
+        }
         try {
             action.run();
         } finally {
-            config.removeAppender(appender.getName());
+            for (LoggerConfig config : configs) {
+                config.removeAppender(appender.getName());
+            }
             appender.stop();
         }
         return events;
