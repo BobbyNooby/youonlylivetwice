@@ -63,6 +63,7 @@ public class RandomSpawnGameTests {
     private static final String RESPAWN_POINT = "you-only-live-twice-gametest:random_spawn_respawn_point";
     private static final String OFF_FIRST_JOIN = "you-only-live-twice-gametest:random_spawn_off_first_join";
     private static final String ADVENTURE = "you-only-live-twice-gametest:random_spawn_adventure";
+    private static final String END_FIRST_JOIN = "you-only-live-twice-gametest:random_spawn_end_first_join";
     // Far enough that the 10,000 block area round a centre moved this far can't hold a spot near the old one
     private static final int MOVE = 20_000;
     // The spawn task loads 7 by 7 chunks round the spot before it is ready, and a random spot's have to be generated,
@@ -496,8 +497,42 @@ public class RandomSpawnGameTests {
         }
     }
 
-    // The check a first join's spot gets at placement stays out of the Nether and the End, as the pick does: a spot there
-    // far outside the area random spawn picks from is left as it is
+    // A world spawn in the End sends a first join's search and placement there, where random spawn stays out, so vanilla's
+    // search gives the spot. Both the overworld's and the End's borders move away from it, so a check at placement that
+    // ran with either dimension's area would move the player. The world spawn's spot is beside the End's main island
+    // centre, clear of its exit portal and pillars.
+    @GameTest(environment = END_FIRST_JOIN)
+    public void firstJoinInTheEndKeepsVanillasSpot(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        ServerLevel end = server.getLevel(Level.END);
+        helper.assertTrue(end != null, "test server has no End");
+        LevelData.RespawnData spawnBefore = server.getWorldData().overworldData().getRespawnData();
+        BlockPos spawn = new BlockPos(15, 64, 0);
+        server.setRespawnData(LevelData.RespawnData.of(Level.END, spawn, 0.0F, 0.0F));
+        try {
+            firstJoin(helper, "EndJoin", true, held -> {
+                int radius = end.getGameRules().get(GameRules.RESPAWN_RADIUS);
+                BlockPos feet = BlockPos.containing(held);
+                helper.assertTrue(Math.max(Math.abs(feet.getX() - spawn.getX()), Math.abs(feet.getZ() - spawn.getZ())) <= radius + 1,
+                        "the search gave " + feet.toShortString() + ", outside the respawn radius round the End's world spawn");
+                for (ServerLevel level : List.of(server.overworld(), end)) {
+                    WorldBorder border = level.getWorldBorder();
+                    border.setCenter(held.x + MOVE, held.z);
+                    helper.assertFalse(insideArea(border, held),
+                            "the moved border's area in " + level.dimension().identifier() + " still holds the spot " + held);
+                }
+            }, (player, held, log) -> {
+                helper.assertTrue(player.level() == end, "placed in " + player.level().dimension().identifier());
+                helper.assertValueEqual(player.position(), held, "where the player was placed");
+                helper.assertValueEqual(log, List.of(), "log");
+            });
+        } finally {
+            server.setRespawnData(spawnBefore);
+        }
+    }
+
+    // The gate alone, without a join: firstJoinSpot stays out of the Nether and the End, as the pick does, and a spot there
+    // far outside the area random spawn picks from is left as it is. The test above takes the End through the hook.
     @GameTest
     public void firstJoinSpotOutsideTheOverworldIsLeftAlone(GameTestHelper helper) {
         MinecraftServer server = helper.getLevel().getServer();
