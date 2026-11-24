@@ -6,17 +6,19 @@ YOLT Hardcore, the coordinate offset, as YOLT Coordinates, the Mending nerf, as 
 YOLT Elytra. Nothing changes in the game for a YOLT server: no setting, default, command, message or `/status` text,
 but for three small fixes:
 
-- While anyone in a dimension is on a daytime nap, nobody there gets vanilla's sleep line, "Sleeping through this
-  night" or "1/2 players sleeping", since a nap never skips the night. On a YOLT server the line only came with
+- A daytime nap sends nobody vanilla's sleep line, such as "Sleeping through this night" or "1/2 players sleeping",
+  when it starts or when it ends, since a nap never skips the night. On a YOLT server the line only came with
   `hardcore.bedRest.enabled` on and `sleep.hideSleepers` and `sleep.noNightSkip` both off.
 - When a player joins while still dead, such as after leaving from the death screen, the Curse of the Undead now tells
-  them at their respawn about the max heart that death took. It told them as they joined, behind the death screen. On
-  a YOLT server this shows with the defaults, for a player who comes back after a revive paper or the end of their
-  lockout, with no server restart since the death.
+  them at their respawn about the max heart that death took. It told them as they joined, behind the death screen. The
+  notice counts only hearts still lost: those a revive paper gave back meanwhile (`hardcore.curse.reviveRefundHearts`,
+  0 as it ships) come off it, and with none left it isn't sent. On a YOLT server this shows with the defaults, for a
+  player who comes back after a revive paper or the end of their lockout, with no server restart since the death.
 - A player joining for the first time while the border shrinks or moves (`/yolt border`, `/yolt center`, a reload) no
-  longer lands outside it. If their random spot, picked as they log in, is outside the border when they are placed a
-  moment later, YOLT picks a new one inside it, and the log names both spots. With no ground for a new one, as over a
-  void, they join at the old spot. It needs `randomSpawn` on, as it ships.
+  longer lands outside it. If their random spot, picked as they log in, is outside the area random spots come from
+  (the border, cut to `worldBorder.diameter`) when they are placed a moment later, YOLT picks a new one inside it, and
+  the log names both spots. With no ground for a new one, as over a void, they join at the old spot. It needs
+  `randomSpawn` on, as it ships.
 
 ## Five mods of their own
 
