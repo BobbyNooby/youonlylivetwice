@@ -203,29 +203,34 @@ public final class RandomSpawn {
         return new Column(pickInside(random, area.minX(), area.maxX()), pickInside(random, area.minZ(), area.maxZ()));
     }
 
-    // Only whole blocks inside: from the first block starting at or after the low edge to the last one ending at or
-    // before the high edge, so a decimal centre can't put a spawn half a block outside
+    // Draws only among whole blocks: the middle block of a narrower area is taken without a draw
     private static int pickInside(Random random, double lowEdge, double highEdge) {
-        int low = (int) Math.ceil(lowEdge);
-        int high = (int) Math.floor(highEdge - 1);
-        // An area under a block wide holds no whole block, so the block at its middle is used
-        if (high < low) {
-            return (int) Math.floor((lowEdge + highEdge) / 2);
-        }
-        return low + random.nextInt(high - low + 1);
+        Span span = Span.between(lowEdge, highEdge);
+        return span.whole() ? span.low() + random.nextInt(span.high() - span.low() + 1) : span.low();
     }
 
-    // True for a column pickColumn can give in this area, with the same edges pickInside works out
+    // True for a column pickColumn can give in this area
     static boolean canPick(Area area, int x, int z) {
         return canPickInside(x, area.minX(), area.maxX()) && canPickInside(z, area.minZ(), area.maxZ());
     }
 
     private static boolean canPickInside(int block, double lowEdge, double highEdge) {
-        int low = (int) Math.ceil(lowEdge);
-        int high = (int) Math.floor(highEdge - 1);
-        if (high < low) {
-            return block == (int) Math.floor((lowEdge + highEdge) / 2);
+        Span span = Span.between(lowEdge, highEdge);
+        return span.low() <= block && block <= span.high();
+    }
+
+    // The blocks a pick can give between two edges. Only whole blocks inside: from the first block starting at or after
+    // the low edge to the last one ending at or before the high edge, so a decimal centre can't put a spawn half a block
+    // outside. An area under a block wide holds no whole block, so it is the block at its middle alone.
+    private record Span(int low, int high, boolean whole) {
+        static Span between(double lowEdge, double highEdge) {
+            int low = (int) Math.ceil(lowEdge);
+            int high = (int) Math.floor(highEdge - 1);
+            if (high < low) {
+                int middle = (int) Math.floor((lowEdge + highEdge) / 2);
+                return new Span(middle, middle, false);
+            }
+            return new Span(low, high, true);
         }
-        return low <= block && block <= high;
     }
 }
