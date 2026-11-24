@@ -13,9 +13,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The Mending nerf: XP still mends gear first, at a configurable rate per point instead of vanilla's 2. The part of a
- * point too small to repair anything yet is kept for the player's next pickup, and XP that repairs nothing reaches the
- * bar, so small orbs are never eaten. A player {@link YoltMending#exempt} keeps vanilla's Mending.
+ * The Mending nerf: XP still mends gear first, at a configurable rate per point instead of vanilla's 2. XP on worn gear
+ * goes to the gear even when it repairs nothing yet, as 1 XP at 0.4 doesn't: the part of a point too small to repair
+ * anything is kept for the player's next pickup, and only XP the gear doesn't need reaches the bar. A player
+ * {@link YoltMending#exempt} keeps vanilla's Mending.
  */
 public final class MendingRepair {
     // Only in memory: losing a fraction of a point on a restart costs nobody anything
