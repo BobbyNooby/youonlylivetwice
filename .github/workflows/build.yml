@@ -132,8 +132,11 @@ jobs:
     # Pushes to release (the release job needs it) and manual runs that ask for it
     if: (github.event_name == 'push' && github.ref == 'refs/heads/release') || (github.event_name == 'workflow_dispatch' && inputs.client)
     runs-on: ubuntu-24.04
-    # A client that can't open a window hangs instead of exiting
-    timeout-minutes: 30
+    # A client that can't open a window hangs instead of exiting. The run's six clients took 10m15s locally, YOLT's
+    # 4m01s of it, and YOLT's alone has taken up to 4m34s here: scaled by YOLT's share that is about 12 minutes here,
+    # and by the slowest ratio of a run here to a local one (4m34s to 2m30s) about 19. 35 leaves room for either and
+    # the steps before it.
+    timeout-minutes: 35
     steps:
       - name: checkout repository
         uses: actions/checkout@v7
@@ -160,8 +163,8 @@ jobs:
             sleep 60
           done
           exit 1
-      # YOLT's client tests against YOLT's jar, then YOLT Hardcore's and YOLT Coordinates', each against its own jar
-      # with no YOLT, one window after the other
+      # YOLT's client tests against YOLT's jar, then those of YOLT Anvils, YOLT Mending, YOLT Elytra, YOLT Hardcore and
+      # YOLT Coordinates, each against its own jar with no YOLT, one window after the other
       - name: run client game tests
         run: ./gradlew runProductionClientGameTest
       # With more than one path the artifact keeps each file's folder from the repository root, so YOLT's shots are
@@ -173,6 +176,7 @@ jobs:
           name: client-screenshots
           path: |
             build/run/clientGameTest/screenshots
+            extras/*/build/run/clientGameTest/screenshots
             hardcore/build/run/clientGameTest/screenshots
             coordinates/build/run/clientGameTest/screenshots
       - name: store client logs
@@ -183,6 +187,8 @@ jobs:
           path: |
             build/run/clientGameTest/logs
             build/run/clientGameTest/crash-reports
+            extras/*/build/run/clientGameTest/logs
+            extras/*/build/run/clientGameTest/crash-reports
             hardcore/build/run/clientGameTest/logs
             hardcore/build/run/clientGameTest/crash-reports
             coordinates/build/run/clientGameTest/logs
