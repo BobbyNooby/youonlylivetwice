@@ -9,6 +9,8 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.rcon.RconConsoleSource;
+import net.minecraft.world.level.BaseCommandBlock;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -80,18 +82,25 @@ final class CoordinateCommands {
         return offsetOn ? text : text + " The coordinate offset is off, so this changes nothing until it is on.";
     }
 
-    // For the log: a player by name, and the console as vanilla names it. Anything else, such as a command block, has
-    // no name to go by here.
+    // For the log: a player by name, the console and RCON as vanilla names them, and a command block as one. A command
+    // block's source class is protected, so it is known by the class it is declared in. Anything else, such as a
+    // function, has no name to go by here.
     private static String callerName(MinecraftServer server, CommandSource caller) {
         if (caller instanceof MinecraftServer) {
             return "Server";
+        }
+        if (caller instanceof RconConsoleSource) {
+            return "Rcon";
+        }
+        if (caller.getClass().getEnclosingClass() == BaseCommandBlock.class) {
+            return "A command block";
         }
         for (ServerPlayer online : server.getPlayerList().getPlayers()) {
             if (online.commandSource() == caller) {
                 return online.getPlainTextName();
             }
         }
-        return "A command block or another source";
+        return "Another source";
     }
 
     /**

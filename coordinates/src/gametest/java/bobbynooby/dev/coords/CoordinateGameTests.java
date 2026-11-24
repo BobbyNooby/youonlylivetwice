@@ -14,8 +14,12 @@ import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.rcon.RconConsoleSource;
 import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.level.BaseCommandBlock;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -198,7 +202,8 @@ public class CoordinateGameTests {
     }
 
     // Through /execute as, the command turns another player's real coordinates on or off, while the reply still goes to
-    // whoever ran it, so the reply names that player. The log names both: here an op, then the console.
+    // whoever ran it, so the reply names that player. The log names both: here an op, then the console, RCON and a
+    // command block, each of which turns them the other way.
     @GameTest
     public void realRunAsAnotherPlayerNamesThem(GameTestHelper helper) {
         CoordinateSettings before = YoltCoordinates.swapForTesting(CoordinateSettings.DEFAULTS);
@@ -230,6 +235,21 @@ public class CoordinateGameTests {
             helper.assertFalse(YoltCoordinates.seesReal(target), "the console's run left real coordinates on");
             helper.assertValueEqual(fromConsole, List.of("Server turned real coordinates off for " + targetName),
                     "the log of the console's run");
+
+            CommandSourceStack rcon = new RconConsoleSource(server).createCommandSourceStack();
+            List<String> fromRcon = logged(() -> helper.assertValueEqual(run(helper, rcon, command), 1, "/" + command + " from RCON"));
+            helper.assertTrue(YoltCoordinates.seesReal(target), "RCON's run left real coordinates off");
+            helper.assertValueEqual(fromRcon, List.of("Rcon turned real coordinates on for " + targetName), "the log of RCON's run");
+
+            BlockPos blockAt = new BlockPos(3, 1, 3);
+            helper.setBlock(blockAt, Blocks.COMMAND_BLOCK);
+            BaseCommandBlock block = helper.getBlockEntity(blockAt, CommandBlockEntity.class).getCommandBlock();
+            block.setCommand(command);
+            List<String> fromBlock = logged(() -> block.performCommand(helper.getLevel()));
+            helper.assertValueEqual(block.getSuccessCount(), 1, "the command block's success count");
+            helper.assertFalse(YoltCoordinates.seesReal(target), "the command block's run left real coordinates on");
+            helper.assertValueEqual(fromBlock, List.of("A command block turned real coordinates off for " + targetName),
+                    "the log of the command block's run");
         } finally {
             try {
                 leave(runner);
