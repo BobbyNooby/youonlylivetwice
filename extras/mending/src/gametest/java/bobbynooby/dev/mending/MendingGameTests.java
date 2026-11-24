@@ -17,6 +17,7 @@ import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -139,6 +140,29 @@ public class MendingGameTests {
         helper.succeed();
     }
 
+    // Two worn Mending items at once: a pickup repairs the one vanilla picks, then the other with what is left, then
+    // fills the bar. At 0.4 a one-point item takes 3 XP and keeps 0.2, the other takes 2 with that 0.2, and 5 of the 10
+    // reach the bar, whichever is picked first.
+    @GameTest
+    public void twoWornItemsShareAPickup(GameTestHelper helper) {
+        MendingSettings before = YoltMending.swapForTesting(new MendingSettings(true, 0.4));
+        try {
+            ServerPlayer player = player(helper, "AloneTwoItems", GameType.SURVIVAL);
+            ItemStack pickaxe = mendingPickaxe(helper, player, 1);
+            ItemStack chestplate = mendingItem(helper, player, Items.DIAMOND_CHESTPLATE, EquipmentSlot.CHEST, 1);
+            int xp = player.totalExperience;
+            touch(player, 10);
+            helper.assertValueEqual(pickaxe.getDamageValue(), 0, "the pickaxe's damage after 10 XP");
+            helper.assertValueEqual(chestplate.getDamageValue(), 0, "the chestplate's damage after 10 XP");
+            helper.assertValueEqual(player.totalExperience - xp, 5, "the XP that reached the bar");
+            double carried = MendingRepair.carried(player.getUUID());
+            helper.assertTrue(carried < CLOSE, "carried after both items were whole: " + carried);
+        } finally {
+            YoltMending.swapForTesting(before);
+        }
+        helper.succeed();
+    }
+
     // A refused value keeps the one in use
     @GameTest
     public void reloadReadsTheFile(GameTestHelper helper) {
@@ -225,6 +249,15 @@ public class MendingGameTests {
         pickaxe.setDamageValue(damage);
         player.setItemSlot(EquipmentSlot.MAINHAND, pickaxe);
         return player.getItemBySlot(EquipmentSlot.MAINHAND);
+    }
+
+    // Any item with Mending in the slot asked for
+    private static ItemStack mendingItem(GameTestHelper helper, ServerPlayer player, Item item, EquipmentSlot slot, int damage) {
+        ItemStack stack = new ItemStack(item);
+        stack.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.MENDING), 1);
+        stack.setDamageValue(damage);
+        player.setItemSlot(slot, stack);
+        return player.getItemBySlot(slot);
     }
 
     // What an orb touching the player does, without the wait between pickups
