@@ -229,6 +229,11 @@ Lying in a bed heals you at Regeneration's pace and makes broken legs heal faste
 - Low protein halves it, as it does other healing.
 - A daytime nap never skips time: it doesn't count towards skipping the night, even on a server with
   `sleep.noNightSkip` off. A nap still resets the time phantoms count from, as any rest does.
+- A daytime nap sends nobody vanilla's "players sleeping" line, when it starts or when it ends; with
+  `sleep.hideSleepers` or `sleep.noNightSkip` on, as they ship, nobody gets that line at all. A known limit: a data
+  pack that gives an overworld biome a bed rule of its own, such as sleeping at any hour, makes real daytime sleepers
+  there, who count towards skipping the night, but while `allowDaytime` is on their line is held back too. No vanilla
+  biome does this.
 - There is no potion icon. It heals like Regeneration, but it isn't the effect, so milk has nothing to take away.
 - `/status` shows "Resting healing in bed".
 

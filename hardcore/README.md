@@ -42,6 +42,11 @@ The Curse of the Undead tells a player over the hotbar, as they respawn, how man
 is only kept in memory: if the server stops between the death and the respawn (in single-player, leaving to the title
 screen from the death screen), the heart is still lost, but the line never comes.
 
+A daytime nap in bed rest sends nobody vanilla's sleep line, such as "1/2 players sleeping", when it starts or when it
+ends. A known limit: a data pack that gives an overworld biome a bed rule of its own, such as sleeping at any hour,
+makes real daytime sleepers there, who count towards skipping the night, but while `hardcore.bedRest.allowDaytime` is
+on their line is held back too. No vanilla biome does this.
+
 ## Install
 
 - You need Minecraft 26.3, Fabric Loader 0.20.1 or newer, [Fabric API](https://modrinth.com/mod/fabric-api)
