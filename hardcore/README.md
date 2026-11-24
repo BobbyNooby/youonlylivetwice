@@ -155,8 +155,9 @@ block tag `you-only-live-twice:heat_sources` (what warms you nearby) and the ite
 
 With the jar taken out, mobs that loaded while it ran keep what it saved on them: those three modifiers, so their extra
 health, speed and follow range, though they no longer hit harder; a zombie that won the door roll, which then breaks
-doors on Hard only, as vanilla's do; and a blood moon's charged creeper. Players keep nothing: what it changes on a
-player is never saved with them.
+doors on Hard only, as vanilla's do; and a blood moon's charged creeper. Players keep only the cold's frost, which
+vanilla saves with them and which thaws within a few seconds of their next join; nothing else it changes on a player is
+saved with them.
 
 ## Inside You Only Live Twice
 
