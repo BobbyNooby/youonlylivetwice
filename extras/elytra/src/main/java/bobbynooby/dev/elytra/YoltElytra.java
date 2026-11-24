@@ -12,7 +12,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * YOLT Elytra: gliding is slower and floatier, and rockets stop pushing past a speed.
+ * YOLT Elytra: gliding is slower and floatier, a rocket boosting a glider past a speed is ended early, and one fired
+ * past it is refused.
  * <p>
  * On its own, it reads config/yolt-elytra.json at each server start and on /yolt-elytra reload, and players in creative
  * or spectator keep vanilla's elytra. A mod that ships it inside its own jar can take over instead: it calls

@@ -11,9 +11,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * The elytra nerf: lighter gravity while gliding, which makes the glide slower and floatier over the same distance, and
- * a horizontal speed past which rockets stop pushing. The client flies with the synced gravity itself, and a rocket that
- * ends early just looks like a shorter one, so the server never fights the client's own speed. A player
- * {@link YoltElytra#exempt} keeps vanilla's elytra.
+ * a horizontal speed past which a rocket boosting the glider is ended early. The server learns that speed a moment after
+ * the client flies it, so a rocket can still take a glider well past it. The client flies with the synced gravity
+ * itself, and a rocket that ends early just looks like a shorter one, so the server never fights the client's own speed.
+ * A player {@link YoltElytra#exempt} keeps vanilla's elytra.
  */
 final class Glide {
     private static final double TICKS_PER_SECOND = 20.0;
@@ -41,7 +42,7 @@ final class Glide {
 
     /**
      * One player, one tick: the gravity modifier comes off when the mod is off, the player is left out or isn't gliding,
-     * and otherwise is set, and rockets boosting a glider past the cut-off end.
+     * and otherwise is set, and a rocket boosting a glider past the cut-off is ended early.
      */
     static void tick(ServerPlayer player) {
         ElytraSettings settings = YoltElytra.settings();

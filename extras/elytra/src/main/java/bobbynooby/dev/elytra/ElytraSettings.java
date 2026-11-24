@@ -3,8 +3,9 @@ package bobbynooby.dev.elytra;
 import java.math.BigDecimal;
 
 /**
- * What the elytra nerf is set to: gravity while gliding is glideGravityMultiplier times vanilla's, and a rocket stops
- * pushing a glider faster than rocketCutoffSpeed, in horizontal metres per second. A cut-off of 0 never cuts.
+ * What the elytra nerf is set to: gravity while gliding is glideGravityMultiplier times vanilla's, and a rocket boosting
+ * a glider faster than rocketCutoffSpeed, in horizontal metres per second, is ended early, while one fired that fast is
+ * refused. A cut-off of 0 never cuts.
  */
 public record ElytraSettings(boolean enabled, double glideGravityMultiplier, double rocketCutoffSpeed) {
     public static final ElytraSettings DEFAULTS = new ElytraSettings(true, 0.6, 20.0);

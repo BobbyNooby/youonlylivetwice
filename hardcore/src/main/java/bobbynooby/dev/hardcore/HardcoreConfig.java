@@ -255,7 +255,8 @@ public final class HardcoreConfig {
         public double breakChance = 0.12;
     }
 
-    // Lighter gravity while gliding means a slower, floatier glide; rockets stop pushing past the cut-off in m/s, 0 for never
+    // Lighter gravity while gliding means a slower, floatier glide; a rocket boosting a glider past the cut-off, in m/s,
+    // is ended early, and one fired past it is refused; 0 for never
     public static class ElytraSection {
         public boolean enabled = false;
         public double glideGravityMultiplier = 0.6;

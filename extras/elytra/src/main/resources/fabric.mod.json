@@ -3,7 +3,7 @@
     "id": "yolt-elytra",
     "version": "${version}",
     "name": "YOLT Elytra",
-    "description": "Server-side elytra nerf: lighter gravity while gliding makes the glide slower and floatier, and rockets stop pushing past 20 m/s. Set both in config/yolt-elytra.json. Also part of You Only Live Twice.",
+    "description": "Server-side elytra nerf: lighter gravity while gliding makes the glide slower and floatier, and a rocket boosting you past 20 m/s is ended early. Set both in config/yolt-elytra.json. Also part of You Only Live Twice.",
     "authors": [
         "BobbyNooby"
     ],
