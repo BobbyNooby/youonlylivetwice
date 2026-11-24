@@ -45,16 +45,16 @@ public class SecondPlayerAloneClientTest implements FabricClientGameTest {
     @Override
     public void runTest(ClientGameTestContext ctx) {
         ClientKit.withServer(ctx, (server, connection) -> {
+            // Known before the join, so the clean-up finds the second player even if the join fails part-way
+            UUID id = UUID.randomUUID();
             EmbeddedChannel[] channel = new EmbeddedChannel[1];
-            ServerPlayer[] second = new ServerPlayer[1];
             try {
                 Offset offset = ClientKit.offset(server, connection);
                 check(!offset.isZero(), () -> "the join's stretch has no shift");
                 // The client stands still, so its own stretch is settled before the second player comes
                 ClientKit.checkShifted(ctx, server, connection, offset, "before the second player joins");
                 BlockPos spot = server.computeOnServer(s -> connection.getServerPlayer().blockPosition().east(EAST));
-                second[0] = server.computeOnServer(s -> join(s, spot, channel));
-                ServerPlayer other = second[0];
+                ServerPlayer other = server.computeOnServer(s -> join(s, id, spot, channel));
                 Offset theirs = server.computeOnServer(s -> CoordinateOffsets.offset(other));
                 check(!theirs.equals(offset), () -> "the second player's own shift " + theirs + " is the client's too");
 
@@ -64,17 +64,13 @@ public class SecondPlayerAloneClientTest implements FabricClientGameTest {
                 moveNorth(server, other, JUMP);
                 checkSeen(ctx, server, other, offset, theirs, "after a move of " + JUMP + " blocks");
 
-                showSecondPlayer(ctx, other.getUUID());
+                showSecondPlayer(ctx, id);
             } finally {
                 ClientKit.runAll(List.of(
                         () -> ClientKit.hideF3(ctx),
-                        () -> {
-                            if (second[0] != null) {
-                                server.runOnServer(s -> leave(s, second[0], channel[0]));
-                                ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> seen(mc, second[0].getUUID()).isEmpty(),
-                                        mc -> "the client still sees the second player after they left");
-                            }
-                        }));
+                        () -> server.runOnServer(s -> leave(s, id, channel[0])),
+                        () -> ClientKit.waitOnClient(ctx, ClientKit.LONG_TIMEOUT, mc -> seen(mc, id).isEmpty(),
+                                mc -> "the client still sees the second player after they left")));
             }
         });
     }
@@ -123,8 +119,8 @@ public class SecondPlayerAloneClientTest implements FabricClientGameTest {
     // A test player who joins through PlayerList.placeNewPlayer, as a client's login places one, at this real spot, so
     // a stretch starts for them as for a client; the far end of their connection is a channel the test holds. The same
     // steps as the mod's own TestPlayers, which only reach a GameTest's world.
-    private static ServerPlayer join(MinecraftServer server, BlockPos spot, EmbeddedChannel[] channel) {
-        GameProfile profile = new GameProfile(UUID.randomUUID(), "SecondPlayer");
+    private static ServerPlayer join(MinecraftServer server, UUID id, BlockPos spot, EmbeddedChannel[] channel) {
+        GameProfile profile = new GameProfile(id, "SecondPlayer");
         CommonListenerCookie cookie = CommonListenerCookie.createInitial(profile, false);
         ServerPlayer player = new ServerPlayer(server, server.overworld(), profile, cookie.clientInformation());
         player.snapTo(spot, 0.0F, 0.0F);
@@ -136,9 +132,14 @@ public class SecondPlayerAloneClientTest implements FabricClientGameTest {
         return player;
     }
 
-    // Closing the test's end, as a real client's going does, ends Fabric's networking session for the connection
-    private static void leave(MinecraftServer server, ServerPlayer player, EmbeddedChannel channel) {
-        server.getPlayerList().remove(player);
+    // The second player goes, found by id, as far as their join got: off the player list if they reached it, and the
+    // test's end of their connection closed if it was made. Closing it, as a real client's going does, ends Fabric's
+    // networking session for the connection.
+    private static void leave(MinecraftServer server, UUID id, EmbeddedChannel channel) {
+        ServerPlayer player = server.getPlayerList().getPlayer(id);
+        if (player != null) {
+            server.getPlayerList().remove(player);
+        }
         if (channel != null) {
             channel.close();
         }
