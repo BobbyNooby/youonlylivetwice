@@ -13,6 +13,7 @@
             "bobbynooby.dev.coords.client.WalkAndBuildAloneClientTest",
             "bobbynooby.dev.coords.client.RespawnAloneClientTest",
             "bobbynooby.dev.coords.client.RealAloneClientTest",
+            "bobbynooby.dev.coords.client.SecondPlayerAloneClientTest",
             "bobbynooby.dev.coords.client.SingleplayerAloneClientTest"
         ]
     }
