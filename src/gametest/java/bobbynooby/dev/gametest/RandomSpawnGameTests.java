@@ -373,8 +373,7 @@ public class RandomSpawnGameTests {
                 helper.assertValueEqual(log, List.of(
                         "No safe random spawn found in 50 columns, and the last one has no ground, so vanilla picks the spawn",
                         player.nameAndId().name() + "'s first spawn at " + BlockPos.containing(held).toShortString()
-                                + " is outside the random spawn area since the border changed while they were joining, and"
-                                + " no new spot was found, so they join there"), "log");
+                                + " is outside the random spawn area now, and no new spot was found, so they join there"), "log");
             });
         } finally {
             VoidGraveGameTests.putBack(level, dug);
@@ -657,7 +656,7 @@ public class RandomSpawnGameTests {
     // The line YOLT logs when it picks a first join's spot again
     private static String moved(ServerPlayer player, Vec3 held) {
         return "Moved " + player.nameAndId().name() + "'s first spawn from " + BlockPos.containing(held).toShortString() + " to "
-                + player.blockPosition().toShortString() + ", since the border changed while they were joining";
+                + player.blockPosition().toShortString() + ", since the old spot is outside the random spawn area now";
     }
 
     private static void assertRandomSpawn(GameTestHelper helper, ServerLevel level, boolean on, String when) {

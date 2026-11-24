@@ -79,8 +79,8 @@ public final class RandomSpawn {
     /**
      * Where a player joining for the first time is placed. Their spot is picked as they log in, and they are placed
      * there only once their chunks have loaded and their client is ready. In between they aren't online for the border
-     * commands to check, so a border changed meanwhile can leave the spot outside: then it is picked again. If no new
-     * spot is found, they are placed at the old one, as vanilla would place them.
+     * commands to check, so a border changed meanwhile can leave the spot outside. A spot a pick could no longer give is
+     * picked again. If no new spot is found, they are placed at the old one, as vanilla would place them.
      */
     public static Vec3 firstJoinSpot(ServerLevel level, Vec3 picked, String name) {
         if (!placesFirstJoins(level.getServer(), level) || insidePickArea(level, picked)) {
@@ -89,11 +89,11 @@ public final class RandomSpawn {
         BlockPos from = BlockPos.containing(picked);
         BlockPos spot = pick(level);
         if (spot == null) {
-            Yolt.LOGGER.warn("{}'s first spawn at {} is outside the random spawn area since the border changed while they were"
-                    + " joining, and no new spot was found, so they join there", name, from.toShortString());
+            Yolt.LOGGER.warn("{}'s first spawn at {} is outside the random spawn area now, and no new spot was found, so they"
+                    + " join there", name, from.toShortString());
             return picked;
         }
-        Yolt.LOGGER.info("Moved {}'s first spawn from {} to {}, since the border changed while they were joining", name,
+        Yolt.LOGGER.info("Moved {}'s first spawn from {} to {}, since the old spot is outside the random spawn area now", name,
                 from.toShortString(), spot.toShortString());
         return Vec3.atBottomCenterOf(spot);
     }
