@@ -38,6 +38,10 @@ Every anvil use costs one fixed price, set by the biggest kind of job in it, and
   Hardcore's own. Installing both does no harm: Fabric loads one copy, this jar when it has YOLT Hardcore's version and
   the one inside YOLT Hardcore's jar when it doesn't. Beside a You Only Live Twice from before it shipped this mod, the
   server won't start, and the log says why.
+- Tried with a real client: on a server with only this mod the anvil screen shows 6 for an enchant, 5 for a repair and
+  1 for a rename, taking the enchant costs 6 levels, a player in creative is shown vanilla's price, and `/yolt-anvils`
+  is an unknown command to a player who isn't an op. In a single-player world the screen shows 6 for an enchant and 1
+  for a rename, and `/yolt-anvils` answers the world's owner when cheats are on.
 
 ## Config
 

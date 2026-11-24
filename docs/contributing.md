@@ -114,18 +114,19 @@ Everything runs locally, with Java 25:
 - `./gradlew :runGameTest -Dfabric-api.gametest.filter=you-only-live-twice-gametest:lockout_game_tests_*`: some of
   YOLT's server GameTests. Without the `:` every other mod's GameTests run too, unfiltered. Add
   `-Dfabric-api.gametest.verify=true` to repeat each of them and find flakes.
-- `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 5 minutes: YOLT's against YOLT's
-  jar, then YOLT Hardcore's and YOLT Coordinates', each against its own jar with no YOLT, one window after the other.
-  `scripts/client-tests.sh --mod hardcore` or `scripts/client-tests.sh --mod coordinates` runs one mod's alone, in under
-  two minutes. `scripts/client-tests.sh PresenceLeak,ServerList` runs only YOLT's tests whose class names start
-  with those. On NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on Mesa, the
-  integrated GPU.
-- Screenshots land in `build/run/clientGameTest/screenshots/` for YOLT, `hardcore/build/run/clientGameTest/screenshots/`
-  and `coordinates/build/run/clientGameTest/screenshots/`, and the logs in `logs/` beside each. Every client run, and
-  `./gradlew build`, empties its project's `build/run/clientGameTest/` first, so copy the screenshots elsewhere to keep
-  them.
+- `scripts/client-tests.sh`: the client GameTests, in a real Minecraft window, about 10 minutes: YOLT's against YOLT's
+  jar, then those of YOLT Anvils, YOLT Mending, YOLT Elytra, YOLT Hardcore and YOLT Coordinates, each against its own
+  jar with no YOLT, one window after the other. `scripts/client-tests.sh --mod <project>` runs one mod's alone, in a
+  minute or two, by its Gradle project name: `anvil`, `mending`, `elytra`, `hardcore` or `coordinates`.
+  `scripts/client-tests.sh PresenceLeak,ServerList` runs only YOLT's tests whose class names start with those. On
+  NixOS the script finds the game's native libraries in nixpkgs, and keeps the game on Mesa, the integrated GPU.
+- Screenshots land in `build/run/clientGameTest/screenshots/` for YOLT,
+  `hardcore/build/run/clientGameTest/screenshots/`, `coordinates/build/run/clientGameTest/screenshots/` and, for each
+  tiny mod, `extras/<name>/build/run/clientGameTest/screenshots/`, and the logs in `logs/` beside each. Every client
+  run, and `./gradlew build`, empties its project's `build/run/clientGameTest/` first, so copy the screenshots
+  elsewhere to keep them.
 - A mod gets client tests of its own by setting `ext.clientTests = true` in its `build.gradle` before it applies
-  `gradle/mod.gradle`, as `hardcore/` and `coordinates/` do, and listing them under `fabric-client-gametest` in its
+  `gradle/mod.gradle`, as all five mods of their own do, and listing them under `fabric-client-gametest` in its
   `src/gametest/resources/fabric.mod.json`.
 
 GitHub Actions only runs for a push to `release`, where the tested jars become the draft release, and for runs started

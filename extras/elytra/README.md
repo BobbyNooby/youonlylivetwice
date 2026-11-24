@@ -29,6 +29,10 @@ It is on as soon as it is installed.
   Hardcore's own, where it is off until you turn it on. Installing both does no harm: Fabric loads one copy, this jar
   when it has YOLT Hardcore's version and the one inside YOLT Hardcore's jar when it doesn't. Beside a You Only Live
   Twice from before it shipped this mod, the server won't start, and the log says why.
+- Tried with a real client, on a server with only this mod and in a single-player world: the gravity the client flies
+  with is 0.6 of vanilla's from just after a glide starts until it lands, and vanilla's again after. One rocket fired
+  from a slow glide took the client to 32 m/s before the server ended it, 4 ticks in, where a plain rocket lasts at
+  least 20. A rocket fired past 20 m/s wasn't used up and didn't speed the client up.
 
 ## Config
 

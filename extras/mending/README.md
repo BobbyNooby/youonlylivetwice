@@ -27,6 +27,9 @@ Mending repairs 0.4 durability per XP point (`durabilityPerXp`) instead of vanil
   Hardcore's own. Installing both does no harm: Fabric loads one copy, this jar when it has YOLT Hardcore's version and
   the one inside YOLT Hardcore's jar when it doesn't. Beside a You Only Live Twice from before it shipped this mod, the
   server won't start, and the log says why.
+- Tried with a real client, on a server with only this mod and in a single-player world: with a worn Mending pickaxe
+  in hand, 5 XP repair it by 2, 1 XP repairs nothing and doesn't reach the bar, the 2 XP after it repair 1 point with
+  the part kept, and XP the pickaxe doesn't need shows on the XP bar.
 
 ## Config
 
